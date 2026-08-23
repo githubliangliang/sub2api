@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -93,6 +94,39 @@ func (s *ProxyProbeServiceSuite) TestProbeProxy_Success_IPifyFallback() {
 	require.Equal(s.T(), "5.6.7.8", info.IP)
 }
 
+func (s *ProxyProbeServiceSuite) TestProbeProxy_UsesConfiguredTargetsInOrder() {
+	var requestedPaths []string
+	s.setupProxyServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPaths = append(requestedPaths, r.URL.Path)
+		switch r.URL.Path {
+		case "/first":
+			w.WriteHeader(http.StatusServiceUnavailable)
+		case "/second":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = io.WriteString(w, "fl=abc\nip=9.8.7.6\nloc=CN\n")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+
+	configured := NewProxyExitInfoProber(&config.Config{
+		Security: config.SecurityConfig{
+			ProxyProbe: config.ProxyProbeConfig{
+				URLs: []config.ProbeURLConfig{
+					{URL: "http://probe.invalid/first", Parser: "ipify"},
+					{URL: "http://probe.invalid/second", Parser: "chatgpt-trace"},
+				},
+			},
+		},
+	}).(*proxyProbeService)
+
+	info, _, err := configured.ProbeProxy(s.ctx, s.proxySrv.URL)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "9.8.7.6", info.IP)
+	require.Equal(s.T(), "CN", info.CountryCode)
+	require.Equal(s.T(), []string{"/first", "/second"}, requestedPaths)
+}
+
 func (s *ProxyProbeServiceSuite) TestProbeProxy_AllFailed() {
 	s.setupProxyServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -164,6 +198,21 @@ func (s *ProxyProbeServiceSuite) TestParseIPify_NoIP() {
 	_, _, err := s.prober.parseIPify(body, 50)
 	require.Error(s.T(), err)
 	require.ErrorContains(s.T(), err, "no IP found")
+}
+
+func (s *ProxyProbeServiceSuite) TestParseChatGPTTrace_Success() {
+	body := []byte("fl=abc\nh=chatgpt.com\nip=203.0.113.5\nloc=US\n")
+	info, latencyMs, err := s.prober.parseChatGPTTrace(body, 320)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), int64(320), latencyMs)
+	require.Equal(s.T(), "203.0.113.5", info.IP)
+	require.Equal(s.T(), "US", info.CountryCode)
+}
+
+func (s *ProxyProbeServiceSuite) TestParseChatGPTTrace_NoIP() {
+	body := []byte("fl=abc\nh=chatgpt.com\nloc=US\n")
+	_, _, err := s.prober.parseChatGPTTrace(body, 100)
+	require.ErrorContains(s.T(), err, "chatgpt-trace: no ip= found")
 }
 
 func TestProxyProbeServiceSuite(t *testing.T) {

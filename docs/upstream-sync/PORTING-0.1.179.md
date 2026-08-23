@@ -1,7 +1,8 @@
 # 移植清单：上游 v0.1.179
 
-对照日期：2026-08-22。初始「本仓库现状」结论均在 `665a959` 上逐条 grep / 实测核实；P1 状态已按当前 `bce2492` 的实现复核。
+对照日期：2026-08-22。初始「本仓库现状」结论均在 `665a959` 上逐条 grep / 实测核实；P1 状态已按当前实现复核。
 合完一项就把状态改成「已合」。**第 4 节 P0 五条已于 2026-08-21 全部合入**（记录见 4.6）；第 5 节 P1 的 5.1–5.4 已合，5.5 按需跳过。
+本轮按要求只继续完成第 7 节的代理探测目标配置；其余可选移植项不做。
 
 通用流程见 [README.md](./README.md)，上一轮清单见 [PORTING-0.1.176.md](./PORTING-0.1.176.md)（标题写 0.1.177，P0–P3 已全合）。
 
@@ -230,15 +231,15 @@ OK    select a, sum(case when b='p' then n else 0 end) from t group by a -> 2 ro
 
 ---
 
-## 7. 看需求决定
+## 7. 按需项（本轮决策已完成）
 
 | 上游 commit | 内容 | 规模 | 判断 |
 |---|---|---|---|
 | `58e147fba`（#5816） | Composite 分组支持 Codex 端点（含 Alpha Search 与 Live） | 12 文件 +216-28 | **已移植（2026-08-22）。** `client_version` 模型清单、JSON `session.model`、multipart `session`、Alpha Search/Live 的 Responses 路由分类均已接入；Composite 的 Alpha Search/Live 只允许解析到 OpenAI 的模型。未带入 Kimi/Zhipu/DeepSeek 分支。 |
-| `b0464a986` + `ec5a34593` + `1ab325678` + `d5484866f`（#5834） | 代理连通性探测目标可配置（有序列表 + 按目标解析） | 4 文件 +100-5 | 小而实用。本仓库 `internal/repository/proxy_probe_service.go:49` 还是硬编码 `probeURLs`。国内网络下能换探测目标。要同步 `deploy/config.example.yaml`，并考虑要不要进 `deploy/config.personal.sqlite.yaml` |
+| `b0464a986` + `ec5a34593` + `1ab325678` + `d5484866f`（#5834） | 代理连通性探测目标可配置（有序列表 + 按目标解析） | 4 文件 +100-5 | **已合（本轮）**。新增 `security.proxy_probe.urls` 有序配置、`ip-api` / `ipify` / `chatgpt-trace` 解析器、URL 与解析器校验；留空保持内置 `ip-api → ipify` 回退。示例已同步到 `deploy/config.example.yaml`。 |
 | `bfac49fef`（#5810） | `POST /v1/responses/input_tokens` 预检 | 10 文件 +479-17 | **已移植（2026-08-22）。** 支持 `/v1/responses/input_tokens`、`/responses/input_tokens`、`/backend-api/codex/responses/input_tokens`；官方 OpenAI 可转发，自定义 relay、Grok 或上游不支持时走本地估算，并纳入 count-token ops 分类。 |
-| `1f2a87adb`（#5875） | 补全管理端平台筛选 + 抽共享 `frontend/src/constants/platforms.ts` | 11 文件 +148-62 | **思路借鉴，不整包合。** 上游目录含三个本 fork 没有的平台；本 fork 另有 hidden menu / simple mode 过滤。可以自己抽一个只含 6 平台的目录 |
-| `63839f193`（#5838） | 管理端用户角色选择器样式 | 前端小改 | 可选。本仓库有 `frontend/src/views/admin/UsersView.vue` |
+| `1f2a87adb`（#5875） | 补全管理端平台筛选 + 抽共享 `frontend/src/constants/platforms.ts` | 11 文件 +148-62 | **不做（本轮决定）。** 上游目录含三个本 fork 没有的平台；本 fork 另有 hidden menu / simple mode 过滤，移植收益有限。 |
+| `63839f193`（#5838） | 管理端用户角色选择器样式 | 前端小改 | **不做（本轮决定）。** 仅样式优化，无必要功能收益。 |
 
 ---
 

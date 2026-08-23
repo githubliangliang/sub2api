@@ -45,6 +45,17 @@ func collectMapstructureKeys(t reflect.Type, prefix string, out map[string]strin
 			// is out of scope here — such settings need a config file either way.
 			continue
 		}
+		if ft.Kind() == reflect.Slice {
+			elem := ft.Elem()
+			for elem.Kind() == reflect.Ptr {
+				elem = elem.Elem()
+			}
+			if elem.Kind() == reflect.Struct {
+				// AutomaticEnv cannot decode one string into a slice of structs.
+				// Structured lists are therefore config-file-only, like maps.
+				continue
+			}
+		}
 		out[strings.ToLower(key)] = ft.String()
 	}
 }
@@ -62,7 +73,7 @@ func collectMapstructureKeys(t reflect.Type, prefix string, out map[string]strin
 // were lost, silently disabling async image tasks for env-driven deployments.
 //
 // When this fails, register a zero-valued default in setEnvReachableDefaults
-// for each reported key.
+// for each reported scalar key. Maps and slices of structs are config-file-only.
 func TestConfigKeysAreEnvReachable(t *testing.T) {
 	bound := map[string]string{}
 	collectMapstructureKeys(reflect.TypeOf(Config{}), "", bound)
