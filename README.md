@@ -11,6 +11,8 @@
 
 基于上游 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) 的个人/单机向改动版。
 
+本仓库发布页：**https://github.com/githubliangliang/sub2api/releases**
+
 上游项目地址：**https://github.com/Wei-Shaw/sub2api**
 
 </div>
@@ -107,7 +109,7 @@ standard 会校验余额，而管理员创建时余额取 `default.user_balance`
 #### 1. 本机编译
 
 ```bash
-git clone <本仓库地址>
+git clone https://github.com/githubliangliang/sub2api.git
 cd sub2api
 
 # 前端
@@ -253,7 +255,7 @@ deploy/deploy-remote.sh                          # 之后每次：构建 → 上
 #### 步骤
 
 ```bash
-git clone <本仓库地址>
+git clone https://github.com/githubliangliang/sub2api.git
 cd sub2api/deploy
 
 # 首次
