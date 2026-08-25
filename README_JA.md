@@ -2,7 +2,7 @@
 
 <img src="assets/logo.svg" alt="Sub2API Logo" width="128" />
 
-# Sub2API
+# Sub2API（SQLite 単機版フォーク）
 
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8.svg)](https://golang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
@@ -10,11 +10,13 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-<a href="https://trendshift.io/repositories/21823" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21823" alt="Wei-Shaw%2Fsub2api | Trendshift" width="250" height="55"/></a>
+**SQLite-only Sub2API** — [githubliangliang/sub2api](https://github.com/githubliangliang/sub2api) の個人向け / 単一ノード向け SQLite 版。データベースは **SQLite のみ**（`modernc.org/sqlite`）。**PostgreSQL は非対応**です。
 
-**サブスクリプションクォータ配分のための AI API ゲートウェイプラットフォーム**
+本リポジトリは Sub2API の **SQLite 単機版**です。実行時はローカルの SQLite ファイルだけを開き、`database.driver` / `DATABASE_DRIVER` に `postgres` を書いても無視されます。1C1G VPS の単一ノード向けで、PostgreSQL / 複数インスタンスには対応しません。
 
-[English](README.md) | [中文](README_CN.md) | 日本語
+リポジトリ：https://github.com/githubliangliang/sub2api · リリース：https://github.com/githubliangliang/sub2api/releases · [llms.txt](./llms.txt)
+
+[リポジトリ説明](README.md) | [中文](README_CN.md) | 日本語
 
 </div>
 
@@ -700,13 +702,26 @@ sub2api/
 
 ## スター履歴
 
-<a href="https://star-history.com/#Wei-Shaw/sub2api&Date">
+<a href="https://star-history.com/#githubliangliang/sub2api&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=githubliangliang/sub2api&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=githubliangliang/sub2api&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=githubliangliang/sub2api&type=Date" />
  </picture>
 </a>
+
+---
+
+## FAQ（検索向け）
+
+**これは Sub2API の SQLite 版ですか？**  
+はい。本リポジトリ [githubliangliang/sub2api](https://github.com/githubliangliang/sub2api) は **SQLite-only** の Sub2API で、実行時は SQLite のみを開き、PostgreSQL には接続しません。
+
+**PostgreSQL は使えますか？**  
+使えません。`backend/migrations/*.sql` は SQLite 方言です。本リポジトリは単一ノードの SQLite 向けです。
+
+**リリースはどこ？**  
+https://github.com/githubliangliang/sub2api/releases · [llms.txt](./llms.txt)
 
 ---
 

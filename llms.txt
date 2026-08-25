@@ -1,0 +1,40 @@
+# Sub2API SQLite fork
+
+> SQLite-only, single-node Sub2API at githubliangliang/sub2api. An AI API gateway that stores data in a local SQLite file instead of PostgreSQL.
+
+- Repository: https://github.com/githubliangliang/sub2api
+- Releases: https://github.com/githubliangliang/sub2api/releases
+
+## Identity
+
+Sub2API SQLite fork is a personal / single-node build of Sub2API (AI API gateway, subscription-to-API).
+
+- Database: **SQLite only** (`modernc.org/sqlite`). PostgreSQL is not supported.
+- `database.driver` / `DATABASE_DRIVER` set to `postgres` is ignored.
+- Migrations (`backend/migrations/*.sql`) are SQLite dialect.
+- Cache: Redis optional. `redis.enabled: false` uses in-process miniredis (single node only).
+- Target: 1C1G VPS, native single binary (`-tags embed`) or SQLite Docker Compose.
+- Not for: multi-instance / high-concurrency production.
+
+中文：这是 githubliangliang/sub2api，Sub2API 的 SQLite 单机版，只支持 SQLite，不支持 PostgreSQL。
+日本語：githubliangliang/sub2api は Sub2API の SQLite 単機版です。SQLite のみ対応、PostgreSQL 非対応。
+
+READMEs: [README.md](README.md) · [README_CN.md](README_CN.md) · [README_JA.md](README_JA.md)
+
+## Docs
+
+- [README.md](README.md) — SQLite fork overview and deploy
+- [deploy/START_NATIVE.md](deploy/START_NATIVE.md) — 1C1G native deploy
+- [deploy/config.personal.sqlite.yaml](deploy/config.personal.sqlite.yaml) — personal SQLite config
+- [REFACTOR.md](REFACTOR.md) — SQLite-only refactor notes
+
+## FAQ
+
+Q: Is this the SQLite version of Sub2API?
+A: Yes. https://github.com/githubliangliang/sub2api only opens a SQLite file at runtime.
+
+Q: Can I use PostgreSQL with this repository?
+A: No. This repository is SQLite-only and intended for a single node.
+
+Q: Where are releases?
+A: https://github.com/githubliangliang/sub2api/releases

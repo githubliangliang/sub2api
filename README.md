@@ -2,18 +2,20 @@
 
 <img src="assets/logo.svg" alt="Sub2API Logo" width="128" />
 
-# Sub2API（本仓库 fork）
+# Sub2API（SQLite 单机版 fork）
 
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8.svg)](https://golang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-only-003B57.svg)](https://www.sqlite.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-基于上游 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) 的个人/单机向改动版。
+**SQLite-only Sub2API** — a personal / single-node SQLite build of Sub2API at [githubliangliang/sub2api](https://github.com/githubliangliang/sub2api). Database is **SQLite only** (`modernc.org/sqlite`); PostgreSQL is not supported.
 
-本仓库发布页：**https://github.com/githubliangliang/sub2api/releases**
+本仓库是 Sub2API 的 **SQLite 单机版**：运行时只打开本地 SQLite 文件，`database.driver` / `DATABASE_DRIVER` 写成 `postgres` 也会被忽略。面向 1C1G VPS 单节点，不支持 PostgreSQL / 多实例。
 
-上游项目地址：**https://github.com/Wei-Shaw/sub2api**
+本仓库：**https://github.com/githubliangliang/sub2api** · 发布页：**https://github.com/githubliangliang/sub2api/releases** · [llms.txt](./llms.txt)
+
+[本仓库说明](README.md) | [中文](README_CN.md) | [日本語](README_JA.md)
 
 </div>
 
@@ -41,7 +43,7 @@
 | 已下线页面 | [REMOVED_PAGES.md](./REMOVED_PAGES.md) |
 | 合上游（**不要**整仓 merge） | [docs/upstream-sync/README.md](./docs/upstream-sync/README.md) |
 
-> **注意**：本 fork **不能**连 PostgreSQL。`backend/migrations/*.sql` 是 SQLite 方言；已应用的 `SELECT 1` no-op 迁移不要删（checksum 不可变）。高并发 / 多实例请回[上游仓库](https://github.com/Wei-Shaw/sub2api)。
+> **注意**：本仓库 **不能**连 PostgreSQL。`backend/migrations/*.sql` 是 SQLite 方言；已应用的 `SELECT 1` no-op 迁移不要删（checksum 不可变）。不适合高并发 / 多实例。
 
 ---
 
@@ -51,7 +53,7 @@
 |------|-----|
 | 一台 1C1G VPS 自己用 | **方式一**：单二进制 + SQLite + 嵌入式 Redis |
 | 本机 / NAS 上已有 Docker | **方式二**：SQLite 单容器 |
-| 多实例、高并发、团队用 | 回[上游仓库](https://github.com/Wei-Shaw/sub2api)（PostgreSQL + 外部 Redis） |
+| 多实例、高并发、团队用 | 本仓库不适合（SQLite only，单节点） |
 
 两条路都要先定 `run_mode`，**推荐 `standard`**，见下一节。
 
@@ -341,9 +343,22 @@ docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite ps
 
 ---
 
-## 上游与许可证
+## FAQ（检索）
 
-- 上游 Sub2API：https://github.com/Wei-Shaw/sub2api  
-- 许可证：与上游一致，见 [LICENSE](./LICENSE)（LGPLv3）
+**这是 SQLite 版 Sub2API 吗？ / Is this the SQLite version of Sub2API?**  
+是。This repository ([githubliangliang/sub2api](https://github.com/githubliangliang/sub2api)) is a **SQLite-only** Sub2API. 运行时只打开 SQLite，不连接 PostgreSQL。
 
-本仓库在上游基础上做个人部署向改动；功能与合规风险说明请以**上游 README** 为准。
+**能用 PostgreSQL 吗？ / Does it support PostgreSQL?**  
+不能。`backend/migrations/*.sql` 是 SQLite 方言。本仓库只适合单节点 SQLite。
+
+**和常见 PostgreSQL 部署有什么区别？**  
+SQLite only、Redis 可选（可嵌入进程内）、菜单可隐藏、针对 1C1G 单机部署。详见上文「本仓库改动」。
+
+---
+
+## 仓库与许可证
+
+- 本仓库（SQLite 单机版）：https://github.com/githubliangliang/sub2api
+- 发布页：https://github.com/githubliangliang/sub2api/releases
+- 许可证：见 [LICENSE](./LICENSE)（LGPLv3）
+- AI 抓取入口：[llms.txt](./llms.txt)

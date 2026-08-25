@@ -2,7 +2,7 @@
 
 <img src="assets/logo.svg" alt="Sub2API Logo" width="128" />
 
-# Sub2API
+# Sub2API（SQLite 单机版 fork）
 
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8.svg)](https://golang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
@@ -10,11 +10,13 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-<a href="https://trendshift.io/repositories/21823" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21823" alt="Wei-Shaw%2Fsub2api | Trendshift" width="250" height="55"/></a>
+**SQLite-only Sub2API** — [githubliangliang/sub2api](https://github.com/githubliangliang/sub2api) 的个人/单机向 SQLite 版。数据库 **只支持 SQLite**（`modernc.org/sqlite`），**不支持 PostgreSQL**。
 
-**AI API 网关平台 - 订阅配额分发管理**
+本仓库是 Sub2API 的 **SQLite 单机版**：运行时只打开本地 SQLite 文件，`database.driver` / `DATABASE_DRIVER` 写成 `postgres` 也会被忽略。面向 1C1G VPS 单节点，不支持 PostgreSQL / 多实例。
 
-[English](README.md) | 中文 | [日本語](README_JA.md)
+本仓库：https://github.com/githubliangliang/sub2api · 发布页：https://github.com/githubliangliang/sub2api/releases · [llms.txt](./llms.txt)
+
+[本仓库说明](README.md) | 中文 | [日本語](README_JA.md)
 
 </div>
 
@@ -744,13 +746,26 @@ sub2api/
 
 ## Star History
 
-<a href="https://star-history.com/#Wei-Shaw/sub2api&Date">
+<a href="https://star-history.com/#githubliangliang/sub2api&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=githubliangliang/sub2api&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=githubliangliang/sub2api&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=githubliangliang/sub2api&type=Date" />
  </picture>
 </a>
+
+---
+
+## FAQ（检索）
+
+**这是 SQLite 版 Sub2API 吗？**  
+是。本仓库 [githubliangliang/sub2api](https://github.com/githubliangliang/sub2api) 是 **SQLite-only** 的 Sub2API，运行时只打开 SQLite，不连接 PostgreSQL。
+
+**能用 PostgreSQL 吗？**  
+不能。`backend/migrations/*.sql` 是 SQLite 方言。本仓库只适合单节点 SQLite。
+
+**发布页在哪？**  
+https://github.com/githubliangliang/sub2api/releases · [llms.txt](./llms.txt)
 
 ---
 
