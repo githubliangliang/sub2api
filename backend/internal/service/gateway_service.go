@@ -689,6 +689,15 @@ func (e *UpstreamFailoverError) Error() string {
 	return fmt.Sprintf("upstream error: %d (failover)", e.StatusCode)
 }
 
+// poolModeRetryableOnSameAccount is true only for pool-mode accounts with a
+// retryable status that are not being disabled.
+func poolModeRetryableOnSameAccount(account *Account, statusCode int, shouldDisable bool) bool {
+	if account == nil {
+		return false
+	}
+	return !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode)
+}
+
 func (e *UpstreamFailoverError) ShouldRetryNextAccount() bool {
 	return e != nil && e.NextAccountAction != NextAccountStop
 }

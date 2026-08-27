@@ -28,11 +28,16 @@
 **结论：119 个非 merge commit 里 28 个可对当前工作区逐字 `git apply`（⇒ patch site 字节一致、同一缺陷确实存在），
 建议本轮吃下约 20 条 P0 + 11 条工具桥接 P1；两个大功能（插件系统、模型广场分时价）不做。**
 
+**2026-08-26 复核后的落地口径**：第 5 节的 21 项 P0 逐条重核（方法见第 2 节，多了按文件切开与
+依赖符号两道关），**21 项全部仍然成立**；其中 2 项前端依赖安全项已决定推迟，实际交付 **19 项**。
+已固化为 OpenSpec change
+[`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)。
+
 ### 1.1 按簇统计
 
 | 簇 | commits | 可逐字 apply | 文件 | 规模 | 判断 |
 |---|---|---|---|---|---|
-| 小而独立的 bugfix | 23 | 18 | 63 | +2484 −193 | **P0 全收**（第 5 节） |
+| 小而独立的 bugfix | 23 | 18 | 63 | +2484 −193 | **P0 全收**（第 5 节）；21 项里 19 项交付、2 项依赖安全项推迟 |
 | Responses/Chat 工具桥接修复 | 11 | 2 | 33 | +1922 −108 | **P1**（6.1） |
 | Grok 4.6 全套（0.1.179 §11 挂起） | 30 | 4 | 64 | +2840 −1644 | **P1，整套或不动**（6.2） |
 | PR #5888 + #5925 兼容大礼包 | 12 | 1 | 163 | +16936 −2498 | P2（7.1） |
@@ -71,11 +76,43 @@ git -C /tmp/up180.git show --format='' --binary <sha> > /tmp/pc/<sha>.patch
 git apply --check -p1 /tmp/pc/<sha>.patch     # 通过 ⇒ patch site 与上游字节一致
 ```
 
-**注意两种假信号：**
+**注意三种假信号：**
 
 - 通过不等于「该合」。上游按自己的历史顺序生成，前置 commit 没合时后面那条也可能失败；反过来，
   像 `f7145c750`（Grok 默认模型设置迁移）能干净应用，但它属于一个本仓库尚未拍板的策略决定，见 6.2。
 - 失败不等于「不该合」，多半只是同一文件被本轮多条 commit 或本仓库自有改动动过。按文件看冲突归属再决定。
+- **通过也不保证能编译**。`apply --check` 只比上下文，不看新代码引用的符号在不在。本节的
+  `913ec5d74` 就是实例：目标文件干净，但它调用的 `CodexCanonicalClientVersion()` 本仓库零命中。
+
+### 2.1 复核时补的两道关（2026-08-26，建议后续沿用）
+
+上面那套只做到「整 commit apply」，两个盲区：整 commit 一旦在测试文件上失败就看不出产品代码
+对不对得上；以及上面第三种假信号。补两步：
+
+```bash
+# 1) 按文件切开，逐个 apply --check，产出三态而不是两态
+awk '/^diff --git /{n++; f=sprintf("%s/%03d.patch",out,n)} n{print > f}' \
+  out=/tmp/split180/<sha> /tmp/pc180/<sha>.patch
+# ⇒ NOFILE（本仓库没这个文件）/ CONFLICT / ok
+
+# 2) 对每个 patch 的 + 行提取函数调用标识符，逐个确认已定义（或由同一 patch 定义）
+grep -rnE "func (\([^)]*\) )?<id>\b" --include=*.go backend/
+```
+
+⚠️ **部分裸克隆对 0.1.180 这批较早提交会逐 blob 拉取、非常慢**（实测跑不完）。改用逐 commit 的
+HTTPS patch，23 次请求几十秒；这条不是 API，没有每小时 60 次限制：
+
+```bash
+curl -sSL -o /tmp/pc180/<sha>.patch "https://github.com/Wei-Shaw/sub2api/commit/<sha>.patch"
+curl -sSL "https://raw.githubusercontent.com/Wei-Shaw/sub2api/c40edb4/<path>"   # 单文件按需取
+```
+
+成对项的依赖方向别靠推断，用临时工作区实测：
+
+```bash
+git worktree add -q --detach /tmp/wt180 HEAD
+cd /tmp/wt180 && git apply -p1 A.patch && git apply --check -p1 B.patch   # 两种顺序各试一次
+```
 
 ---
 
@@ -96,7 +133,13 @@ git apply --check -p1 /tmp/pc/<sha>.patch     # 通过 ⇒ patch site 与上游�
 ## 4. 建议顺序
 
 ```text
-① 第 5 节 P0 全批（先做 5.1 dompurify 安全项）
+① 第 5 节 P0（19 项，5.1 与 nanoid 已推迟）—— 按 OpenSpec change 的五个阶段走：
+   阶段 1 静默失效三件套（5.2 池模式重试 / 40c26f343 空 capabilities / 5.3 ops 内存）
+   阶段 2 流式与协议保真（243921dc0 / bafd2e293）
+   阶段 3 模型目录与账号端点（先补 CodexCanonicalClientVersion → 913ec5d74 →
+          f98a056f7 先做配置检查 → e7a3c1202+21c07e835 同一提交 → 1e1798d90）
+   阶段 4 Ollama Cloud 一对（b30651a0a → 86470628d，顺序固定）
+   阶段 5 会话种子 / 日志 / token 刷新 / 管理台四项 / 文档
 ② 6.1 Responses/Chat 工具桥接 11 条（先 4d4a0be1a：PDF 附件被静默丢弃）
 ③ 6.2 Grok 一套：先 ed4207a16（别名 + grok-3-mini 价卡两个真 bug），
        再决定 39485f2e2 + f7145c750（默认模型 4.5 → 4.6）
@@ -114,9 +157,32 @@ git apply --check -p1 /tmp/pc/<sha>.patch     # 通过 ⇒ patch site 与上游�
 
 除 5.1 外全部 `git apply --check` 通过。
 
-### 5.1 dompurify `3.3.1` → `3.4.14`（安全，本节最高优先）
+本节 21 项已固化为 OpenSpec change
+[`openspec/changes/port-upstream-0.1.180-p0-fixes/`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)：
+`specs/*/spec.md` 是移植后必须成立的行为（21 条 Requirement / 77 个 Scenario，覆盖交付的 19 项），
+`tasks.md` 是按文件的实施清单，`verification.md` 是验收证据矩阵。合完一项后把下面对应条目的
+状态改成「已合」。
 
-上游 `4a1da2950`。2 文件 +20-64。状态：**待合**
+📌 **其中 2 项前端依赖安全项（5.1 dompurify、5.4 的 `b410c3913` nanoid 审计例外）已决定推迟**，
+不在该 change 的交付范围内，理由与重新评估触发条件见其 `design.md` 决策 1。
+
+⚠️ **2026-08-26 复核补充两点**（原清单的 `apply --check` 通道看不出来，详见该 change 的
+`source-baseline.md` §4）：
+
+1. **`913ec5d74` 引用了本仓库没有的 `CodexCanonicalClientVersion()`**，`apply --check` 通过但
+   **不编译**。上游该函数体只有一行 `return resolveCodexOutboundIdentity("").version`，
+   本仓库 `openai_codex_identity.go:108` 有 `resolveCodexOutboundIdentity`，补同名 helper 即可。
+   ⇒ 凡新增函数调用都要额外 `grep -rn "func .*<name>"`，别只看 `apply --check`。
+2. **`e7a3c1202` 与 `21c07e835` 的落地顺序要与上游相反**。上游先合路由（`e7a3c120`）、后修 URL
+   （`21c07e83`），中间那段时间付费账号被打到 `daily-cloudcode-pa.sandbox.googleapis.com` → 401
+   「Invalid bearer token」，正是 #3611 / #2962 那个坑。本仓库**必须同一提交落地，或先合 URL 修正**。
+
+另外实测确认：`86470628d` 单独 apply 报 NOFILE（目标文件由 `b30651a0a` 新建），顺序固定；
+`cfecc8d11` 与 `e4f869e0c` 两种顺序下都 clean，顺序无关。
+
+### 5.1 dompurify `3.3.1` → `3.4.14`（安全项，**已决定推迟**）
+
+上游 `4a1da2950`。2 文件 +20-64。状态：**已决定推迟**（2026-08-26）
 
 CVE-2026-65913 / GHSA-cj63-jhhr-wcxv：`USE_PROFILES` 打开时 `ALLOWED_ATTR` 被重建成普通数组并用
 `ALLOWED_ATTR[lcName]` 查表，被污染的 `Array.prototype` 属性（如 `onclick`）会被当成白名单属性存活。
@@ -129,11 +195,25 @@ CVE-2026-65913 / GHSA-cj63-jhhr-wcxv：`USE_PROFILES` 打开时 `ALLOWED_ATTR` �
 | 文件 | 动作 | 改什么 |
 |---|---|---|
 | `frontend/package.json` | 改 | `dompurify: ^3.4.14`，并在 `pnpm.overrides` 加 `"dompurify@<3.4.14": ">=3.4.14"`（让 mermaid 传递依赖的那份也去重到同一版本） |
-| `frontend/pnpm-lock.yaml` | 重新生成 | ⚠️ **不要抄上游 lockfile**（它是 pnpm 9 产物，本仓库用 pnpm v11）。本地 `pnpm install` 后提交 |
+| `frontend/pnpm-lock.yaml` | 重新生成 | ⚠️ **不要抄上游 lockfile**（它是 pnpm 9 产物，本仓库用 pnpm v11）。本地 `pnpm install --lockfile-only` 即可，只重写 lockfile、不装 node_modules |
+
+⚠️ 原清单漏了一处：`frontend/pnpm-workspace.yaml` 里**也有一个 `overrides:` 块**，注释写明
+「pnpm v11 reads overrides here; Docker/CI still use pnpm 9 which also honors
+package.json.pnpm.overrides. Keep both in sync.」——本机 pnpm 11 读 workspace 那份，CI（pnpm 9）
+读 `package.json` 那份。**两处都要加**，只加一处会「本地去重了、CI 没去重」。
+
+**推迟决定（2026-08-26）**：这个绕过需要页面里另有 prototype pollution 原语才可利用；本仓库
+`sanitizeSvg` 的全部输入都是管理员自填（`AppSidebar.vue` 的自定义侧栏图标来自菜单设置，
+`ImageUpload.vue` 的 `mode='svg'` 只出现在 `SettingsView.vue` / `RiskControlView.vue` /
+`AccountTestModal.vue` 三个管理页），单管理员部署下实际可达性低。
+**推迟意味着这两个文件一个都不动**——三个 workflow 与 `Dockerfile` 都用
+`pnpm install --frozen-lockfile`，只改 `package.json` 会让 CI 与镜像构建直接失败。
+重新评估的触发条件（对外发 key / 出现第二个管理员 / 发现 prototype pollution 原语 /
+因其他原因顺带升级传递依赖）见 change 的 `design.md` 决策 1。
 
 ### 5.2 池模式同账号错误重试丢失（两条 compat 路径）
 
-上游 `b1e60ba45`。3 文件 +88-6。状态：**待合**
+上游 `b1e60ba45`。3 文件 +88-6。状态：**已合**
 
 本仓库现状：`gateway_forward.go:699` / `:733`（原生 Anthropic 路径）已经在填
 `RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(...)`，但
@@ -145,7 +225,7 @@ CVE-2026-65913 / GHSA-cj63-jhhr-wcxv：`USE_PROFILES` 打开时 `ALLOWED_ATTR` �
 
 ### 5.3 ops 面板混用 cgroup 与 host 内存
 
-上游 `cd05772e9`。2 文件 +160-35。状态：**待合**
+上游 `cd05772e9`。2 文件 +160-35。状态：**已合**
 
 本仓库现状：`ops_metrics_collector.go:602` 取 cgroup 三元组，`:622` 就是那句
 「If total memory isn't available from cgroup (e.g. memory.max = "max"), fill total from host」。
@@ -155,26 +235,26 @@ Docker + cgroup v2 且未设内存上限时，`used` 是容器数、`total` 是�
 
 ### 5.4 其余 P0（逐条已 `apply --check` 通过）
 
-| 上游 commit | 内容 | 规模 | 备注 |
-|---|---|---|---|
-| `3445485eb` | 前端 token 刷新锁死循环 | 2 文件 +17-12 | 纯删 `api/tokenRefresh.ts` 12 行 + 回归测试；CPU 空转 |
-| `40c26f343` | 空 `openai_capabilities` 不再把 OAuth 账号排除出文本调度（#5530） | 2 文件 +76-0 | `service/account.go` +15；调度可用性 |
-| `e45490a36` | 动态 system message 下 chat 粘性 hash 不再漂移 | 2 文件 +83-11 | `openai_content_session_seed.go` |
-| `913ec5d74` | OAuth 账号自动同步模型 | 2 文件 +121-0 | `upstream_models.go` |
-| `f98a056f7` | 收紧 Google One 模型目录 | 6 文件 +142-1 | `pkg/geminicli/models.go` 新增约束 |
-| `243921dc0` | 按上报 item 重建流式终端输出 | 2 文件 +206-5 | `openai_gateway_response_handling.go` |
-| `bafd2e293` | 流式 arguments delta 不再带空 tool name | 2 文件 +47-1 | `apicompat/types.go` |
-| `e7a3c1202` + `21c07e835` | Antigravity 付费账号改走官方 daily 端点 | 2+2 文件 | `antigravity_gateway_retry.go`、`pkg/antigravity/oauth.go` |
-| `1e1798d90` | Composite 分组放行视频生成端点 | 2 文件 +16-1 | `server/routes/gateway.go` |
-| `b30651a0a` | Ollama Cloud CC 思维字段对齐 `reasoning_content` | 3 文件 +445-0 | 新建 `openai_gateway_ollama_cloud_cc_reasoning.go`；本 fork 有 Ollama Cloud |
-| `86470628d` | Ollama Cloud 账号 clamp `max_tokens` | 3 文件 +245-1 | 依赖上一条，先后顺序固定 |
-| `ee62dfbaf` | 批量代理解析支持 `[IPv6]` | 2 文件 +62-4 | `views/admin/ProxiesView.vue` |
-| `5dfad32b8` | 用户并发数 0 = 不限（编辑弹窗） | 4 文件 +109-5 | 含中英文案 |
-| `616df479e` | 账号优先级列默认展示 | 2 文件 +153-1 | |
-| `f6aa9dc3c` | `prompt_guard.config_loaded` 只在变化时记日志 | 2 文件 +73-5 | `securityaudit/prompt_config_store.go`；1C1G 磁盘友好 |
-| `cfecc8d11` + `e4f869e0c` | 运维错误详情「返回列表」+ 保留筛选状态、兼容展示 | 6+5 文件 +228-13 | 纯前端，本仓库 ops 页面组件齐全 |
-| `b410c3913` | nanoid 审计例外 GHSA-2v37-7h3g-55p8 | 1 文件 +7 | `.github/audit-exceptions.yml` |
-| `98c7b0e88` | 文档自引用 URL 修正 | 1 文件 | 顺手 |
+| 上游 commit | 内容 | 规模 | 状态 | 备注 |
+|---|---|---|---|---|
+| `3445485eb` | 前端 token 刷新锁死循环 | 2 文件 +17-12 | **已合** | 纯删 `api/tokenRefresh.ts` 12 行 + 回归测试；CPU 空转 |
+| `40c26f343` | 空 `openai_capabilities` 不再把 OAuth 账号排除出文本调度（#5530） | 2 文件 +76-0 | **已合** | `service/account.go` +15；调度可用性 |
+| `e45490a36` | 动态 system message 下 chat 粘性 hash 不再漂移 | 2 文件 +83-11 | **已合** | `openai_content_session_seed.go` |
+| `913ec5d74` | OAuth 账号自动同步模型 | 2 文件 +121-0 | **已合** | `upstream_models.go`；⚠️ **先补 `CodexCanonicalClientVersion()`**，否则不编译（见本节开头） |
+| `f98a056f7` | 收紧 Google One 模型目录 | 6 文件 +142-1 | **已合** | `pkg/geminicli/models.go` 新增约束。⚠️ 这是**收窄**（3.x / image 模型从 Google One 账号的可见清单里移出）：上线前先查现有 Google One 账号与分组白名单 / `model_pricing` 有没有依赖将被移出的模型 ID，否则会留下孤儿条目 |
+| `243921dc0` | 按上报 item 重建流式终端输出 | 2 文件 +206-5 | **已合** | `openai_gateway_response_handling.go` |
+| `bafd2e293` | 流式 arguments delta 不再带空 tool name | 2 文件 +47-1 | **已合** | `apicompat/types.go` |
+| `e7a3c1202` + `21c07e835` | Antigravity 付费账号改走官方 daily 端点 | 2+2 文件 | **已合** | `antigravity_gateway_retry.go`、`pkg/antigravity/oauth.go`；⚠️ **顺序与上游相反**：URL 修正必须同时或在前（见本节开头） |
+| `1e1798d90` | Composite 分组放行视频生成端点 | 2 文件 +16-1 | **已合** | `server/routes/gateway.go` |
+| `b30651a0a` | Ollama Cloud CC 思维字段对齐 `reasoning_content` | 3 文件 +445-0 | **已合** | 新建 `openai_gateway_ollama_cloud_cc_reasoning.go`；本 fork 有 Ollama Cloud |
+| `86470628d` | Ollama Cloud 账号 clamp `max_tokens` | 3 文件 +245-1 | **已合** | 依赖上一条，先后顺序固定 |
+| `ee62dfbaf` | 批量代理解析支持 `[IPv6]` | 2 文件 +62-4 | **已合** | `views/admin/ProxiesView.vue` |
+| `5dfad32b8` | 用户并发数 0 = 不限（编辑弹窗） | 4 文件 +109-5 | **已合** | 含中英文案 |
+| `616df479e` | 账号优先级列默认展示 | 2 文件 +153-1 | **已合** | |
+| `f6aa9dc3c` | `prompt_guard.config_loaded` 只在变化时记日志 | 2 文件 +73-5 | **已合** | `securityaudit/prompt_config_store.go`；1C1G 磁盘友好 |
+| `cfecc8d11` + `e4f869e0c` | 运维错误详情「返回列表」+ 保留筛选状态、兼容展示 | 6+5 文件 +228-13 | **已合** | 纯前端，本仓库 ops 页面组件齐全 |
+| `b410c3913` | nanoid 审计例外 GHSA-2v37-7h3g-55p8 | 1 文件 +7 | **已决定推迟** | `.github/audit-exceptions.yml`（与 5.1 同批）。另注：该文件里 `lodash` / `lodash-es`（`2026-07-02`）与 `axios`（`2026-07-10`）三条例外**已过期**，而 `tools/check_pnpm_audit_exceptions.py` 对过期条目同样返回 1 ⇒ `security-scan.yml` 很可能已经红了约七周，与 nanoid 无关，需单独处理 |
+| `98c7b0e88` | 文档自引用 URL 修正 | 1 文件 | **已合** | 顺手；无 Requirement，只在 change 的 `tasks.md` |
 
 ---
 
@@ -385,7 +465,9 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 | 上游 `migrations/229_plugins.sql` / `230_plugin_artifacts.sql` 原文件 | PG 方言 + 多实例语义；本地要新建 225/226 才行，且插件系统本轮判为不合 |
 | 上游 0.1.179 的迁移 226 / 227 / 228 | 沿用 0.1.179 §10 的结论 |
 | `f7145c750` 顺手合 | 它是 Grok 默认模型 4.6 的数据迁移，属于 9.1 的决定，不是独立 bugfix |
-| 上游 `frontend/pnpm-lock.yaml` | pnpm 9 产物，本仓库 pnpm v11，必须本地重生成 |
+| 上游 `frontend/pnpm-lock.yaml` | pnpm 9 产物，本仓库 pnpm v11，必须本地重生成（真做 5.1 时用 `pnpm install --lockfile-only`） |
+| 推迟期间碰 `frontend/package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `.github/audit-exceptions.yml` | 5.1 与 nanoid 已决定推迟，这四个文件一个都不动 |
+| 只改 `package.json` 不同步 lockfile | 三个 workflow 与 `Dockerfile` 都用 `pnpm install --frozen-lockfile`，会让 CI 与镜像构建直接失败。没有「只改一半」的中间状态 |
 | 改已应用的 `migrations/*.sql` | checksum 不可变 |
 | 手改 `wire_gen.go` | 动了 wire 就 `go generate ./cmd/server`（7.3 会触发） |
 | 在 `skipSQLiteBackgroundJobs` 里新增服务来「绕过」上游 SQL | README 硬约束第 9 条 |
@@ -406,10 +488,17 @@ cd ../frontend && pnpm run typecheck && pnpm run lint:check
 cd .. && make test-frontend-critical
 ```
 
+第 5 节那 19 项的逐条证据矩阵在 OpenSpec change 的
+[`verification.md`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/verification.md)，
+其中三条**必须先复现失效再验修复**（它们都不抛错，按「代码改了」验收等于没验收）：
+5.2 池模式重试、`40c26f343` 空 capabilities、5.3 ops 内存混用。
+
 重点盯：
 
 - 登录 / `user_allowed_groups`（缺表会 503）
 - 用量写入（`usage_billing_dedup`）
 - 调度冷却与账号 failover（6.3 的 `3fd66a33b`、5.2 的池模式重试都在这条路上）
+- `40c26f343` 上线后进观察期：此前被静默排除的 OAuth 账号会重新进入调度，账号池实际容量上升、
+  流量分布会变，盯账号级并发与 429 分布
 - 前端全量 `pnpm run test:run` 已知有 1 个**与移植无关**的失败文件
   （`src/composables/__tests__/useRoutePrefetch.spec.ts`，5 条），见 PORTING-0.1.179.md §4.6

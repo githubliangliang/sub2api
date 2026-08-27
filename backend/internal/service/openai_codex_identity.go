@@ -98,6 +98,13 @@ type codexOutboundIdentity struct {
 	version    string
 }
 
+// CodexCanonicalClientVersion is the outbound Codex client version used when
+// no candidate User-Agent is supplied. OAuth model sync must use this same
+// source as other Codex traffic.
+func CodexCanonicalClientVersion() string {
+	return resolveCodexOutboundIdentity("").version
+}
+
 // resolveCodexOutboundIdentity 由候选 User-Agent 推导自洽的出站身份。
 // candidateUA 为空时使用规范 User-Agent；推导不出官方身份时整体回退为规范 TUI 身份。
 //
