@@ -2,8 +2,12 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
@@ -97,6 +101,76 @@ func TestUserRepositoryCreateWithEmailAliasGuard(t *testing.T) {
 		Role:         service.RoleUser,
 		Status:       service.StatusActive,
 	}))
+}
+
+func TestUserRepositoryUpdateEmailWithAliasGuardRequiresTransaction(t *testing.T) {
+	repo, client := newUserEntRepo(t)
+	ctx := context.Background()
+	seedUserForAliasTest(t, repo, "owner@example.com")
+	owner, err := repo.GetByEmail(ctx, "owner@example.com")
+	require.NoError(t, err)
+
+	err = repo.UpdateEmailWithAliasGuard(ctx, owner.ID, "new@example.com", "new-hash")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires a transaction")
+
+	stored, err := client.User.Get(ctx, owner.ID)
+	require.NoError(t, err)
+	require.Equal(t, "owner@example.com", stored.Email)
+}
+
+func TestUserRepositoryUpdateEmailWithAliasGuardRejectsOtherUserAlias(t *testing.T) {
+	repo, client := newUserEntRepo(t)
+	ctx := context.Background()
+	seedUserForAliasTest(t, repo, "a.b@gmail.com")
+	seedUserForAliasTest(t, repo, "other@example.com")
+	other, err := repo.GetByEmail(ctx, "other@example.com")
+	require.NoError(t, err)
+
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+	txCtx := dbent.NewTxContext(ctx, tx)
+
+	err = repo.UpdateEmailWithAliasGuard(txCtx, other.ID, "ab@gmail.com", "new-hash")
+	require.ErrorIs(t, err, service.ErrEmailExists)
+	var app *infraerrors.ApplicationError
+	require.True(t, errors.As(err, &app))
+	require.NotContains(t, app.Message, "UNIQUE")
+	require.NotContains(t, app.Reason, "users.email")
+}
+
+func TestUserRepositoryUpdateEmailWithAliasGuardAllowsOwnAliasRewrite(t *testing.T) {
+	repo, client := newUserEntRepo(t)
+	ctx := context.Background()
+	seedUserForAliasTest(t, repo, "a.b@gmail.com")
+	owner, err := repo.GetByEmail(ctx, "a.b@gmail.com")
+	require.NoError(t, err)
+
+	tx, err := client.Tx(ctx)
+	require.NoError(t, err)
+	txCtx := dbent.NewTxContext(ctx, tx)
+	require.NoError(t, repo.UpdateEmailWithAliasGuard(txCtx, owner.ID, "ab@gmail.com", "new-hash"))
+	require.NoError(t, tx.Commit())
+
+	stored, err := client.User.Get(ctx, owner.ID)
+	require.NoError(t, err)
+	require.Equal(t, "ab@gmail.com", stored.Email)
+	require.Equal(t, "new-hash", stored.PasswordHash)
+}
+
+func TestTranslatePersistenceErrorUniqueConstraintBecomesEmailExistsWithoutSQLLeak(t *testing.T) {
+	err := translatePersistenceError(
+		errors.New("UNIQUE constraint failed: users.email"),
+		service.ErrUserNotFound,
+		service.ErrEmailExists,
+	)
+	require.ErrorIs(t, err, service.ErrEmailExists)
+	var app *infraerrors.ApplicationError
+	require.True(t, errors.As(err, &app))
+	require.NotContains(t, app.Message, "UNIQUE")
+	require.NotContains(t, app.Reason, "users.email")
+	require.False(t, strings.Contains(strings.ToLower(app.Message), "sql"))
 }
 
 func TestUserRepositoryCountUsersByEmailDomain(t *testing.T) {

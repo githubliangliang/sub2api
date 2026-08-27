@@ -2,7 +2,14 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-当前对照与待移植清单见 [PORTING-0.1.180.md](./PORTING-0.1.180.md)（上一轮 [PORTING-0.1.179.md](./PORTING-0.1.179.md)，P0/P1 已全合；再上一轮 [PORTING-0.1.176.md](./PORTING-0.1.176.md)，标题写 0.1.177，已全合）。
+当前待移植清单有两份，**互不冲突、可并行**：
+
+- [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版，12 项 P0 + 2 项 P1，无新迁移。
+- [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版，**一条都还没合**；上面那份里的 Responses Lite 簇要等它的 §6.1 / §7.1。
+
+两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（21 项）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
+
+上一轮 [PORTING-0.1.179.md](./PORTING-0.1.179.md)，P0/P1 已全合；再上一轮 [PORTING-0.1.176.md](./PORTING-0.1.176.md)，标题写 0.1.177，已全合。
 
 移植上游代码前先读 [第 4 节「硬约束」](#4-硬约束)，尤其是 9–12 条（SQLite 适配的四个静默陷阱）。这几条的由来见 [第 7 节的事故复盘](#7-案例一次由-sqlite-适配引发的调度事故2026-08-16)。
 

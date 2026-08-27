@@ -670,10 +670,10 @@ func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsag
 
 			cc5m := deltaUsage.Get("cache_creation.ephemeral_5m_input_tokens")
 			cc1h := deltaUsage.Get("cache_creation.ephemeral_1h_input_tokens")
-			if cc5m.Exists() && cc5m.Int() > 0 {
+			if cc5m.Exists() {
 				usage.CacheCreation5mTokens = int(cc5m.Int())
 			}
-			if cc1h.Exists() && cc1h.Int() > 0 {
+			if cc1h.Exists() {
 				usage.CacheCreation1hTokens = int(cc1h.Int())
 			}
 		}

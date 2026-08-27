@@ -230,6 +230,39 @@ func TestAuthServiceLoginDefersLastLoginTouchUntilRecordSuccessfulLogin(t *testi
 	require.Equal(t, user.ID, identity.UserID)
 }
 
+func TestAuthServiceLogin_LoadsAllowedGroupsFromJoinTable(t *testing.T) {
+	svc, repo, client := newAuthServiceWithEnt(t, map[string]string{
+		service.SettingKeyRegistrationEnabled: "true",
+	}, nil)
+	ctx := context.Background()
+
+	passwordHash, err := svc.HashPassword("password")
+	require.NoError(t, err)
+	user, err := client.User.Create().
+		SetEmail("login-allowed-groups@example.com").
+		SetUsername("login-allowed-groups").
+		SetPasswordHash(passwordHash).
+		SetRole(service.RoleUser).
+		SetStatus(service.StatusActive).
+		SetBalance(1).
+		SetConcurrency(1).
+		Save(ctx)
+	require.NoError(t, err)
+
+	group, err := client.Group.Create().
+		SetName("login-allowed-groups").
+		SetStatus(service.StatusActive).
+		Save(ctx)
+	require.NoError(t, err)
+	require.NoError(t, repo.AddGroupToAllowedGroups(ctx, user.ID, group.ID))
+
+	token, gotUser, err := svc.Login(ctx, user.Email, "password")
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+	require.NotNil(t, gotUser)
+	require.Equal(t, []int64{group.ID}, gotUser.AllowedGroups)
+}
+
 func TestAuthServiceRecordSuccessfulLoginBackfillsEmailIdentity(t *testing.T) {
 	svc, repo, client := newAuthServiceWithEnt(t, map[string]string{
 		service.SettingKeyRegistrationEnabled: "true",

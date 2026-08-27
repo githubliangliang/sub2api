@@ -866,6 +866,66 @@ func TestSetAntigravityModelRateLimits_ClaudeDoesNotWriteGeminiScope(t *testing.
 	require.Equal(t, "claude-sonnet-4-5", repo.modelRateLimitCalls[0].modelKey)
 }
 
+func TestSetAntigravityModelRateLimits_DoesNotDoubleMapCustomChain(t *testing.T) {
+	repo := &stubAntigravityAccountRepo{}
+	svc := &AntigravityGatewayService{}
+	account := &Account{
+		ID:       790,
+		Platform: PlatformAntigravity,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"custom-sonnet":     "claude-sonnet-4-5",
+				"claude-sonnet-4-5": "claude-sonnet-4-6",
+			},
+		},
+	}
+	resetAt := time.Now().Add(30 * time.Second)
+	canonicalModel := resolveFinalAntigravityModelKey(context.Background(), account, "custom-sonnet")
+	require.Equal(t, "claude-sonnet-4-5", canonicalModel)
+
+	success := svc.setAntigravityModelRateLimits(
+		context.Background(),
+		repo,
+		account,
+		canonicalModel,
+		"[test]",
+		429,
+		resetAt,
+		false,
+	)
+
+	require.True(t, success)
+	require.Len(t, repo.modelRateLimitCalls, 1)
+	require.Equal(t, "claude-sonnet-4-5", repo.modelRateLimitCalls[0].modelKey)
+}
+
+func TestSetModelRateLimitAndClearSession_UsesUpstreamReportedModelMetadata(t *testing.T) {
+	repo := &stubAntigravityAccountRepo{}
+	svc := &AntigravityGatewayService{accountRepo: repo}
+	account := &Account{
+		ID:       791,
+		Platform: PlatformAntigravity,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"claude-sonnet-4-5": "claude-sonnet-4-6",
+			},
+		},
+	}
+
+	svc.setModelRateLimitAndClearSession(&handleModelRateLimitParams{
+		ctx:        context.Background(),
+		prefix:     "[test]",
+		account:    account,
+		statusCode: 429,
+	}, &antigravitySmartRetryInfo{
+		RetryDelay: 30 * time.Second,
+		ModelName:  "claude-sonnet-4-5",
+	})
+
+	require.Len(t, repo.modelRateLimitCalls, 1)
+	require.Equal(t, "claude-sonnet-4-5", repo.modelRateLimitCalls[0].modelKey)
+}
+
 func TestAntigravityRetryLoop_PreCheck_SwitchesWhenRateLimited(t *testing.T) {
 	upstream := &recordingOKUpstream{}
 	account := &Account{

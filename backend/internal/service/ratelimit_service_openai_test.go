@@ -117,6 +117,77 @@ func TestCalculateOpenAI429ResetTime_NoCodexHeaders(t *testing.T) {
 	}
 }
 
+func TestParseOpenAIRateLimitResetTime_OpenCodeGoUsageLimit(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want time.Duration
+	}{
+		{
+			name: "days",
+			body: `{"type":"error","error":{"type":"GoUsageLimitError","message":"Weekly usage limit reached. Resets in 2 days."}}`,
+			want: 48 * time.Hour,
+		},
+		{
+			name: "hours",
+			body: `{"type":"error","error":{"type":"GoUsageLimitError","message":"Weekly usage limit reached. Resets in 18 hours."}}`,
+			want: 18 * time.Hour,
+		},
+		{
+			name: "hours and minutes",
+			body: `{"type":"error","error":{"type":"GoUsageLimitError","message":"5-hour usage limit reached. Resets in 4hr 59min."}}`,
+			want: 4*time.Hour + 59*time.Minute,
+		},
+		{
+			name: "1h 30m",
+			body: `{"type":"error","error":{"type":"GoUsageLimitError","message":"Resets in 1h 30m"}}`,
+			want: 90 * time.Minute,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := time.Now()
+			resetAt := parseOpenAIRateLimitResetTime([]byte(tt.body))
+			after := time.Now()
+
+			require.NotNil(t, resetAt)
+			actual := time.Unix(*resetAt, 0)
+			require.False(t, actual.Before(before.Add(tt.want).Truncate(time.Second)))
+			require.False(t, actual.After(after.Add(tt.want)))
+		})
+	}
+}
+
+func TestParseOpenAIRateLimitResetTime_DoesNotParseUnknownErrorMessage(t *testing.T) {
+	body := []byte(`{"error":{"type":"rate_limit_error","message":"Resets in 2 days."}}`)
+
+	require.Nil(t, parseOpenAIRateLimitResetTime(body))
+}
+
+func TestParseOpenCodeGoUsageLimitResetDuration_UnparseableOverflowAndNonPositive(t *testing.T) {
+	require.Equal(t, time.Duration(0), parseOpenCodeGoUsageLimitResetDuration("GoUsageLimitError with no duration"))
+	require.Equal(t, time.Duration(0), parseOpenCodeGoUsageLimitResetDuration("Resets in 0m"))
+	require.Equal(t, time.Duration(0), parseOpenCodeGoUsageLimitResetDuration("Resets in -2 days"))
+	require.Equal(t, time.Duration(0), parseOpenCodeGoUsageLimitResetDuration("Resets in 999999999999999999999s"))
+}
+
+func TestParseOpenAIRateLimitResetTime_ExistingTypesUnchanged(t *testing.T) {
+	ts := int64(1769404154)
+	body := []byte(`{"error":{"type":"usage_limit_reached","resets_at":1769404154}}`)
+	got := parseOpenAIRateLimitResetTime(body)
+	require.NotNil(t, got)
+	require.Equal(t, ts, *got)
+
+	rateLimitBody := []byte(`{"error":{"type":"rate_limit_exceeded","resets_in_seconds":90}}`)
+	before := time.Now().Unix()
+	got = parseOpenAIRateLimitResetTime(rateLimitBody)
+	after := time.Now().Unix()
+	require.NotNil(t, got)
+	require.GreaterOrEqual(t, *got, before+90)
+	require.LessOrEqual(t, *got, after+90)
+}
+
 func TestCalculateOpenAI429ResetTime_ReversedWindowOrder(t *testing.T) {
 	svc := &RateLimitService{}
 
