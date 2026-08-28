@@ -103,10 +103,10 @@ func TestGatewayCompatPoolModeRetryNegativeCases(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	type scenario struct {
-		name       string
-		status     int
-		poolMode   bool
-		wantRetry  bool
+		name      string
+		status    int
+		poolMode  bool
+		wantRetry bool
 	}
 	scenarios := []scenario{
 		{name: "non-pool 429", status: http.StatusTooManyRequests, poolMode: false, wantRetry: false},

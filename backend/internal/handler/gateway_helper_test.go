@@ -182,7 +182,7 @@ func TestPostForwardContext_DropsCancellationKeepsDeadlineAndValues(t *testing.T
 }
 
 func TestPostForwardContext_NilParent(t *testing.T) {
-	ctx, cancel := postForwardContext(nil)
+	ctx, cancel := postForwardContext(nil) //nolint:staticcheck // SA1012: verifies nil-parent fallback
 	defer cancel()
 
 	require.NoError(t, ctx.Err())

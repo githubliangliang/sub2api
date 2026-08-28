@@ -88,7 +88,7 @@ var DefaultAntigravityModelMapping = map[string]string{
 	"claude-sonnet-4-5-thinking": "claude-sonnet-4-6", // 迁移旧兼容别名
 	// Claude 详细版本 ID 映射
 	"claude-opus-4-5-20251101":   "claude-opus-4-6-thinking", // 迁移旧模型
-	"claude-sonnet-4-5-20250929": "claude-sonnet-4-6", // 迁移旧兼容别名
+	"claude-sonnet-4-5-20250929": "claude-sonnet-4-6",        // 迁移旧兼容别名
 	// Claude Haiku → Sonnet（无 Haiku 支持）
 	"claude-haiku-4-5":          "claude-sonnet-4-6",
 	"claude-haiku-4-5-20251001": "claude-sonnet-4-6",

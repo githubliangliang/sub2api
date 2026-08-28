@@ -109,7 +109,7 @@ func (s *ProxyProbeServiceSuite) TestProbeProxy_UsesConfiguredTargetsInOrder() {
 		}
 	}))
 
-	configured := NewProxyExitInfoProber(&config.Config{
+	prober := NewProxyExitInfoProber(&config.Config{
 		Security: config.SecurityConfig{
 			ProxyProbe: config.ProxyProbeConfig{
 				URLs: []config.ProbeURLConfig{
@@ -118,7 +118,9 @@ func (s *ProxyProbeServiceSuite) TestProbeProxy_UsesConfiguredTargetsInOrder() {
 				},
 			},
 		},
-	}).(*proxyProbeService)
+	})
+	configured, ok := prober.(*proxyProbeService)
+	require.True(s.T(), ok)
 
 	info, _, err := configured.ProbeProxy(s.ctx, s.proxySrv.URL)
 	require.NoError(s.T(), err)

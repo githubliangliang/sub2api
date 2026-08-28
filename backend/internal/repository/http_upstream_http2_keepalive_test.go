@@ -28,10 +28,7 @@ func http2KeepAliveTestPoolSettings() poolSettings {
 // HTTP2Config.SendPingTimeout/PingTimeout. Older toolchains still set TLSNextProto.
 func requireHTTP2Configured(t *testing.T, tr *http.Transport, msg string) {
 	t.Helper()
-	configured := false
-	if tr.Protocols != nil && tr.Protocols.HTTP2() {
-		configured = true
-	}
+	configured := tr.Protocols != nil && tr.Protocols.HTTP2()
 	if tr.TLSNextProto != nil && tr.TLSNextProto["h2"] != nil {
 		configured = true
 	}
