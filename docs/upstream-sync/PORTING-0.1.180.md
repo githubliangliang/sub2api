@@ -6,7 +6,7 @@
 通用流程见 [README.md](./README.md)，上一轮清单见 [PORTING-0.1.179.md](./PORTING-0.1.179.md)（P0/P1 已全合，
 第 7 节按需项已决策完毕；其第 9 节的长上下文计费门控仍未决，见本文第 9 节）。
 
-移植前先读 README [第 4 节「硬约束」](./README.md#4-硬约束)，尤其 9–12 条；写 SQL 对照
+移植前先读 README [第 4 节「硬约束」](./README.md#4-硬约束)，尤其 9–13 条；写 SQL 对照
 [第 5 节转换速查](./README.md#5-pg--sqlite-转换速查)。
 
 ---
@@ -76,18 +76,34 @@ git -C /tmp/up180.git show --format='' --binary <sha> > /tmp/pc/<sha>.patch
 git apply --check -p1 /tmp/pc/<sha>.patch     # 通过 ⇒ patch site 与上游字节一致
 ```
 
-**注意三种假信号：**
+**注意四种假信号：**
 
 - 通过不等于「该合」。上游按自己的历史顺序生成，前置 commit 没合时后面那条也可能失败；反过来，
   像 `f7145c750`（Grok 默认模型设置迁移）能干净应用，但它属于一个本仓库尚未拍板的策略决定，见 6.2。
 - 失败不等于「不该合」，多半只是同一文件被本轮多条 commit 或本仓库自有改动动过。按文件看冲突归属再决定。
 - **通过也不保证能编译**。`apply --check` 只比上下文，不看新代码引用的符号在不在。本节的
   `913ec5d74` 就是实例：目标文件干净，但它调用的 `CodexCanonicalClientVersion()` 本仓库零命中。
+- **通过、能编译，也不保证有效**（2026-08-28 新增，实例见 6.2(c) 的 `17c0ee385`）。
+  当一条 patch 改的是**守卫条件**（`if` 的状态码集合、平台白名单、feature flag 判断）时，
+  它放行的那条路径下游往往还有第二道判定。上游那道判定可能早已被**同簇的另一条 commit** 放宽，
+  而本仓库没合那条 ⇒ 外层放开了、内层照样否掉，净行为为零。
+  这类改动的危害在于它**看起来最安全**：一行、无冲突、无新符号、测试全绿，最容易被当成
+  「顺手捡的小修复」合进来，然后在文档上留下一条「已支持 X」的假记录。
+
+  ⇒ **判定守卫类改动时，必须连同它守卫的下游判定一起看**，并回答一个问题：
+  「改完之后，什么样的真实输入会走到新放行的分支里，并且真的产生不同结果？」答不上来就是 no-op。
+  机械做法：把 patch 里出现的每个状态码 / 枚举值，在**上游同版本的完整文件**里再 grep 一遍，
+  确认下游判定也认这个值：
+
+  ```bash
+  curl -sSL "https://raw.githubusercontent.com/Wei-Shaw/sub2api/<上游tag>/<path>" \
+    | grep -n '<新放行的值>'
+  ```
 
 ### 2.1 复核时补的两道关（2026-08-26，建议后续沿用）
 
 上面那套只做到「整 commit apply」，两个盲区：整 commit 一旦在测试文件上失败就看不出产品代码
-对不对得上；以及上面第三种假信号。补两步：
+对不对得上；以及上面第三种假信号（第四种要靠读下游判定，工具挡不住）。补两步：
 
 ```bash
 # 1) 按文件切开，逐个 apply --check，产出三态而不是两态
@@ -515,6 +531,7 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 | 上游 `migrations/229_plugins.sql` / `230_plugin_artifacts.sql` 原文件 | PG 方言 + 多实例语义；本地要新建 225/226 才行，且插件系统本轮判为不合 |
 | 上游 0.1.179 的迁移 226 / 227 / 228 | 沿用 0.1.179 §10 的结论 |
 | `f7145c750` 顺手合 | 它是 Grok 默认模型 4.6 的数据迁移，属于 9.1 的决定，不是独立 bugfix |
+| `17c0ee385` 顺手合 | **2026-08-28 实测：单独合是 no-op。** 它只放宽 `forwardGrokResponses` 的**外层**状态码守卫（400 → 400/422），而真正决定要不要剥掉加密 reasoning 重试的**内层** `isGrokInvalidEncryptedContentResponse` 在本仓库仍硬门 400 ⇒ 422 进外层也会被内层否掉。widen 内层的是同簇的 `953028718`。它 1 行、无冲突、编译通过、测试全绿，**最容易被当成小修复捡走**，见 6.2(c) 与第 2 节第四种假信号 |
 | 上游 `frontend/pnpm-lock.yaml` | pnpm 9 产物，本仓库 pnpm v11，必须本地重生成（真做 5.1 时用 `pnpm install --lockfile-only`） |
 | 推迟期间碰 `frontend/package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `.github/audit-exceptions.yml` | 5.1 与 nanoid 已决定推迟，这四个文件一个都不动 |
 | 只改 `package.json` 不同步 lockfile | 三个 workflow 与 `Dockerfile` 都用 `pnpm install --frozen-lockfile`，会让 CI 与镜像构建直接失败。没有「只改一半」的中间状态 |
