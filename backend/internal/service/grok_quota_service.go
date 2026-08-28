@@ -21,10 +21,13 @@ import (
 const (
 	grokQuotaUpstreamTimeout = 20 * time.Second
 	grokQuotaProbeInput      = "hi"
-	grokQuotaDefaultModel    = grokDefaultResponsesModel
-	grokBillingExtraKey      = "grok_billing_snapshot"
-	grokBillingMaxAttempts   = 2
-	grokBillingRetryDelay    = 100 * time.Millisecond
+	// Quota probes stay on grok-4.5: SuperGrok/Heavy plan fingerprinting
+	// reads grok-4.5 Responses rate-limit windows (xai.IsGrok45ResponsesQuotaModel).
+	// Do not follow grokDefaultResponsesModel / xai.DefaultTextModel.
+	grokQuotaDefaultModel  = "grok-4.5"
+	grokBillingExtraKey    = "grok_billing_snapshot"
+	grokBillingMaxAttempts = 2
+	grokBillingRetryDelay  = 100 * time.Millisecond
 )
 
 type GrokQuotaProbeResult struct {

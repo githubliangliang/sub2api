@@ -185,7 +185,7 @@ func TestAccountTestService_TestAccountConnection_GrokDefaultsEmptyModelTo45(t *
 
 	require.NoError(t, err)
 	require.Equal(t, grokDefaultResponsesModel, gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Contains(t, recorder.Body.String(), `"model":"grok-4.5"`)
+	require.Contains(t, recorder.Body.String(), `"model":"`+grokDefaultResponsesModel+`"`)
 }
 
 func TestAccountTestService_Grok429PersistsRateLimitReset(t *testing.T) {

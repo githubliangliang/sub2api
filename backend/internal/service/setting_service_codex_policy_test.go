@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -52,12 +53,16 @@ func TestGetCodexRestrictionPolicy_InvalidJSONSafe(t *testing.T) {
 type codexPolicyMigrationRepoStub struct {
 	values map[string]string
 	sets   map[string]string
+	getErr error
 }
 
 func (s *codexPolicyMigrationRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
 	panic("unused")
 }
 func (s *codexPolicyMigrationRepoStub) GetValue(ctx context.Context, key string) (string, error) {
+	if s.getErr != nil {
+		return "", s.getErr
+	}
 	if v, ok := s.values[key]; ok {
 		return v, nil
 	}
@@ -200,5 +205,53 @@ func TestMigrateCodexBodyFingerprintToSignals(t *testing.T) {
 		svc := NewSettingService(repo, &config.Config{})
 		require.NoError(t, svc.MigrateCodexBodyFingerprintToSignals(context.Background()))
 		require.Equal(t, openai.DefaultEngineFingerprintSignalsJSON(), repo.values[SettingKeyCodexCLIOnlyEngineFingerprintSignals])
+	})
+}
+
+func TestMigrateGrokDefaultTextModel(t *testing.T) {
+	t.Run("upgrades legacy built-in default", func(t *testing.T) {
+		repo := &codexPolicyMigrationRepoStub{values: map[string]string{
+			SettingKeyGrokDefaultTextModel: "grok-4.5",
+		}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.NoError(t, svc.MigrateGrokDefaultTextModel(context.Background()))
+		require.Equal(t, "grok-4.6", repo.values[SettingKeyGrokDefaultTextModel])
+		require.Equal(t, "grok-4.6", repo.sets[SettingKeyGrokDefaultTextModel])
+	})
+
+	t.Run("trims whitespace around legacy default", func(t *testing.T) {
+		repo := &codexPolicyMigrationRepoStub{values: map[string]string{
+			SettingKeyGrokDefaultTextModel: "  grok-4.5\n",
+		}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.NoError(t, svc.MigrateGrokDefaultTextModel(context.Background()))
+		require.Equal(t, "grok-4.6", repo.values[SettingKeyGrokDefaultTextModel])
+	})
+
+	t.Run("does not overwrite an explicit model", func(t *testing.T) {
+		repo := &codexPolicyMigrationRepoStub{values: map[string]string{
+			SettingKeyGrokDefaultTextModel: "grok-4.3",
+		}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.NoError(t, svc.MigrateGrokDefaultTextModel(context.Background()))
+		require.Equal(t, "grok-4.3", repo.values[SettingKeyGrokDefaultTextModel])
+		_, wrote := repo.sets[SettingKeyGrokDefaultTextModel]
+		require.False(t, wrote)
+	})
+
+	t.Run("missing setting is left for normal defaults", func(t *testing.T) {
+		repo := &codexPolicyMigrationRepoStub{values: map[string]string{}}
+		svc := NewSettingService(repo, &config.Config{})
+		require.NoError(t, svc.MigrateGrokDefaultTextModel(context.Background()))
+		_, wrote := repo.sets[SettingKeyGrokDefaultTextModel]
+		require.False(t, wrote)
+	})
+
+	t.Run("repo error is returned so startup can warn and continue", func(t *testing.T) {
+		repo := &codexPolicyMigrationRepoStub{getErr: errors.New("db down")}
+		svc := NewSettingService(repo, &config.Config{})
+		err := svc.MigrateGrokDefaultTextModel(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "db down")
 	})
 }

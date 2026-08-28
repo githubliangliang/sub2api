@@ -496,7 +496,8 @@ func grokChatResponsesCacheIntentBody(body []byte) ([]byte, error) {
 }
 
 func grokChatResponsesRuntimeEligible(upstreamModel, cacheIdentity string) bool {
-	return strings.TrimSpace(upstreamModel) == "grok-4.5" && strings.TrimSpace(cacheIdentity) != ""
+	model := strings.TrimSpace(upstreamModel)
+	return (model == "grok-4.5" || model == "grok-4.6") && strings.TrimSpace(cacheIdentity) != ""
 }
 
 // grokChatImageBridgeModel reports whether an inline-image Chat request on this

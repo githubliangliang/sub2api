@@ -43,7 +43,7 @@ describe('useModelWhitelist', () => {
     expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
   })
 
-  it('xAI 模型列表包含 Grok 4.5 官方模型和别名', () => {
+  it('xAI 模型列表包含 Grok 4.6 官方模型和别名', () => {
     const models = getModelsByPlatform('grok')
 
     expect(models).toContain('grok-4.6')
@@ -51,25 +51,26 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('grok-4.5')
     expect(models).toContain('grok-4.5-latest')
     expect(models).toContain('grok-build-latest')
+    expect(models).toContain('grok-imagine-image-2.0')
     expect(models).toContain('grok-imagine-video-1.5-preview')
   })
 
-  it('combined 模式支持 Grok 4.5 官方别名映射', () => {
+  it('combined 模式支持 Grok 4.6 官方别名映射', () => {
     const mapping = buildModelMappingObject(
       'combined',
-      ['grok-4.5'],
+      ['grok-4.6'],
       [
-        { from: 'grok-latest', to: 'grok-4.5' },
+        { from: 'grok-latest', to: 'grok-4.6' },
         { from: 'grok-4.5-latest', to: 'grok-4.5' },
-        { from: 'grok-build-latest', to: 'grok-4.5' }
+        { from: 'grok-build-latest', to: 'grok-build-0.1' }
       ]
     )
 
     expect(mapping).toEqual({
-      'grok-4.5': 'grok-4.5',
-      'grok-latest': 'grok-4.5',
+      'grok-4.6': 'grok-4.6',
+      'grok-latest': 'grok-4.6',
       'grok-4.5-latest': 'grok-4.5',
-      'grok-build-latest': 'grok-4.5'
+      'grok-build-latest': 'grok-build-0.1'
     })
   })
 

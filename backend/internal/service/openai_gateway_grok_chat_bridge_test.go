@@ -218,6 +218,7 @@ func TestGrokChatResponsesBridgeEligibility(t *testing.T) {
 func TestGrokChatResponsesRuntimeEligibility(t *testing.T) {
 	t.Parallel()
 	require.True(t, grokChatResponsesRuntimeEligible("grok-4.5", "isolated-id"))
+	require.True(t, grokChatResponsesRuntimeEligible("grok-4.6", "isolated-id"))
 	require.False(t, grokChatResponsesRuntimeEligible("grok-4.3", "isolated-id"))
 	require.False(t, grokChatResponsesRuntimeEligible("grok-4.5-build-free", "isolated-id"))
 	require.False(t, grokChatResponsesRuntimeEligible("grok-4.5", ""))
@@ -248,7 +249,7 @@ func TestForwardGrokChatViaResponsesNonStreamingCachesAndReturnsChat(t *testing.
 	require.NotNil(t, result)
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	require.Equal(t, grokChatResponsesEndpoint, result.UpstreamEndpoint)
-	require.Equal(t, "grok-4.5", result.UpstreamModel)
+	require.Equal(t, grokDefaultResponsesModel, result.UpstreamModel)
 	require.Equal(t, 9908, result.Usage.InputTokens)
 	require.Equal(t, 12, result.Usage.OutputTokens)
 	require.Equal(t, 9856, result.Usage.CacheReadInputTokens)
@@ -349,7 +350,7 @@ func TestForwardGrokChatViaResponsesCodeBuddyUsesStableConversationHeader(t *tes
 			c.Request.Header.Set("X-Request-ID", "generic-"+tt.requestID)
 			c.Set("api_key", &APIKey{ID: 7111})
 
-			identity := resolveGrokCacheIdentity(c, tt.body, "", "grok-4.5")
+			identity := resolveGrokCacheIdentity(c, tt.body, "", grokDefaultResponsesModel)
 			require.NotEmpty(t, identity)
 			if index == 0 {
 				stableIdentity = identity
@@ -403,8 +404,8 @@ func TestForwardGrokChatViaResponsesTraeToolHistoryKeepsCacheRoute(t *testing.T)
 		accountRepo:       repo,
 	}
 
-	firstTurnIdentity := resolveGrokCacheIdentity(c, firstTurnBody, "", "grok-4.5")
-	extendedTurnIdentity := resolveGrokCacheIdentity(c, body, "", "grok-4.5")
+	firstTurnIdentity := resolveGrokCacheIdentity(c, firstTurnBody, "", grokDefaultResponsesModel)
+	extendedTurnIdentity := resolveGrokCacheIdentity(c, body, "", grokDefaultResponsesModel)
 	require.NotEmpty(t, firstTurnIdentity)
 	require.Equal(t, firstTurnIdentity, extendedTurnIdentity)
 
@@ -460,8 +461,8 @@ func TestForwardGrokChatViaResponsesTraeCompatibilityFieldsKeepCacheRoute(t *tes
 		accountRepo:       repo,
 	}
 
-	firstTurnIdentity := resolveGrokCacheIdentity(c, firstTurnBody, "", "grok-4.5")
-	extendedTurnIdentity := resolveGrokCacheIdentity(c, body, "", "grok-4.5")
+	firstTurnIdentity := resolveGrokCacheIdentity(c, firstTurnBody, "", grokDefaultResponsesModel)
+	extendedTurnIdentity := resolveGrokCacheIdentity(c, body, "", grokDefaultResponsesModel)
 	require.NotEmpty(t, firstTurnIdentity)
 	require.Equal(t, firstTurnIdentity, extendedTurnIdentity)
 
@@ -531,7 +532,7 @@ func TestForwardGrokChatRuntimeGateFallsBackToRaw(t *testing.T) {
 		mappedModel  string
 		wantUpstream string
 	}{
-		{name: "missing cache identity", wantUpstream: "grok-4.5"},
+		{name: "missing cache identity", wantUpstream: grokDefaultResponsesModel},
 		{name: "non cache capable mapped model", setAPIKey: true, mappedModel: "grok-4.3", wantUpstream: "grok-4.3"},
 	}
 

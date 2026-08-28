@@ -1150,10 +1150,29 @@ func TestCalculateCostWithLongContext_PropagatesError(t *testing.T) {
 	require.Contains(t, err.Error(), "pricing not found")
 }
 
+func TestCalculateCost_Grok3MiniUsesOfficialCardNotGrok45Fallback(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	mini, err := svc.CalculateCost("grok-3-mini", tokens, 1.0)
+	require.NoError(t, err)
+	fast, err := svc.CalculateCost("grok-3-mini-fast", tokens, 1.0)
+	require.NoError(t, err)
+	g45, err := svc.CalculateCost("grok-4.5", tokens, 1.0)
+	require.NoError(t, err)
+	require.InDelta(t, 1_000_000*0.30e-6, mini.InputCost, 1e-12)
+	require.InDelta(t, 1_000_000*0.50e-6, mini.OutputCost, 1e-12)
+	require.InDelta(t, 1_000_000*0.60e-6, fast.InputCost, 1e-12)
+	require.InDelta(t, 1_000_000*4e-6, fast.OutputCost, 1e-12)
+	require.Greater(t, g45.InputCost, mini.InputCost*5)
+	require.Greater(t, g45.OutputCost, mini.OutputCost*10)
+	require.False(t, mini.LongContextBillingApplied)
+	require.False(t, fast.LongContextBillingApplied)
+}
+
 func TestGetModelPricing_Grok45OfficialFallback(t *testing.T) {
 	svc := newTestBillingService()
 
-	for _, model := range []string{"grok", "grok-latest", "grok-4.5", "grok-4.5-latest"} {
+	for _, model := range []string{"grok-4.5", "grok-4.5-latest"} {
 		model := model
 		t.Run(model, func(t *testing.T) {
 			pricing, err := svc.GetModelPricing(model)
@@ -1169,7 +1188,7 @@ func TestGetModelPricing_Grok45OfficialFallback(t *testing.T) {
 func TestGetModelPricing_Grok46OfficialFallback(t *testing.T) {
 	svc := newTestBillingService()
 
-	for _, model := range []string{"grok-4.6", "grok-4.6-latest"} {
+	for _, model := range []string{"grok", "grok-latest", "grok-4.6", "grok-4.6-latest"} {
 		model := model
 		t.Run(model, func(t *testing.T) {
 			pricing, err := svc.GetModelPricing(model)
@@ -1186,9 +1205,9 @@ func TestGetModelPricing_Grok46OfficialFallback(t *testing.T) {
 	}
 }
 
-func TestGetModelPricing_UnknownGrokTextFallsBackToGrok45(t *testing.T) {
+func TestGetModelPricing_UnknownGrokTextFallsBackToGrok46(t *testing.T) {
 	svc := newTestBillingService()
-	baseline, err := svc.GetModelPricing("grok-4.5")
+	baseline, err := svc.GetModelPricing("grok-4.6")
 	require.NoError(t, err)
 
 	for _, model := range []string{"grok-5", "grok-5-latest", "x-ai/grok-7", "grok-4.7-beta"} {
@@ -1216,7 +1235,7 @@ func TestGetModelPricing_UnknownGrokTextFallsBackToGrok45(t *testing.T) {
 		"grok-speech-1",
 	} {
 		_, err := svc.GetModelPricing(model)
-		require.Error(t, err, "non-text grok family %s must not inherit grok-4.5 token rates", model)
+		require.Error(t, err, "non-text grok family %s must not inherit grok-4.6 token rates", model)
 		require.ErrorIs(t, err, ErrModelPricingUnavailable)
 	}
 
@@ -1272,6 +1291,14 @@ func TestGetModelPricing_GrokCatalogFallbacks(t *testing.T) {
 			name: "Grok 4.3 family",
 			models: []string{
 				"grok-4.3",
+			},
+			input:     1.25e-6,
+			cacheRead: 0.2e-6,
+			output:    2.5e-6,
+		},
+		{
+			name: "Grok 4.20 family uses dedicated card",
+			models: []string{
 				"grok-4.20-0309-reasoning",
 				"grok-4.20-0309-non-reasoning",
 				"grok-4.20-multi-agent-0309",
@@ -1281,6 +1308,24 @@ func TestGetModelPricing_GrokCatalogFallbacks(t *testing.T) {
 			input:     1.25e-6,
 			cacheRead: 0.2e-6,
 			output:    2.5e-6,
+		},
+		{
+			name: "Grok 3 Mini official cards",
+			models: []string{
+				"grok-3-mini",
+			},
+			input:     0.30e-6,
+			cacheRead: 0.075e-6,
+			output:    0.50e-6,
+		},
+		{
+			name: "Grok 3 Mini Fast official cards",
+			models: []string{
+				"grok-3-mini-fast",
+			},
+			input:     0.60e-6,
+			cacheRead: 0.15e-6,
+			output:    4e-6,
 		},
 		{
 			name: "Grok coding and Composer family",
@@ -1309,6 +1354,9 @@ func TestGetModelPricing_GrokCatalogFallbacks(t *testing.T) {
 			}
 		})
 	}
+
+	require.Same(t, svc.fallbackPrices["grok-4.20"], svc.getFallbackPricing("grok-4.20-reasoning"))
+	require.NotSame(t, svc.fallbackPrices["grok-4.3"], svc.getFallbackPricing("grok-4.20-reasoning"))
 }
 
 func TestCalculateCost_SupportsCacheBreakdown(t *testing.T) {
