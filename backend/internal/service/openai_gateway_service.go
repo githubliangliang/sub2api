@@ -337,6 +337,15 @@ func GetActualOpenAIUpstreamEndpoint(c *gin.Context) string {
 	return strings.TrimSpace(endpoint)
 }
 
+// ClearActualOpenAIUpstreamEndpoint drops any leftover runtime endpoint from a
+// previous failover attempt on this Gin context.
+func ClearActualOpenAIUpstreamEndpoint(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set(openAIUpstreamEndpointContextKey, "")
+}
+
 type OpenAIWSRetryMetricsSnapshot struct {
 	RetryAttemptsTotal            int64 `json:"retry_attempts_total"`
 	RetryBackoffMsTotal           int64 `json:"retry_backoff_ms_total"`

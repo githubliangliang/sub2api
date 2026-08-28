@@ -58,6 +58,10 @@ func TestClassifyNoAccountError_NilDiagnoser_Falls503(t *testing.T) {
 
 	require.Equal(t, http.StatusServiceUnavailable, cls.Status)
 	require.Equal(t, "api_error", cls.ErrType)
+	require.Equal(t, "Service temporarily unavailable", cls.Message)
+	require.NotContains(t, cls.Message, "quota_auto_pause")
+	require.NotContains(t, cls.Message, "model_rate_limited")
+	require.NotContains(t, cls.Message, "not_schedulable")
 	require.False(t, cls.ModelNotFound)
 }
 
