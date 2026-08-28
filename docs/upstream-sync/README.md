@@ -5,11 +5,13 @@
 当前待移植清单有两份，**互不冲突、可并行**：
 
 - [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版，12 项 P0 + 2 项 P1，无新迁移。
-- [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版，**一条都还没合**；上面那份里的 Responses Lite 簇要等它的 §6.1 / §7.1。
+- [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。
 
 两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
 
 两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
+
+再下一批是 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（2026-08-28）：从剩余 backlog 里挑 6 条「缺陷已核实、patch site 对得上、彼此无文件冲突」的候选，**实际交付 5 条**——0.1.180 §6.1 的 4 条工具桥接修复（PDF 附件静默丢弃、流式 tool_call 空身份、HTTP bridge 重复回放与孤儿 tool call）+ §6.3 的 composite `/v1/messages` 闸门。第 6 条 `17c0ee385` 在实施中被证实是 **`apply --check` 干净的 no-op**（依赖同簇未合的 `953028718`）并撤回——这是本仓库遇到的**第四种假信号**，详见该 change 的 `design.md` 决策 7 与 `source-baseline.md` §3。
 
 上一轮 [PORTING-0.1.179.md](./PORTING-0.1.179.md)，P0/P1 已全合；再上一轮 [PORTING-0.1.176.md](./PORTING-0.1.176.md)，标题写 0.1.177，已全合。
 
