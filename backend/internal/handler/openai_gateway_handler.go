@@ -189,8 +189,13 @@ func allowOpenAICompatibleMessagesDispatch(ctx context.Context, apiKey *service.
 	if apiKey.Group.Platform == service.PlatformGrok {
 		return true
 	}
-	if platform, ok := service.ResolvedTargetPlatformFromContext(ctx); ok && platform == service.PlatformGrok {
-		return true
+	// composite 分组解析到 grok 目标时与独立 grok 分组同语义豁免（/v1/messages 就是
+	// grok 的主要服务形态，anthropic 协议账号原生直通 Claude Code）；解析到 openai
+	// 目标则受 composite 分组自身的 allow_messages_dispatch 开关控制。
+	if apiKey.Group.Platform == service.PlatformComposite {
+		if platform, ok := service.ResolvedTargetPlatformFromContext(ctx); ok && platform == service.PlatformGrok {
+			return true
+		}
 	}
 	return apiKey.Group.AllowMessagesDispatch
 }
