@@ -311,7 +311,7 @@ SQLite 重写**（`CREATE TEMP TABLE` + `ROW_NUMBER() OVER (PARTITION BY ...)` +
 
 ### 4.2 `4795650d` 错误日志把入站端点误报成上游端点（未发布）
 
-8 文件 +46-0，3 个产品文件冲突。状态：**待合（需裁剪）**
+8 文件 +46-0，3 个产品文件冲突。状态：**已合**（2026-08-27），见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)
 
 `force_chat_completions` 生效时，请求实际发往 `/v1/chat/completions`，但 503 / 传输失败
 这类**没有 `OpenAIForwardResult`** 的路径上，`handler.GetUpstreamEndpoint` 回落到入站端点，

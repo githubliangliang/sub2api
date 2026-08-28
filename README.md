@@ -4,7 +4,7 @@
 
 # Sub2API（SQLite 单机版 fork）
 
-[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8.svg)](https://golang.org/)
+[![Go](https://img.shields.io/badge/Go-1.27.0-00ADD8.svg)](https://golang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
 [![SQLite](https://img.shields.io/badge/SQLite-only-003B57.svg)](https://www.sqlite.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
@@ -106,7 +106,7 @@ standard 会校验余额，而管理员创建时余额取 `default.user_balance`
 
 方案：单二进制 + SQLite + 无外部 Redis（不跑 PostgreSQL / Redis 进程）。
 
-本机需要：Go `1.26.5`（见 `backend/go.mod`）、Node 20、**pnpm**（不要用 npm）。
+本机需要：Go `1.27.0`（见 `backend/go.mod`）、Node 20、**pnpm**（不要用 npm）。
 
 #### 1. 本机编译
 
@@ -335,7 +335,7 @@ docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite ps
 
 | 组件 | 技术 |
 |------|------|
-| 后端 | Go 1.26.5、Gin、Ent、`modernc.org/sqlite` |
+| 后端 | Go 1.27.0、Gin、Ent、`modernc.org/sqlite` |
 | 前端 | Vue 3、Vite、TailwindCSS（pnpm） |
 | 数据库 | **SQLite only**（`backend/migrations/*.sql` 为 SQLite 方言） |
 | 缓存 | Redis 可选；关掉外置就用进程内嵌入式实现（仅单机） |

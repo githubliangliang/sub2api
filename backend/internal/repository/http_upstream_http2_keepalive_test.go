@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"context"
+	"crypto/x509"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -19,6 +22,26 @@ func http2KeepAliveTestPoolSettings() poolSettings {
 	}
 }
 
+// requireHTTP2Configured asserts HTTP/2 was explicitly attached to the
+// http.Transport. On go1.27 x/net/http2 wraps stdlib HTTP/2: ConfigureTransports
+// opens Protocols.HTTP2 and maps ReadIdleTimeout/PingTimeout onto
+// HTTP2Config.SendPingTimeout/PingTimeout. Older toolchains still set TLSNextProto.
+func requireHTTP2Configured(t *testing.T, tr *http.Transport, msg string) {
+	t.Helper()
+	configured := false
+	if tr.Protocols != nil && tr.Protocols.HTTP2() {
+		configured = true
+	}
+	if tr.TLSNextProto != nil && tr.TLSNextProto["h2"] != nil {
+		configured = true
+	}
+	require.True(t, configured, msg)
+	if tr.HTTP2 != nil {
+		require.Equal(t, openAIHTTP2ReadIdleTimeout, tr.HTTP2.SendPingTimeout, "HTTP2Config.SendPingTimeout")
+		require.Equal(t, openAIHTTP2PingTimeout, tr.HTTP2.PingTimeout, "HTTP2Config.PingTimeout")
+	}
+}
+
 // Codex/OpenAI 上游改走 HTTP/2 后，池化连接被代理/NAT 静默掐断会成为“死连接”：
 // 两端都以为连接存活，请求落上去会挂到 TCP 重传超时（分钟级）才失败。Go 的
 // http2.Transport 默认 ReadIdleTimeout=0（不发健康 PING），无法检测这种死连接。
@@ -31,10 +54,12 @@ func TestEnableOpenAIHTTP2KeepAlive_EnablesPingHealthCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, h2, "必须返回已配置的 *http2.Transport")
 
-	require.Positive(t, h2.ReadIdleTimeout, "必须启用空闲 PING 探测以剔除死连接")
-	require.Equal(t, openAIHTTP2ReadIdleTimeout, h2.ReadIdleTimeout)
-	require.Equal(t, openAIHTTP2PingTimeout, h2.PingTimeout, "PING 无响应必须有超时判定")
-	require.NotNil(t, tr.TLSNextProto["h2"], "http2 必须已挂到底层 http.Transport 上")
+	if h2 != nil {
+		require.Positive(t, h2.ReadIdleTimeout, "必须启用空闲 PING 探测以剔除死连接")
+		require.Equal(t, openAIHTTP2ReadIdleTimeout, h2.ReadIdleTimeout)
+		require.Equal(t, openAIHTTP2PingTimeout, h2.PingTimeout, "PING 无响应必须有超时判定")
+	}
+	requireHTTP2Configured(t, tr, "http2 必须已挂到底层 http.Transport 上")
 }
 
 // openai_h2 模式构建的 Transport 必须带上 H2 PING 健康探测，从源头剔除死连接。
@@ -42,7 +67,32 @@ func TestBuildUpstreamTransport_OpenAIH2_EnablesPingHealthCheck(t *testing.T) {
 	tr, err := buildUpstreamTransport(http2KeepAliveTestPoolSettings(), nil, upstreamProtocolModeOpenAIH2)
 	require.NoError(t, err)
 	require.True(t, tr.ForceAttemptHTTP2, "openai_h2 必须启用 HTTP/2")
-	require.NotNil(t, tr.TLSNextProto["h2"], "openai_h2 必须显式配置 http2 以启用 ReadIdleTimeout")
+	requireHTTP2Configured(t, tr, "openai_h2 必须显式配置 http2 以启用 ReadIdleTimeout")
+}
+
+func TestBuildUpstreamTransport_OpenAIH2_NegotiatesHTTP2(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+
+	tr, err := buildUpstreamTransport(http2KeepAliveTestPoolSettings(), nil, upstreamProtocolModeOpenAIH2)
+	require.NoError(t, err)
+	defer tr.CloseIdleConnections()
+	require.NotNil(t, tr.TLSClientConfig)
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	tr.TLSClientConfig.RootCAs = roots
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := tr.RoundTrip(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, 2, resp.ProtoMajor, "openai_h2 必须协商到 HTTP/2")
 }
 
 // 非 H2 模式（default/h1）不应因本次改动被误配置：default 走 Go 自动 H2（惰性配置，
@@ -62,6 +112,6 @@ func TestBuildUpstreamTransport_OpenAIH2_WithHTTPProxy_EnablesKeepAlive(t *testi
 	tr, err := buildUpstreamTransport(http2KeepAliveTestPoolSettings(), proxyURL, upstreamProtocolModeOpenAIH2)
 	require.NoError(t, err)
 	require.True(t, tr.ForceAttemptHTTP2)
-	require.NotNil(t, tr.TLSNextProto["h2"], "经代理的 openai_h2 也必须启用 http2 keepalive")
+	requireHTTP2Configured(t, tr, "经代理的 openai_h2 也必须启用 http2 keepalive")
 	require.NotNil(t, tr.Proxy, "HTTP 代理仍须通过 Transport.Proxy 生效")
 }

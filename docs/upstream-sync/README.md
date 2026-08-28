@@ -7,7 +7,9 @@
 - [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版，12 项 P0 + 2 项 P1，无新迁移。
 - [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版，**一条都还没合**；上面那份里的 Responses Lite 簇要等它的 §6.1 / §7.1。
 
-两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（21 项）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
+两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
+
+两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
 
 上一轮 [PORTING-0.1.179.md](./PORTING-0.1.179.md)，P0/P1 已全合；再上一轮 [PORTING-0.1.176.md](./PORTING-0.1.176.md)，标题写 0.1.177，已全合。
 

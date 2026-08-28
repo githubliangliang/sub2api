@@ -287,6 +287,14 @@ Docker + cgroup v2 且未设内存上限时，`used` 是容器数、`total` 是�
 5 文件 +62-24。`git apply --check` 只在 `openai_gateway_grok.go:1173` 冲突（本仓库该文件有自有改动），
 `xai/models.go` 与 `billing_service.go` 两处干净。
 
+状态：**已合**（2026-08-27），见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+
+⚠️ **2026-08-27 复核补充**：`openai_gateway_grok.go` 的那个 hunk 不是「冲突」而是**不可移植**——
+它调用 `grokSameAccountRetryMetadata`，本仓库 grep 零命中（属下面 (c) 那簇 Grok 429 同号重试）。
+⇒ **该文件的 hunk 整个丢弃**，只取 `xai/models.go` 与 `billing_service.go`。
+另外 (b) 的 `39485f2e2` 会改 (a) 刚引入的别名收窄条件、并重排 (a) 刚加过 case 的价卡 switch，
+⇒ **顺序固定 `ed4207a16` → `39485f2e2` → `f7145c750`**。
+
 1. **别名被无条件重映射**：`ModelMappingWithOptions` 与 `ResolveGrokTextResponsesModelID` 原先对
    *所有*指向 `DefaultTextModel` 常量的别名都替换成运行时默认，于是客户端**显式**要 `grok-4.5`
    也会被改写成运营方配的默认模型。上游收窄成只有 `grok` / `grok-latest` / `grok-build-latest` 跟随默认。
@@ -327,7 +335,7 @@ stream idle 重试上限作用于主路径（`c628b3eea`）、容量重试与兼
 
 | 上游 commit | 内容 | 规模 | 判断 |
 |---|---|---|---|
-| `3fd66a33b` | 调度「无可用账号」诊断：boolean 门改成返回具体 veto reason（`model_rate_limited` / `quota_auto_pause_<window>` / `platform_mismatch` / …） | 2 文件 +118-16 | **行为不变、纯可观测性**。以 `c35a482` 那次静默调度事故的经历，这条很值。⚠️ 与 7.3 重置卡功能同改 `openai_gateway_scheduling.go`，先后顺序要定 |
+| `3fd66a33b` | 调度「无可用账号」诊断：boolean 门改成返回具体 veto reason（`model_rate_limited` / `quota_auto_pause_<window>` / `platform_mismatch` / …） | 2 文件 +118-16 | **已合**。行为不变、纯可观测性。⚠️ 与 7.3 重置卡功能同改 `openai_gateway_scheduling.go`，后续 7.3 需 rebase。 |
 | `68653fb2c` | Composite 分组的 `/v1/messages` 闸门改为尊重分组自己的开关（原先 `sanitizeGroupMessagesDispatchFields` 对 composite 恒置 false） | 7 文件 +70-23 | 本仓库有 `views/admin/groupsMessagesDispatch.ts` 与 composite；解析到 grok 目标仍按目标平台豁免。CN 相关测试改动跳过 |
 | `d5824f6a5` | 保留原生 `reasoning_effort: max` | 10 文件 +81-14 | 10 个文件里 8 个本仓库有，2 个是 CN 平台文件（`*_anthropic_native.go` 里的 CN 分支）跳过 |
 | `d493ce0bb` + `fa4587041` | Codex 账号身份限定到 OAuth 账号 / auto-review 留在母账号 | 18+7 文件 +1392-68 | **只有在用 spark 影子账号时才需要**。不用就别动，它铺开 25 个文件 |
@@ -429,7 +437,10 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 - **6.2(a) 的两个 bug 与这个决定无关**，可以先合、不影响默认模型。
 - 决定跟的话，`39485f2e2` 与 `f7145c750` 必须一起，否则代码默认与存量 DB 设置会不一致。
 
-状态：**未决**。
+状态：**已决策并落地（2026-08-27）—— 跟到 `grok-4.6`**。`39485f2e2` + `f7145c750` 成对，
+落地顺序在 6.2(a) 之后。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+⚠️ `f7145c750` 的数据迁移**不可逆**：revert 代码不会把 DB 里已被改写的
+`grok_default_text_model` 改回 `grok-4.5`。
 
 ### 9.2 Go 1.27.0 + golangci-lint v2.13
 
@@ -448,12 +459,27 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 
 可以先不跟。但拖久了，后续每轮移植都要在两套 ent 生成结果之间手工调和。
 
-状态：**未决**。
+状态：**已决策并落地（2026-08-27）—— 跟到 `1.27.0`** + golangci-lint `v2.13`。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+⚠️ 两处本节原文写少了：版本断言实际是 **5 行**（`backend-ci.yml` 两处、`security-scan.yml` 一处、
+`release.yml` 两处），golang 镜像是 **3 个** Dockerfile（根 / `backend/` / `deploy/`）。
+`DEV_GUIDE.md:52` 现在写的「三个 workflow ... 两处」也要一并纠正。
 
 ### 9.3 遗留：长上下文计费门控 AND → OR（0.1.179 §9）
 
-与 0.1.180 无关，仍未决。`billing_service.go` 里那一行 `applyLongCtx = applyLongCtx && *input.…`。
-对外发 key 就跟 OR，纯自用记账可以保持 AND（代价是用量统计低估真实成本）。
+与 0.1.180 无关。`billing_service.go:1103-1105` 那一行 `applyLongCtx = applyLongCtx && *input.…`。
+
+状态：**已决策并落地（2026-08-27）—— 改成分组为主、账号只能额外开启（区间定价前置条件仍为 AND）**。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+
+⚠️ 两条实施要点：
+
+- **不要把 `&&` 直接换成 `||`**。那会让账号开关绕过 `len(resolved.Intervals) == 0` 前置条件
+  （区间定价已自含上下文分层）。按上游 v0.1.183 的形状写：先算
+  `contextTierPricingEnabled := resolved.longContextPricingEnabled`，账号开关**为真时**置 true，
+  再 `applyLongCtx := len(resolved.Intervals) == 0 && contextTierPricingEnabled`。
+- **`billing_service.go:1045-1046`（无 Resolver 回退路径）保持原样**，那里拿不到分组开关。
+
+**费用会上升**：分组开关默认开、账号开关默认关 ⇒ 此前不收长上下文倍率的请求之后会收
+（2× 输入 / 1.5× 输出）。想保持旧行为的分组把它的 `long_context_pricing_enabled` 关掉。
 
 ---
 

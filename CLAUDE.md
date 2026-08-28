@@ -18,7 +18,7 @@ This fork is SQLite-only and prioritizes 1C1G native deploy. Upstream multi-inst
 
 **Merging upstream:** git history was rewritten (no shared ancestor). Do **not** `git merge upstream/main`. Cherry-pick or port by feature. Process + current checklists: [docs/upstream-sync/README.md](./docs/upstream-sync/README.md), [docs/upstream-sync/PORTING-0.1.183.md](./docs/upstream-sync/PORTING-0.1.183.md) (0.1.181–0.1.183 bugfixes), [docs/upstream-sync/PORTING-0.1.180.md](./docs/upstream-sync/PORTING-0.1.180.md).
 
-**Go version:** `1.26.5` (from `backend/go.mod`). CI asserts this string; bump go.mod and workflow version checks together.
+**Go version:** `1.27.0` (from `backend/go.mod`). CI asserts this string; bump go.mod and workflow version checks together.
 
 **Frontend package manager:** **pnpm only** (not npm). Commit `frontend/pnpm-lock.yaml` after dependency changes. pnpm v11 needs `frontend/pnpm-workspace.yaml` `allowBuilds` for `esbuild` / `vue-demi` postinstall.
 
