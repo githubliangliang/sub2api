@@ -5,15 +5,17 @@
 当前待移植清单有两份，**互不冲突、可并行**：
 
 - [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版，12 项 P0 + 2 项 P1，无新迁移。
-- [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版，**一条都还没合**；上面那份里的 Responses Lite 簇要等它的 §6.1 / §7.1。
+- [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。
 
 两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
 
 两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
 
+再下一批是 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（2026-08-28）：从剩余 backlog 里挑 6 条「缺陷已核实、patch site 对得上、彼此无文件冲突」的候选，**实际交付 5 条**——0.1.180 §6.1 的 4 条工具桥接修复（PDF 附件静默丢弃、流式 tool_call 空身份、HTTP bridge 重复回放与孤儿 tool call）+ §6.3 的 composite `/v1/messages` 闸门。第 6 条 `17c0ee385` 在实施中被证实是 **`apply --check` 干净的 no-op**（依赖同簇未合的 `953028718`）并撤回——这是本仓库遇到的**第四种假信号**，详见该 change 的 `design.md` 决策 7 与 `source-baseline.md` §3。
+
 上一轮 [PORTING-0.1.179.md](./PORTING-0.1.179.md)，P0/P1 已全合；再上一轮 [PORTING-0.1.176.md](./PORTING-0.1.176.md)，标题写 0.1.177，已全合。
 
-移植上游代码前先读 [第 4 节「硬约束」](#4-硬约束)，尤其是 9–12 条（SQLite 适配的四个静默陷阱）。这几条的由来见 [第 7 节的事故复盘](#7-案例一次由-sqlite-适配引发的调度事故2026-08-16)。
+移植上游代码前先读 [第 4 节「硬约束」](#4-硬约束)，尤其是 9–12 条（SQLite 适配的四个静默陷阱）与第 13 条（守卫类单行改动的空转陷阱）。这几条的由来见 [第 7 节的事故复盘](#7-案例一次由-sqlite-适配引发的调度事故2026-08-16)。
 
 写 / 改 SQL 时对照 [第 5 节「PG → SQLite 转换速查」](#5-pg--sqlite-转换速查)。上一次 PG 残留核查的结论与复查命令：[PG-REMNANTS-AUDIT.md](./PG-REMNANTS-AUDIT.md)（2026-08-16，基线 `a8ccd19`）。
 
@@ -162,6 +164,18 @@ go generate ./cmd/server     # 动了 wire.go
 12. **去重（dedup）语义不能默认消费者活着。** `INSERT ... ON CONFLICT (dedup_key) DO NOTHING` 的隐含前提是「冲突的那行马上会被消费掉」。消费者一旦停摆，滞留行的 `dedup_key` 就永久占位，**后续同 key 的新事件在入队处被静默吞掉**——没有报错、没有日志，只有功能不生效。
 
     本仓库改成了**先删后插**：待处理的重复仍然合并成一条，已消费/滞留的旧行不再挡路，正确性不再依赖水位状态。移植上游任何 outbox / 事件表时按同样标准审一遍。
+
+13. **守卫类单行改动，要连同它守卫的下游判定一起验证。** 一条 patch 只放宽某个 `if` 的状态码集合 / 平台白名单 / feature flag 时，它放行的路径下游通常还有第二道判定。上游那道判定往往已被**同簇的另一条 commit** 一并放宽，本仓库若没合那条，就是**外层放开、内层照否**，净行为为零。
+
+    危险之处在于这类改动**看起来最安全**：一行、无冲突、不引用新符号、`apply --check` 干净、编译通过、测试全绿——最容易被当成「顺手捡的小修复」合进来，然后在移植清单上留下一条「已支持 X」的假记录，下次排查时反而误导人。
+
+    合之前先回答：**「改完之后，什么样的真实输入会走到新放行的分支里，并且真的产生不同结果？」** 答不上来就是 no-op，不要合。机械核法是把 patch 里新放行的每个状态码 / 枚举值，拿到**上游同版本的完整文件**里再 grep 一遍，确认下游判定也认这个值：
+
+    ```bash
+    curl -sSL "https://raw.githubusercontent.com/Wei-Shaw/sub2api/<上游tag>/<path>" | grep -n '<新放行的值>'
+    ```
+
+    实例：`17c0ee385`（Grok compaction 422 同号重试）。详见 [PORTING-0.1.180.md](./PORTING-0.1.180.md) 第 2 节「第四种假信号」、§6.2(c) 与 §10，以及 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/) 的 `design.md` 决策 7。
 
 ---
 

@@ -6,7 +6,7 @@
 通用流程见 [README.md](./README.md)，上一轮清单见 [PORTING-0.1.179.md](./PORTING-0.1.179.md)（P0/P1 已全合，
 第 7 节按需项已决策完毕；其第 9 节的长上下文计费门控仍未决，见本文第 9 节）。
 
-移植前先读 README [第 4 节「硬约束」](./README.md#4-硬约束)，尤其 9–12 条；写 SQL 对照
+移植前先读 README [第 4 节「硬约束」](./README.md#4-硬约束)，尤其 9–13 条；写 SQL 对照
 [第 5 节转换速查](./README.md#5-pg--sqlite-转换速查)。
 
 ---
@@ -76,18 +76,34 @@ git -C /tmp/up180.git show --format='' --binary <sha> > /tmp/pc/<sha>.patch
 git apply --check -p1 /tmp/pc/<sha>.patch     # 通过 ⇒ patch site 与上游字节一致
 ```
 
-**注意三种假信号：**
+**注意四种假信号：**
 
 - 通过不等于「该合」。上游按自己的历史顺序生成，前置 commit 没合时后面那条也可能失败；反过来，
   像 `f7145c750`（Grok 默认模型设置迁移）能干净应用，但它属于一个本仓库尚未拍板的策略决定，见 6.2。
 - 失败不等于「不该合」，多半只是同一文件被本轮多条 commit 或本仓库自有改动动过。按文件看冲突归属再决定。
 - **通过也不保证能编译**。`apply --check` 只比上下文，不看新代码引用的符号在不在。本节的
   `913ec5d74` 就是实例：目标文件干净，但它调用的 `CodexCanonicalClientVersion()` 本仓库零命中。
+- **通过、能编译，也不保证有效**（2026-08-28 新增，实例见 6.2(c) 的 `17c0ee385`）。
+  当一条 patch 改的是**守卫条件**（`if` 的状态码集合、平台白名单、feature flag 判断）时，
+  它放行的那条路径下游往往还有第二道判定。上游那道判定可能早已被**同簇的另一条 commit** 放宽，
+  而本仓库没合那条 ⇒ 外层放开了、内层照样否掉，净行为为零。
+  这类改动的危害在于它**看起来最安全**：一行、无冲突、无新符号、测试全绿，最容易被当成
+  「顺手捡的小修复」合进来，然后在文档上留下一条「已支持 X」的假记录。
+
+  ⇒ **判定守卫类改动时，必须连同它守卫的下游判定一起看**，并回答一个问题：
+  「改完之后，什么样的真实输入会走到新放行的分支里，并且真的产生不同结果？」答不上来就是 no-op。
+  机械做法：把 patch 里出现的每个状态码 / 枚举值，在**上游同版本的完整文件**里再 grep 一遍，
+  确认下游判定也认这个值：
+
+  ```bash
+  curl -sSL "https://raw.githubusercontent.com/Wei-Shaw/sub2api/<上游tag>/<path>" \
+    | grep -n '<新放行的值>'
+  ```
 
 ### 2.1 复核时补的两道关（2026-08-26，建议后续沿用）
 
 上面那套只做到「整 commit apply」，两个盲区：整 commit 一旦在测试文件上失败就看不出产品代码
-对不对得上；以及上面第三种假信号。补两步：
+对不对得上；以及上面第三种假信号（第四种要靠读下游判定，工具挡不住）。补两步：
 
 ```bash
 # 1) 按文件切开，逐个 apply --check，产出三态而不是两态
@@ -131,6 +147,10 @@ cd /tmp/wt180 && git apply -p1 A.patch && git apply --check -p1 B.patch   # 两�
 ---
 
 ## 4. 建议顺序
+
+**2026-08-28 进度**：① 已全合；② 8 条里已合 4 条（`4d4a0be1a` / `cc894ef57` /
+`25da02ddd` + `66808413d`）；③ 已全合（(a)(b) 见 §9.1）；④ 已合 `3fd66a33b` 与 `68653fb2c`，
+`d5824f6a5` 判 N/A。剩余：②的另 4 条、6.2(c) 整簇、⑤⑥。
 
 ```text
 ① 第 5 节 P0（19 项，5.1 与 nanoid 已推迟）—— 按 OpenSpec change 的五个阶段走：
@@ -264,16 +284,21 @@ Docker + cgroup v2 且未设内存上限时，`used` 是容器数、`total` 是�
 
 只有 `bafd2e293`（已列在 5.4）和另一条 apply 干净，其余因同文件多次改动需按序落地。
 
-| 上游 commit | 内容 | 规模 | 本仓库现状 |
+**2026-08-28：本簇 8 条里已合 4 条**（`4d4a0be1a` / `cc894ef57` / `25da02ddd` / `66808413d`），
+见 OpenSpec change [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)。
+剩下 4 条都落在 `chatcompletions_responses_bridge.go` / `openai_gateway_responses_chat_fallback.go` /
+`responses_client_tools.go` / `openai_gateway_grok.go` 这几个本仓库有自有改动的文件上，需逐 hunk 解。
+
+| 上游 commit | 内容 | 规模 | 状态 / 本仓库现状 |
 |---|---|---|---|
-| `4d4a0be1a` | `/v1/chat/completions` 的 `type:"file"`（PDF）不再被静默丢弃，转成 Responses `input_file` | 3 文件 +97-2 | **确认有此 bug**：`apicompat/types.go:91` 的 content part 分支只有 `"text"` / `"image_url"`，全仓 grep `input_file` 零命中。表现是请求 200、模型照答，但 prompt 里没有那份文件 |
+| `4d4a0be1a` | `/v1/chat/completions` 的 `type:"file"`（PDF）不再被静默丢弃，转成 Responses `input_file` | 3 文件 +97-2 | **已合**（`ddc63c7ef`）。曾确认有此 bug：`apicompat/types.go:91` 的 content part 分支只有 `"text"` / `"image_url"`，全仓 grep `input_file` 零命中。表现是请求 200、模型照答，但 prompt 里没有那份文件。⚠️ `types.go` 的 hunk 手写落地（本仓库 `x_search` 字段导致上下文漂移，结构体本身与上游一致） |
 | `e2d9ce0ca` + `fbc9ee626` | 拒绝非法 tool-call arguments（第二条收窄第一条的范围） | 6+5 文件 | 两条必须一起，否则行为过宽 |
-| `cc894ef57` | 剥掉流式 tool_call 的空 `id` / `function.name` | 4 文件 +363-0 | 上游举的例子是 DashScope/DeepSeek，但受害面是**任何**「后续 delta 送空 id」的上游：客户端按 `!== undefined` 合并会覆盖首个 delta 的身份，最后去调一个名为 `""` 的工具。新建 `openai_gateway_cc_tool_call_identity.go` |
-| `31d5b67ba` | 恢复带命名空间的自定义工具别名 | 6 文件 +220-23 | |
+| `cc894ef57` | 剥掉流式 tool_call 的空 `id` / `function.name` | 4 文件 +363-0 | **已合**（`2f091ed66`，4/4 文件逐字 apply）。上游举的例子是 DashScope/DeepSeek，但受害面是**任何**「后续 delta 送空 id」的上游：客户端按 `!== undefined` 合并会覆盖首个 delta 的身份，最后去调一个名为 `""` 的工具。新建 `openai_gateway_cc_tool_call_identity.go` |
+| `31d5b67ba` | 恢复带命名空间的自定义工具别名 | 6 文件 +220-23 | 5/6 文件干净，只 `openai_gateway_responses_chat_fallback.go` 冲突——与 `e2d9ce0ca`+`fbc9ee626` 同一文件族，一起排期 |
 | `7a09a2eaf` | 清掉孤儿 deferred 工具标记 | 6 文件 +109-0 | 动 `openai_gateway_grok.go`（本仓库该文件有自有改动，注意冲突） |
-| `7498d8fdc` | Responses Lite 强制串行工具调用 | 4 文件 +216-10 | |
-| `25da02ddd` | 避免 HTTP bridge 重复回放 | 5 文件 +240-9 | 与本仓库已合的 `793fa50` / `8528c43`（0.1.179 §5.1）同一个文件族 |
-| `66808413d` | 丢弃孤儿回放 tool call | 3 文件 +128-2 | 依赖上一条 |
+| `7498d8fdc` | Responses Lite 强制串行工具调用 | 4 文件 +216-10 | 是 [PORTING-0.1.183.md](./PORTING-0.1.183.md) §5.1 那 5 条的基座；要做就整簇做 |
+| `25da02ddd` | 避免 HTTP bridge 重复回放 | 5 文件 +240-9 | **已合**（`a3f0c978b`，与下一条同批）。产品代码 4/4 逐字 apply；`openai_ws_http_bridge_test.go` 的两个新增测试因上游锚点不存在而追加到文件末尾 |
+| `66808413d` | 丢弃孤儿回放 tool call | 3 文件 +128-2 | **已合**（`a3f0c978b`）。依赖上一条，**顺序不可交换**：先合它会让过滤作用在旧判据上 |
 
 实际在用 Codex 的场景，这一簇价值最高。
 
@@ -318,7 +343,7 @@ Docker + cgroup v2 且未设内存上限时，`used` 是容器数、`total` 是�
 
 Realtime 预握手复用与切号（`61c2f5ad2` `611a7c8ed`）、握手失败账号冷却（`d78e366db`）、
 普通 429 有限同号重试（`8db8791a7` `2ab24a1e7` `0b1f79c83`）、compaction 422 重试
-（`17c0ee385`，仅 1 行 +1-1，已 apply 干净）、CC bridge 同号重试（`5ae254f77` `ad87ddee1`）、
+（`17c0ee385`，仅 1 行 +1-1，apply 干净但**不可独立移植**，见下）、CC bridge 同号重试（`5ae254f77` `ad87ddee1`）、
 stream idle 重试上限作用于主路径（`c628b3eea`）、容量重试与兼容性分类收紧（`953028718` `39aaf2fea`
 `0e05c61d3`）、传输超时与握手（`5ade09431`）、媒体超时与内容拒绝计费（`e85348be8` `2e68b10aa`）、
 以及 CI 回归修正（`787f875dd` `2ab41b92b` `1bff06ea5` `cca235365` `f7bc1970e` `3243983b7` `3b8177642`）。
@@ -331,13 +356,28 @@ stream idle 重试上限作用于主路径（`c628b3eea`）、容量重试与兼
 ⚠️ `16b15e870`「修复 5888 与 5925 的同号重试语义冲突」说明这一簇和 7.1 的大礼包**互相打补丁**，
 两者要一起排期，先合哪个都要把这条一并带上。
 
+⚠️ **`17c0ee385` 单独合是 no-op，2026-08-28 实测确认，不要再当独立小项挑出来。**
+它改的是 `forwardGrokResponses` 的**外层**守卫（400 → 400/422），而真正决定要不要剥掉加密
+reasoning 重试的**内层**判定 `isGrokInvalidEncryptedContentResponse`
+（`openai_gateway_grok.go:255`）在本仓库仍是 `if statusCode != http.StatusBadRequest { return false }`
+⇒ 422 进了外层也会被内层否掉，净效果只是把响应体多读一遍再放回去。
+widen 内层的是本簇的 **`953028718`**（实测：`v0.1.180` 区间里只有 `17c0ee385` 与 `953028718`
+两个 commit 含 `StatusUnprocessableEntity`），它同时引入 compaction 错误码
+（`invalid_compaction` / `compaction_decode_error`）与 `grokStructuredErrorMessageCandidates`
+（本仓库零命中）——也就是说标题里的「compaction」识别能力全在 `953028718` 里。
+⇒ **随本簇整体排期。** 详细证据见 OpenSpec change
+[`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/) 的 `design.md` 决策 7。
+
+📌 这是 §2「三种假信号」之外的**第四种**：`apply --check` 通过、符号齐全、编译通过，**但行为为空**。
+今后判定单行守卫类改动，要连同它守卫的下游判定一起看。
+
 ### 6.3 单条小项
 
 | 上游 commit | 内容 | 规模 | 判断 |
 |---|---|---|---|
 | `3fd66a33b` | 调度「无可用账号」诊断：boolean 门改成返回具体 veto reason（`model_rate_limited` / `quota_auto_pause_<window>` / `platform_mismatch` / …） | 2 文件 +118-16 | **已合**。行为不变、纯可观测性。⚠️ 与 7.3 重置卡功能同改 `openai_gateway_scheduling.go`，后续 7.3 需 rebase。 |
-| `68653fb2c` | Composite 分组的 `/v1/messages` 闸门改为尊重分组自己的开关（原先 `sanitizeGroupMessagesDispatchFields` 对 composite 恒置 false） | 7 文件 +70-23 | 本仓库有 `views/admin/groupsMessagesDispatch.ts` 与 composite；解析到 grok 目标仍按目标平台豁免。CN 相关测试改动跳过 |
-| `d5824f6a5` | 保留原生 `reasoning_effort: max` | 10 文件 +81-14 | 10 个文件里 8 个本仓库有，2 个是 CN 平台文件（`*_anthropic_native.go` 里的 CN 分支）跳过 |
+| `68653fb2c` | Composite 分组的 `/v1/messages` 闸门改为尊重分组自己的开关（原先 `sanitizeGroupMessagesDispatchFields` 对 composite 恒置 false） | 7 文件 +70-23 | **已合**（`b21a2df03`）。产品改动只有 2 行 + handler 豁免收窄 + 前端表单；⚠️ 上游 handler hunk 的 `IsCNProvider` 两处分支整段丢弃，且**不要**为对齐上游把 `allowOpenAICompatibleMessagesDispatch` 的 `ctx context.Context` 签名改成 `*gin.Context`。存量 composite 分组的落库值仍是 false，升级不会自动放宽 |
+| `d5824f6a5` | 保留原生 `reasoning_effort: max` | 10 文件 +81-14 | **N/A**（2026-08-28 实测定性）。它新增的 `supportsOpenAIReasoningEffortMax` 在 `isOpenAIGPT56Model` 之外只放开 `deepseek-v4` / `glm-` / `kimi-` / `moonshot-` / `k3` 五个前缀，全是本仓库没有的平台；剩下的是把 mappedModel 透进两个 extractor，而本仓库主路径 `openai_gateway_request_body.go:825` 早就在传 `firstNonEmpty(modelCandidates...)`，被补的两条是 CC/Responses → Anthropic 原生上游的路径，那里 mappedModel 是 claude 模型、归一化结果不变 ⇒ **对本仓库空转，不做** |
 | `d493ce0bb` + `fa4587041` | Codex 账号身份限定到 OAuth 账号 / auto-review 留在母账号 | 18+7 文件 +1392-68 | **只有在用 spark 影子账号时才需要**。不用就别动，它铺开 25 个文件 |
 
 ---
@@ -491,6 +531,7 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 | 上游 `migrations/229_plugins.sql` / `230_plugin_artifacts.sql` 原文件 | PG 方言 + 多实例语义；本地要新建 225/226 才行，且插件系统本轮判为不合 |
 | 上游 0.1.179 的迁移 226 / 227 / 228 | 沿用 0.1.179 §10 的结论 |
 | `f7145c750` 顺手合 | 它是 Grok 默认模型 4.6 的数据迁移，属于 9.1 的决定，不是独立 bugfix |
+| `17c0ee385` 顺手合 | **2026-08-28 实测：单独合是 no-op。** 它只放宽 `forwardGrokResponses` 的**外层**状态码守卫（400 → 400/422），而真正决定要不要剥掉加密 reasoning 重试的**内层** `isGrokInvalidEncryptedContentResponse` 在本仓库仍硬门 400 ⇒ 422 进外层也会被内层否掉。widen 内层的是同簇的 `953028718`。它 1 行、无冲突、编译通过、测试全绿，**最容易被当成小修复捡走**，见 6.2(c) 与第 2 节第四种假信号 |
 | 上游 `frontend/pnpm-lock.yaml` | pnpm 9 产物，本仓库 pnpm v11，必须本地重生成（真做 5.1 时用 `pnpm install --lockfile-only`） |
 | 推迟期间碰 `frontend/package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `.github/audit-exceptions.yml` | 5.1 与 nanoid 已决定推迟，这四个文件一个都不动 |
 | 只改 `package.json` 不同步 lockfile | 三个 workflow 与 `Dockerfile` 都用 `pnpm install --frozen-lockfile`，会让 CI 与镜像构建直接失败。没有「只改一半」的中间状态 |
