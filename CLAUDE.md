@@ -52,7 +52,7 @@ go test ./...
 go test -tags=unit ./...
 go test -tags=integration ./...
 go test -tags=unit ./internal/repository/ -run 'TestName' -count=1   # single test
-golangci-lint run ./...   # CI uses v2.9
+golangci-lint run ./...   # CI uses v2.13
 ```
 
 Codegen after schema / wire changes:
@@ -143,6 +143,31 @@ migrations/         Ordered SQL migrations (currently SQLite dialect)
 | Install lock | `$DATA_DIR/.installed` + `config.yaml` → skips setup wizard |
 | Simple mode | `run_mode: simple` |
 | Hide ops / batch image | `ops.enabled`, `batch_image.enabled` |
+
+## Releases / tags
+
+This fork uses its **own** `1.1.x` numbers. Do **not** set `VERSION` or tags to upstream `0.1.x`.
+
+**Source of truth**
+
+- File: `backend/cmd/server/VERSION` (plain `X.Y.Z`, one line)
+- `backend/scripts/resolve-version.sh`: exact `vX.Y.Z` checkout → tag without `v`; otherwise the file. `deploy/deploy-remote.sh` bakes that into the binary.
+
+**Sequence (do not reorder)**
+
+1. Set `backend/cmd/server/VERSION` to the new number and **commit** it (so the tag commit itself carries the matching file). `v1.1.8` tagged `f8f257ad7` while the file was still `1.1.2` — do not repeat that.
+2. Annotated tag only (`git tag -a`), never lightweight.
+3. `git push origin main` then `git push origin vX.Y.Z`. Pushing `v*` runs `.github/workflows/release.yml`.
+
+**Annotated tag body (Chinese, same shape as `v1.1.9`)**
+
+Relative to the previous tag SHA. Always include:
+
+1. **同步上游** — Wei-Shaw/sub2api versions included, and **what landed** (P0/P1/decisions, with this-fork commit SHAs). Split by upstream version (`v0.1.180`, `v0.1.181–v0.1.183`, …).
+2. **本仓库自上一 tag 起另外新增** — fork-only docs, VERSION alignment, lint cleanup, etc.
+3. **明确未合** — deferred/skipped clusters so the tag is not read as “we took the whole upstream release” (tool-bridge, Grok 429/Realtime, monitor-v2 composite, frontend lockfile upgrades, plugins, CN providers, …).
+
+Do not rewrite historical PORTING / OpenSpec notes that record “VERSION was 1.1.8 at port time”.
 
 ## Admin CLI skill
 
