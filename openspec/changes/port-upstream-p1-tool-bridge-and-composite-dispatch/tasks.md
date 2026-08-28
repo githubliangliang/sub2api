@@ -97,4 +97,5 @@
 - [x] 7.5 `docs/upstream-sync/PORTING-0.1.180.md`：§6.1 四行 / §6.3 `68653fb2c` 标「已合」；
       `d5824f6a5` 标 N/A + 理由（决策 6）；§6.2(c) 补记 `17c0ee385` 不可独立移植（决策 7）
 - [x] 7.6 `docs/upstream-sync/README.md` 顶部的「当前待移植清单」段落补一句本批的落点
-- [ ] 7.7 合回 `main`
+- [x] 7.7 合回 `main` —— `d775cc12d`（`--no-ff`，2026-08-28）。合并后在 `main` 上复跑门禁：
+      `go build` 通过 / `go test -tags=unit ./...` **EXIT=0** / `golangci-lint run ./...` **0 issues**
