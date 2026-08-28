@@ -246,6 +246,76 @@ func TestGetModelPricing_OpenAIGPT54MiniFallback(t *testing.T) {
 	require.Zero(t, pricing.LongContextInputThreshold)
 }
 
+func TestCalculateCostUnified_LongContextGroupPrimaryGating(t *testing.T) {
+	svc := newTestBillingService()
+	resolver := NewModelPricingResolver(nil, svc)
+	pricing := &ModelPricing{
+		InputPricePerToken:            1e-6,
+		OutputPricePerToken:           2e-6,
+		LongContextInputThreshold:     100000,
+		LongContextThresholdInclusive: true,
+		LongContextInputMultiplier:    2,
+		LongContextOutputMultiplier:   1.5,
+	}
+	tokens := UsageTokens{InputTokens: 200000, OutputTokens: 1000}
+	baseInput := float64(tokens.InputTokens) * 1e-6
+	baseOutput := float64(tokens.OutputTokens) * 2e-6
+	longInput := baseInput * 2
+	longOutput := baseOutput * 1.5
+
+	tests := []struct {
+		name      string
+		groupOn   bool
+		account   *bool
+		wantLong  bool
+		intervals bool
+	}{
+		{name: "group on account off", groupOn: true, account: boolPtr(false), wantLong: true},
+		{name: "group off account on", groupOn: false, account: boolPtr(true), wantLong: true},
+		{name: "both on", groupOn: true, account: boolPtr(true), wantLong: true},
+		{name: "both off", groupOn: false, account: boolPtr(false), wantLong: false},
+		{name: "account missing follows group on", groupOn: true, wantLong: true},
+		{name: "account missing follows group off", groupOn: false, wantLong: false},
+		{name: "intervals block stacked multiplier", groupOn: true, account: boolPtr(true), wantLong: false, intervals: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved := &ResolvedPricing{
+				Mode:                      BillingModeToken,
+				BasePricing:               pricing,
+				longContextPricingEnabled: tt.groupOn,
+			}
+			if tt.intervals {
+				in := 1e-6
+				out := 2e-6
+				resolved.Intervals = []PricingInterval{{
+					MinTokens:   0,
+					InputPrice:  &in,
+					OutputPrice: &out,
+				}}
+			}
+			cost, err := svc.CalculateCostUnified(CostInput{
+				Model:                     "long-context-gate",
+				Tokens:                    tokens,
+				RateMultiplier:            1,
+				Resolver:                  resolver,
+				Resolved:                  resolved,
+				LongContextBillingEnabled: tt.account,
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.wantLong, cost.LongContextBillingApplied, tt.name)
+			if tt.wantLong {
+				require.InDelta(t, longInput, cost.InputCost, 1e-10, tt.name)
+				require.InDelta(t, longOutput, cost.OutputCost, 1e-10, tt.name)
+			} else {
+				require.InDelta(t, baseInput, cost.InputCost, 1e-10, tt.name)
+				require.InDelta(t, baseOutput, cost.OutputCost, 1e-10, tt.name)
+			}
+		})
+	}
+}
+
 func TestCalculateCost_OpenAIGPT54LongContextAppliesWholeSessionMultipliers(t *testing.T) {
 	svc := newTestBillingService()
 
