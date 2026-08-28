@@ -17,21 +17,28 @@ exceptions:
   - package: lodash
     advisory: "GHSA-r5fr-rjxr-66jc"
     severity: high
-    reason: "lodash _.template not used with untrusted input; only internal admin UI templates"
-    mitigation: "No user-controlled template strings; plan to migrate to lodash-es tree-shaken imports"
-    expires_on: "2026-07-02"
-    owner: "security@your-domain"
+    reason: "Re-verified 2026-08-27: transitive only (frontend/src has no lodash import). GHSA-r5fr-rjxr-66jc is _.template prototype pollution; this SPA never calls _.template. Not reported by pnpm audit --prod --audit-level=high on this date."
+    mitigation: "No application _.template usage; keep out of frontend/src. Revisit at next dependency maintenance."
+    expires_on: "2026-10-06"
+    owner: "lzq"
   - package: lodash-es
     advisory: "GHSA-r5fr-rjxr-66jc"
     severity: high
-    reason: "lodash-es _.template not used with untrusted input; only internal admin UI templates"
-    mitigation: "No user-controlled template strings; plan to migrate to native JS alternatives"
-    expires_on: "2026-07-02"
-    owner: "security@your-domain"
+    reason: "Re-verified 2026-08-27: transitive only (frontend/src has no lodash-es import). Same GHSA as lodash (_.template); unused here. Not reported by pnpm audit --prod --audit-level=high on this date."
+    mitigation: "No application _.template usage; keep out of frontend/src. Revisit at next dependency maintenance."
+    expires_on: "2026-10-06"
+    owner: "lzq"
   - package: axios
     advisory: "GHSA-3p68-rc4w-qgx5"
     severity: critical
-    reason: "NO_PROXY bypass not exploitable; all API calls go to known endpoints via server-side proxy"
-    mitigation: "Proxy configuration not user-controlled; upgrade when axios releases fix"
-    expires_on: "2026-07-10"
-    owner: "security@your-domain"
+    reason: "Re-verified 2026-08-27: direct dependency frontend/package.json axios ^1.18.0 (lock 1.18.1). GHSA-3p68-rc4w-qgx5 is a NO_PROXY bypass. apiClient is created with a fixed getAPIBaseURL() and no user-controlled proxy/NO_PROXY; browser calls go to this origin only. Not reported by pnpm audit --prod --audit-level=high on this date."
+    mitigation: "Do not accept user-controlled axios proxy env; upgrade axios when the next planned frontend dependency pass lands."
+    expires_on: "2026-10-06"
+    owner: "lzq"
+  - package: nanoid
+    advisory: "GHSA-2v37-7h3g-55p8"
+    severity: high
+    reason: "Re-verified 2026-08-27: transitive (pnpm-lock nanoid@3.3.17, no frontend/src import). GHSA-2v37-7h3g-55p8 requires a custom nanoid generator with size 0; this app never calls nanoid. Currently the only unmatched prod high in pnpm audit --prod --audit-level=high."
+    mitigation: "No application nanoid usage. Upgrade with the deferred frontend dependency pass; do not call custom generators."
+    expires_on: "2026-10-06"
+    owner: "lzq"
