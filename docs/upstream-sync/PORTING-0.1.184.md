@@ -400,8 +400,10 @@ if err != nil {
 
 ## 4. P1 — 值得做，按需排期
 
-本节只做了三态 + 基座抽查，**没有逐条读完整 diff**（§3 才是逐条核过的）。真要合先按 §2 的
-三道关自己复核一遍。
+**4.1–4.11 已于 2026-08-31 全部合入**（实施记录见 §11）；下面「按需」那批仍未合。
+
+本节原先只做了三态 + 基座抽查、**没有逐条读完整 diff**（§3 才是逐条核过的），
+实施时逐条复核过，偏差见 §11。
 
 | # | commit | 内容 | 三态 | 备注 |
 |---|---|---|---|---|
@@ -727,3 +729,120 @@ Anthropic 路径）全部 `git apply` 干净。
 - 3.13：给账号打上限流 → 管理端点「重置配额」→ 确认它立刻重回调度
 - 3.3：用 `skills/sub2api-admin` 实跑一次不带限额字段的分组更新，确认限额保持「无限制」
 - 3.4：真实 Fable OAuth 请求确认不再出现 `stop_reason=refusal` + 零 output
+
+---
+
+## 11. 实施记录：§4 的 4.1–4.11（2026-08-31，同一分支）
+
+11 项全部合入。同样只记**与 §4 判断不一致的地方**。
+
+干净落地、无偏差：4.5 `3f1581b2d`（8 文件全干净）、4.7 `706b5676a`、4.9 `0aef702b6`、
+4.10 `9e7aff59d`。
+
+### 11.1 4.8 `ed12ea716` 三态干净但直接 `is not defined` —— 前端也有这个坑
+
+patch 6 个文件全干净，合上去 3 条 spec 立刻红：`escapeTomlBasicString is not defined`。
+上游把这个 helper 放在 `22e1b8144`（Codex routed model catalog 簇，§5.1 未合），而
+`ed12ea716` 调了它。
+
+这是本轮**第三次**「`apply --check` 干净不等于能跑」，也是第一次出现在前端 —— §2 那条教训
+不只适用于 Go：Vue SFC 里的 `<script setup>` 同样是"符号必须在当前文件/作用域里"。
+
+处理：`escapeTomlBasicString` 本身与那个功能簇无关（TOML basic string 转义是独立正确的
+行为），就地补 2 行并注明出处，不为它去拖整簇。
+
+⚠️ 移植前端时**必须真跑 vitest**，`pnpm run typecheck` 抓不到这类问题：`vue-tsc` 对
+`<script setup>` 里未定义的顶层标识符在本仓库配置下没报错，只有运行期才炸。
+
+### 11.2 4.6 到期时间簇：`8177f27aa` 必须跳过，不是「顺序问题」
+
+§4.6 只说"必须按最终形态整簇合"。实际形态更明确：
+
+| commit | 时间 | 路径 |
+|---|---|---|
+| `8177f27aa` | 08-30 22:10 | `CreateAccountModal.vue` / `EditAccountModal.vue`（**仓库根目录**） |
+| `d66bc88e6` | 08-30 22:11 | `frontend/src/components/account/…`（正确路径） |
+
+`8177f27aa` 是上游误传到根目录的副本，1 分钟后由 `d66bc88e6` 在正确路径重做，那两个错位
+文件再由 `3673702af` / `94edcd5d8` 删掉（本文 §6 已列为 N/A）。所以**跳过 `8177f27aa`、
+只合 `d66bc88e6`**；`d66bc88e6` 在本仓库冲突（我们这两个 modal 的上下文与上游不同），
+三处改动手工落：import 加 `getBrowserTimeZone`、`const browserTimeZone = getBrowserTimeZone()`、
+hint 段落加 `expiresAtTimezoneHint`。
+
+其余按时间顺序 `263605779` → `ae1bcdc25` → `81e461f65` → `b7aca87fd` → `5778739cd` 全干净。
+`81e461f65`（`format.ts` 的 `getBrowserTimeZone` + 严格解析）必须在 `d66bc88e6` 之前或同批，
+否则前者引用的 helper 还不存在。
+
+### 11.3 4.4 `c66e700f0` 一处 hunk 手工落，并保留上游刻意的不对称
+
+17 文件里 16 个干净，只有 `openai_gateway_response_handling.go` 冲突：上游的上下文里有
+`pendingSSEEventType := ""` 这一行，本仓库没有（属另一处未移植改动）。
+
+手工落这几处：`ttftMode := s.openAITTFTMode(ctx)`、`startsTTFTOutput := openAIStreamDataStartsTTFT(...)`、
+`eventStartsVisibleOutput` → `eventStartsTTFTOutput`、`completedVisibleEvent` → `completedTTFTEvent`。
+
+⚠️ **有一处看着该改、其实不能改**：本仓库 `:636`
+`if firstTokenMs == nil && startsVisibleOutput { shouldFlush = true }`（为 TTFT 尽快 flush 的
+启发式）在上游 v0.1.184 终态里**仍然用 `startsVisibleOutput`**，只有真正记 TTFT 的那处
+（`:653`）切到 `startsTTFTOutput`。顺手一起改会让 flush 时机跟着 TTFT 模式变，属上游没打算
+做的行为改动。判定方式还是 §9.3 那条：先 `git show <tag>:<file>` 看终态。
+
+### 11.4 4.1 `a3bbf33c0` 三件事要额外处理
+
+1. **`wire_gen.go` 不要相信 patch，自己重跑一遍。** 本机 `wire` 不在 PATH、`go run …@latest`
+   拉不动（网络），但模块缓存里有 `wire@v0.7.0`，
+   `go build -o /tmp/wirebin github.com/google/wire/cmd/wire` 可离线构建。跑
+   `/tmp/wirebin gen ./cmd/server` 后与 patch 后的文件 `diff` —— **逐字节相同**，确认那处
+   `NewChannelMonitorV2Handler(channelMonitorV2Service, apiKeyService)` 就是 wire 会生成的结果。
+2. **SQL 方言核查通过**：这条 patch 对 `channel_monitor_v2_repo.go` 的改动全是 Go 层
+   （空作用域短路 + 交集收窄），没有新增任何 SQL，`ANY(` / `::` / jsonb 逐个 grep 零命中。
+3. **测试要改写，且不能引入 `lib/pq`。** 上游用 `require.Equal(t, pq.Array([]int64{4}), args[3])`
+   断言 PG 的 `group_id = ANY($4)` 单数组参数；本仓库同一个 `channelMonitorV2Where` 走
+   `sqlInt64In` 展开成 `group_id IN ($4,$5)` + 逐个标量参数。3 处断言按本仓库形态改写
+   （`IN ($4)` + `int64(4)`），其余 5 条逐字照搬。`lib/pq` 虽然在 go.mod 里（几个
+   `integration && postgres` 测试用），但**不该为一条新测试把 PG 驱动拉进 SQLite 路径**。
+
+8 条新用例全过，其中 3 条 `EmptyRestrictedScope*` 用 sqlmock 且**不登记任何期望**——
+`mock.ExpectationsWereMet()` 正是在钉"空作用域必须在发出任何 SQL 之前短路"。
+
+### 11.5 4.2 / 4.3 / 4.11 手工落，原因都是本仓库上下文不同
+
+- 4.2 `d881bfc0d`：本仓库 `openai_gateway_forward.go` 的 else 分支还是
+  `applyCodexOAuthTransform(decoded, isCodexCLI, isCompactRequest)` 三参形态。改成
+  `applyCodexOAuthTransformWithOptions` 并两个分支都带上
+  `OmitPromotedSystemMessagesFromInput`。基座 `codexOAuthTransformOptions.OmitPromotedSystemMessagesFromInput`
+  已存在（`openai_codex_transform.go:86`，Chat 兼容入口已在用），无需补。
+- 4.3 `0756c9810`：`BulkEditAccountModal.vue` 冲突，两处手工落（checkbox 的 `id`
+  测试钩子 + `extra.codex_fingerprint_mode` 改为无条件显式落键）。上游注释里那句关键
+  理由照抄：批量接口只做顶层合并，删 payload 里的键清不掉账号上已有的
+  device/session/full，而且只删不写会让 payload 退化成 `{extra:{}}` 被后端判空更新 400。
+- 4.11 `c03776604`：产品文件 `UseKeyModal.vue` 干净（4 处 `CLAUDE_CODE_ATTRIBUTION_HEADER=0`
+  全删）。spec 冲突（4.8 刚改过同一文件同一区域），只手工移植其中那条独立用例
+  `omits the attribution override from every standard Claude Code setup form`；上游另一批
+  断言插在它自己的 Grok 用例中间，本仓库那个用例上下文不同，未移植。
+
+### 11.6 本批未合（§4「按需」那组，判断不变）
+
+`32ad1dcdc`（订阅重置锚点）、`b5827cfd5`（DeepSeek 峰谷价）、
+`e6ea7b9af` + `d077002eb` + `6ff771d3d`（图像工具冷却）、
+`88cb79d8b` + `00efee430`（Grok）、
+`50ba14629` + `32064d39e` + `3c5553e25` + `60756c0ca`（§5.4 边缘）、
+`02eee39dd` + `1e8745c88` + `d522aed65`（支付）。
+
+都不是"没核过"，是**取决于这套部署实际用不用那些功能**。用到哪块再按 §2 的三道关单独过。
+
+---
+
+## 12. §4 批次验证结果
+
+| 项 | 结果 |
+|---|---|
+| `go build ./...` | 通过 |
+| `go vet -tags=unit ./...` | 通过 |
+| `go test -tags=unit ./...` | **53 个包全 ok**，无失败 |
+| `golangci-lint run ./...`（v2.13.0） | **0 issues** |
+| `wire gen ./cmd/server` 重跑后 `diff` | 与 patch 后的 `wire_gen.go` **逐字节相同** |
+| `pnpm run typecheck` / `lint:check` | 通过 |
+| `make test-frontend-critical` | 14 文件 / **168** passed / 2 skipped |
+| 本批触及的 6 个前端 spec | 62 passed |
+| `internal/repository -run ChannelMonitorV2` | 20 条全过（含 8 条新增） |
