@@ -3454,9 +3454,25 @@ func accountQuotaJustExceeded(accountType string, before, after map[string]any) 
 	return !prev.IsQuotaExceeded() && next.IsQuotaExceeded()
 }
 
-// ResetQuotaUsed 重置账号所有维度的配额用量为 0
-// 保留固定重置模式的配置字段（quota_daily_reset_mode 等），仅清零用量和窗口起始时间
-func (r *accountRepository) ResetQuotaUsed(ctx context.Context, id int64) error {
+// ResetQuotaUsedAndClearRateLimitCooldown 重置账号所有维度的配额用量为 0，并在同一事务里
+// 清掉账号级限流冷却。
+// 保留固定重置模式的配置字段（quota_daily_reset_mode 等），仅清零用量和窗口起始时间。
+//
+// 清冷却这半是上游 897faea33：只清零用量、不动 rate_limited_at / rate_limit_reset_at 时，
+// 因配额打满被限流的账号在管理端点了"重置配额"之后**冷却仍在**，账号照样调度不到，
+// 管理员看不出为什么没生效。两件事必须原子完成，否则中间态仍是"配额已清但仍被冷却"。
+//
+// 只清账号级冷却，其余调度阻塞状态（TempUnschedulable、模型级 model_rate_limits 等）
+// 一律保留——它们不是配额打满造成的，重置配额无权代为解除。
+//
+// 跟着上游一起从 ResetQuotaUsed 改了名：名字里带上"清冷却"这半，调用方才不会以为它只清
+// 用量。改名本身牵动 service.AccountRepository 接口与 6 处测试 stub（DEV_GUIDE 坑 6），
+// 但上游那批文件在本仓库 apply --check 全干净，所以改名反而比保留旧名更省。
+//
+// 上游那段 SQL 是 PG jsonb（'{}'::jsonb / || / - 'key'），本仓库这个方法早已重写成 Ent
+// 事务，**不要**把 jsonb 语法搬回来（README §5）。上游用 RowsAffected == 0 判不存在，
+// 本仓库由 client.Account.Get + translatePersistenceError 覆盖，无需重复。
+func (r *accountRepository) ResetQuotaUsedAndClearRateLimitCooldown(ctx context.Context, id int64) error {
 	committed, err := withRepositoryTransaction(ctx, r.client, func(txCtx context.Context, client *dbent.Client) error {
 		current, err := client.Account.Get(txCtx, id)
 		if err != nil {
@@ -3467,7 +3483,11 @@ func (r *accountRepository) ResetQuotaUsed(ctx context.Context, id int64) error 
 		for _, key := range []string{"quota_daily_start", "quota_weekly_start", "quota_daily_reset_at", "quota_weekly_reset_at"} {
 			delete(extra, key)
 		}
-		if _, err := client.Account.UpdateOneID(id).SetExtra(extra).Save(txCtx); err != nil {
+		if _, err := client.Account.UpdateOneID(id).
+			SetExtra(extra).
+			ClearRateLimitedAt().
+			ClearRateLimitResetAt().
+			Save(txCtx); err != nil {
 			return err
 		}
 		return enqueueSchedulerOutbox(txCtx, client, service.SchedulerOutboxEventAccountChanged, &id, nil, nil)

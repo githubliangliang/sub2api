@@ -29,6 +29,15 @@ func TestAccountRepository_SetTempUnschedulable_NoRowsAffectedDoesNotWriteOutbox
 	require.NotContains(t, strings.Join(exec.execQueries, "\n"), "scheduler_outbox")
 }
 
+// 上游 897faea33 在这里还加了一条
+// TestAccountRepository_ResetQuotaUsedAndClearRateLimitCooldown_NoRowsAffectedReturnsNotFoundWithoutOutbox，
+// **本仓库不适用、已删**：它拿 newAccountRepositoryWithSQL(nil, exec, nil) 断言"一条
+// UPDATE accounts + RowsAffected==0 → ErrAccountNotFound"，那是上游那份裸 SQL 实现的形状。
+// 本仓库这个方法是 Ent 事务（withRepositoryTransaction + client.Account.Get），Ent client
+// 为 nil 时直接 panic，而"账号不存在"由 Get + translatePersistenceError 覆盖。
+// 真正走通 Ent 路径的断言在 account_repo_integration_test.go 的
+// TestResetQuotaUsedAndClearRateLimitCooldownPreservesOtherRuntimeState（-tags=integration）。
+
 func TestAccountRepository_GrokCredentialConditionalMutationsAreEligibleAndAtomicallyPropagated(t *testing.T) {
 	proxyID := int64(77)
 	snapshot := service.GrokCredentialMutationSnapshot{

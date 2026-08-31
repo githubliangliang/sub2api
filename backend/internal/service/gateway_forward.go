@@ -194,6 +194,17 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		systemRaw, _ := parsed.SystemValue()
 		systemPromptInjectionEnabled, systemPrompt, systemPromptBlocks := s.claudeOAuthSystemPromptInjectionSettings(ctx)
 		if systemPromptInjectionEnabled {
+			// 原生 /v1/messages 也要走 Fable 专用 block 形态。上游 32ac921f2 只改了
+			// applyClaudeCodeOAuthMimicryToBody（桥接路径 ForwardAsResponses /
+			// ForwardAsChatCompletions），而 Claude Code → 原生 /v1/messages 走的是这里，
+			// 是本 fork 的主用法：不套 claudeOAuthSystemPromptBlocksForModel 的话，
+			// Fable 仍会被注入通用 CLI 展开块并被上游判为 stop_reason=refusal（零 output）。
+			//
+			// 这里用 reqModel（客户端请求名）而不是映射后的名字：模型映射在下面
+			// 第 265 行之后才做，而能走到本分支的都是 OAuth 账号，其映射只有
+			// claude.NormalizeModelID 这一层前缀/长短 ID 归一化，"fable" 这个子串
+			// 在归一化前后都保留，isAnthropicFableModel 的判定不会因此翻转。
+			systemPromptBlocks = claudeOAuthSystemPromptBlocksForModel(reqModel, systemPromptBlocks)
 			if err := replaceBody(rewriteSystemForNonClaudeCodeWithPromptBlocks(body, systemRaw, systemPrompt, systemPromptBlocks)); err != nil {
 				return nil, err
 			}
@@ -381,30 +392,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
 			}
-			// Transport attempt left local validation; count Ollama Cloud activity.
-			if !errors.Is(err, context.Canceled) {
-				scheduleOllamaCloudUsageActivity(s.deferredService, account)
-			}
-			// Ensure the client receives an error response (handlers assume Forward writes on non-failover errors).
-			safeErr := sanitizeUpstreamErrorMessage(err.Error())
-			setOpsUpstreamError(c, 0, safeErr, "")
-			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-				Platform:           account.Platform,
-				AccountID:          account.ID,
-				AccountName:        account.Name,
-				UpstreamStatusCode: 0,
-				UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
-				Kind:               "request_error",
-				Message:            safeErr,
+			return nil, s.handleUpstreamTransportError(ctx, c, account, err, OpsUpstreamErrorEvent{
+				UpstreamURL: safeUpstreamURL(upstreamReq.URL.String()),
 			})
-			c.JSON(http.StatusBadGateway, gin.H{
-				"type": "error",
-				"error": gin.H{
-					"type":    "upstream_error",
-					"message": "Upstream request failed",
-				},
-			})
-			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
 
 		// 优先检测thinking block签名错误（400）并重试一次

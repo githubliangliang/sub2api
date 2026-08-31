@@ -84,10 +84,19 @@ func TestAccountRepositorySQLiteRemainingPaths(t *testing.T) {
 	updated, err = client.Account.Get(ctx, updated.ID)
 	require.NoError(t, err)
 	require.InDelta(t, 2, updated.Extra["quota_used"], 0.000001)
-	require.NoError(t, repo.ResetQuotaUsed(ctx, updated.ID))
+	// 先给账号打上账号级限流，确认重置配额把它一起清掉（上游 897faea33）：
+	// 只清用量不清冷却，账号在 SQLite 上同样会卡在"配额已清但仍不参与调度"。
+	require.NoError(t, repo.SetRateLimited(ctx, updated.ID, time.Now().Add(time.Hour)))
+	updated, err = client.Account.Get(ctx, updated.ID)
+	require.NoError(t, err)
+	require.NotNil(t, updated.RateLimitResetAt)
+
+	require.NoError(t, repo.ResetQuotaUsedAndClearRateLimitCooldown(ctx, updated.ID))
 	updated, err = client.Account.Get(ctx, updated.ID)
 	require.NoError(t, err)
 	require.InDelta(t, 0, updated.Extra["quota_used"], 0.000001)
+	require.Nil(t, updated.RateLimitedAt)
+	require.Nil(t, updated.RateLimitResetAt)
 
 	updated, err = updated.Update().SetExtra(map[string]any{
 		service.UpstreamBillingProbeEnabledExtraKey:    true,
@@ -322,7 +331,7 @@ func TestAccountRepositoryRecoveryRollsBackWhenSchedulerOutboxWriteFails(t *test
 				return account.Update().SetExtra(map[string]any{"quota_used": 7.0, "quota_daily_used": 3.0, "quota_weekly_used": 5.0}).Save(context.Background())
 			},
 			invoke: func(repo *accountRepository, account *dbent.Account) error {
-				return repo.ResetQuotaUsed(context.Background(), account.ID)
+				return repo.ResetQuotaUsedAndClearRateLimitCooldown(context.Background(), account.ID)
 			},
 			assert: func(t *testing.T, account *dbent.Account) {
 				require.InDelta(t, 7, account.Extra["quota_used"], 0.000001)
