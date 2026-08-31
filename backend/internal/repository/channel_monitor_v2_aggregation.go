@@ -266,7 +266,20 @@ WITH candidate_ids AS (
 ), ranked AS (
   SELECT
     strftime('%Y-%m-%d %H:%M:00', current_error.created_at) AS bucket_start,
-    lower(COALESCE(NULLIF(TRIM(current_error.platform), ''), 'unknown')) AS platform,
+    -- composite 只是路由层：ops_error_logs.platform 记的是 'composite'，而 composite
+    -- 永远不是「已启用的 config platform」，于是 composite 分组的错误会被监控 v2 的每一个
+    -- 查询过滤掉、面板上完全看不到。用量侧早就用 usageLogEffectivePlatformExpr 解析到真实
+    -- 账号平台，错误侧一直没有（上游 49752060 + b20f29d1，后者修的正是前者写出的
+    -- NULLIF 少参数的硬 SQL 错误）。这里只搬语义：上游那段用的是若干 PG 专属构造
+    -- （见 PORTING-0.1.183.md §4.1 的清单），本文件是独立的 SQLite 重写。
+    -- 注：注释里也不要写 PG 语法字面量——sqlite_dialect_audit_test 会连注释一起扫。
+    lower(CASE
+      WHEN g.platform = 'composite' THEN COALESCE(
+        NULLIF(TRIM(a.platform), ''),
+        NULLIF(NULLIF(lower(TRIM(current_error.platform)), ''), 'composite'),
+        'unknown')
+      ELSE COALESCE(NULLIF(TRIM(current_error.platform), ''), 'unknown')
+    END) AS platform,
     COALESCE(current_error.group_id, 0) AS group_id,
     COALESCE(NULLIF(TRIM(current_error.requested_model), ''), NULLIF(TRIM(current_error.model), ''), 'unknown') AS model,
     current_error.user_id, current_error.error_type, current_error.error_owner,
@@ -288,6 +301,8 @@ WITH candidate_ids AS (
       ORDER BY current_error.created_at DESC, current_error.id DESC
     ) AS row_number
   FROM ops_error_logs current_error
+  LEFT JOIN groups g ON g.id = current_error.group_id
+  LEFT JOIN accounts a ON a.id = current_error.account_id
   WHERE (
       (NULLIF(current_error.request_id, '') IS NULL AND current_error.created_at >= $1 AND current_error.created_at < $2)
       OR (
