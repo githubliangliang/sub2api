@@ -1294,3 +1294,68 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 一度以为是本轮引起。核查结论是**负载敏感的既有 flaky**：它关掉 httptest server 再期待连接
 失败，紧接在 167 秒的 service 包之后跑时时序会变；机器空闲时 main 与本分支各 4/4 通过。
 判定方法值得记下——**怀疑某条失败是自己引起时，先在 main 上同样负载下复跑，而不是只跑一次**。
+
+---
+
+## 19. 按第 10 条重量 §5.2 / §5.4（2026-08-31，只读核查）
+
+第 10 条说「量基座要照上游终态，不能照记录它的那条 commit」。照终态重量这两簇，结论各不同。
+
+### 19.1 §5.2 的测量是对的，判断也不变
+
+§17 量 §5.2 时读的就是 `upstream/main` 的终态函数体（observer 的 `ObserveServiceTier` +
+`ServiceTier()` + `normalizeObservedOpenAIServiceTier`，约 50 行）。这个数字站得住。
+
+判断仍不变：**基座便宜 ≠ 功能该做**。§5.2 那 8 条服务的 §7.2 Fast mode `service_tier` 整体是
+25+ 文件 / +1584，而且只有真在发 fast / priority 请求才划算。不发 fast 请求，那 8 条本身也无关。
+
+### 19.2 §5.4 要拆开：它不是「一簇被同一个基座卡住」
+
+`decodeOpenAIJSONUseNumber` 随 Responses Lite 簇落地后重量三态，5 条的形态完全变了：
+
+| commit | 内容 | 现在的三态 | 判断 |
+|---|---|---|---|
+| `d5a012463` | isolate passthrough websocket sessions | 0ok / **2 文件全缺** | 见 19.3，可能是真 N/A |
+| `f4e3eb1c5` | ws v2 passthrough 里检测 cyber policy | **3ok / 2conf / 0 miss**（原 0ok/3conf/2miss） | 可做 |
+| `7c616db07` | 桥接超大 passthrough 请求 | 2ok / 2conf | 可做 |
+| `c83dced4b` | 入站 WS 客户端正常关闭不计账号故障 | 1ok / 1conf | 可做 |
+| `d8694f03b` | WSv2 陈旧原生工具 ID 清理的回归测试 | 纯测试 | 随对应项 |
+
+⇒ **§5.4 原先记的「缺 0.1.180 §7.1 基座」对整簇不成立。** 那 4 条是各自独立的修复
+（`f4e3eb1c5` 之前判 0ok 是因为缺的文件此后已随 §5.1 / Responses Lite 落地）。
+
+### 19.3 `d5a012463` 大概率是真 N/A，不是缺基座
+
+它要的新文件 `openai_ws_session_preemption.go`（279 行）依赖 `repository/gateway_cache.go` 的
+三个方法，本仓库全部零命中：
+
+- `ClaimOpenAIResponsesSessionWindow`
+- `CompareAndRefreshOpenAIResponsesSessionWindow`
+- `CompareAndDeleteOpenAIResponsesSessionWindow`
+
+看名字与形态就是**基于 Redis 的会话窗口抢占**（claim / compare-and-refresh / compare-and-delete
+是分布式租约的标准三件套）。本 fork 是**单节点 + 可选进程内 miniredis**，跨实例抢占在这里是
+退化的——与 CLAUDE.md 里「多实例需要真 Redis」「leader 锁单机用不上」同一类。
+
+⇒ 建议把 `d5a012463` 从「缺基座」改判为**按需/N/A**：真要做得先确认这套部署有没有多实例
+或多客户端争同一会话窗口的场景。这与 §5.3（本仓库缺陷不成立）是同一种归类，不是同一种
+「等基座」。
+
+⇒ 教训（第 11 条）：**「缺基座」和「本 fork 架构上不需要」要分开归类。** 前者是排期问题，
+后者是永久不做。判据是看那个基座**为什么存在**——如果它存在的理由是多实例协调
+（Redis 租约、leader 锁、跨节点广播），单节点 fork 大概率属后者。
+
+### 19.4 修订后的剩余 backlog
+
+| 簇 | 现在的判断 |
+|---|---|
+| §5.2（8 条） | 基座约 50 行，但**取决于是否发 fast/priority 请求**，不发就整簇无关 |
+| §5.3（4 条） | **本仓库缺陷不成立**，永久不做 |
+| §5.4 → 拆成两半 | `f4e3eb1c5` / `7c616db07` / `c83dced4b` **可做**（+ `d8694f03b` 随项）；`d5a012463` 改判**按需/N/A**（Redis 会话抢占） |
+| §5.5（3 条） | 功能非缺陷 + 要新建 SQLite 迁移 |
+| §5.6（1 条） | 要动 ent schema + 迁移 + aux 表，单人收益低 |
+| §5.8（4 条） | 属 0.1.180 §6.2(c) 挂起的 Grok 整簇 |
+| §15.2 的 none-effort 子功能 | 两个基座已随 Responses Lite 落地，现在只差本体，**下一轮可评估** |
+
+**建议的下一批**：§5.4 那 3 条独立修复 + §15.2 的 none-effort 子功能——都已无基座阻塞，
+且都不依赖「这套部署用不用某功能」的判断。
