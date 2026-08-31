@@ -224,6 +224,21 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
 	}
 
+	// Lite 请求必须 parallel_tool_calls: false，否则上游 400 unsupported_value。
+	// 位置必须在构建上游请求之前：本仓库这条路径下面第 248/250 行就把 body 交给
+	// buildGrokResponsesRequest / buildUpstreamRequestOpenAIPassthrough 了。
+	// 上游 d5e43ef7d 的落点在它自己那版更靠后的位置，照抄会晚一步（那时 body 已被用掉）。
+	// 判定条件与下面设置 responsesLiteHeader 的那处保持同一套。
+	if account.Platform != PlatformGrok && isOpenAIResponsesLiteWebSocketPayload(payload) {
+		liteBody, liteChanged, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(body, account)
+		if liteErr != nil {
+			return nil, fmt.Errorf("normalize responses Lite payload: %w", liteErr)
+		}
+		if liteChanged {
+			body = liteBody
+		}
+	}
+
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	var upstreamReq *http.Request
 	if account.Platform == PlatformGrok {

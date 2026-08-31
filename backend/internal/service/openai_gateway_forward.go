@@ -93,12 +93,23 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if toolSchemaSanitized {
 		body = sanitizedToolBody
 	}
-	if account.IsOpenAIOAuth() && isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) {
-		liteBody, changed, liteErr := normalizeOpenAIResponsesLiteToolsPayload(body)
+	// 门槛从 IsOpenAIOAuth() 放宽到 IsOpenAI()：normalizeOpenAIResponsesLitePayloadForAccount
+	// 内部自己按账号形态分派（OAuth/SetupToken 走完整 tools 归一化，API Key 只钉
+	// parallel_tool_calls），卡在 OAuth 上等于把 API Key 那一半功能废掉——而 Lite 的
+	// 400 unsupported_value 对 API Key 账号同样成立。
+	if account.IsOpenAI() && isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) {
+		liteBody, changed, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(body, account)
 		if liteErr != nil {
+			// 校验错误自带出错字段名，不要一律报 "tools"：
+			// parallel_tool_calls / reasoning 都可能是真正的元凶。
+			param := "tools"
+			var validationErr *openAIResponsesLiteValidationError
+			if errors.As(liteErr, &validationErr) {
+				param = validationErr.param
+			}
 			setOpsUpstreamError(c, http.StatusBadRequest, liteErr.Error(), "")
 			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
-				"type": "invalid_request_error", "message": liteErr.Error(), "param": "tools",
+				"type": "invalid_request_error", "message": liteErr.Error(), "param": param,
 			}})
 			return nil, liteErr
 		}

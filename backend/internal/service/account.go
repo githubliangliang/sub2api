@@ -1270,6 +1270,13 @@ func (a *Account) IsOpenAIOAuth() bool {
 	return a.IsOpenAI() && a.Type == AccountTypeOAuth
 }
 
+// IsOpenAIOAuthLike 覆盖 OAuth 与 Setup Token 两种订阅态 OpenAI 账号。
+// 与 IsOpenAIOAuth 的区别只在多认 AccountTypeSetupToken —— 后者同样走 ChatGPT
+// 私有后端，凡是「按订阅态而非 API Key 区分行为」的判定都该用这个。
+func (a *Account) IsOpenAIOAuthLike() bool {
+	return a != nil && a.IsOpenAI() && (a.Type == AccountTypeOAuth || a.Type == AccountTypeSetupToken)
+}
+
 func (a *Account) IsOpenAIChatGPTSubscription() bool {
 	if !a.IsOpenAIOAuth() {
 		return false
