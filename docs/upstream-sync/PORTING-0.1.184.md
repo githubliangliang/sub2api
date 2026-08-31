@@ -1403,5 +1403,57 @@ Grok tool search、API-key client tools 上——与 §18.1 的 Lite 测试文�
 
 ### 20.3 修订后的下一批
 
-`c83dced4b` / `7c616db07` / `f4e3eb1c5` 三条，按 §20.2 的表逐 hunk 手工对齐（约 227 行）。
-测试文件都已验证可干净落地，产品侧对齐完直接重新 apply 即可。
+~~`c83dced4b` / `7c616db07` / `f4e3eb1c5` 三条~~ → `f4e3eb1c5` **已合**（`1371cec69`，见 §21）；
+剩 `c83dced4b`（73 行 / 3 hunk）与 `7c616db07`（123 行 / 2 hunk）。
+
+⚠️ §20.2 说「测试文件都已验证可干净落地」——**这句不准**。`git apply` 干净只说明上下文对得上，
+不代表用例引用的符号都在。`f4e3eb1c5` 的两个用例就是 apply 干净但编译不过（见 §21.2）。
+
+---
+
+## 21. `f4e3eb1c5` ws v2 透传风控检测：已合（2026-08-31）
+
+### 21.1 修的是什么
+
+ws v2 透传路径**完全不看**上游的风控（cyber policy）终止事件，风控命中会被当成普通上游错误走
+账号副作用（限流 / 摘号）——而它是请求级判定、与账号健康无关。
+
+四处改动：handler 的 `BeforeRequest` 加连接级 cyber 会话闸门（passthrough ingress 刻意跳过
+`BeforeTurn`，所以要在这里兜一道，**必须放在 `turn == 1` 早退之前**否则首轮就漏）；adapter 新增
+`markOpenAIWSV2PassthroughCyberPolicy`；`error` / `response.failed` 在走
+`parseOpenAIWSErrorEventFields` 之前先过这道判定；close reason 截断到 120 字符（超出 WebSocket
+控制帧上限时 `coder/websocket` 直接跳过 close 帧，客户端只看到 EOF 拿不到状态码）。
+
+本仓库的 `BeforeRequest` 比上游少 `BeginOpsStreamTurn` / `setCyberTurnBody`（属其它未移植项），
+按同一语义位置手工插入。基座逐个核过全部在位，`CyberPolicyMark` 字段与上游逐一对得上。
+
+### 21.2 上游自带的两个用例落不了 —— 撤回而不是留着
+
+- handler 侧 `openai_ws_v2_passthrough_cyber_test.go`：依赖未移植的 **cyber session 改造**
+  （`CyberSessionExplicitBlockKey` / `CyberSessionTranscriptBlockKeys` 那套）。上游把
+  `openai_cyber_session_block.go` 从 **99 行改到 163 行**、换了整套 key 方案（explicit / scope /
+  transcript 三类），本仓库还是单一 `CyberSessionBlockKey`。这是独立功能，不是本条的基座。
+- service 侧 lifecycle 用例：依赖另一处未移植文件里的 `openAIStream403AccountRepo` test helper。
+
+两者都按第 12 条撤回。随之带进来的 `internal/testutil/redis.go` 也删掉——本仓库无消费者，
+按第 9 条不单独落死代码。
+
+改为新增 `openai_ws_v2_cyber_policy_test.go`，就地覆盖
+`markOpenAIWSV2PassthroughCyberPolicy` 本身：风控事件必须命中并写 ops 标记
+（`UpstreamStatus=200`）；普通上游失败必须**不**命中，否则会错误地跳过账号副作用。
+
+⇒ 教训（第 13 条）：**「测试文件 apply 干净」不等于「测试能编译」。** 这是第 2 条（apply 干净 ≠
+能编译）在测试文件上的同一表现，但更容易漏——因为 `apply --check` 三态是按文件报的，测试文件
+通常没有冲突，很容易被记成「测试没问题、只差产品代码」。§20.2 就写错了这句。判定方法还是老的：
+对用例引用的符号逐个 grep。
+
+### 21.3 剩下两条的工作量（未做）
+
+| commit | 文件 | 改动 | 备注 |
+|---|---|---|---|
+| `c83dced4b` | `handler/openai_gateway_handler.go` | 73 行 / 3 hunk | 入站 WS 客户端正常关闭不再计为账号故障 |
+| `7c616db07` | `service/openai_ws_forwarder_ingress.go` | 4 行 / 1 hunk | 桥接超大 passthrough 请求 |
+| `7c616db07` | `service/openai_ws_http_bridge.go` | 119 行 / 1 hunk | 同上 |
+
+⚠️ 按第 13 条，这两条的用例也要先逐个 grep 引用符号，不能因为 `apply --check` 干净就当能跑。
+
