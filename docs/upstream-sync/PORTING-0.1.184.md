@@ -1452,10 +1452,10 @@ ws v2 透传路径**完全不看**上游的风控（cyber policy）终止事件�
 | commit | 文件 | 改动 | 状态 |
 |---|---|---|---|
 | `c83dced4b` | `handler/openai_gateway_handler.go` | 73 行 / 3 hunk | **已合**（见 §22） |
-| `7c616db07` | `service/openai_ws_forwarder_ingress.go` | 4 行 / 1 hunk | 待合 |
-| `7c616db07` | `service/openai_ws_http_bridge.go` | 119 行 / 1 hunk | 待合 |
+| `7c616db07` | `service/openai_ws_forwarder_ingress.go` | 4 行 / 1 hunk | **已合**（见 §23） |
+| `7c616db07` | `service/openai_ws_http_bridge.go` | 119 行 / 1 hunk | **已合**（见 §23） |
 
-⚠️ 按第 13 条，剩下那条的用例也要先逐个 grep 引用符号，不能因为 `apply --check` 干净就当能跑。
+⇒ §5.4 里判为「可做」的三条至此全部合入；`d5a012463` 仍按 §19.3 归为按需/N/A。
 
 ---
 
@@ -1495,3 +1495,57 @@ close 错误、在第一个判定里就算良性，而其它 deadline 是真卡�
 上游 7 条用例整取并全过（按第 13 条先逐个 grep 过引用符号，全部在位——与 §21.2 那两个落不了的
 用例形成对照）。
 
+
+---
+
+## 23. `7c616db07` 超大 WS 透传首帧改走 HTTP bridge：已合（2026-08-31）
+
+超大首帧在 ws v2 透传上会被上游按消息大小限制拒掉，HTTP bridge 路径没有这个约束。新增
+`shouldBridgeOpenAIWSPassthroughFirstMessage`，透传 ingress 里对首帧判一次，命中就置
+`forceHTTPBridge`（本仓库已有这个变量）。
+
+**为什么手写 JSON 扫描**：这条判定对每个连接跑一次，而首帧恰恰可能非常大——整个解成 map 只为
+读 `type` 与 `previous_response_id` 两个键，代价与被拒的那个大小成正比。三个 helper
+（`skipOpenAIWSJSONSpace` / `scanOpenAIWSJSONString` / `skipOpenAIWSJSONValue`）**由本条自带**，
+不是外部基座（这一点先 grep 确认过：`git diff` 里三个都是 `+func`）。
+
+两处 CONF 都是琐碎上下文不匹配：`openai_ws_http_bridge.go` 的冲突源于本仓库
+`prepareOpenAIWSHTTPBridgeBody` 已带 `account` 参数（§20.1 那轮的改动）；
+`openai_ws_forwarder_ingress.go` 的 switch-case 注释与上游不同。
+
+### 23.1 删掉一条越界子用例
+
+`ingress_session_test` 里 `name:"malformed data"`（截断 JSON、`wantRelayReject: true`）断言的是
+**透传 relay 拒收非法 JSON 首帧**——本仓库 relay 没有这个行为（会转发，由假上游回
+`response.completed`），而这不属本条改动范围：本条对截断 JSON 的处理是
+「`json.Valid` 为假 → 不桥接、留在透传」，已由 `TestOpenAIWSPassthroughFirstMessageBridgeDecision`
+的 12 个子用例直接覆盖。
+
+⇒ 教训（第 15 条）：**用例整取之后仍可能有个别子用例越界。** 第 13 条的 grep 能保证「能编译」，
+保证不了「断言的都是本条改的行为」——上游一条提交的用例常常顺带断言同一路径上的邻近行为。
+子用例失败时先问「这条断言的是本条改的东西吗」，再决定是补基座还是删用例。
+
+---
+
+## 24. 本轮（2026-08-31）总账
+
+从最初「评估 v0.1.184 哪些值得合并」出发，实际合入：
+
+| 批次 | 内容 |
+|---|---|
+| v0.1.184 P0 | 14 项（§3 / §9） |
+| v0.1.184 P1 | 11 项（§4 / §11） |
+| SSE frame 基座 | 补齐 3.11，裸 `error` 帧的非流式换号生效（§13） |
+| §5.1 Codex routed catalog | 整簇 12 条（§14 / §15） |
+| §5.7 Antigravity 混合内置工具 | 4 条（§16） |
+| 0.1.183 §5.1 Responses Lite | 5 条（§17 / §18） |
+| §15.2 none-effort 过滤 | 尾巴补齐（§20） |
+| §5.4 可做的三条 | `f4e3eb1c5`（§21）/ `c83dced4b`（§22）/ `7c616db07`（§23） |
+
+**仍未合**：§5.2（取决于是否发 fast/priority）、§5.3（缺陷不成立，永久不做）、
+§5.4 的 `d5a012463`（Redis 会话租约，单节点 N/A）、§5.5（要新建 SQLite 迁移）、
+§5.6（要动 ent schema）、§5.8（属挂起的 Grok 整簇）、§4 按需组、0.1.183 §4.1、
+`normalizeOpenAIParallelToolCallsWithoutTools`、`CreateAccountModal.vue` 两个 hunk。
+
+**15 条通用教训**已写进 [README](./README.md)。其中本轮新增 12 条——这个数字本身说明一件事：
+之前几轮「缺基座 → 不做」的判断里，**有相当一部分是没量就下的结论**。
