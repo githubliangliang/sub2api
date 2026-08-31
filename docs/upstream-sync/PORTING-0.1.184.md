@@ -452,6 +452,9 @@ PORTING-0.1.183 §5.3 当时的理由是「未发布 + 上游仍在返工」。*
 `CompositeRouteResolver` 加了 `CompositeModelOwnershipResolver` 回调并在 `NewGatewayService`
 里接线，是这个功能簇的一环。0.1.183 §5.3 已把它记成假信号样本，本轮**继续成立**。
 
+📌 **2026-08-31 立项复核：上面「冲突面很大」这个判断被证伪了一半，见 §14。** 三态里的
+CONFLICT 主要来自行号漂移，不是深度分歧——本仓库在这簇的核心文件上与上游**几乎没有分叉**。
+
 上游 v0.1.184 之后还有一条 `e2624fb65`「fix(codex): preserve known image input capabilities」
 仍在这簇上打补丁——立项时把它一起纳进来。
 
@@ -917,3 +920,99 @@ hint 段落加 `expiresAtTimezoneHint`。
 | `-run BareErrorEvent` | 2 个子用例全过（`t.Skip` 已删） |
 | `-run ExtractOpenAISSETerminalEvent` | 5 条新用例全过 |
 | `./internal/service/` 整包 | 通过（165s） |
+
+---
+
+## 14. §5.1 Codex routed model catalog 立项（2026-08-31）
+
+### 14.1 这个功能是什么
+
+Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前：Composite 与其它非 OpenAI
+分组要么落到 OpenAI 的 live-manifest handler、要么根本没有 Codex 专用响应；API key 用户也没有
+受支持的方式去取那份 manifest 并在 `config.toml` 里引用它。
+
+这簇做两件事：从每个分组的**有效模型列表**生成最小 manifest（同时保留官方 OpenAI live 路径
+与普通 `/models` 响应）；给 Use Key 流程加「带鉴权下载 catalog + 配 `model_catalog_json`」，
+且不把 API key 写进下载的文件。
+
+**本仓库用得上**：composite 分组存在（`internal/service/composite_model_route.go`），
+`/backend-api/codex/models` 端点也已注册（`internal/server/routes/gateway.go:378`）。
+§11.1 补的 `escapeTomlBasicString` 就是这簇的产物——我们已经吃下了 Use Key 流程里
+「API key 内联鉴权」那半，缺的正是 `model_catalog_json` 那半。
+
+### 14.2 规模
+
+12 条提交（含 v0.1.184 之后的 `e2624fb65`）、49 个文件、约 **+8200 行**。产品代码集中在两个
+文件的近乎重写上：
+
+| 文件 | 本簇增删 |
+|---|---|
+| `service/openai_codex_models_service.go` | **+1639 -97** |
+| `service/upstream_models.go` | **+699 -21** |
+| `service/openai_codex_model_metadata.go` | +321（新文件） |
+| `handler/gateway_handler.go` | +97 -14 |
+| `service/gateway_service.go` | +84 -2 |
+| `pkg/claude/effort_catalog.go` | +69（新文件） |
+| `service/openai_gateway_request_body.go` | +63 |
+| 前端 `UseKeyModal.vue` / `api/codex.ts` / `utils/codexCatalogConfig.ts` | +328 / +56 / +63 |
+
+测试约占 4400 行。8 个文件是纯新增（`effort_catalog.go`、`openai_codex_model_metadata.go`、
+`api/codex.ts`、`utils/codexCatalogConfig.ts` 及各自用例）。
+
+### 14.3 关键发现：本仓库在这簇的核心文件上几乎没有分叉
+
+§5.1 原先按三态 CONFLICT 数判「冲突面很大、只能按功能手工移植」。**按正确的方法量一遍
+（本仓库当前文件 vs 上游 `22e1b8144^` 即入簇前状态），结论相反**：
+
+| 文件 | 与上游入簇前的差异行数 |
+|---|---|
+| `handler/openai_codex_models_handler.go` | **0**（逐字相同） |
+| `service/openai_codex_models_service.go` | **22**（我们 761 行 / 上游 773 行） |
+| `handler/gateway_handler.go` | 20 |
+| `service/gateway_service.go` | 54 |
+| `service/upstream_models.go` | 78 |
+| `service/openai_gateway_request_body.go` | **409**（我们 1484 / 上游 1873，缺约 389 行） |
+
+⇒ 六个核心文件里五个近乎一致，三态里的 CONFLICT 主要是**行号漂移**。唯一真正分叉的是
+`openai_gateway_request_body.go`（我们少约 389 行，属其它未移植功能），而这簇对它只加 63 行，
+需要单独确认落点。
+
+**教训（第 5 条）：三态计数不能当分叉程度的度量。** CONFLICT 数高既可能是深度分歧，也可能
+只是漂移。判分叉要拿「本仓库当前文件 vs 上游入簇前的同一文件」直接 diff，这个数才是手工量的
+真实上限。§5.1 当初那句「冲突面很大」正是按错的指标下的判断。
+
+### 14.4 依赖自包含（本轮最重要的一道关）
+
+按 §2 的第三道关，对新增代码里的每个函数调用逐个 grep 基座。`openai_codex_model_metadata.go`
+调了 6 个本仓库零命中的符号：
+
+| 符号 | 定义在 |
+|---|---|
+| `codexExplicitModelMappingClaims` | `service/openai_codex_models_service.go`（**本簇内**） |
+| `resolveCodexCompositeModelTarget` | 同上（本簇内） |
+| `GetUpstreamModelMetadata` | `service/upstream_models.go`（本簇内） |
+| `normalizeCodexInputModalities` | 同上（本簇内） |
+| `normalizeReasoningLevel` | 同上（本簇内） |
+| `normalizeReasoningLevels` | 同上（本簇内） |
+
+**全部由本簇自己提供**，没有一个挂在别的未移植簇上。这与 §5.2（service_tier）、§5.4（WS v2）
+那两簇有本质区别——它们缺的是**簇外**基座，做不了；这簇缺的都在簇内，可以做。
+
+### 14.5 分层与建议
+
+| 层 | commits | 性质 |
+|---|---|---|
+| 骨架 | `22e1b8144` `e471be730` | 两个 feat，manifest 生成 + 完整 routed catalog |
+| 路由 | `3e98a5a1a` `b16ed03ca` `5a2f542ab` | composite 别名路由、按真实 route 对齐、配置优先于发现 |
+| 能力同步 | `e39fce270` `2abce6503` `db01fb98f` `5934981e2` | 上游能力交集与不可调度账号下的稳定性 |
+| 收尾 | `fc589bce1` `195b21970` `e2624fb65` | review 反馈、API-key catalog 缓存隔离、图像能力保留 |
+
+**建议：整簇按「逐 commit 顺序重放」而不是取最终态。** 理由是这两个 feat 之后的 10 条全是对
+同一批函数的反复返工，取最终态等于放弃了每一步的可读边界；而按 §14.3 的测量，逐条重放的
+冲突主要是漂移，代价可控。中间态**不要求能编译**（§9.3 的教训：逐条 cherry-pick 必然落在中间
+态），只要求最后一条落完后 `go build` + 全量用例通过。
+
+**不建议**整体覆盖 `openai_gateway_request_body.go`——那 409 行分叉里含本仓库未移植的其它功能，
+只落这簇的 63 行。
+
+**排期**：这是一次独立的 change，规模与 0.1.180 §7.1 那档相当，不适合塞在 P0/P1 批次里。
