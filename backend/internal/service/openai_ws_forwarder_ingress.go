@@ -92,6 +92,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if wsDecision.Transport != OpenAIUpstreamTransportResponsesWebsocketV2 {
 				return fmt.Errorf("websocket ingress requires ws_v2 transport, got=%s", wsDecision.Transport)
 			}
+			// 超大首帧在 ws v2 透传上会被上游按大小限制拒掉，改走 HTTP bridge。
+			if s.shouldBridgeOpenAIWSPassthroughFirstMessage(account, firstClientMessage) {
+				forceHTTPBridge = true
+				break
+			}
 			// 注意：透传 relay 只回调 hooks.AfterTurn，没有 turn 起始回调，
 			// 因此下面这条路径永远不会触发 hooks.BeforeTurn——分组利润控制的
 			// turn 级复核与 turn 级 pricingAt 冻结都不覆盖透传 ingress，
