@@ -1549,3 +1549,52 @@ close 错误、在第一个判定里就算良性，而其它 deadline 是真卡�
 
 **15 条通用教训**已写进 [README](./README.md)。其中本轮新增 12 条——这个数字本身说明一件事：
 之前几轮「缺基座 → 不做」的判断里，**有相当一部分是没量就下的结论**。
+
+---
+
+## 25. 0.1.183 §4.1 监控 v2 composite 平台归属：已合（2026-08-31）
+
+这是 PORTING-0.1.183.md 里最后一个「待合」项，也是**唯一一个从头到尾没被量过规模的**。
+量完发现：「需 SQLite 重写」听起来重，实际只是照那节已经写好的表达式改两处（platform 的
+CASE + 两个 LEFT JOIN），约 10 行。
+
+⇒ 教训（第 16 条）：**backlog 里挂最久的项，往往是最早被贴上标签、之后再没人量过的那个。**
+「需 SQLite 重写」「缺基座」这类标签一旦写下就会被后续每一轮直接沿用。定期回头量一遍最老的
+几项，比继续往前找新项更划算。
+
+### 25.1 必须真跑 SQL 的理由
+
+既有的两条相关用例都是**字符串检查**（`strings.ToLower(channelMonitorV2ClassifyErrorsSQL)` 里
+grep 关键字），语法错误一条都抓不到。而这次往取数 CTE 里加了**两个 LEFT JOIN 和一个多层
+CASE**，正是最容易「Go 侧编译通过、SQLite 上语法失败」的形状——上游 `b20f29d1` 修的就是
+`49752060` 写出的 `NULLIF` 少一个参数的硬 SQL 错误。
+
+新增 `channel_monitor_v2_classify_sqlite_test.go`：建最小 `ops_error_logs` / `groups` /
+`accounts`，真执行那条 SQL，断言两件事——SQL 可执行；composite 分组解析为账号真实平台。
+**做了反向验证**：去掉 composite CASE 后该用例变红（`actual: "composite"`），证明它测的确实是
+这件事而不是恒真。
+
+### 25.2 被本仓库自己的审计抓了一次
+
+我在 SQL 注释里写了 PG 语法字面量当反例，被 `sqlite_dialect_audit_test.go` 的
+`TestProductionSQLUsesSQLiteDialect` 拦下——那个审计**连注释一起扫**。
+
+这本身是好事（说明护栏有效），但值得记：⇒ **在 SQL 常量的注释里不要写 PG 语法字面量**，
+哪怕是当反例。已改写措辞并在注释里就地注明。
+
+### 25.3 现在的 backlog
+
+`docs/upstream-sync/` 三份清单里，**所有「基座已在、缺陷已核实」的项都已合入**。剩下的每一项都
+落在这三类之一：
+
+1. **取决于使用方式** —— §5.2 与那 8 条（是否发 fast/priority）、§4 按需组（订阅 / DeepSeek 峰谷价 /
+   图像冷却 / Grok / 支付）
+2. **架构上不需要** —— §5.3（本仓库缺陷不成立）、§5.4 的 `d5a012463`（Redis 会话租约，单节点退化）
+3. **需要新增迁移或改 schema** —— §5.5（两个 usage 字段 + SQLite 迁移）、§5.6（每用户公共分组，
+   ent schema + 迁移 + aux 表）
+
+外加两条尾巴：`normalizeOpenAIParallelToolCallsWithoutTools`（本仓库整个行为不存在，调用点在落后
+约 389 行的文件里）、`CreateAccountModal.vue` 两个 hunk（依赖零命中的 `upstreamModelsPreviewed` /
+`isCNPlatform` 与未移植的 post-create 自动同步流程）；以及 §5.8 属 0.1.180 §6.2(c) 挂起的 Grok 整簇。
+
+**没有一项是「量一量就能做」的了。**
