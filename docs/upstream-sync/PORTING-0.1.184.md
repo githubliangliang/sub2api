@@ -1016,3 +1016,48 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 只落这簇的 63 行。
 
 **排期**：这是一次独立的 change，规模与 0.1.180 §7.1 那档相当，不适合塞在 P0/P1 批次里。
+
+### 14.6 试跑一遍重放：73/101 干净，但 §14.3 的结论要打个补丁
+
+按 §14.5 的建议做了一次**探查性重放**（topo 顺序逐条、逐文件 apply，结果已撤销，工作树未留痕）：
+
+- **101 个 file-patch 里 73 个干净落地**，8 个新文件全部到位。
+- 28 处冲突，集中在两个文件：`openai_codex_models_service.go` **9 处**、
+  `UseKeyModal.spec.ts` 5 处、`CreateAccountModal.vue`/`.spec.ts` 各 2 处、
+  `upstream_models.go` 2 处，其余 8 个文件各 1 处。
+- 核心文件的**第一条**（`22e1b8144`）是干净的；9 处冲突全来自后续返工——文件被前面几条
+  改过之后，后面的上下文就对不上了。这符合「逐条重放会落在中间态」的预期。
+- 重放后 `go build` 报的全是 `codexModelMetadataOverride` / `UpstreamModelMetadata` /
+  `resolveCodexCompositeModelTarget` / `configuredCodexModelDescriptor` / `modelsDevProvider`
+  未定义——都在那两个冲突文件里，即「冲突没解 → 符号没落地」，不是新的基座缺口。
+
+⚠️ **§14.3 的「近乎没有分叉」需要打补丁：行数小 ≠ 语义可忽略。** 把那 22 行 / 78 行摊开看：
+
+| 文件 | 本仓库与上游入簇前的真实关系 |
+|---|---|
+| `openai_codex_models_service.go` | **我们落后**：上游那 22 行是 Codex 出站身份收敛（`resolveCodexOutboundIdentity` / `NormalizeCodexClientVersion` / `CompareVersions` / `codexUpstreamMinVersion`，来自 0.1.175–0.1.177 那批），本仓库还是更早的 `openAICodexProbeVersion` + `codexCLIUserAgent` 形态 |
+| `upstream_models.go` | **三种情况混在一起**：① 上游有 `IsCNProvider` 分支，本仓库**刻意没有**（无国产平台）；② 上游用协议感知的 `GetOpenAIProtocolAPIKey` / `GetOpenAIFormatBaseURL`，本仓库还是 `GetOpenAIApiKey` / `GetOpenAIBaseURL`；③ 本仓库有**上游没有的** `buildOpenAIOAuthUpstreamModelsRequest`（约 62 行，让 OAuth 账号用 Codex manifest 走管理端模型同步按钮） |
+
+⇒ **不能拿上游最终态整文件覆盖这两个文件**：会把国产供应商路径合回来（违反硬约束第 1 条）、
+引用可能不存在的协议感知 getter、并且**删掉本仓库独有的 OAuth 模型同步**。§14.5 原先只给
+`openai_gateway_request_body.go` 打了这个记号，实际上两个核心文件同样适用。
+
+**教训（第 6 条）：分叉的「行数」和「可否整文件覆盖」是两个问题。** 22 行里可能同时藏着
+「我们落后于上游」「我们刻意不要」「我们独有」三种情形，每种的处理方式相反。判定必须把 diff
+摊开逐段归类，不能只看数字。
+
+### 14.7 修订后的建议
+
+这簇**依然值得做**（§14.4 的依赖自包含结论不变，功能对本仓库也成立），但它是一次
+**独立的 change**，不能塞进 P0/P1 批次尾巴，工作量集中在：
+
+1. `openai_codex_models_service.go` 的 9 处冲突 —— 需要先决定是否顺带补齐 0.1.175–0.1.177 的
+   Codex 出站身份收敛（补了，冲突大半自消；不补，每条返工都要手工对齐）。
+2. `upstream_models.go` 的 2 处冲突 —— 逐段归类：CN 分支剔除、协议感知 getter 按本仓库形态
+   落、`buildOpenAIOAuthUpstreamModelsRequest` 原样保留。
+3. `openai_gateway_request_body.go` 只落本簇那 63 行（§14.5 已定）。
+4. 前端 5 + 2 + 2 处冲突（`UseKeyModal.spec.ts` / `CreateAccountModal.vue` / `.spec.ts`），
+   其中 `UseKeyModal.vue` 已被本轮 §11.1 / §11.5 改过两次，冲突里有一部分是我们自己造成的。
+
+**入口条件**：先把「是否补 Codex 出站身份收敛」拍板，这是第 1 项的岔路口，也决定整簇的工作量
+是 1 天还是 3 天量级。
