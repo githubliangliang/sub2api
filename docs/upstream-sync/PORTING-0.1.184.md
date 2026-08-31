@@ -1449,11 +1449,49 @@ ws v2 透传路径**完全不看**上游的风控（cyber policy）终止事件�
 
 ### 21.3 剩下两条的工作量（未做）
 
-| commit | 文件 | 改动 | 备注 |
+| commit | 文件 | 改动 | 状态 |
 |---|---|---|---|
-| `c83dced4b` | `handler/openai_gateway_handler.go` | 73 行 / 3 hunk | 入站 WS 客户端正常关闭不再计为账号故障 |
-| `7c616db07` | `service/openai_ws_forwarder_ingress.go` | 4 行 / 1 hunk | 桥接超大 passthrough 请求 |
-| `7c616db07` | `service/openai_ws_http_bridge.go` | 119 行 / 1 hunk | 同上 |
+| `c83dced4b` | `handler/openai_gateway_handler.go` | 73 行 / 3 hunk | **已合**（见 §22） |
+| `7c616db07` | `service/openai_ws_forwarder_ingress.go` | 4 行 / 1 hunk | 待合 |
+| `7c616db07` | `service/openai_ws_http_bridge.go` | 119 行 / 1 hunk | 待合 |
 
-⚠️ 按第 13 条，这两条的用例也要先逐个 grep 引用符号，不能因为 `apply --check` 干净就当能跑。
+⚠️ 按第 13 条，剩下那条的用例也要先逐个 grep 引用符号，不能因为 `apply --check` 干净就当能跑。
+
+---
+
+## 22. `c83dced4b` 客户端正常关闭不再计为账号故障：已合（2026-08-31）
+
+### 22.1 一个良性结局的三种形态，本仓库只认一种
+
+| 形态 | 来源 | 此前 |
+|---|---|---|
+| `*service.OpenAIWSClientCloseError` 带 1000 | 网关按自己节奏关闭（轮间空闲超时） | ✓ 已认 |
+| 裸 `coderws.CloseError{Code:1000}` | 客户端干净关闭时 `coder/websocket` 的返回形态 | ✗ `ReadOpenAIWSClientMessage` 把 `conn.Read` 的错误**原样**传回，没有任何地方包成上面那个类型，`errors.As` 看不见它 |
+| `context.Canceled` | 客户端中途走了 | ✗ 这条路径用 `StatusGoingAway(1001)` 关闭、把取消作为 cause 带上，只判 1000 匹配不到 |
+
+后两种一路落到 `shouldReportOpenAIWSProxyAccountFailure`（只过滤模型切换错误），于是到达
+`ObserveOpenAIAPIKeyHealthFailure` 与 `scheduler.ReportResult(false)`——**客户端只是断开，却记到
+上游账号的健康度上，甚至能把它踢出调度**。
+
+### 22.2 本仓库早就有这条规则的另一半
+
+`failoverClientGone` 为 HTTP failover 路径写明了同一条规则（客户端取消「被误报成账号耗尽」是
+bug 而非信号），`summarizeWSCloseErrorForLog` 也早就用正确方式读 close code——所以那条 WARN 会
+**一边打印 `close_status=1000(StatusNormalClosure)`、一边把它算到账号账上**。日志里就写着答案。
+
+⇒ 教训（第 14 条）：**同一条规则在本仓库的另一条路径上可能已经写对了。** 移植前 grep 一下
+「这个语义在别处是怎么处理的」，既能确认缺陷真实存在，也能拿到现成的判定写法和注释依据。
+这与第 3.4/§18.2 那组「调用点不一致」是同一族问题的另一个面。
+
+### 22.3 判定刻意收窄的两处
+
+不单独匹配 `StatusGoingAway`：网关因自身原因拆会话时同样发 1001，而客户端取消已由
+`context.Canceled` 覆盖。不含 `context.DeadlineExceeded`：空闲超时那条路径会把它包进 1000 的
+close 错误、在第一个判定里就算良性，而其它 deadline 是真卡住、值得上报。
+
+收尾时裸 `CloseError` 或单纯取消都没有网关选定的 close 帧，镜像客户端那个干净的 1000，
+而不是发 proxy-failure 尾巴上的 1011。
+
+上游 7 条用例整取并全过（按第 13 条先逐个 grep 过引用符号，全部在位——与 §21.2 那两个落不了的
+用例形成对照）。
 
