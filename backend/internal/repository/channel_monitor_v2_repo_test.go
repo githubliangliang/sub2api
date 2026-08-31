@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
@@ -95,6 +96,183 @@ func TestChannelMonitorV2WhereRejectsGroupFilterOutsideConfiguredScope(t *testin
 	require.Contains(t, where, "FALSE")
 	require.NotContains(t, where, "m.group_id IN")
 	require.Len(t, args, 3)
+}
+
+// 以下 8 条来自上游 a3bbf33c0（渠道监控 v2 按用户可见分组收窄）。
+//
+// 移植说明：上游那份 patch 的断言用 pq.Array([]int64{4}) 比对单个数组参数，
+// 因为它的 channelMonitorV2Where 走 PG 的 `group_id = ANY($4)`。本仓库是 SQLite，
+// 同一个函数用 sqlInt64In 展开成 `group_id IN ($4,$5)` + 逐个标量参数
+// （见上面 TestChannelMonitorV2WhereUsesConfiguredScope...），所以 3 处断言按本仓库
+// 形态改写，并且**不引入 lib/pq**——SQLite-only fork 不该为一条测试把 PG 驱动拉进来。
+// 其余 5 条与上游逐字一致。
+
+func TestChannelMonitorV2WhereRestrictsOrdinaryViewerToAllowedConfiguredGroups(t *testing.T) {
+	filter := service.ChannelMonitorV2Filter{
+		Start: time.Unix(1, 0), End: time.Unix(2, 0),
+		GroupIDs: []int64{4, 9}, AllowedGroupIDs: []int64{3, 4}, RestrictGroups: true,
+	}
+	cfg := service.ChannelMonitorV2Config{
+		Platforms: []service.ChannelMonitorV2PlatformConfig{{Platform: "openai", Enabled: true}},
+		GroupIDs:  []int64{3, 4, 9},
+	}
+	where, args := channelMonitorV2Where(filter, cfg, "m")
+	// 请求的 {4,9} ∩ 允许的 {3,4} ∩ 配置的 {3,4,9} = {4}：越权请求的 9 被摘掉。
+	require.Contains(t, where, "m.group_id IN ($4)")
+	require.Equal(t, int64(4), args[3])
+}
+
+func TestChannelMonitorV2WhereRejectsOrdinaryViewerWithNoAllowedGroups(t *testing.T) {
+	filter := service.ChannelMonitorV2Filter{
+		Start: time.Unix(1, 0), End: time.Unix(2, 0),
+		GroupIDs: []int64{9}, RestrictGroups: true,
+	}
+	cfg := service.ChannelMonitorV2Config{
+		Platforms: []service.ChannelMonitorV2PlatformConfig{{Platform: "openai", Enabled: true}},
+		GroupIDs:  []int64{3, 9},
+	}
+	where, _ := channelMonitorV2Where(filter, cfg, "m")
+	require.Contains(t, where, "FALSE")
+	require.NotContains(t, where, "m.group_id IN")
+}
+
+func TestChannelMonitorV2CatalogKeepsViewerScopeWhileIgnoringPickerFilters(t *testing.T) {
+	filter := service.ChannelMonitorV2Filter{
+		Platforms: []string{"openai"}, GroupIDs: []int64{9}, Models: []string{"gpt-5"},
+		AllowedGroupIDs: []int64{3}, RestrictGroups: true,
+	}
+	catalog := channelMonitorV2CatalogFilter(filter)
+	require.Empty(t, catalog.Platforms)
+	require.Empty(t, catalog.GroupIDs)
+	require.Empty(t, catalog.Models)
+	require.True(t, catalog.RestrictGroups)
+	require.Equal(t, []int64{3}, catalog.AllowedGroupIDs)
+}
+
+func TestChannelMonitorV2AdminScopeRemainsGlobal(t *testing.T) {
+	filter := service.ChannelMonitorV2Filter{Start: time.Unix(1, 0), End: time.Unix(2, 0), GroupIDs: []int64{9}}
+	cfg := service.ChannelMonitorV2Config{
+		Platforms: []service.ChannelMonitorV2PlatformConfig{{Platform: "openai", Enabled: true}},
+		GroupIDs:  []int64{3, 9},
+	}
+	where, args := channelMonitorV2Where(filter, cfg, "m")
+	// RestrictGroups 为 false（管理员）：请求的 9 原样生效，不做交集收窄。
+	require.Contains(t, where, "m.group_id IN ($4)")
+	require.Equal(t, int64(9), args[3])
+}
+
+func TestChannelMonitorV2MatrixDoesNotSeedGroupsForEmptyViewerScope(t *testing.T) {
+	filter := service.ChannelMonitorV2Filter{RestrictGroups: true}
+	cfg := service.ChannelMonitorV2Config{
+		Platforms: []service.ChannelMonitorV2PlatformConfig{{Platform: "openai", Enabled: true}},
+		GroupIDs:  []int64{3, 9},
+	}
+	accs := seedChannelMonitorV2MatrixAccumulators(filter, cfg, service.ChannelMonitorV2GroupByPlatformGroup, map[int64]channelMonitorV2GroupInfo{
+		3: {name: "private"}, 9: {name: "other-private"},
+	})
+	require.Empty(t, accs)
+}
+
+func TestChannelMonitorV2EmptyRestrictedScopeReturnsEmptyInventory(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	repo := &channelMonitorV2Repository{db: db}
+	filter := service.ChannelMonitorV2Filter{RestrictGroups: true}
+	cfg := service.ChannelMonitorV2Config{
+		Platforms: []service.ChannelMonitorV2PlatformConfig{{Platform: "openai", Enabled: true, Models: []string{"gpt-5"}}},
+		GroupIDs:  []int64{3, 9},
+	}
+
+	dimensions, err := repo.GetDimensions(context.Background(), filter, cfg)
+	require.NoError(t, err)
+	require.Empty(t, dimensions.Platforms)
+	require.Empty(t, dimensions.Groups)
+	require.Empty(t, dimensions.Models)
+	require.NotNil(t, dimensions.Platforms)
+	require.NotNil(t, dimensions.Groups)
+	require.NotNil(t, dimensions.Models)
+
+	models, err := repo.GetModels(context.Background(), filter, cfg, false)
+	require.NoError(t, err)
+	require.Empty(t, models.Items)
+	require.NotNil(t, models.Items)
+	require.Equal(t, service.ChannelMonitorV2Coverage{}, models.Coverage)
+	// sqlmock 没有登记任何期望：空作用域必须在发出任何 SQL 之前就短路返回。
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestChannelMonitorV2EmptyRestrictedScopeReturnsEmptySnapshotWithoutQueries(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter service.ChannelMonitorV2Filter
+	}{
+		{
+			name:   "no allowed groups",
+			filter: service.ChannelMonitorV2Filter{RestrictGroups: true},
+		},
+		{
+			name: "requested groups exclude allowed configured scope",
+			filter: service.ChannelMonitorV2Filter{
+				GroupIDs: []int64{9}, AllowedGroupIDs: []int64{3}, RestrictGroups: true,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			repo := &channelMonitorV2Repository{db: db}
+			cfg := service.ChannelMonitorV2Config{
+				Enabled: true,
+				Platforms: []service.ChannelMonitorV2PlatformConfig{{
+					Platform: "openai", Enabled: true, Models: []string{"gpt-5"},
+				}},
+				GroupIDs: []int64{3},
+			}
+
+			snapshot, err := repo.GetSnapshot(context.Background(), test.filter, cfg, false)
+			require.NoError(t, err)
+			require.Equal(t, service.ChannelMonitorV2Config{}, snapshot.Config)
+			require.Equal(t, service.ChannelMonitorV2Coverage{}, snapshot.Coverage)
+			require.Equal(t, service.ChannelMonitorV2Metric{}, snapshot.Metrics)
+			require.Equal(t, service.ChannelMonitorV2Health{}, snapshot.Health)
+			require.Empty(t, snapshot.Trend)
+			require.NotNil(t, snapshot.Trend)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestChannelMonitorV2EmptyRestrictedScopeReturnsEmptyMatrixForEveryGrouping(t *testing.T) {
+	groupings := []service.ChannelMonitorV2GroupBy{
+		service.ChannelMonitorV2GroupByPlatform,
+		service.ChannelMonitorV2GroupByPlatformModel,
+		service.ChannelMonitorV2GroupByPlatformGroup,
+		service.ChannelMonitorV2GroupByPlatformGroupModel,
+	}
+	for _, groupBy := range groupings {
+		t.Run(string(groupBy), func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = db.Close() })
+			repo := &channelMonitorV2Repository{db: db}
+			filter := service.ChannelMonitorV2Filter{RestrictGroups: true}
+			cfg := service.ChannelMonitorV2Config{
+				Platforms: []service.ChannelMonitorV2PlatformConfig{{Platform: "openai", Enabled: true, Models: []string{"gpt-5"}}},
+				GroupIDs:  []int64{3, 9},
+			}
+
+			matrix, err := repo.GetMatrix(context.Background(), filter, cfg, groupBy, false)
+			require.NoError(t, err)
+			require.Equal(t, groupBy, matrix.GroupBy)
+			require.Empty(t, matrix.Items)
+			require.NotNil(t, matrix.Items)
+			require.Equal(t, service.ChannelMonitorV2Coverage{}, matrix.Coverage)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
 
 func TestChannelMonitorV2ErrorAggregationCountsFinalUserErrorsOnly(t *testing.T) {
