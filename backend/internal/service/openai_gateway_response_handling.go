@@ -952,6 +952,16 @@ func openAICompatPayloadWithEventType(payload, eventType string) string {
 	return patched
 }
 
+// effectiveOpenAISSEEventType 取一帧 SSE 的有效事件类型：payload 里的 "type" 优先，
+// 缺失时回落到 `event:` 行。上游兼容层里两种形态都存在——原生 Responses 事件把类型写在
+// JSON 里，而部分兼容上游只在 `event:` 行给类型、data 里没有 "type"。
+func effectiveOpenAISSEEventType(payload []byte, eventType string) string {
+	if payloadType := strings.TrimSpace(gjson.GetBytes(payload, "type").String()); payloadType != "" {
+		return payloadType
+	}
+	return strings.TrimSpace(eventType)
+}
+
 func (s *OpenAIGatewayService) replaceModelInSSELine(line, fromModel, toModel string) string {
 	data, ok := extractOpenAISSEDataLine(line)
 	if !ok {
@@ -1485,7 +1495,10 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		body = restoredBody
 	} else {
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
-		if terminalOK && terminalType == "response.failed" {
+		// 裸 `error` 帧与 `response.failed` 同属终止失败事件，都不该按 200 收尾
+		// （上游 81ac8ccd6 的完整范围；extractOpenAISSETerminalEvent 换成 frame 识别后
+		// 这个分支才真正能被裸 error 帧命中）。
+		if terminalOK && (terminalType == "response.failed" || terminalType == "error") {
 			msg := extractOpenAISSEErrorMessage(terminalPayload)
 			if msg == "" {
 				msg = "Upstream compact response failed"
@@ -1531,16 +1544,22 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 	}, nil
 }
 
+// extractOpenAISSETerminalEvent 找出一段响应体里的终止事件。
+//
+// 两点与旧实现不同（对齐上游 v0.1.184 的形态）：
+//  1. 走 forEachOpenAISSEFrame 而不是 forEachOpenAISSEDataPayload —— 后者只看 data 里的
+//     "type"，只在 `event:` 行给类型的兼容上游会完全落空。
+//  2. switch 里含 "error"：裸 error 帧同属终止失败事件，非流式路径要据此换号
+//     （见 nonStreamingTerminalFailureFailover）。
+//
+// 取**最后**一个匹配帧而不是第一个：一段体里可能先出 response.failed 再补一个 error 帧
+// （或反之），最后那个才是上游真正的收尾表态。
 func extractOpenAISSETerminalEvent(body string) (string, []byte, bool) {
 	var terminalType string
 	var terminalPayload []byte
-	forEachOpenAISSEDataPayload(body, func(data []byte) {
-		if terminalPayload != nil {
-			return
-		}
-		eventType := strings.TrimSpace(gjson.GetBytes(data, "type").String())
+	forEachOpenAISSEFrame(body, func(eventType string, data []byte) {
 		switch eventType {
-		case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
+		case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled", "error":
 			terminalType = eventType
 			terminalPayload = append([]byte(nil), data...)
 		}

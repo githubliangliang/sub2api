@@ -1308,17 +1308,34 @@ func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool 
 	return true
 }
 
-// openAIStreamErrorEventShouldFailover 处理 type=="error" 的流内事件。
+// openAIStreamErrorEventShouldFailover 处理 `error` 终止事件（流式与非流式共用）。
 // 只有可重试的瞬时故障（含仅以文本形式返回的容量降载）才切号；
 // 上下文超长是请求本身的问题，换账号也没用。
+//
+// 不再自己校验 payload 里的 "type" == "error"：三个调用点都已按事件类型分派
+// （流式两处判 eventType == "error"，非流式走 nonStreamingTerminalFailureFailover 的
+// terminalType == "error"），而 extractOpenAISSETerminalEvent 改成 frame 识别之后，
+// 只在 `event:` 行给类型、data 里没有 "type" 的裸 error 帧会被这个自校验直接挡掉——
+// 那正是这次要修的形态。上游也没有这个 guard。
+//
+// ⚠️ 与上游 v0.1.184 仍有差距：上游这个函数还含 detectOpenAICyberPolicy 前置拒绝、
+// isOpenAIUpstreamAccessStateError、以及按 openAIStreamFailedEventSemanticStatus 分派
+// 403/401/429/529 的 switch。后两个符号（isOpenAIUpstreamAccessStateError /
+// openAIStream403AccountFailure）本仓库零命中，属未移植的其它簇，故只补文本标记这一段。
 func openAIStreamErrorEventShouldFailover(payload []byte, message string) bool {
-	if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) != "error" {
-		return false
-	}
 	if isOpenAIContextWindowError(message, payload) {
 		return false
 	}
-	return isOpenAITransientProcessingError(http.StatusBadRequest, message, payload)
+	if isOpenAITransientProcessingError(http.StatusBadRequest, message, payload) {
+		return true
+	}
+	// 上游只以文本形式表达的瞬时故障（无 code / 无 type），与上游同一组标记。
+	combined := strings.ToLower(strings.TrimSpace(message + " " +
+		gjson.GetBytes(payload, "error.message").String() + " " +
+		gjson.GetBytes(payload, "response.error.message").String()))
+	return strings.Contains(combined, "temporary") ||
+		strings.Contains(combined, "try again") ||
+		strings.Contains(combined, "please retry")
 }
 
 func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []byte, message string) bool {
@@ -1903,7 +1920,10 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		body = restoredBody
 	} else {
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
-		if terminalOK && terminalType == "response.failed" {
+		// 裸 `error` 帧与 `response.failed` 同属终止失败事件，都不该按 200 收尾
+		// （上游 81ac8ccd6 的完整范围；extractOpenAISSETerminalEvent 换成 frame 识别后
+		// 这个分支才真正能被裸 error 帧命中）。
+		if terminalOK && (terminalType == "response.failed" || terminalType == "error") {
 			msg := extractOpenAISSEErrorMessage(terminalPayload)
 			if msg == "" {
 				msg = "Upstream compact response failed"

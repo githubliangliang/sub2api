@@ -151,20 +151,6 @@ func TestNonStreamingSSEToJSON_NonRetryableFailedEventStillWritesProtocolError(t
 // 裸 error 帧走的是更保守的那个分类器：只有正向识别为瞬时才换号。
 // 这条用例证明两种终止事件确实被分派到了各自的判定，而不是共用一个。
 func TestNonStreamingSSEToJSON_BareErrorEventUsesConservativeClassifier(t *testing.T) {
-	// 移植缺口（上游 81ac8ccd6 之外的基座）：本仓库 extractOpenAISSETerminalEvent
-	// 走 forEachOpenAISSEDataPayload、按 JSON 的 "type" 字段识别，且 switch 里**没有**
-	// "error" 这一支；上游那版早已改成 forEachOpenAISSEFrame（按 SSE 的 event: 行识别、
-	// 取最后一个终止帧）并把 "error" 加进 switch。
-	//
-	// 所以本仓库的裸 error 帧根本走不到 nonStreamingTerminalFailureFailover——
-	// terminalOK 为 false，函数继续按普通 SSE 收尾。把调用点的条件扩成
-	// `|| terminalType == "error"` 是**空转改动**（README §4 第 13 条），已撤回。
-	//
-	// nonStreamingTerminalFailureFailover 里的 error 分派保留为与上游同形，
-	// 等 extractOpenAISSETerminalEvent 那版重构一并移植后，去掉本 Skip 即可生效。
-	// 已交付的 response.failed 主路径由本文件其余用例覆盖。
-	t.Skip("需先移植 extractOpenAISSETerminalEvent 的 frame 识别重构（含 \"error\" 终止类型）")
-
 	t.Run("non_transient_stays_protocol_error", func(t *testing.T) {
 		c, rec := newNonStreamingFailoverContext(t)
 		svc := newNonStreamingFailoverService()

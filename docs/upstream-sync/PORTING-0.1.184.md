@@ -283,7 +283,7 @@ assistant 消息里的 thinking 块整块丢弃。而这些 thinking 块本来�
 / `openAIStreamErrorEventShouldFailover`(4) / `writeOpenAINonStreamingProtocolError`(3)
 / `newOpenAIStreamFailoverError`(20) / `OpenAICompactKeepaliveAdjustedWrittenSize`(8)
 / `handleSSEToJSON`(6) / `handlePassthroughSSEToJSON`(3) / `IsResponseCommitted`(6)。
-状态：**部分合**（`response.failed` 已交付，裸 `error` 帧缺基座 —— 见 §9.3）
+状态：**已合**（先按 `response.failed` 部分合，见 §9.3；裸 `error` 帧的基座随后补齐，见 §13）
 
 `stream=false` 时上游仍可能回 SSE（其他 sub2api 实例、部分 openai_compat 上游），容量/限流
 错误经 HTTP 200 的 `response.failed` / `error` 终止事件回传。`handleSSEToJSON` 与
@@ -846,3 +846,74 @@ hint 段落加 `expiresAtTimezoneHint`。
 | `make test-frontend-critical` | 14 文件 / **168** passed / 2 skipped |
 | 本批触及的 6 个前端 spec | 62 passed |
 | `internal/repository -run ChannelMonitorV2` | 20 条全过（含 8 条新增） |
+
+---
+
+## 13. 补齐 3.11 的缺口：SSE frame 识别 + 裸 `error` 终止事件（2026-08-31）
+
+§9.3 把 3.11 记成「部分合」，缺口是 `extractOpenAISSETerminalEvent` 的 frame 识别重构。
+本节把它补上，3.11 转为**已合**，`t.Skip` 已去掉。
+
+### 13.1 基座缺口比预估小得多
+
+§9.3 当时只说「上游那版早已改成 `forEachOpenAISSEFrame`」，没量化代价。实测：
+
+| 符号 | 本仓库 |
+|---|---|
+| `openAICompatSSEFrameParser` / `openAICompatSSEFrame` | **已存在**，且与上游**逐字同形**（`EventType` + `Data`、`AddLine` / `Finish` / `dispatch`） |
+| `forEachOpenAISSEFrame` | 缺，30 行，只依赖上面那对 + 下面那个 |
+| `effectiveOpenAISSEEventType` | 缺，5 行，无依赖 |
+
+`openai_sse_data.go` 上下游的**唯一**差异就是少了 `forEachOpenAISSEFrame`。所以这不是
+「要拖一整簇」，是 35 行的自包含移植。引入它的上游提交 `acce29af2`（「补齐 OpenAI 与 Grok
+协议兼容处理」）是个 ≤ v0.1.183 的大杂烩，**不要整条 cherry-pick**，按符号取即可。
+
+### 13.2 `extractOpenAISSETerminalEvent` 的三处语义变化
+
+改成 `forEachOpenAISSEFrame` 之后，这个函数（3 个产品调用点）有三点变了，都与上游终态一致：
+
+1. **读 `event:` 行**。只在 `event:` 给类型、data 里没有 `"type"` 的帧此前完全落空
+   （`terminalOK=false`），非流式路径把它当普通 SSE 按 200 收尾。
+2. **switch 里加 `"error"`**。裸 error 帧同属终止失败事件。
+3. **取最后一个匹配帧**（旧实现取第一个）。一段体里可能先 `response.failed` 再补一个
+   `error`，最后那个才是上游真正的收尾表态。
+
+新增 `openai_sse_terminal_event_test.go` 5 条用例专门钉这三点 + 两条边界（只有增量事件与
+`[DONE]` 时必须报 false、`response.completed` 仍是终止事件不能被 `"error"` 挤掉）。
+这个函数改动的影响面比看起来大，单独立文件覆盖。
+
+### 13.3 顺带发现：`openAIStreamErrorEventShouldFailover` 有个会挡住新形态的自校验
+
+去掉 `t.Skip` 后 `non_transient` 子用例立刻绿，`transient_fails_over` 仍红。两个原因：
+
+1. **自校验挡路**。本仓库这个函数开头有
+   `if gjson.GetBytes(payload, "type").String() != "error" { return false }`，上游没有。
+   frame 识别生效后，裸 error 帧的 `terminalType` 是 `"error"`（来自 `event:` 行）而
+   payload 里没有 `"type"` —— 正好被这个自校验挡掉，等于新形态白改。
+   三个调用点本来就都按事件类型分派过了（流式两处判 `eventType == "error"`，非流式走
+   `nonStreamingTerminalFailureFailover` 的 `terminalType == "error"`），这个自校验是多余
+   且有害的，按上游去掉。
+2. **缺文本标记那一段**。上游末尾有
+   `strings.Contains(combined, "temporary" / "try again" / "please retry")`，覆盖「上游只以
+   文本形式表达瞬时故障、无 code 无 type」的情形。本仓库只有
+   `isOpenAITransientProcessingError`，命不中这类文案。补上同一组标记。
+
+⚠️ **仍与上游有差距，已在代码注释里标明**：上游这个函数还含 `detectOpenAICyberPolicy`
+前置拒绝、`isOpenAIUpstreamAccessStateError`、以及按 `openAIStreamFailedEventSemanticStatus`
+分派 403/401/429/529 的 switch。其中 `isOpenAIUpstreamAccessStateError` /
+`openAIStream403AccountFailure` 本仓库**零命中**，属其它未移植簇，故本轮只补文本标记一段，
+没有整体替换这个分类器。
+
+⇒ 这条是 §2 那类假信号的又一个变体：**基座补齐了、调用点也改对了，但路径上还有一道自己
+早年加的守卫会把新形态挡掉。** 补基座之后要把整条链路跑通一次，而不是只看新函数被调用到。
+
+### 13.4 验证
+
+| 项 | 结果 |
+|---|---|
+| `go build ./...` / `go vet -tags=unit ./...` | 通过 |
+| `go test -tags=unit ./...` | **53 个包全 ok** |
+| `golangci-lint run ./...`（v2.13.0） | **0 issues** |
+| `-run BareErrorEvent` | 2 个子用例全过（`t.Skip` 已删） |
+| `-run ExtractOpenAISSETerminalEvent` | 5 条新用例全过 |
+| `./internal/service/` 整包 | 通过（165s） |
