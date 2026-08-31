@@ -1228,3 +1228,69 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 
 入口动作：把 `openai_responses_lite_tools.go` 那 77 行 diff 摊开按「落后 / 刻意不要 / 独有」
 三类归档（§14.6 第 6 条教训），再决定是补齐整文件还是只取那 4 个函数。
+
+---
+
+## 18. 0.1.183 §5.1 Responses Lite 并行工具调用簇：已合（2026-08-31）
+
+§17.3 建议的下一批，当天做完。修的是：Lite 请求必须 `parallel_tool_calls: false`，否则上游
+400 `unsupported_value`「X-OpenAI-Internal-Codex-Responses-Lite requires
+`parallel_tool_calls` to be false」。
+
+### 18.1 入口动作的结果：77 行 diff 全属「我们落后」
+
+按 §14.6 第 6 条把 `openai_responses_lite_tools.go` 的 77 行 diff 逐段归类，**三类里只出现
+一类**：没有 fork 独有内容、没有刻意剔除的国产供应商内容，全是我们落后于上游。
+→ 直接取上游终态。测试文件同样零 fork 独有项（上游多 8 条用例），也取终态。
+
+基座按第 9 条**随簇一起落**：`openai_json_decode.go`（24 行，Lite payload 用它取代
+`json.Unmarshal` 以保住大整数精度）、`Account.IsOpenAIOAuthLike()`（3 行）。
+
+### 18.2 关键：四处调用点的门槛不放宽，这一半功能等于白合
+
+本仓库把 Lite 归一化卡在 `account.IsOpenAIOAuth()` 上，共四处：
+`openai_gateway_forward.go`、`openai_ws_forwarder_ingress.go`、
+`openai_ws_v2_passthrough_adapter.go`（两处）。
+
+而 `normalizeOpenAIResponsesLitePayloadForAccount` **本身就按账号形态分派**
+（OAuth/SetupToken → 完整 tools 归一化；API Key → 只钉 `parallel_tool_calls`），
+上游那三处也没有 OAuth 门槛。卡在 OAuth 上 = 把 API Key 那一半直接废掉，而 Lite 的 400
+对 API Key 账号同样成立。
+
+放宽到 `IsOpenAI()` 之后，上游新增的
+`TestOpenAIGatewayServiceForward_DisablesParallelToolCallsForResponsesLiteAPIKey` 与
+`TestPassthroughLifecycle_ResponsesLiteFirstFramePinsParallelToolCalls` 才通过——**这两条用例
+正是发现门槛问题的途径**。顺带把错误里硬编码的 `"param":"tools"` 换成从类型化错误
+`openAIResponsesLiteValidationError.param` 取真实字段名。
+
+⇒ 这是 §3.4「上游修复只覆盖它自己的调用点」的镜像变体：**本仓库自己早年加的收窄条件，会把
+新移植的能力挡在门外。** 与 §13.3 那道 `payload.type != "error"` 自校验同类。合完要问一句
+「我这边有没有比上游更窄的前置条件」。
+
+### 18.3 `d5e43ef7d` 的落点要往前挪
+
+上游把 WS HTTP bridge 的 Lite 归一化插在它自己那版更靠后的位置。本仓库照抄会**晚一步**：
+第 248/250 行已经把 `body` 交给 `buildGrokResponsesRequest` /
+`buildUpstreamRequestOpenAIPassthrough` 了。改插在 `prepareOpenAIWSHTTPBridgeBody` 之后，
+判定条件与下面设置 `responsesLiteHeader` 的那处保持同一套。
+
+### 18.4 未合的尾巴
+
+`normalizeOpenAIParallelToolCallsWithoutTools` + `openAIRequestBodyHasTools`。§17 量的是
+`1563db3f8` 里那个 17 行版本，但**上游 main 上已是 2 参形态、3 个产品调用点**，而本仓库整个
+「无 tools 时删掉 `parallel_tool_calls`」的行为都不存在，调用点又都在
+`openai_gateway_request_body.go`（落后约 389 行）里。
+
+本簇不需要它：放宽门槛后上游那两条相关用例已通过。⇒ 教训（第 10 条）：**§17 那种"量基座"
+要照上游终态量，不能照记录它的那条 commit 量**——同一个函数在区间后段可能已经换了签名和
+调用面（这也是 §9.3 中间态教训的另一种表现）。
+
+### 18.5 验证
+
+`go build ./...` / `go vet -tags=unit ./...` 通过；`go test -tags=unit ./...` **54 包全 ok、
+0 FAIL**；`golangci-lint` v2.13.0 **0 issues**。
+
+⚠️ 过程中 `TestAliyunCaptchaVerifier_TransportError`（`internal/repository`）出现过 2/3 失败，
+一度以为是本轮引起。核查结论是**负载敏感的既有 flaky**：它关掉 httptest server 再期待连接
+失败，紧接在 167 秒的 service 包之后跑时时序会变；机器空闲时 main 与本分支各 4/4 通过。
+判定方法值得记下——**怀疑某条失败是自己引起时，先在 main 上同样负载下复跑，而不是只跑一次**。

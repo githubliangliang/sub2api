@@ -339,7 +339,7 @@ SQLite 重写**（`CREATE TEMP TABLE` + `ROW_NUMBER() OVER (PARTITION BY ...)` +
 
 ## 5. 本轮不做
 
-### 5.1 Responses Lite 并行工具调用簇（5 条）—— 缺 0.1.180 基座
+### 5.1 Responses Lite 并行工具调用簇（5 条）—— **已合**（2026-08-31）
 
 `1563db3f`（v0.1.181）`53d76ad8` `d6012b0b` `d5e43ef7` `095b5253`（v0.1.182）。
 
@@ -353,9 +353,15 @@ SQLite 重写**（`CREATE TEMP TABLE` + `ROW_NUMBER() OVER (PARTITION BY ...)` +
 | `normalizeOpenAIResponsesLitePayloadForAccount` | `d5e43ef7` |
 | `normalizeOpenAIParallelToolCallsWithoutTools` | `1563db3f` |
 
-也就是说这簇挂在 0.1.180 §6.1（`7498d8fdc` Responses Lite 强制串行工具调用）与
-§7.1（PR #5888 大礼包）上。**要做就先做 0.1.180 那两项**，届时这 5 条一起排期。
-`d6012b0b` 是典型的「`apply --check` 过了但编译不过」——目标文件在，调用的函数不在。
+~~也就是说这簇挂在 0.1.180 §6.1（`7498d8fdc`）与 §7.1（PR #5888 大礼包）上。~~
+
+📌 **2026-08-31 更正：这个「挂在大礼包上」的判断是错的。** 按 PORTING-0.1.184.md §17 的
+测量，上表四个符号分别是 **24 行独立新文件** / **3 行谓词** / 13+9 行 / 17 行，
+没有一项需要拖 §7.1。这簇**已于 2026-08-31 合入**（本仓库 `db053dcfd`），详见
+PORTING-0.1.184.md §18。
+
+当时的判断只记了「逐个 grep 零命中」，没跟一句「那它多大」——这正是 0.1.184 §16 第 8 条
+教训的由来。`d6012b0b` 那句「`apply --check` 过了但编译不过」仍然成立，是对的。
 
 ### 5.2 `f1aadd48` OpenAI OAuth 配额耗尽 429 分类 —— 本仓库该缺陷不成立
 
