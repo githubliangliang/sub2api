@@ -1090,7 +1090,7 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 `upstream_models.go` 的 2 处 rejected hunk（`upstreamModelEntry.Slug` 字段、
 `upstreamModelEntryID` 的 Slug 回落）**本仓库已经有了**——是「已应用」而非缺口，无需处理。
 
-### 15.2 剔除的子功能：Codex 0.149.0 的 `reasoning.effort: none` 过滤
+### 15.2 剔除的子功能：Codex 0.149.0 的 `reasoning.effort: none` 过滤 —— **已于 2026-08-31 补齐，见 §20**
 
 `e39fce270` 把 catalog 能力同步和另一个子功能打包在一起：为 Codex 0.149.0 把 catalog 里那个
 只用于展示的 `none` effort 在**非官方上游**上按"未设置"处理
@@ -1359,3 +1359,49 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 
 **建议的下一批**：§5.4 那 3 条独立修复 + §15.2 的 none-effort 子功能——都已无基座阻塞，
 且都不依赖「这套部署用不用某功能」的判断。
+
+---
+
+## 20. §15.2 的尾巴补齐 + §5.4 三条的精确工作量（2026-08-31）
+
+### 20.1 none-effort 过滤已合（`643d0316e`）
+
+§15.2 剔除它的理由是缺 `IsOpenAIOAuthLike` 与 `decodeOpenAIJSONUseNumber`。两者已随 §18 的
+Responses Lite 簇落地，本体随即补齐：三个函数（`shouldPreserve...` / `filter...ForAccount`
+[]byte 形态 / `delete...FromObject` map 形态）+ 两处调用点（`Forward` 开头、
+`prepareOpenAIWSHTTPBridgeBody` 签名加 `account`）。
+
+顺带修一处**本仓库自己的精度问题**：`prepareOpenAIWSHTTPBridgeBody` 一直用 `json.Unmarshal`，
+WS 帧里超出 float64 精度的大整数（`sequence` 之类）会被静默丢精度再原样发给上游。
+改用刚落地的 `decodeOpenAIJSONUseNumber`。这是「基座落地后顺带解锁的既有缺陷」，
+不在任何 PORTING 清单里——**移植基座之后值得 grep 一遍谁还在用被它取代的旧写法**。
+
+用例只手工移植了上游那条 none-effort 用例。**没有整取上游的
+`openai_ws_http_bridge_test.go`**：它另有 13 条本仓库缺失的用例，分别挂在 §5.2 service_tier、
+Grok tool search、API-key client tools 上——与 §18.1 的 Lite 测试文件（零 fork 独有项、可整取）
+形成对照。⇒ **「测试文件能不能整取」要逐个判，不能因为上一次能整取就照做。**
+
+### 20.2 §5.4 三条的精确工作量（本轮量到、未做）
+
+试落了一遍：三条的**测试文件全部干净落地，产品代码全部冲突**。已把测试文件撤回，避免留下
+「用例在、产品改动不在」的不一致状态。产品侧的精确工作量：
+
+| commit | 文件 | 改动 |
+|---|---|---|
+| `c83dced4b` | `handler/openai_gateway_handler.go` | 73 行 / 3 hunk |
+| `7c616db07` | `service/openai_ws_forwarder_ingress.go` | 4 行 / 1 hunk |
+| `7c616db07` | `service/openai_ws_http_bridge.go` | 119 行 / 1 hunk |
+| `f4e3eb1c5` | `handler/openai_gateway_handler.go` | 7 行 / 1 hunk |
+| `f4e3eb1c5` | `service/openai_ws_v2_passthrough_adapter.go` | 24 行 / 3 hunk |
+
+合计约 227 行 / 9 hunk，全部要手工对齐。另 `d8694f03b`（纯测试）的
+`openai_ws_forwarder_success_test.go` 也冲突。
+
+⇒ 教训（第 12 条）：**试落时如果只有测试文件干净、产品代码全冲突，要立刻撤回测试文件。**
+留着会得到「编译通过但用例必然失败」的状态，比没开始更糟——而且下一轮容易误以为那部分已合。
+撤回的同时把每个产品 hunk 的行数量下来，下一轮直接照表手工对齐。
+
+### 20.3 修订后的下一批
+
+`c83dced4b` / `7c616db07` / `f4e3eb1c5` 三条，按 §20.2 的表逐 hunk 手工对齐（约 227 行）。
+测试文件都已验证可干净落地，产品侧对齐完直接重新 apply 即可。
