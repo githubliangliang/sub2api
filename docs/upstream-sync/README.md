@@ -2,9 +2,10 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-当前待移植清单有两份，**互不冲突、可并行**：
+当前待移植清单有三份，**互不冲突、可并行**：
 
-- [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版，12 项 P0 + 2 项 P1，无新迁移。
+- [PORTING-0.1.184.md](./PORTING-0.1.184.md) —— 上游 0.1.184 大混合版（2026-08-31 评估）。**14 项 P0 + 11 项 P1**，上游 3 条新迁移全部不合（故本仓库迁移号仍是 224）。不做的六簇见其 §5，其中 §5.1 Codex routed catalog「未发布」的阻塞条件已解除、需单独立项。
+- [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版，12 项 P0 + 2 项 P1，无新迁移。**§3 的 12 项 P0 与 §4.2 已合，只剩 §4.1**（监控 v2 composite，需 SQLite 重写）。
 - [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。
 
 两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
@@ -14,6 +15,11 @@
 再下一批是 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（2026-08-28）：从剩余 backlog 里挑 6 条「缺陷已核实、patch site 对得上、彼此无文件冲突」的候选，**实际交付 5 条**——0.1.180 §6.1 的 4 条工具桥接修复（PDF 附件静默丢弃、流式 tool_call 空身份、HTTP bridge 重复回放与孤儿 tool call）+ §6.3 的 composite `/v1/messages` 闸门。第 6 条 `17c0ee385` 在实施中被证实是 **`apply --check` 干净的 no-op**（依赖同簇未合的 `953028718`）并撤回——这是本仓库遇到的**第四种假信号**，详见该 change 的 `design.md` 决策 7 与 `source-baseline.md` §3。
 
 上一轮 [PORTING-0.1.179.md](./PORTING-0.1.179.md)，P0/P1 已全合；再上一轮 [PORTING-0.1.176.md](./PORTING-0.1.176.md)，标题写 0.1.177，已全合。
+
+再下一批的候选是 [PORTING-0.1.184.md](./PORTING-0.1.184.md) §3 的 14 项 P0（建议顺序见其 §7）。这一轮评估又添了两条通用教训，移植前值得先看：
+
+- **`apply --check` 干净 ≠ 能编译**，本轮抓到两条（0.1.184 §2）。判定方法不是看三态，而是对新增代码里的每个函数调用逐个 grep 基座是否存在。
+- **上游修复只覆盖了它自己的那条调用点，本 fork 的主路径可能是另一条。** 0.1.184 §3.4（Fable OAuth 系统提示词）就是样本：上游只改了桥接路径的注入点，原生 `/v1/messages` 的注入点在另一个文件，而后者才是本 fork 的主用法。照抄 patch 会得到一个「合了但没修好」的结果——这是第 13 条空转陷阱的变体，**核查时要问「这个函数被谁调用」，不只是「这个 patch 能不能打上」**。
 
 移植上游代码前先读 [第 4 节「硬约束」](#4-硬约束)，尤其是 9–12 条（SQLite 适配的四个静默陷阱）与第 13 条（守卫类单行改动的空转陷阱）。这几条的由来见 [第 7 节的事故复盘](#7-案例一次由-sqlite-适配引发的调度事故2026-08-16)。
 
