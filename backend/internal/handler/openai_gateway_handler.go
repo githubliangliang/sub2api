@@ -2052,6 +2052,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			ReasoningEffortMappings: reasoningEffortMappings,
 			BeforeRequest: func(turn int, payload []byte, originalModel string) error {
 				c.Set(securityAuditWSTurnContextKey, turn)
+				// passthrough ingress 刻意跳过 BeforeTurn，所以连接级 cyber 会话闸门也要在
+				// 这里兜一道。原生 ingress 会先经过本钩子、拿到同一个无副作用的 close 错误；
+				// 它自己 BeforeTurn 里那道守卫作为纵深防御保留（见下面 cyberBlockedThisConn 的
+				// 另一处使用）。**必须放在 turn == 1 早退之前**，否则首轮就漏。
+				if cyberBlockedThisConn {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, cyberSessionBlockedClientMsg, nil)
+				}
 				if turn == 1 {
 					return nil
 				}

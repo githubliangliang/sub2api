@@ -1167,6 +1167,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if !ok {
 					return
 				}
+				// 与 handler 的 close 路径一致，并且不能超出 WebSocket 控制帧上限：
+				// reason 过长时 coder/websocket 会直接跳过 close 帧，客户端只看到 EOF
+				// 而拿不到状态码。
+				reason = truncateString(reason, 120)
 				_ = clientConn.Close(status, reason)
 				_ = clientConn.CloseNow()
 			},
@@ -1182,6 +1186,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					s.handleOpenAIWSErrorEventTransientFailure(ctx, account, capturedSessionModel, handshakeHeaders, payload)
 				}
 				if wroteDownstream || eventType != "error" {
+					return nil
+				}
+				if (eventType == "error" || eventType == "response.failed") && markOpenAIWSV2PassthroughCyberPolicy(c, payload) {
 					return nil
 				}
 				errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(payload)
@@ -1359,6 +1366,27 @@ func openAIWSPassthroughRelayClientClose(exit openaiwsv2.RelayExit, completedTur
 		return coderws.StatusInternalError, "upstream websocket proxy failed", true
 	}
 	return 0, "", false
+}
+
+// markOpenAIWSV2PassthroughCyberPolicy 在 ws v2 透传路径上识别上游的风控（cyber policy）
+// 终止事件并记 ops 标记。透传路径此前完全不看这类事件，风控命中会被当成普通上游错误
+// 走账号副作用（限流/摘号），而它其实是请求级判定、与账号健康无关。
+func markOpenAIWSV2PassthroughCyberPolicy(c *gin.Context, payload []byte) bool {
+	hit, code, message := detectOpenAICyberPolicy(payload)
+	if !hit {
+		return false
+	}
+	usage := OpenAIUsage{}
+	parseOpenAIWSResponseUsageFromCompletedEvent(payload, &usage)
+	MarkOpsCyberPolicy(c, CyberPolicyMark{
+		Code:           code,
+		Message:        message,
+		Body:           truncateString(string(payload), 4096),
+		UpstreamStatus: http.StatusOK,
+		UpstreamInTok:  usage.InputTokens,
+		UpstreamOutTok: usage.OutputTokens,
+	})
+	return true
 }
 
 func (s *OpenAIGatewayService) mapOpenAIWSPassthroughDialError(
