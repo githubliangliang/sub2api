@@ -1061,3 +1061,88 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 
 **入口条件**：先把「是否补 Codex 出站身份收敛」拍板，这是第 1 项的岔路口，也决定整簇的工作量
 是 1 天还是 3 天量级。
+
+---
+
+## 15. §5.1 Codex routed model catalog：实际合入（2026-08-31）
+
+§14.7 的入口条件是「先拍板是否补齐 Codex 出站身份收敛」。**答案是不用拍板——本仓库早就有那套
+策略**（`internal/service/openai_codex_identity.go`，0.1.175–0.1.177 那批已合），只有
+`FetchCodexModelsManifest` 这一条调用点没接上，是遗留漏点而不是取向选择。先把它接上
+（独立提交，`d52f3cc6c`），冲突立刻从 28 处降到 22 处、核心文件从 9 处降到 3 处。
+
+然后整簇合入。**结果：12 条全部落地，其中 1 个子功能按依赖缺失剔除。**
+
+### 15.1 逐段归类的实际处理
+
+§14.6 说过「22 行 / 78 行里混着三种情形」，实际落地时每一种都遇到了：
+
+| 情形 | 具体 | 处理 |
+|---|---|---|
+| **我们落后** | `FetchCodexModelsManifest` 停在收敛前形态 | 先独立补齐（`d52f3cc6c`），消掉核心文件大半冲突 |
+| **我们落后** | `openai/constants.go` 缺 `CodexUsageProbeModel` 具名常量（`codex-auto-review` 这个模型本仓库早就有） | 补常量 |
+| **我们刻意不要** | `upstreamModelRegistryBaseURL` 用 `IsCNProvider` + `GetOpenAIFormatBaseURL`（两者本仓库零命中） | 改成 `IsOpenAI()` + `GetOpenAIBaseURL()` |
+| **我们刻意不要** | `defaultCodexModelIDsForPlatform` 的 DeepSeek 兜底分支 | 收成只 delegate，注释写清将来补回的位置 |
+| **我们刻意不要** | `UseKeyModal.vue` 里 17 处 `deepseek` / `kimi` / `zhipu` 分支 | 逐处裁掉（详见 15.3） |
+| **我们刻意不要** | 5 个测试文件 19 处 `PlatformDeepseek` | 1 处 DeepSeek 专属表行删除，其余 18 处替换为 `PlatformGrok`（平台在这些用例里是偶然的） |
+| **我们独有** | `buildOpenAIOAuthUpstreamModelsRequest`（约 62 行） | 完整保留，落完后 grep 确认还在 |
+
+`upstream_models.go` 的 2 处 rejected hunk（`upstreamModelEntry.Slug` 字段、
+`upstreamModelEntryID` 的 Slug 回落）**本仓库已经有了**——是「已应用」而非缺口，无需处理。
+
+### 15.2 剔除的子功能：Codex 0.149.0 的 `reasoning.effort: none` 过滤
+
+`e39fce270` 把 catalog 能力同步和另一个子功能打包在一起：为 Codex 0.149.0 把 catalog 里那个
+只用于展示的 `none` effort 在**非官方上游**上按"未设置"处理
+（`filterOpenAIResponsesNoneReasoningEffortForAccount` + `deleteOpenAIResponsesNoneReasoningEffortFromObject`，
+落在 `openai_gateway_forward.go` / `openai_gateway_request_body.go` / `openai_ws_http_bridge.go`）。
+
+**这一支缺簇外基座，已剔除**：`IsOpenAIOAuthLike` 与 `decodeOpenAIJSONUseNumber` 本仓库
+**零命中**，后者正是 PORTING-0.1.183 §5.1 记过的、挂在 0.1.180 §7.1 大礼包上的符号。
+
+⚠️ **这修正了 §14.4 的结论范围**：「依赖自包含」对 catalog **核心**成立，但**不是对
+`e39fce270` 的每个 hunk 都成立**——那一条提交同时含核心能力同步与这个外部依赖的子功能。
+⇒ 教训（第 7 条）：**依赖自包含要按 hunk 判，不能按 commit 判。** 一条提交里可以既有自包含的
+主线、又有挂在别处的搭车修复。
+
+剔除得干净：其对应的用例也没落地（`grep NoneReasoningEffort` 在测试里零命中），没有留下孤儿用例。
+
+### 15.3 前端两处必须小心的地方
+
+1. **`escapeTomlBasicString` 重复定义。** §11.1 为了让 `ed12ea716` 能跑，手工补了一份；这簇
+   原生带来了同一个函数 → `Duplicate function implementation`。**删掉 §11.1 那份临时补丁**
+   （它的注释里「本仓库未合那簇」这句也已过期），保留本簇提供的。
+2. ⚠️ **删 `case 'deepseek':` 会留下不可达的孤儿代码，而 `vue-tsc` 不报。** 裁掉 case 标签后，
+   原属该分支的 `return` / `if` 块会**贴在前一个 case 的 return 之后**成为死代码。本轮抓到 3 处
+   （两处 `keys.useKeyModal.deepseek.*` 的 return 块、一处空的
+   `if (activeClientTab.value === 'codex') { }`），typecheck 与 eslint 都没报。
+   靠 `grep -n 'deepseek'` 复查残留 + 人眼看 switch 结构才发现。
+
+   这与 §11.1 是同一类：**前端的正确性不能只靠 typecheck**。
+
+### 15.4 已知缺口（不影响编译与现有用例）
+
+`CreateAccountModal.vue` 的 2 个 hunk 未落：它们引用 `upstreamModelsPreviewed` 与
+`isCNPlatform`，本仓库**都零命中**（前者是另一处未移植的状态标志，后者是国产平台判定），
+而它们服务的「创建账号后自动同步上游模型」流程本仓库也没有。
+
+后果是 `ModelWhitelistSelector.vue` 的 `upstream-synced` emit 已落地但**无消费者**——Vue 对
+未监听的 emit 无副作用，不是故障，只是一个空信号。要接上得先移植那套 post-create 自动同步流程。
+
+同理未落的 4 个测试文件片段（`UseKeyModal.spec.ts` 5 处、`CreateAccountModal.spec.ts` 2 处等）
+都是这两块的用例。
+
+### 15.5 验证
+
+| 项 | 结果 |
+|---|---|
+| `go build ./...` / `go vet -tags=unit ./...` | 通过 |
+| `go test -tags=unit ./...` | **54 个包全 ok**（比之前多 1 个：新增的 `pkg/claude` effort catalog 用例） |
+| `golangci-lint run ./...`（v2.13.0） | **0 issues** |
+| `pnpm run typecheck` / `lint:check` | 通过 |
+| `make test-frontend-critical` | 14 文件 / 168 passed / 2 skipped |
+| `pnpm exec vitest run`（全量） | **232 / 233 文件通过**；唯一失败是既有的 `useRoutePrefetch.spec.ts`（5 条），与本轮无关，见 PORTING-0.1.179.md §4.6 |
+| 前端本簇新增用例 | `api/__tests__/codex.spec.ts`、`utils/__tests__/codexCatalogConfig.spec.ts` 全过 |
+
+**仍需真实环境验证**：用 Codex CLI 对着一个 composite 分组做模型发现，确认能拿到 manifest；
+以及 Use Key 流程下载 catalog + `model_catalog_json` 配置后 Codex 能正常起会话。

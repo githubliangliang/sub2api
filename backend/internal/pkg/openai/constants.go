@@ -45,6 +45,12 @@ func DefaultModelIDs() []string {
 // DefaultTestModel default model for testing OpenAI accounts
 const DefaultTestModel = "gpt-5.4"
 
+// CodexUsageProbeModel is the model used for OAuth Codex usage probes.
+// 本仓库早就有 codex-auto-review 这个模型（见上面的 DefaultModels 与
+// service/openai_codex_transform.go 的映射表），只是一直没有具名常量；
+// 上游 Codex routed catalog 那簇的用例按名字引用它，故补上。
+const CodexUsageProbeModel = "codex-auto-review"
+
 // DefaultInstructions default instructions for non-Codex CLI requests.
 // 内容为真实 Codex CLI 的 GPT-5-Codex base prompt（codex 系模型默认）。
 //
