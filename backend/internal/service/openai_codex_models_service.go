@@ -18,7 +18,6 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"golang.org/x/net/http2"
 	"golang.org/x/sync/singleflight"
 )
@@ -243,7 +242,9 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 
 	clientVersion = strings.TrimSpace(clientVersion)
 	if clientVersion == "" {
-		clientVersion = openAICodexProbeVersion
+		// 回落到 Codex 出站身份的规范版本，而不是 account_usage_service 里那个
+		// 配额探测专用常量：这条链路发的是真实的 models manifest 请求。
+		clientVersion = CodexCanonicalClientVersion()
 	}
 
 	requestEndpoint := chatgptCodexModelsURL
@@ -305,9 +306,25 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		setOpenAIChatGPTAccountHeaders(headers, credAccount)
 	}
 	headers.Set("Accept", "application/json")
-	headers.Set("Originator", openai.CodexDefaultOriginator)
-	headers.Set("Version", clientVersion)
-	headers.Set("User-Agent", codexCLIUserAgent)
+	overrideUA := ""
+	if !useAPIKeyUpstream {
+		overrideUA = credAccount.GetOpenAIUserAgent()
+	}
+	identity := resolveCodexOutboundIdentity(overrideUA)
+	headers.Set("Originator", identity.originator)
+	headers.Set("User-Agent", identity.userAgent)
+	// Version 头优先与 client_version 查询参数同源：客户端自报版本合法且不低于上游
+	// 门槛时原样使用；否则回退规范版本，避免陈旧 version 触发上游 404（上游 #3901）。
+	// client_version 查询参数本身始终按客户端原值透传（内容协商语义）。
+	//
+	// 本仓库早就有整套 Codex 出站身份收敛（internal/service/openai_codex_identity.go，
+	// 0.1.175–0.1.177 那批已合），只有这条 manifest 抓取路径一直没接上，是个遗留漏点，
+	// 不是"要不要跟上游取向"的问题。接上之后也顺带消掉 §5.1 那簇在本文件上的大半冲突。
+	headerVersion := NormalizeCodexClientVersion(clientVersion)
+	if headerVersion == "" || CompareVersions(headerVersion, codexUpstreamMinVersion) < 0 {
+		headerVersion = identity.version
+	}
+	headers.Set("Version", headerVersion)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
