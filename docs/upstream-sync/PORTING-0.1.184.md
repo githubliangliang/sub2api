@@ -503,7 +503,7 @@ CONFLICT 主要来自行号漂移，不是深度分歧——本仓库在这簇�
 必须与迁移**列对列**一致，两边都是 `IF NOT EXISTS`、谁先跑谁生效，不一致会让迁移文件变成
 误导。而且登录路径会加载 allowed groups，**这张表出问题直接 503**。
 
-### 5.7 `b1737cc84` Antigravity 混合内置工具 —— 缺 0.1.178 基座，可拆一半
+### 5.7 `b1737cc84` Antigravity 混合内置工具 —— **已合**（2026-08-31，见 §16）
 
 6 文件 5 ok / 1 conf，但 §2 已说明这是「`ok` 不保证能编译」：它改的
 `hasMixedToolInvocations` 与 `includeServerSideToolInvocations` 本仓库**零命中**
@@ -1146,3 +1146,36 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 
 **仍需真实环境验证**：用 Codex CLI 对着一个 composite 分组做模型发现，确认能拿到 manifest；
 以及 Use Key 流程下载 catalog + `model_catalog_json` 配置后 Codex 能正常起会话。
+
+---
+
+## 16. §5.7 Antigravity 混合内置工具：基座只是两条漏项（2026-08-31）
+
+§5.7 当初记的是「缺 0.1.178 的 `hasMixedToolInvocations` 基座、可拆一半」。**结论对，代价估高了。**
+
+那个「基座」不是一整簇，是两条被漏掉的小提交（都 ≤ v0.1.183）：
+
+| commit | 内容 | 规模 / 三态 |
+|---|---|---|
+| `3c3bb2fa1` | `GeminiToolConfig` 加 `IncludeServerSideToolInvocations` 字段 | 2 文件 +26，**全干净** |
+| `cb5e03a72` | raw passthrough 路径保留混合 Gemini tool config | 3 文件 +117，**全干净** |
+| `1ba92449c` | 把该标志接进 typed transform 路径 | 2 文件 +71-17，**全干净** |
+| `b1737cc84` | §5.7 本体：`codeExecution` 也算内置工具；Chat 的 `web_search` / `code_execution` 透传到 Responses | 6 文件，补齐前 5ok/1conf → **补齐后全干净** |
+
+按顺序落完，**四条 100% 干净，不需要拆**。
+
+修的是真缺陷：`TransformClaudeToGeminiWithOptions` 从头构建 `GeminiToolConfig` 却从不设
+`includeServerSideToolInvocations`，`gemini-*` 模型经 Claude 格式网关进来、且工具里同时有
+函数声明与内置工具（`googleSearch` / `codeExecution`）时，上游直接 400（上游 #5709）。
+本仓库连那个 struct 字段都没有，所以这条路径一直是坏的。
+
+**本仓库适配**：上游测试里 3 处未检查的类型断言（`wrapped["request"].(map[string]any)` 之类）
+被本仓库更严的 golangci-lint `errcheck` 拦下——上游 lint 配置不查类型断言，本仓库查。
+按本仓库既有写法改成两值形式 + `require.True`。
+
+⇒ 教训（第 8 条）：**「缺基座」要顺着符号往上游历史回溯一层，看基座本身有多大。** §5.7 当初只
+记了「零命中」就归入不做，没量基座的规模；实际是两条各百行以内、且都能干净落地的漏项。
+零命中说明「现在做不了」，不说明「做起来贵」——这两件事之间要多问一句。
+
+同类值得回头量一量的：§5.2 / §5.4 记的缺失符号（`observedUpstreamResponseServiceTier`、
+`decodeOpenAIJSONUseNumber` 等）当初也是只记了零命中，没回溯基座规模。
