@@ -1179,3 +1179,52 @@ Codex CLI 的模型发现要求一份**顶层 models manifest**。上游此前�
 
 同类值得回头量一量的：§5.2 / §5.4 记的缺失符号（`observedUpstreamResponseServiceTier`、
 `decodeOpenAIJSONUseNumber` 等）当初也是只记了零命中，没回溯基座规模。
+
+---
+
+## 17. 按第 8 条教训回头量：剩余「缺基座」判断全部低估了（2026-08-31，只读核查）
+
+§16 的教训是「零命中只说明现在做不了，不说明做起来贵」。把仍挂着的几处「缺基座」逐个回溯到
+上游定义处量一遍，**结论是四处全部低估**——所谓基座都是几十行，没有一处是「一整簇」。
+
+| 记在哪 | 缺失符号 | 上游定义处 | 真实规模 |
+|---|---|---|---|
+| 0.1.183 §5.1 / 0.1.184 §5.4 / §15.2 | `decodeOpenAIJSONUseNumber` | `service/openai_json_decode.go`（**独立新文件**） | **24 行，只依赖 stdlib**（bytes/encoding/json/errors/io） |
+| 0.1.184 §15.2 | `IsOpenAIOAuthLike` | `service/account.go` | **3 行**：`IsOpenAI() && (Type==OAuth \|\| Type==SetupToken)`。本仓库已有 `IsOpenAIOAuth()`（少 SetupToken 一支）且 `AccountTypeSetupToken` 常量在位 |
+| 0.1.183 §5.1 | `ensureOpenAIResponsesLiteParallelToolCalls` / `normalizeOpenAIResponsesLitePayloadForAccount` | `service/openai_responses_lite_tools.go`（**本仓库已有此文件**） | 13 行 / 9 行；整文件 ours 216 vs upstream 279，**diff 仅 77 行** |
+| 0.1.183 §5.1 | `normalizeOpenAIParallelToolCallsWithoutTools` | `service/openai_gateway_request_body.go` | 17 行 |
+| 0.1.184 §5.2 | `observedUpstreamResponseServiceTier` / `resolvedOpenAIUpstreamServiceTier` | `service/upstream_response_model.go`（本仓库已有） | 两者各 3–5 行**薄封装**；真正的基座是 observer 的 `ObserveServiceTier` + `ServiceTier()` + `normalizeObservedOpenAIServiceTier`，约 **50 行**，都在同一个文件里 |
+
+### 17.1 这改变了什么、没改变什么
+
+**改变的**：0.1.183 §5.1（Responses Lite 并行工具调用，5 条）过去被判「挂在 0.1.180 §6.1 的
+`7498d8fdc` 与 §7.1 大礼包上」。按上表，它实际缺的是 `decodeOpenAIJSONUseNumber`（24 行独立文件）
++ `IsOpenAIOAuthLike`（3 行）+ `openai_responses_lite_tools.go` 的 77 行 diff + 一个 17 行函数。
+**没有一项需要拖那个大礼包。** 这簇现在值得重新立项。
+
+**没改变的**：§5.2 的**基座**便宜（约 50 行），但它服务的 §7.2 Fast mode `service_tier`
+**整个功能**仍是 25+ 文件 / +1584，而且 PORTING-0.1.180 §7.2 自己的判断是
+「只有真在发 fast / priority 请求才划算」。基座便宜 ≠ 功能该做——这两件事要分开。
+§5.2 那 8 条修复也一样：不发 fast 请求，它们本身就无关。
+
+同理 §5.4（WS v2 passthrough，5 条）：`decodeOpenAIJSONUseNumber` 免费了，但那簇三态里还有
+多处 NOFILE（`d5a012463` 两文件全缺、`f4e3eb1c5` 2 个缺、`c83dced4b` 1 个缺），说明缺的不止
+这个 helper。要做得先把那些缺失文件也量一遍。
+
+### 17.2 单独移植 helper 不算交付
+
+`decodeOpenAIJSONUseNumber` 只有 24 行、拿来即用，但**本仓库没有任何调用点**——单独合进去就是
+死代码，`golangci-lint` 的 unused 检查也未必放过。它应该**随第一个真正用到它的簇一起落**
+（最可能是 0.1.183 §5.1 那簇）。
+
+⇒ 教训（第 9 条）：**基座要随用它的簇一起移植，不要为了"先把基座补齐"单独落一个没人调用的
+函数。** 免费的基座是「解锁条件已满足」的信号，不是「可以先合」的许可。
+
+### 17.3 建议的下一批
+
+**0.1.183 §5.1 Responses Lite 并行工具调用簇（5 条）** —— 按 §17 的测量，它是目前唯一
+「基座便宜 + 功能对本仓库明确有用（修的是 Lite 请求必须 `parallel_tool_calls: false`
+否则上游 400 `unsupported_value`）+ 不依赖使用习惯判断」的候选。
+
+入口动作：把 `openai_responses_lite_tools.go` 那 77 行 diff 摊开按「落后 / 刻意不要 / 独有」
+三类归档（§14.6 第 6 条教训），再决定是补齐整文件还是只取那 4 个函数。
