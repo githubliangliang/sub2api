@@ -45,6 +45,81 @@ func buildOpenAIResponsesURL(base string) string {
 	return buildOpenAIEndpointURL(base, "/v1/responses")
 }
 
+// shouldPreserveOpenAIResponsesNoneReasoningEffort 判断是否保留 reasoning effort 的 "none"。
+// 官方 OpenAI 语义下 "none" 是合法档位、必须原样透传；对第三方兼容上游它只是 catalog 里
+// 用于展示的占位值，透传过去会被拒。
+//
+// 移植说明：本仓库没有国产供应商平台，故只有 OAuth/SetupToken 与「API Key + 官方 base」
+// 两种保留情形，与上游终态一致。
+func shouldPreserveOpenAIResponsesNoneReasoningEffort(account *Account) bool {
+	if account == nil {
+		return false
+	}
+	if account.IsOpenAIOAuthLike() {
+		return true
+	}
+	if !account.IsOpenAIApiKey() {
+		return false
+	}
+	baseURL := strings.TrimSpace(account.GetCredential("base_url"))
+	return baseURL == "" || isOfficialOpenAIModelsBaseURL(baseURL)
+}
+
+// filterOpenAIResponsesNoneReasoningEffortForAccount 把「只存在于 catalog」的 none effort
+// 当作未设置处理。Codex 0.149.0 需要 catalog 里有单一 effort 档位才能直接选中可见的非推理
+// 模型，但那个值不能真的发到兼容上游去。
+//
+// 移植说明：上游 e39fce270 把它和 Codex catalog 能力同步打包在一条提交里，本仓库当时因缺
+// IsOpenAIOAuthLike / decodeOpenAIJSONUseNumber 而整支剔除（见 PORTING-0.1.184.md §15.2）；
+// 两个基座已随 0.1.183 §5.1 Responses Lite 簇落地，此处补齐本体。
+func filterOpenAIResponsesNoneReasoningEffortForAccount(account *Account, body []byte) ([]byte, error) {
+	if len(body) == 0 || shouldPreserveOpenAIResponsesNoneReasoningEffort(account) {
+		return body, nil
+	}
+
+	out := body
+	for _, path := range []string{"reasoning.effort", "reasoning_effort"} {
+		effort := gjson.GetBytes(out, path)
+		if effort.Type != gjson.String || !strings.EqualFold(strings.TrimSpace(effort.String()), "none") {
+			continue
+		}
+		next, err := sjson.DeleteBytes(out, path)
+		if err != nil {
+			return body, fmt.Errorf("strip %s none placeholder: %w", path, err)
+		}
+		out = next
+	}
+	if reasoning := gjson.GetBytes(out, "reasoning"); reasoning.IsObject() && len(reasoning.Map()) == 0 {
+		next, err := sjson.DeleteBytes(out, "reasoning")
+		if err != nil {
+			return body, fmt.Errorf("strip empty reasoning object: %w", err)
+		}
+		out = next
+	}
+	return out, nil
+}
+
+// deleteOpenAIResponsesNoneReasoningEffortFromObject 是上面那个的 map 形态版本，
+// 供已经解成 map 的路径（WS HTTP bridge）复用同一判定。
+func deleteOpenAIResponsesNoneReasoningEffortFromObject(account *Account, body map[string]any) {
+	if body == nil || shouldPreserveOpenAIResponsesNoneReasoningEffort(account) {
+		return
+	}
+	if effort, ok := body["reasoning_effort"].(string); ok && strings.EqualFold(strings.TrimSpace(effort), "none") {
+		delete(body, "reasoning_effort")
+	}
+	reasoning, ok := body["reasoning"].(map[string]any)
+	if !ok {
+		return
+	}
+	if effort, ok := reasoning["effort"].(string); ok && strings.EqualFold(strings.TrimSpace(effort), "none") {
+		delete(reasoning, "effort")
+	}
+	if len(reasoning) == 0 {
+		delete(body, "reasoning")
+	}
+}
+
 func trimOpenAIEncryptedReasoningItems(reqBody map[string]any) bool {
 	if len(reqBody) == 0 {
 		return false

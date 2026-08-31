@@ -30,8 +30,25 @@ func TestResolveOpenAIWSClientFirstMessageTimeout(t *testing.T) {
 	require.Equal(t, 120*time.Second, ResolveOpenAIWSClientFirstMessageTimeout(cfg))
 }
 
+// 上游 e39fce270 的用例：兼容端点要把 catalog 占位的 none effort 当未设置处理，
+// 官方端点必须原样保留。（本仓库当时整支剔除，见 PORTING-0.1.184.md §15.2；现已补齐）
+func TestPrepareOpenAIWSHTTPBridgeBodyStripsNoneReasoningForCompatibleEndpoint(t *testing.T) {
+	payload := []byte(`{"type":"response.create","model":"gpt-5","reasoning":{"effort":"none"},"reasoning_effort":"none","input":"hi"}`)
+
+	compatible := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"base_url": "https://compat.example.com/v1"}}
+	body, err := prepareOpenAIWSHTTPBridgeBody(compatible, payload)
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(body, "reasoning").Exists(), string(body))
+	require.False(t, gjson.GetBytes(body, "reasoning_effort").Exists(), string(body))
+
+	officialBody, err := prepareOpenAIWSHTTPBridgeBody(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, payload)
+	require.NoError(t, err)
+	require.Equal(t, "none", gjson.GetBytes(officialBody, "reasoning.effort").String(), string(officialBody))
+	require.Equal(t, "none", gjson.GetBytes(officialBody, "reasoning_effort").String(), string(officialBody))
+}
+
 func TestPrepareOpenAIWSHTTPBridgeBodyStripsWSFields(t *testing.T) {
-	body, err := prepareOpenAIWSHTTPBridgeBody([]byte(`{"type":"response.create","generate":true,"model":"gpt-5","stream":false,"previous_response_id":"resp_prev","input":"hi"}`))
+	body, err := prepareOpenAIWSHTTPBridgeBody(nil, []byte(`{"type":"response.create","generate":true,"model":"gpt-5","stream":false,"previous_response_id":"resp_prev","input":"hi"}`))
 	require.NoError(t, err)
 	require.False(t, gjson.GetBytes(body, "type").Exists())
 	require.False(t, gjson.GetBytes(body, "generate").Exists())
