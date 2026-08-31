@@ -61,6 +61,45 @@ func shouldReportOpenAIWSProxyAccountFailure(err error) bool {
 	return err != nil && !errors.Is(err, errOpenAIWSUnsupportedModelSwitch)
 }
 
+// openAIWSIngressEndedByClient 判断一次已结束的入站 WebSocket turn 是否以「健康客户端的
+// 正常收尾」结束，而不是上游或账号故障。
+//
+// 同一个良性结局有三种错误形态，此前只认第一种：
+//
+//   - *service.OpenAIWSClientCloseError 带 1000 —— 网关按自己的节奏关闭，
+//     例如轮间空闲超时。
+//   - 裸的 coderws.CloseError{Code: 1000} —— 客户端干净关闭时 coder/websocket 返回的形态。
+//     ReadOpenAIWSClientMessage 把 conn.Read 的错误原样传回，没有任何地方把它包成上面那个
+//     类型，所以 errors.As 对那个类型的断言看不见它。
+//   - context.Canceled —— 客户端中途走了。这条路径用 StatusGoingAway(1001) 关闭并把取消
+//     作为 cause 带上，所以只判 1000 同样匹配不到。
+//
+// 后两种会一路落到 shouldReportOpenAIWSProxyAccountFailure —— 它只过滤模型切换（以及上游
+// 那边的会话抢占）错误，其余全部到达 ObserveOpenAIAPIKeyHealthFailure 与
+// scheduler.ReportResult(false)：**客户端只是断开，却记到上游账号的健康度上，甚至能把它踢出
+// 调度**。
+//
+// failoverClientGone 早就为 HTTP failover 路径写明了这条规则（客户端取消「被误报成账号耗尽」
+// 是 bug 而非信号），summarizeWSCloseErrorForLog 也早就用正确方式读 close code —— 所以那条
+// WARN 会一边打印 close_status=1000(StatusNormalClosure)、一边把它算到账号账上。
+//
+// 判定刻意收窄：不单独匹配 StatusGoingAway（网关因自身原因拆会话时同样发 1001，而客户端取消
+// 的情形已由 context.Canceled 覆盖）；也不含 context.DeadlineExceeded（空闲超时那条路径会把它
+// 包进 1000 的 close 错误、在第一个判定里就算良性，而其它 deadline 是真卡住、值得上报）。
+func openAIWSIngressEndedByClient(err error) bool {
+	if err == nil {
+		return true
+	}
+	var closeErr *service.OpenAIWSClientCloseError
+	if errors.As(err, &closeErr) && closeErr.StatusCode() == coderws.StatusNormalClosure {
+		return true
+	}
+	if coderws.CloseStatus(err) == coderws.StatusNormalClosure {
+		return true
+	}
+	return errors.Is(err, context.Canceled)
+}
+
 func openAIWSTurnBillingModel(result *service.OpenAIForwardResult, mapping service.ChannelMappingResult, requestedModel, upstreamModel string) string {
 	billingModel := ""
 	if result != nil {
@@ -2293,12 +2332,22 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			}
 
 			var closeErr *service.OpenAIWSClientCloseError
-			if errors.As(err, &closeErr) && closeErr.StatusCode() == coderws.StatusNormalClosure {
-				reqLog.Info("openai.websocket_ingress_closed_normally",
-					zap.Int64("account_id", account.ID),
-					zap.String("reason", closeErr.Reason()),
-				)
-				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
+			hasClientCloseErr := errors.As(err, &closeErr)
+			if openAIWSIngressEndedByClient(err) {
+				closedFields := []zap.Field{zap.Int64("account_id", account.ID)}
+				if hasClientCloseErr {
+					closedFields = append(closedFields, zap.String("reason", closeErr.Reason()))
+				} else {
+					closedFields = append(closedFields, zap.Error(err))
+				}
+				reqLog.Info("openai.websocket_ingress_closed_normally", closedFields...)
+				// 裸 coderws.CloseError 或单纯的取消都不带网关选定的 close 帧；
+				// 这里镜像客户端那个干净的 1000，而不是发 proxy-failure 尾巴上的 1011。
+				if hasClientCloseErr {
+					closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
+				} else {
+					closeOpenAIClientWS(wsConn, coderws.StatusNormalClosure, "")
+				}
 				return
 			}
 
@@ -2323,7 +2372,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				proxyFailedFields = append(proxyFailedFields, zap.Int64p("proxy_id", account.ProxyID))
 			}
 			reqLog.Warn("openai.websocket_proxy_failed", proxyFailedFields...)
-			if errors.As(err, &closeErr) {
+			if hasClientCloseErr {
 				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
 				return
 			}
