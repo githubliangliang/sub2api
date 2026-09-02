@@ -420,6 +420,7 @@ func TestPricingRequestToService_NilPriceFields(t *testing.T) {
 	require.Nil(t, r.InputPrice)
 	require.Nil(t, r.OutputPrice)
 	require.Nil(t, r.CacheWritePrice)
+	require.Nil(t, r.CacheWrite1hPrice)
 	require.Nil(t, r.CacheReadPrice)
 	require.Nil(t, r.ImageOutputPrice)
 	require.Nil(t, r.PerRequestPrice)

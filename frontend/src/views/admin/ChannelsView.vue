@@ -889,6 +889,7 @@ async function syncLatestModels(sectionIdx: number) {
       input_price: null,
       output_price: null,
       cache_write_price: null,
+      cache_write_1h_price: null,
       cache_read_price: null,
       image_input_price: null,
       image_output_price: null,

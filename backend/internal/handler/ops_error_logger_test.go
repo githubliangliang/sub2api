@@ -927,7 +927,7 @@ func TestClassifyOpsLocalBusinessLimitErrorsExcludedFromSLA(t *testing.T) {
 			message:     `reasoning effort "high" exceeds this group's limit of "low"`,
 			code:        "",
 			status:      http.StatusForbidden,
-			wantErrType: "permission_error",
+			wantErrType: "api_error",
 			wantPhase:   "request",
 		},
 		{
