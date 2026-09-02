@@ -2,13 +2,16 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-当前待移植清单有三份，**互不冲突、可并行**：
+当前待移植清单有四份，**互不冲突、可并行**：
 
-- [PORTING-0.1.184.md](./PORTING-0.1.184.md) —— 上游 0.1.184 大混合版（2026-08-31）。**§3 的 14 项 P0 与 §4 的 11 项 P1 已全部合入**（实施记录见其 §9 / §11 / §13，验证矩阵见 §10 / §12 / §13.4）。上游 3 条新迁移全部不合，故本仓库迁移号仍是 224。**§5.1 Codex routed model catalog 整簇也已合入**（立项见 §14，落地与剔除见 §15）。**§5.7 Antigravity 混合内置工具也已合入**（其「基座」其实只是两条 ≤ v0.1.183 的漏项，见 §16）。剩下的是 §4 那组「取决于是否用到该功能」的按需项 + §5 余下五簇。
+- [PORTING-0.2.0.md](./PORTING-0.2.0.md) —— 上游 v0.1.185 + v0.2.0（2026-09-02，**最新一轮**）。60 个非 merge commit 的评估：**11 项 P0**（§3，其中 §3.1 `e93e6368f` 是本仓库已追通的活缺陷——调度快照投影裁掉透传开关，透传账号在选号阶段被误判 `model_not_supported`）、**4 项 P1**（§4，含 2 条新迁移 → 本仓库 `225` / `226`）、6 簇不做（§5：Fast 组策略按需、长上下文阶梯基座 573 行、Kimi 缺 CN 平台整支、`e21b849a9` 需先核调用点、数据库启动重试 PG-only、404-vs-429 本仓库缺陷不成立）。落地顺序见其 §7，本轮 8 条新教训见 §9。已按档固化为两个 OpenSpec change：**第一档** [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/)（§3.1–§3.7，6 项 / 6 capability，无迁移无前端）**仍未开始**；**第二档** [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/) 的 §3.8–§3.11 + §4.1–§4.4（8 项 / 7 capability，+2 迁移）**已在分支 `sync/upstream-20260902-p1` 落地**（起点 `3da1c2dd0`，因第一档未合而提前开工；代码尖 `0af248bc8`）。第 9 项并入的 0.1.180 §5.1 dompurify **本批未做**（不改 lockfile）。§5 的第三档/第四档**未立项，等确认**。迁移号现为 `226`。
+- [PORTING-0.1.184.md](./PORTING-0.1.184.md) —— 上游 0.1.184 大混合版（2026-08-31）。**§3 的 14 项 P0 与 §4 的 11 项 P1 已全部合入**（实施记录见其 §9 / §11 / §13，验证矩阵见 §10 / §12 / §13.4）。上游 3 条新迁移全部不合，故本仓库迁移号仍是 224。**§5.1 Codex routed model catalog 整簇也已合入**（立项见 §14，落地与剔除见 §15）。**§5.7 Antigravity 混合内置工具也已合入**（其「基座」其实只是两条 ≤ v0.1.183 的漏项，见 §16）。剩下的是 §4 那组「取决于是否用到该功能」的按需项 + §5 余下五簇。⚠️ 其 §1 那句「上游 main `200602b41` 之后 3 条本文不含」说的是**该文档的覆盖范围**，不是「本仓库没有」——`e2624fb65` 实际已随 §5.1 落地，见 0.2.0 §6 / §9.1。
 - [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版。**全部合完**：§3 的 12 项 P0、§4.1（监控 v2 composite，见 0.1.184 §25）、§4.2、以及原判「缺基座不做」的 §5.1 Responses Lite 簇（更正见 0.1.184 §17–§18）。
-- [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。
+- [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。0.2.0 §5.2 那簇（长上下文阶梯数据驱动）的 573 行基座就是这份 §7 未合的那一支。**§5.1 dompurify 已于 2026-09-02 重新量过、改判「建议做」并曾并入 0.2.0 第二档作为阶段 9（见其 §12）**，但第二档实施时按目标 **未改 lockfile，故仍未合**：3 个文件 / 22 行 lockfile / 零代码改动，一次可清掉 18 条 advisory；同时更正了原判两处判据（暴露面是 7 个净化调用点而不是 1 个，其中 `/legal/*` 完全公开；原清单唯一引用的那条 CVE 用四种污染形态都没能复现）。量的时候还撞见两条不在任何清单里的直接依赖 high：`xlsx` 原型污染 + ReDoS（运行时，无干净升级路径，值得单独立项）与 `vite` / `vitest` 的 dev-only 项。
 
 两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
+
+`openspec/changes/` 当前全貌（按时间倒序）：[`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/)（**未开始**）与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)（§3.8–§3.11 + §4 已在 `sync/upstream-20260902-p1` 落地，阶段 9 dompurify 未做）→ [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（5 项交付 + 1 项撤回）→ [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)（4 项 P1 + 3 个决策）→ 上面那两批 P0。新一轮的立项规则见 [CLAUDE.md](../../CLAUDE.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
 
 两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
 
@@ -32,6 +35,17 @@
 - **「缺基座」和「本 fork 架构上不需要」要分开归类**（0.1.184 §19.3）。判据是看那个基座为什么存在——如果它存在的理由是多实例协调（Redis 租约、leader 锁、跨节点广播），单节点 fork 大概率是永久不做，不是等排期。§5.4 的 `d5a012463` 就是这样从「缺基座」改判为按需/N/A 的。
 - **基座便宜 ≠ 功能该做。** §5.2 的基座约 50 行，但它服务的 §7.2 Fast mode `service_tier` 整个功能是 25+ 文件 / +1584，且只有真在发 fast / priority 请求才划算。两件事要分开判。
 - **上游修复只覆盖了它自己的那条调用点，本 fork 的主路径可能是另一条。** 0.1.184 §3.4（Fable OAuth 系统提示词）就是样本：上游只改了桥接路径的注入点，原生 `/v1/messages` 的注入点在另一个文件，而后者才是本 fork 的主用法。照抄 patch 会得到一个「合了但没修好」的结果——这是第 13 条空转陷阱的变体，**核查时要问「这个函数被谁调用」，不只是「这个 patch 能不能打上」**。
+
+[PORTING-0.2.0.md](./PORTING-0.2.0.md) 那轮（v0.1.185 / v0.2.0）又添六条，详见其 §9：
+
+- **开轮先跑一遍反向 `apply --check`（`ALREADY` 态），三态改四态。** 「某份 PORTING 文档不含」≠「本仓库没有」——上一轮的对照上游 main 可能已在下一个 tag 内部，且按终态取文件时会顺带落进邻近提交。本轮 `e2624fb65` 三文件全 `ALREADY`，直接省掉一次重复移植。
+- **上游把一个功能拆成十几条微提交时，逐条判定是噪声。** 要按 PR merge 取整体 diff（`git diff <merge>^1 <merge>`）。同一个 PR#6443 逐条看是一片冲突，整体看是 38/44 干净。
+- **链上的冲突数不是工作量，排序前不要报数。** PR#6444 的 30 处、PR#6425 的 9 处 CONFLICT 全部只因前一条未落。
+- **`CONFLICT` 也可能是「缺基座 / 无此缺陷」的伪装。** 凡 CONFLICT 都要先 grep 被改函数在不在，再判「手工改」还是「不成立」——`343858021` 就是后者，本仓库没有 `classifySelectionFailureError`，也就没有那个 bug。
+- **一个 PR 里可能塞两件不相关的事，按功能拆而不是按 PR 合。** `34b8bf1a6` 标题只说 Fable 5.1，一半内容是带迁移的渠道 `cache_write_1h_price` 拆分。**看到 PR 里出现迁移文件而标题没提，就先拆。**
+- **「上游为 X 修的」不代表「本仓库因 X 受益」，但结构收益仍可能成立。** 平台 N/A 时先看它顺手修掉的结构问题在不在（`9eabd2a5b`）。
+- **安全项要单独拎出来问，而且要重量而不是重述。** 判据里「输入可信」和「受众范围」是两件事——净化跑在**访问者**的浏览器里；清单引用的 CVE 未必被验证过，安全项的「已核实」标准比功能项高一档（功能项 grep 到 patch site 即可，安全项还需要能跑的 PoC）。没有 PoC 时理由要换成可验证的那些（advisory 数量、调用点数量、暴露面）。样本：0.1.180 §5.1 → §12。
+- **`_integration_test.go` 落地前先 `head -1` 看构建标签。** 本仓库有一批是 `//go:build integration && postgres`，在 SQLite-only fork 里永远不编译（`internal/repository/migrations_schema_integration_test.go` 就是，而上游 PR#6443 / PR#6444 改了它）。这类 hunk 无论三态报什么都直接丢，**不要为了让它能打上去动构建标签**。
 
 移植上游代码前先读 [第 4 节「硬约束」](#4-硬约束)，尤其是 9–12 条（SQLite 适配的四个静默陷阱）与第 13 条（守卫类单行改动的空转陷阱）。这几条的由来见 [第 7 节的事故复盘](#7-案例一次由-sqlite-适配引发的调度事故2026-08-16)。
 

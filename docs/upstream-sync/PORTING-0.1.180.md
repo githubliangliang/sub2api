@@ -200,9 +200,9 @@ cd /tmp/wt180 && git apply -p1 A.patch && git apply --check -p1 B.patch   # 两�
 另外实测确认：`86470628d` 单独 apply 报 NOFILE（目标文件由 `b30651a0a` 新建），顺序固定；
 `cfecc8d11` 与 `e4f869e0c` 两种顺序下都 clean，顺序无关。
 
-### 5.1 dompurify `3.3.1` → `3.4.14`（安全项，**已决定推迟**）
+### 5.1 dompurify `3.3.1` → `3.4.14`（安全项，**已重量并立项，第二档实施时未合**）
 
-上游 `4a1da2950`。2 文件 +20-64。状态：**已决定推迟**（2026-08-26）
+上游 `4a1da2950`。2 文件 +20-64。状态：2026-08-26 判**推迟**；**2026-09-02 重新量过，改判「做」并已并入 0.2.0 第二档 OpenSpec change 的阶段 9，同时更正了本节两处判据 —— 见 [§12](#12-51-dompurify-重新量2026-09-02只读核查未改任何文件)。下面这段保留 2026-08-26 的原文，其中「暴露面只有 SVG 那条链」与「唯一引用的那条 CVE 可利用」两点已被 §12 更正。**
 
 CVE-2026-65913 / GHSA-cj63-jhhr-wcxv：`USE_PROFILES` 打开时 `ALLOWED_ATTR` 被重建成普通数组并用
 `ALLOWED_ATTR[lcName]` 查表，被污染的 `Array.prototype` 属性（如 `onclick`）会被当成白名单属性存活。
@@ -569,3 +569,175 @@ cd .. && make test-frontend-critical
   流量分布会变，盯账号级并发与 429 分布
 - 前端全量 `pnpm run test:run` 已知有 1 个**与移植无关**的失败文件
   （`src/composables/__tests__/useRoutePrefetch.spec.ts`，5 条），见 PORTING-0.1.179.md §4.6
+
+---
+
+## 12. §5.1 dompurify 重新量（2026-09-02，只读核查，未改任何文件）
+
+0.2.0 那轮复述旧 backlog 时，把 §5.1 单独拎出来问了一句（它是唯一带安全属性的挂起项），
+确认后重量。**结论：升级成本比原判还低（3 个文件、22 行 lockfile、零代码改动），
+但原判「推迟」的理由本身有两处需要更正——一处对我们不利、一处对我们有利。**
+
+### 12.1 目标版本仍然正确且仍是最新
+
+| 点 | 值 |
+|---|---|
+| 本仓库直接依赖 | `frontend/package.json:25` = `^3.3.1` → 解析到 `3.3.1` |
+| 本仓库传递依赖 | `dompurify@3.3.3`，路径 `. > @lobehub/icons > @lobehub/ui > mermaid > dompurify` |
+| 上游 v0.1.180 起 | `^3.4.14` + `pnpm.overrides` 的 `dompurify@<3.4.14: >=3.4.14` |
+| npm `latest`（2026-09-02 查） | **`3.4.14`** —— 目标版本仍是当前最新，`3.3.1..3.4.14` 之间共 18 个发布版 |
+
+### 12.2 `pnpm audit` 实测：18 条 advisory，全部 low/moderate
+
+`cd frontend && pnpm audit --json`（只读，不改文件）。整棵树 72 条 advisory，
+其中 **dompurify 占 18 条**，是单包最多的一个；但**critical/high 里一条 dompurify 都没有**：
+
+| 严重度 | 全树 | 其中 dompurify |
+|---|---|---|
+| critical | 1 | 0 |
+| high | 27 | 0 |
+| moderate | 38 | 14 |
+| low | 6 | 4 |
+
+只影响我们这两份副本（3.3.1 / 3.3.3）且**不需要特殊配置**的那几条：
+
+- `GHSA-h8r8-wccr-v5f2` mutation-XSS via Re-Contextualization（`<3.3.2`）—— 默认配置即可触发，
+  是本仓库 6 个 `DOMPurify.sanitize(html)` 裸调用点真正对得上的一条
+- `GHSA-v2wj-7wpq-c8vv` XSS（`>=3.1.3 <=3.3.1`）
+- `GHSA-cj63-jhhr-wcxv` USE_PROFILES 原型污染（`<=3.3.1`）—— 原清单唯一引用的那条，见 §12.5
+
+需要**函数形态** `ADD_TAGS` / `ADD_ATTR` 的两条（`GHSA-39q2-94rc-95cp` / `GHSA-cjmm-f4jc-qw8r`）
+在本仓库**不成立**：`CustomPageView.vue` 传的是数组而不是谓词。剩下大半是 `IN_PLACE` /
+`SAFE_FOR_TEMPLATES` / hook / Trusted Types 相关，本仓库这些模式一个都没用。
+
+### 12.3 更正一：暴露面比原清单大得多（7 个调用点，不是 1 个）
+
+原清单只写了 `utils/sanitize.ts` → `AppSidebar.vue` / `ImageUpload.vue` 这一条 SVG 链，
+并据此判定「全部输入都是管理员自填、单管理员部署可达性低」。实际全仓有 **7 个** `DOMPurify.sanitize` 调用点：
+
+| 调用点 | 配置 | 路由/受众 |
+|---|---|---|
+| `utils/sanitize.ts:5` | `USE_PROFILES: {svg, svgFilters}` | 经 `AppSidebar.vue:95/120/140`、`ImageUpload.vue:108` |
+| `views/public/LegalDocumentView.vue:158` | 默认 | `/legal/:documentId`，**`requiresAuth: false`——完全公开** |
+| `views/user/CustomPageView.vue:244` | `ADD_TAGS:['iframe']`、`ADD_ATTR:['allowfullscreen','frameborder','src']` | `/custom/:id`，`requiresAuth: true` / **`requiresAdmin: false`** |
+| `components/common/AnnouncementBell.vue:350` | 默认 | 所有登录用户 |
+| `components/common/AnnouncementPopup.vue:129` | 默认 | 所有登录用户 |
+| `components/modelPlaza/ModelPlazaContent.vue:98` | 默认（`marked.parse` 之后） | 模型广场 |
+| `components/admin/AdminComplianceDialog.vue:142` | 默认 | 管理端 |
+
+**内容仍然是管理员自填，但受众不是管理员。** 净化发生在**访问者**的浏览器里，所以这不是
+「管理员 XSS 自己」，而是「管理员自填内容被投递给全部访问者，其中 `/legal/*` 连登录都不需要」。
+单管理员部署下依然低危，但**原判据里「可达性低」那句话的支点是「输入可信」，不是「受众只有管理员」**——
+这两件事被混在一起了。0.1.180 §5.1 的重估触发条件里写的「对外发 key / 出现第二个管理员」，
+实际上 `/legal/*` 这条路径连这两个条件都不需要。
+
+顺带一条**不属于本项、但量的时候撞见的**：`CustomPageView.vue` 显式放开 `iframe` 与 `src`，
+意味着自定义页面的 markdown 可以嵌入任意 iframe。这是有意的设计选择，比任何一条 dompurify
+advisory 都更值得单独看一眼，本文不展开。
+
+### 12.4 更正二：升级成本比原判更低，且原判那条「两处 overrides 都要改」仍然正确
+
+在 `/tmp` 的副本里量的（**没有动仓库里的任何文件**）：先确认 `pnpm install --lockfile-only`
+在未改动输入上产出**逐字节相同**的 lockfile（439ms no-op），所以下面的 churn 全部归因于改动本身。
+
+改动 = **3 个文件**：
+
+1. `frontend/package.json`：`"dompurify": "^3.3.1"` → `"^3.4.14"`，且 `pnpm.overrides` 加
+   `"dompurify@<3.4.14": ">=3.4.14"`
+2. `frontend/pnpm-workspace.yaml`：`overrides:` 块加同一条
+3. `frontend/pnpm-lock.yaml`：`pnpm install --lockfile-only` 重新生成
+
+lockfile churn **22 行**，全部集中在 dompurify 自己：
+
+```
++  dompurify@<3.4.14: '>=3.4.14'          # overrides 块
+-  specifier: ^3.3.1 / version: 3.3.1     # 直接依赖
++  specifier: ^3.4.14 / version: 3.4.14
+-  dompurify@3.3.1: / dompurify@3.3.3:    # 两份副本
++  dompurify@3.4.14:                      # 合成一份
+-      dompurify: 3.3.3                   # mermaid 的那份也去重了
++      dompurify: 3.4.14
+```
+
+- **两份副本合成一份**（`3.3.1` + mermaid 的 `3.3.3` → 单个 `3.4.14`），override 按预期生效
+- **没有引入任何新的 warning / peer 冲突**（把基线那次 no-op 与本次全量解析的输出逐条比过，
+  差异全是「全量解析才会打印的既有 deprecation」：eslint 8、vue-i18n 9、`@types/dompurify` stub）
+- `3.4.x` 去掉了 `@types/trusted-types` 这个 optionalDependency，无别的依赖变化
+
+**原判那条「`package.json` 与 `pnpm-workspace.yaml` 两处 overrides 都要加」经复核仍然成立**，
+而且这次拿到了直接证据：本机 pnpm `11.21.0` 在两次运行里都打印
+
+```
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides".
+```
+
+即**本地只有 workspace 那份生效**；而 CI 是 `pnpm/action-setup@v6` + `version: 9`
+（`.github/workflows/backend-ci.yml:50-52`）、`Dockerfile:28` 是 `corepack prepare pnpm@9`、
+`deploy/Dockerfile:25` 是 `pnpm@9.15.9`，**pnpm 9 只读 `package.json` 那份**。
+只改一处 = 一边去重、另一边没去重。
+
+⚠️ 三个 workflow 与两个 Dockerfile 都用 `--frozen-lockfile`
+（`security-scan.yml:49`、`backend-ci.yml:61`、`release.yml:67`、`Dockerfile:34`、`deploy/Dockerfile:29`）
+⇒ **这 3 个文件必须同一个提交里一起改**，只改 `package.json` 会让 CI 与镜像构建立刻失败。
+这条和原判一致。
+
+### 12.5 原清单唯一引用的那条 CVE，我没能复现
+
+原清单把整个理由建在 `GHSA-cj63-jhhr-wcxv`（USE_PROFILES 时 `ALLOWED_ATTR[lcName]` 命中被污染的
+`Array.prototype` 属性）上。用 jsdom 把 `3.3.1` 与 `3.4.14` 并排装起来，按
+`utils/sanitize.ts:5` 的**原样调用**试了四种污染形态：
+
+| 污染 | 3.3.1 | 3.4.14 |
+|---|---|---|
+| `Array.prototype.onclick`（不可枚举） | 被剥掉 | 被剥掉 |
+| `Array.prototype.onclick`（可枚举） | 被剥掉 | 被剥掉 |
+| `Object.prototype.onclick`（可枚举） | 被剥掉 | 被剥掉 |
+| `Object.prototype.foo` / `Array.prototype.foo` | 被剥掉 | 被剥掉 |
+
+对照组：未污染时 `foo` 同样被剥掉；`data-x` 两个版本都保留（那是 `ALLOW_DATA_ATTR` 默认开，
+与污染无关）。**四种形态都没有让事件处理器存活。**
+
+这不说明 advisory 是假的——可能还需要别的配置组合或别的污染形状，我没有继续找。
+它说明的是：**「这条 CVE 在本仓库这条调用上可利用」这个前提没有被证实过，
+原清单当初把它当成既定事实写进了判据。** 所以升级的理由应该换成 §12.2 + §12.3
+（18 条 advisory 一次清掉、7 个调用点、其中一个公开页），而不是这一条。
+
+同一次探针还顺手给出了升级安全性的直接证据：**`3.3.1` 与 `3.4.14` 对
+`sanitize.ts` 的原样调用输出逐字节相同**（良性 SVG 与带 `onclick` 的 SVG 两种输入都试过），
+`USE_PROFILES` 的 API 形状没变。
+
+### 12.6 修正后的建议 —— **已并入 0.2.0 第二档立项；实施时未合（2026-09-02）**
+
+按用户决定并入
+[`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)
+作为**第 9 项 / 阶段 9**（capability `frontend-sanitizer-dependency`，逐步清单见该 change 的
+`tasks.md` §9，决策见 `design.md` 决策 11）。**排在最后一个阶段**：它一改 lockfile，
+阶段 6/7/8 的前端测试就都是在旧依赖树上跑的，放最后可以让收尾那次全量前端测试一并覆盖。
+
+第二档实施（`sync/upstream-20260902-p1`，代码尖 `0af248bc8`）按目标 **未改 lockfile**，
+故本节仍未合、阶段 9 复选框保持未勾。
+
+**做**，但理由和优先级都要重写：
+
+- **成本**：3 个文件、22 行 lockfile、**零代码改动**、API 输出逐字节不变。这是整个 backlog 里
+  最便宜的一项，比它当初被推迟时估的还便宜（当初没量出「两份副本会合成一份」）。
+- **收益**：一次清掉 18 条 advisory（单包最多），并消掉一份重复的 dompurify 副本。
+- **不要**把它当「修一个已知可利用的 XSS」来排期（§12.5）；它是依赖卫生 + 缩小 7 个净化点的已知缺陷面。
+- ⚠️ **也不要按「让审计门禁转绿」记账**：门禁是 `pnpm audit --prod --audit-level=high`，
+  dompurify 那 18 条全是 low/moderate ⇒ **从来没进门禁**。门禁现报 `xlsx` ×2 + `nanoid` ×1，
+  三条都有例外条目（`expires_on: 2026-10-06`）。升级前后门禁结果必须**相同**，
+  且 `.github/audit-exceptions.yml` 一个字节都不改。
+- **验收**：`pnpm install --frozen-lockfile` 能过 + `pnpm run test:run` + `make test-frontend-critical`
+  + 手工看一次 `/legal/:documentId`、`/custom/:id`、公告弹窗、侧栏自定义 SVG 图标四处渲染正常。
+- **可以顺手做的**：`@types/dompurify` 是官方标注的 stub（dompurify 自带类型），
+  `package.json:40` 的 `^3.0.5` 可以直接删。这条独立于升级，但同一个提交里做最省事。
+
+**比它更值得先看的两项**（本次量 dompurify 时撞见，均不在任何清单里）：
+
+| 项 | 严重度 | 位置 |
+|---|---|---|
+| `xlsx` 原型污染 + ReDoS（`GHSA-4r6h-8v6p-xvw6` / `GHSA-5pgg-2g8v-p4x9`） | **high ×2，直接依赖** | 已装版本低于 `0.20.2`；SheetJS 已不在 npm 发新版，升级要换源或换库 |
+| `vite` `server.fs.deny` 绕过（`GHSA-fx2h-pf6j-xcff`） | **high，直接依赖** | 仅 dev server 受影响；`vitest` 那条 critical（`GHSA-5xrq-8626-4rwp`）同理只在开 UI 时 |
+
+`xlsx` 那条是**运行时**依赖里唯一的 high，且没有干净的升级路径 ⇒ 值得单独立一项判，
+不要和 dompurify 混在一批里。
