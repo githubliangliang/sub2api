@@ -64,6 +64,16 @@ func TestMigration135DropsLegacyProviderIndexesWithSQLiteSyntax(t *testing.T) {
 	require.Contains(t, sql, "DROP INDEX IF EXISTS pending_auth_sessions_provider_type_check")
 }
 
+func TestMigration225AddsGroupReasoningEffortOverLimitWithSQLiteSyntax(t *testing.T) {
+	content, err := FS.ReadFile("225_group_reasoning_effort_over_limit.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ALTER TABLE groups ADD COLUMN max_reasoning_effort_over_limit VARCHAR(20) NOT NULL DEFAULT 'downgrade'")
+	require.NotContains(t, sql, "IF NOT EXISTS")
+	require.NotContains(t, sql, "COMMENT ON")
+}
+
 func TestMigration151AddsAccountAutoPauseExpiryPartialIndex(t *testing.T) {
 	content, err := FS.ReadFile("151_account_autopause_expiry_index_notx.sql")
 	require.NoError(t, err)

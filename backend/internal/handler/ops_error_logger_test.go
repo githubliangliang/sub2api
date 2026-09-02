@@ -922,6 +922,15 @@ func TestClassifyOpsLocalBusinessLimitErrorsExcludedFromSLA(t *testing.T) {
 			wantPhase:   "request",
 		},
 		{
+			name:        "group reasoning effort over limit deny",
+			errType:     "permission_error",
+			message:     `reasoning effort "high" exceeds this group's limit of "low"`,
+			code:        "",
+			status:      http.StatusForbidden,
+			wantErrType: "permission_error",
+			wantPhase:   "request",
+		},
+		{
 			name:        "route token counting platform unsupported",
 			errType:     "not_found_error",
 			message:     "Token counting is not supported for this platform",
@@ -1157,6 +1166,12 @@ func TestClassifyOpsUpstreamAuthTextStillCountsForSLA(t *testing.T) {
 			message: "api key 额度已用完",
 			code:    "API_KEY_QUOTA_EXHAUSTED",
 			status:  http.StatusTooManyRequests,
+		},
+		{
+			name:    "provider reasoning effort over limit shaped error",
+			message: `reasoning effort "high" exceeds this group's limit of "low"`,
+			code:    "403",
+			status:  http.StatusForbidden,
 		},
 		{
 			name:    "provider deleted group shaped error",

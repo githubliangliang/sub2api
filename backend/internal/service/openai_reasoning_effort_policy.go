@@ -12,6 +12,11 @@ import (
 const (
 	maxReasoningEffortMappings = 64
 	maxReasoningEffortValueLen = 64
+
+	// ReasoningEffortOverLimitDowngrade rewrites values above the ceiling.
+	ReasoningEffortOverLimitDowngrade = "downgrade"
+	// ReasoningEffortOverLimitDeny rejects the request when the ceiling is exceeded.
+	ReasoningEffortOverLimitDeny = "deny"
 )
 
 var openAIReasoningEffortValues = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
@@ -20,7 +25,33 @@ type openAIReasoningEffortPolicyContextKey struct{}
 
 type openAIReasoningEffortPolicy struct {
 	maxEffort string
+	overLimit string
 	mappings  []ReasoningEffortMapping
+}
+
+// ReasoningEffortOverLimitError is returned when a group policy is set to deny
+// requests whose explicit reasoning effort exceeds the ceiling.
+type ReasoningEffortOverLimitError struct {
+	Requested string
+	Max       string
+}
+
+func (e *ReasoningEffortOverLimitError) Error() string {
+	if e == nil {
+		return "reasoning effort exceeds this group's limit"
+	}
+	requested := strings.TrimSpace(e.Requested)
+	max := strings.TrimSpace(e.Max)
+	if requested == "" && max == "" {
+		return "reasoning effort exceeds this group's limit"
+	}
+	if requested == "" {
+		return fmt.Sprintf("reasoning effort exceeds this group's limit of %q", max)
+	}
+	if max == "" {
+		return fmt.Sprintf("reasoning effort %q exceeds this group's limit", requested)
+	}
+	return fmt.Sprintf("reasoning effort %q exceeds this group's limit of %q", requested, max)
 }
 
 // NormalizeMaxReasoningEffort validates and canonicalizes a group policy value.
@@ -83,6 +114,42 @@ func normalizeMaxReasoningEffortForPlatform(platform, raw string) (string, error
 	)
 }
 
+// NormalizeMaxReasoningEffortOverLimit canonicalizes the over-limit action.
+// Empty means the historical default: automatically downgrade to the ceiling.
+func NormalizeMaxReasoningEffortOverLimit(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", ReasoningEffortOverLimitDowngrade:
+		return ReasoningEffortOverLimitDowngrade
+	case ReasoningEffortOverLimitDeny:
+		return ReasoningEffortOverLimitDeny
+	default:
+		return ""
+	}
+}
+
+func normalizeMaxReasoningEffortOverLimitForPlatform(platform, raw string) (string, error) {
+	value := NormalizeMaxReasoningEffortOverLimit(raw)
+	if value == "" {
+		return "", fmt.Errorf(
+			"reasoning effort over-limit action %q is not supported; allowed values: %s, %s",
+			raw,
+			ReasoningEffortOverLimitDowngrade,
+			ReasoningEffortOverLimitDeny,
+		)
+	}
+	if value == ReasoningEffortOverLimitDowngrade {
+		return value, nil
+	}
+	if len(reasoningEffortValuesForPlatform(platform)) == 0 {
+		return "", fmt.Errorf(
+			"reasoning effort policy is only supported for platforms %q and %q",
+			PlatformOpenAI,
+			PlatformComposite,
+		)
+	}
+	return value, nil
+}
+
 func reasoningEffortRank(raw string) (int, bool) {
 	switch NormalizeMaxReasoningEffort(raw) {
 	case "minimal":
@@ -139,12 +206,13 @@ func NormalizeReasoningEffortMappings(platform string, raw []ReasoningEffortMapp
 // WithOpenAIReasoningEffortPolicy binds a group policy to a request after its
 // concrete target platform has been resolved to OpenAI. The policy is copied so
 // retries and asynchronous forwarding cannot observe later slice mutations.
-func WithOpenAIReasoningEffortPolicy(ctx context.Context, maxEffort string, mappings []ReasoningEffortMapping) context.Context {
+func WithOpenAIReasoningEffortPolicy(ctx context.Context, maxEffort string, mappings []ReasoningEffortMapping, overLimit string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	policy := openAIReasoningEffortPolicy{
 		maxEffort: maxEffort,
+		overLimit: overLimit,
 		mappings:  append([]ReasoningEffortMapping(nil), mappings...),
 	}
 	return context.WithValue(ctx, openAIReasoningEffortPolicyContextKey{}, policy)
@@ -152,15 +220,15 @@ func WithOpenAIReasoningEffortPolicy(ctx context.Context, maxEffort string, mapp
 
 // ApplyOpenAIReasoningEffortPolicyFromContext applies a policy previously bound
 // to the request. An unbound request is returned byte-for-byte unchanged.
-func ApplyOpenAIReasoningEffortPolicyFromContext(ctx context.Context, body []byte) ([]byte, bool) {
+func ApplyOpenAIReasoningEffortPolicyFromContext(ctx context.Context, body []byte) ([]byte, bool, error) {
 	if ctx == nil {
-		return body, false
+		return body, false, nil
 	}
 	policy, ok := ctx.Value(openAIReasoningEffortPolicyContextKey{}).(openAIReasoningEffortPolicy)
 	if !ok {
-		return body, false
+		return body, false, nil
 	}
-	return ApplyOpenAIReasoningEffortPolicy(body, policy.maxEffort, policy.mappings)
+	return ApplyOpenAIReasoningEffortPolicy(body, policy.maxEffort, policy.mappings, policy.overLimit)
 }
 
 func mapReasoningEffort(raw string, mappings []ReasoningEffortMapping) (string, bool) {
@@ -180,24 +248,32 @@ func sanitizeGroupReasoningEffortPolicy(group *Group) {
 	}
 	maxEffort, maxErr := normalizeMaxReasoningEffortForPlatform(group.Platform, group.MaxReasoningEffort)
 	mappings, mappingsErr := NormalizeReasoningEffortMappings(group.Platform, group.ReasoningEffortMappings)
+	overLimit := NormalizeMaxReasoningEffortOverLimit(group.MaxReasoningEffortOverLimit)
 	if maxErr != nil {
 		maxEffort = ""
 	}
 	if mappingsErr != nil {
 		mappings = []ReasoningEffortMapping{}
 	}
+	if overLimit == "" || (group.Platform != PlatformOpenAI && group.Platform != PlatformComposite) {
+		overLimit = ReasoningEffortOverLimitDowngrade
+	}
 	group.MaxReasoningEffort = maxEffort
+	group.MaxReasoningEffortOverLimit = overLimit
 	group.ReasoningEffortMappings = mappings
 }
 
-// ApplyOpenAIReasoningEffortPolicy applies one exact mapping and then caps
-// known effort levels. Omitted values remain untouched so upstream defaults
-// stay in control.
-func ApplyOpenAIReasoningEffortPolicy(body []byte, maxEffort string, mappings []ReasoningEffortMapping) ([]byte, bool) {
+// ApplyOpenAIReasoningEffortPolicy applies one exact mapping and then either
+// caps known effort levels or rejects the request when the group is configured
+// to deny values above the ceiling. Omitted values remain untouched so
+// upstream defaults stay in control.
+func ApplyOpenAIReasoningEffortPolicy(body []byte, maxEffort string, mappings []ReasoningEffortMapping, overLimit string) ([]byte, bool, error) {
 	maxRank, hasMax := reasoningEffortRank(maxEffort)
 	if len(body) == 0 || (!hasMax && len(mappings) == 0) {
-		return body, false
+		return body, false, nil
 	}
+	deny := hasMax && NormalizeMaxReasoningEffortOverLimit(overLimit) == ReasoningEffortOverLimitDeny
+	canonicalMax := NormalizeMaxReasoningEffort(maxEffort)
 
 	result := body
 	changed := false
@@ -215,7 +291,10 @@ func ApplyOpenAIReasoningEffortPolicy(body []byte, maxEffort string, mappings []
 		if currentRank, recognized := reasoningEffortRank(effective); recognized {
 			effective = NormalizeMaxReasoningEffort(effective)
 			if hasMax && currentRank > maxRank {
-				effective = NormalizeMaxReasoningEffort(maxEffort)
+				if deny {
+					return body, false, &ReasoningEffortOverLimitError{Requested: effective, Max: canonicalMax}
+				}
+				effective = canonicalMax
 			}
 		}
 		if effective == original {
@@ -229,5 +308,19 @@ func ApplyOpenAIReasoningEffortPolicy(body []byte, maxEffort string, mappings []
 		result = updated
 		changed = true
 	}
-	return result, changed
+	return result, changed, nil
+}
+
+func applyOpenAIWSReasoningEffortPolicy(payload []byte, hooks *OpenAIWSIngressHooks) ([]byte, error) {
+	if hooks == nil || (hooks.MaxReasoningEffort == "" && len(hooks.ReasoningEffortMappings) == 0) {
+		return payload, nil
+	}
+	capped, changed, err := ApplyOpenAIReasoningEffortPolicy(payload, hooks.MaxReasoningEffort, hooks.ReasoningEffortMappings, hooks.MaxReasoningEffortOverLimit)
+	if err != nil {
+		return payload, err
+	}
+	if changed {
+		return capped, nil
+	}
+	return payload, nil
 }

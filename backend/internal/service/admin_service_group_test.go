@@ -878,12 +878,13 @@ func TestAdminService_UpdateGroup_RejectsInvalidReasoningEffortMappings(t *testi
 
 func TestAdminService_UpdateGroup_ClearsReasoningPolicyForUnsupportedPlatform(t *testing.T) {
 	existing := &Group{
-		ID:                      1,
-		Name:                    "openai-group",
-		Platform:                PlatformOpenAI,
-		Status:                  StatusActive,
-		MaxReasoningEffort:      "medium",
-		ReasoningEffortMappings: []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
+		ID:                          1,
+		Name:                        "openai-group",
+		Platform:                    PlatformOpenAI,
+		Status:                      StatusActive,
+		MaxReasoningEffort:          "medium",
+		MaxReasoningEffortOverLimit: ReasoningEffortOverLimitDeny,
+		ReasoningEffortMappings:     []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
 	}
 	repo := &groupRepoStubForAdmin{getByID: existing}
 	svc := &adminServiceImpl{groupRepo: repo}
@@ -892,6 +893,7 @@ func TestAdminService_UpdateGroup_ClearsReasoningPolicyForUnsupportedPlatform(t 
 
 	require.NoError(t, err)
 	require.Empty(t, repo.updated.MaxReasoningEffort)
+	require.Equal(t, ReasoningEffortOverLimitDowngrade, repo.updated.MaxReasoningEffortOverLimit)
 	require.Empty(t, repo.updated.ReasoningEffortMappings)
 }
 
