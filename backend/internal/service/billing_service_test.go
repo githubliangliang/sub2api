@@ -520,6 +520,11 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "empty model", model: "   ", expectNilPricing: true},
 		{name: "claude opus 4.6", model: "claude-opus-4.6-20260201", expectedInput: 5e-6},
 		{name: "claude opus 4.5 alt separator", model: "claude-opus-4-5-20260101", expectedInput: 5e-6},
+		{name: "claude fable 5.1 hyphen", model: "claude-fable-5-1", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 5.1 dotted", model: "claude-fable-5.1", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 5.1 compact", model: "claude-fable5.1", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 51 compact", model: "claude-fable51", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 5", model: "claude-fable-5", expectedInput: 10e-6, expectedCacheRead: floatPtr(1e-6)},
 		{name: "claude generic model fallback sonnet", model: "claude-foo-bar", expectedInput: 3e-6},
 		{name: "gemini explicit fallback", model: "gemini-3-1-pro", expectedInput: 2e-6},
 		{name: "gemini unknown no fallback", model: "gemini-2.0-pro", expectNilPricing: true},
@@ -1911,6 +1916,54 @@ func TestGetModelPricingWithChannel_CacheWritePriceAffects5mAnd1h(t *testing.T) 
 	require.InDelta(t, 7e-6, pricing.CacheCreationPricePerToken, 1e-12)
 	require.InDelta(t, 7e-6, pricing.CacheCreation5mPrice, 1e-12)
 	require.InDelta(t, 7e-6, pricing.CacheCreation1hPrice, 1e-12)
+}
+
+func TestGetModelPricing_Fable51FallbackPricing(t *testing.T) {
+	svc := newTestBillingService()
+
+	pricing, err := svc.GetModelPricing("claude-fable-5-1")
+	require.NoError(t, err)
+	require.InDelta(t, 10e-6, pricing.InputPricePerToken, 1e-12)
+	require.InDelta(t, 50e-6, pricing.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 12.5e-6, pricing.CacheCreation5mPrice, 1e-12)
+	require.InDelta(t, 20e-6, pricing.CacheCreation1hPrice, 1e-12)
+	require.InDelta(t, 0.25e-6, pricing.CacheReadPricePerToken, 1e-12)
+	require.True(t, pricing.SupportsCacheBreakdown)
+}
+
+func TestGetFallbackPricing_FableCatalogMissVsHit(t *testing.T) {
+	svc := newTestBillingService()
+
+	miss, err := svc.GetModelPricing("claude-fable-5")
+	require.NoError(t, err)
+	require.InDelta(t, 10e-6, miss.InputPricePerToken, 1e-12)
+	require.NotEqual(t, 0.0, miss.InputPricePerToken)
+	require.NotEqual(t, svc.getFallbackPricing("claude-opus-4.5").InputPricePerToken, miss.InputPricePerToken)
+
+	fable5 := svc.getFallbackPricing("claude-fable-5")
+	fable51 := svc.getFallbackPricing("claude-fable-5-1")
+	require.Less(t, fable51.CacheReadPricePerToken, fable5.CacheReadPricePerToken)
+
+	catalog := NewPricingService(&config.Config{}, nil)
+	catalog.pricingData["claude-fable-5"] = &LiteLLMModelPricing{
+		InputCostPerToken:   99e-6,
+		OutputCostPerToken:  88e-6,
+		LiteLLMProvider:     "anthropic",
+		Mode:                "chat",
+	}
+	svc.pricingService = catalog
+	hit, err := svc.GetModelPricing("claude-fable-5")
+	require.NoError(t, err)
+	require.InDelta(t, 99e-6, hit.InputPricePerToken, 1e-12)
+	require.InDelta(t, 88e-6, hit.OutputPricePerToken, 1e-12)
+}
+
+func TestGetFallbackPricing_ExistingFamiliesUnchangedByFable(t *testing.T) {
+	svc := newTestBillingService()
+	require.Same(t, svc.fallbackPrices["claude-opus-4.5"], svc.getFallbackPricing("claude-opus-4-5"))
+	require.Same(t, svc.fallbackPrices["claude-sonnet-4"], svc.getFallbackPricing("claude-sonnet-4"))
+	require.Same(t, svc.fallbackPrices["claude-3-haiku"], svc.getFallbackPricing("claude-3-haiku"))
+	require.Same(t, svc.fallbackPrices["gemini-3.1-pro"], svc.getFallbackPricing("gemini-3.1-pro"))
 }
 
 func TestGetModelPricingWithChannel_CacheReadPriceAffectsPriority(t *testing.T) {
