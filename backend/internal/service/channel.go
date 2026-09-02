@@ -94,8 +94,9 @@ type ChannelModelPricing struct {
 	BillingMode      BillingMode       `json:"billing_mode"`
 	InputPrice       *float64          `json:"input_price"`
 	OutputPrice      *float64          `json:"output_price"`
-	CacheWritePrice  *float64          `json:"cache_write_price"`
-	CacheReadPrice   *float64          `json:"cache_read_price"`
+	CacheWritePrice   *float64          `json:"cache_write_price"`
+	CacheWrite1hPrice *float64          `json:"cache_write_1h_price"`
+	CacheReadPrice    *float64          `json:"cache_read_price"`
 	ImageInputPrice  *float64          `json:"image_input_price"`
 	ImageOutputPrice *float64          `json:"image_output_price"`
 	PerRequestPrice  *float64          `json:"per_request_price"`
@@ -113,8 +114,9 @@ type PricingInterval struct {
 	TierLabel       string    `json:"tier_label"`
 	InputPrice      *float64  `json:"input_price"`
 	OutputPrice     *float64  `json:"output_price"`
-	CacheWritePrice *float64  `json:"cache_write_price"`
-	CacheReadPrice  *float64  `json:"cache_read_price"`
+	CacheWritePrice   *float64  `json:"cache_write_price"`
+	CacheWrite1hPrice *float64  `json:"cache_write_1h_price"`
+	CacheReadPrice    *float64  `json:"cache_read_price"`
 	PerRequestPrice *float64  `json:"per_request_price"`
 	SortOrder       int       `json:"sort_order"`
 	CreatedAt       time.Time `json:"created_at,omitempty"`
@@ -347,6 +349,7 @@ func validateIntervalPrices(iv *PricingInterval, idx int) error {
 		{"input_price", iv.InputPrice},
 		{"output_price", iv.OutputPrice},
 		{"cache_write_price", iv.CacheWritePrice},
+		{"cache_write_1h_price", iv.CacheWrite1hPrice},
 		{"cache_read_price", iv.CacheReadPrice},
 		{"per_request_price", iv.PerRequestPrice},
 	}

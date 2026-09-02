@@ -1918,6 +1918,72 @@ func TestGetModelPricingWithChannel_CacheWritePriceAffects5mAnd1h(t *testing.T) 
 	require.InDelta(t, 7e-6, pricing.CacheCreation1hPrice, 1e-12)
 }
 
+func TestGetModelPricingWithChannel_CacheWriteTTLFourCombinations(t *testing.T) {
+	svc := newTestBillingService()
+	official, err := svc.GetModelPricing("claude-sonnet-4")
+	require.NoError(t, err)
+
+	t.Run("only 5m set covers both TTLs", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{
+			CacheWritePrice: testPtrFloat64(7e-6),
+		})
+		require.NoError(t, err)
+		require.InDelta(t, 7e-6, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 7e-6, pricing.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("only 1h set leaves 5m on official", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{
+			CacheWrite1hPrice: testPtrFloat64(21e-6),
+		})
+		require.NoError(t, err)
+		require.InDelta(t, official.CacheCreation5mPrice, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, pricing.CacheCreation1hPrice, 1e-12)
+		require.True(t, pricing.SupportsCacheBreakdown)
+	})
+	t.Run("both set are independent", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{
+			CacheWritePrice:   testPtrFloat64(13e-6),
+			CacheWrite1hPrice: testPtrFloat64(21e-6),
+		})
+		require.NoError(t, err)
+		require.InDelta(t, 13e-6, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, pricing.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("both nil keep official", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{})
+		require.NoError(t, err)
+		require.InDelta(t, official.CacheCreation5mPrice, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, official.CacheCreation1hPrice, pricing.CacheCreation1hPrice, 1e-12)
+	})
+}
+
+func TestIntervalToModelPricing_CacheWriteTTLFourCombinations(t *testing.T) {
+	t.Run("only 5m set covers both TTLs", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{CacheWritePrice: testPtrFloat64(7e-6)}, true, nil)
+		require.InDelta(t, 7e-6, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 7e-6, got.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("only 1h set", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{CacheWrite1hPrice: testPtrFloat64(21e-6)}, true, nil)
+		require.InDelta(t, 0, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, got.CacheCreation1hPrice, 1e-12)
+		require.True(t, got.SupportsCacheBreakdown)
+	})
+	t.Run("both set are independent", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{
+			CacheWritePrice:   testPtrFloat64(13e-6),
+			CacheWrite1hPrice: testPtrFloat64(21e-6),
+		}, true, nil)
+		require.InDelta(t, 13e-6, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, got.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("both nil keep zeros from interval overlay", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{}, true, nil)
+		require.InDelta(t, 0, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 0, got.CacheCreation1hPrice, 1e-12)
+	})
+}
+
 func TestGetModelPricing_Fable51FallbackPricing(t *testing.T) {
 	svc := newTestBillingService()
 

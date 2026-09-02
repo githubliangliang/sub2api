@@ -451,7 +451,7 @@
     <BaseDialog
       :show="showCreateModal"
       :title="t('admin.groups.createGroup')"
-      width="normal"
+      width="wide"
       @close="closeCreateModal"
     >
       <form
@@ -1549,13 +1549,13 @@
         </div>
         <!-- 分组逐模型定价：Group → Channel → 内置 -->
         <div class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4">
-          <div class="mb-1 flex items-center justify-between">
-            <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
+            <h4 class="min-w-0 flex-1 text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelPricing.title") }}
             </h4>
             <button
               type="button"
-              class="text-xs text-primary-600 hover:text-primary-700"
+              class="shrink-0 whitespace-nowrap text-xs text-primary-600 hover:text-primary-700"
               @click="addGroupPricingEntry(createForm)"
               data-testid="create-add-model-pricing"
             >
@@ -2212,7 +2212,7 @@
     <BaseDialog
       :show="showEditModal"
       :title="t('admin.groups.editGroup')"
-      width="normal"
+      width="wide"
       @close="closeEditModal"
     >
       <form
@@ -3308,13 +3308,13 @@
         </div>
         <!-- 分组逐模型定价：Group → Channel → 内置 -->
         <div class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4">
-          <div class="mb-1 flex items-center justify-between">
-            <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
+            <h4 class="min-w-0 flex-1 text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelPricing.title") }}
             </h4>
             <button
               type="button"
-              class="text-xs text-primary-600 hover:text-primary-700"
+              class="shrink-0 whitespace-nowrap text-xs text-primary-600 hover:text-primary-700"
               @click="addGroupPricingEntry(editForm)"
               data-testid="edit-add-model-pricing"
             >
@@ -5857,6 +5857,7 @@ const groupPricingToForm = (
     input_price: perTokenToMTok(entry.input_price),
     output_price: perTokenToMTok(entry.output_price),
     cache_write_price: perTokenToMTok(entry.cache_write_price),
+    cache_write_1h_price: perTokenToMTok(entry.cache_write_1h_price),
     cache_read_price: perTokenToMTok(entry.cache_read_price),
     image_input_price: perTokenToMTok(entry.image_input_price),
     image_output_price: perTokenToMTok(entry.image_output_price),
@@ -5876,6 +5877,7 @@ const groupPricingToAPI = (
       input_price: mTokToPerToken(entry.input_price),
       output_price: mTokToPerToken(entry.output_price),
       cache_write_price: mTokToPerToken(entry.cache_write_price),
+      cache_write_1h_price: mTokToPerToken(entry.cache_write_1h_price),
       cache_read_price: mTokToPerToken(entry.cache_read_price),
       image_input_price: mTokToPerToken(entry.image_input_price),
       image_output_price: mTokToPerToken(entry.image_output_price),
@@ -5890,6 +5892,7 @@ const addGroupPricingEntry = (form: { model_pricing: PricingFormEntry[] }) => {
     input_price: null,
     output_price: null,
     cache_write_price: null,
+    cache_write_1h_price: null,
     cache_read_price: null,
     image_input_price: null,
     image_output_price: null,

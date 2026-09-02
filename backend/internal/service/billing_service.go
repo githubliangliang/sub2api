@@ -1057,13 +1057,7 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
 		pricing.OutputPricePerToken = *channelPricing.OutputPrice
 		pricing.OutputPricePerTokenPriority = *channelPricing.OutputPrice
 	}
-	if channelPricing.CacheWritePrice != nil {
-		pricing.CacheCreationPricePerToken = *channelPricing.CacheWritePrice
-		pricing.CacheCreationPricePerTokenPriority = *channelPricing.CacheWritePrice
-		pricing.CacheCreationPriceExplicit = true
-		pricing.CacheCreation5mPrice = *channelPricing.CacheWritePrice
-		pricing.CacheCreation1hPrice = *channelPricing.CacheWritePrice
-	}
+	applyChannelCacheWriteTTLPrices(pricing, channelPricing.CacheWritePrice, channelPricing.CacheWrite1hPrice)
 	if channelPricing.CacheReadPrice != nil {
 		pricing.CacheReadPricePerToken = *channelPricing.CacheReadPrice
 		pricing.CacheReadPricePerTokenPriority = *channelPricing.CacheReadPrice
@@ -1076,6 +1070,30 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
 	pricing.ImageOutputPriceExplicit = true
 	applyChannelImageInputPrice(channelPricing, pricing)
 	return pricing, nil
+}
+
+// applyChannelCacheWriteTTLPrices applies 5m/1h cache-write overrides.
+// When CacheWrite1hPrice is nil, a lone cache_write_price continues to cover
+// both TTL tiers (pre-split behavior).
+func applyChannelCacheWriteTTLPrices(pricing *ModelPricing, cacheWritePrice, cacheWrite1hPrice *float64) {
+	if pricing == nil {
+		return
+	}
+	if cacheWritePrice != nil {
+		pricing.CacheCreationPricePerToken = *cacheWritePrice
+		pricing.CacheCreationPricePerTokenPriority = *cacheWritePrice
+		pricing.CacheCreationPriceExplicit = true
+		pricing.CacheCreation5mPrice = *cacheWritePrice
+		if cacheWrite1hPrice == nil {
+			// Preserve the pre-split behavior for existing configurations: a lone
+			// cache_write_price continues to override both TTL tiers.
+			pricing.CacheCreation1hPrice = *cacheWritePrice
+		}
+	}
+	if cacheWrite1hPrice != nil {
+		pricing.CacheCreation1hPrice = *cacheWrite1hPrice
+		pricing.SupportsCacheBreakdown = true
+	}
 }
 
 // --- 统一计费入口 ---

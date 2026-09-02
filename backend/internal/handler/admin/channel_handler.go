@@ -62,8 +62,9 @@ type channelModelPricingRequest struct {
 	BillingMode      string                   `json:"billing_mode" binding:"omitempty,oneof=token per_request image"`
 	InputPrice       *float64                 `json:"input_price" binding:"omitempty,min=0"`
 	OutputPrice      *float64                 `json:"output_price" binding:"omitempty,min=0"`
-	CacheWritePrice  *float64                 `json:"cache_write_price" binding:"omitempty,min=0"`
-	CacheReadPrice   *float64                 `json:"cache_read_price" binding:"omitempty,min=0"`
+	CacheWritePrice   *float64                 `json:"cache_write_price" binding:"omitempty,min=0"`
+	CacheWrite1hPrice *float64                 `json:"cache_write_1h_price" binding:"omitempty,min=0"`
+	CacheReadPrice    *float64                 `json:"cache_read_price" binding:"omitempty,min=0"`
 	ImageInputPrice  *float64                 `json:"image_input_price" binding:"omitempty,min=0"`
 	ImageOutputPrice *float64                 `json:"image_output_price" binding:"omitempty,min=0"`
 	PerRequestPrice  *float64                 `json:"per_request_price" binding:"omitempty,min=0"`
@@ -76,10 +77,11 @@ type pricingIntervalRequest struct {
 	TierLabel       string   `json:"tier_label"`
 	InputPrice      *float64 `json:"input_price"`
 	OutputPrice     *float64 `json:"output_price"`
-	CacheWritePrice *float64 `json:"cache_write_price"`
-	CacheReadPrice  *float64 `json:"cache_read_price"`
-	PerRequestPrice *float64 `json:"per_request_price"`
-	SortOrder       int      `json:"sort_order"`
+	CacheWritePrice   *float64 `json:"cache_write_price"`
+	CacheWrite1hPrice *float64 `json:"cache_write_1h_price"`
+	CacheReadPrice    *float64 `json:"cache_read_price"`
+	PerRequestPrice   *float64 `json:"per_request_price"`
+	SortOrder         int      `json:"sort_order"`
 }
 
 type accountStatsPricingRuleRequest struct {
@@ -114,8 +116,9 @@ type channelModelPricingResponse struct {
 	BillingMode      string                    `json:"billing_mode"`
 	InputPrice       *float64                  `json:"input_price"`
 	OutputPrice      *float64                  `json:"output_price"`
-	CacheWritePrice  *float64                  `json:"cache_write_price"`
-	CacheReadPrice   *float64                  `json:"cache_read_price"`
+	CacheWritePrice   *float64                  `json:"cache_write_price"`
+	CacheWrite1hPrice *float64                  `json:"cache_write_1h_price"`
+	CacheReadPrice    *float64                  `json:"cache_read_price"`
 	ImageInputPrice  *float64                  `json:"image_input_price"`
 	ImageOutputPrice *float64                  `json:"image_output_price"`
 	PerRequestPrice  *float64                  `json:"per_request_price"`
@@ -129,10 +132,11 @@ type pricingIntervalResponse struct {
 	TierLabel       string   `json:"tier_label,omitempty"`
 	InputPrice      *float64 `json:"input_price"`
 	OutputPrice     *float64 `json:"output_price"`
-	CacheWritePrice *float64 `json:"cache_write_price"`
-	CacheReadPrice  *float64 `json:"cache_read_price"`
-	PerRequestPrice *float64 `json:"per_request_price"`
-	SortOrder       int      `json:"sort_order"`
+	CacheWritePrice   *float64 `json:"cache_write_price"`
+	CacheWrite1hPrice *float64 `json:"cache_write_1h_price"`
+	CacheReadPrice    *float64 `json:"cache_read_price"`
+	PerRequestPrice   *float64 `json:"per_request_price"`
+	SortOrder         int      `json:"sort_order"`
 }
 
 type accountStatsPricingRuleResponse struct {
@@ -222,8 +226,9 @@ func pricingToResponse(p *service.ChannelModelPricing) channelModelPricingRespon
 		BillingMode:      billingMode,
 		InputPrice:       p.InputPrice,
 		OutputPrice:      p.OutputPrice,
-		CacheWritePrice:  p.CacheWritePrice,
-		CacheReadPrice:   p.CacheReadPrice,
+		CacheWritePrice:   p.CacheWritePrice,
+		CacheWrite1hPrice: p.CacheWrite1hPrice,
+		CacheReadPrice:    p.CacheReadPrice,
 		ImageInputPrice:  p.ImageInputPrice,
 		ImageOutputPrice: p.ImageOutputPrice,
 		PerRequestPrice:  p.PerRequestPrice,
@@ -239,10 +244,11 @@ func intervalToResponse(iv service.PricingInterval) pricingIntervalResponse {
 		TierLabel:       iv.TierLabel,
 		InputPrice:      iv.InputPrice,
 		OutputPrice:     iv.OutputPrice,
-		CacheWritePrice: iv.CacheWritePrice,
-		CacheReadPrice:  iv.CacheReadPrice,
-		PerRequestPrice: iv.PerRequestPrice,
-		SortOrder:       iv.SortOrder,
+		CacheWritePrice:   iv.CacheWritePrice,
+		CacheWrite1hPrice: iv.CacheWrite1hPrice,
+		CacheReadPrice:    iv.CacheReadPrice,
+		PerRequestPrice:   iv.PerRequestPrice,
+		SortOrder:         iv.SortOrder,
 	}
 }
 
@@ -262,8 +268,9 @@ func pricingRequestToService(reqs []channelModelPricingRequest) []service.Channe
 				TierLabel:       iv.TierLabel,
 				InputPrice:      iv.InputPrice,
 				OutputPrice:     iv.OutputPrice,
-				CacheWritePrice: iv.CacheWritePrice,
-				CacheReadPrice:  iv.CacheReadPrice,
+				CacheWritePrice:   iv.CacheWritePrice,
+				CacheWrite1hPrice: iv.CacheWrite1hPrice,
+				CacheReadPrice:    iv.CacheReadPrice,
 				PerRequestPrice: iv.PerRequestPrice,
 				SortOrder:       iv.SortOrder,
 			})
@@ -274,8 +281,9 @@ func pricingRequestToService(reqs []channelModelPricingRequest) []service.Channe
 			BillingMode:      billingMode,
 			InputPrice:       r.InputPrice,
 			OutputPrice:      r.OutputPrice,
-			CacheWritePrice:  r.CacheWritePrice,
-			CacheReadPrice:   r.CacheReadPrice,
+			CacheWritePrice:   r.CacheWritePrice,
+			CacheWrite1hPrice: r.CacheWrite1hPrice,
+			CacheReadPrice:    r.CacheReadPrice,
 			ImageInputPrice:  r.ImageInputPrice,
 			ImageOutputPrice: r.ImageOutputPrice,
 			PerRequestPrice:  r.PerRequestPrice,
@@ -496,7 +504,7 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, gin.H{
+	data := gin.H{
 		"found":              true,
 		"input_price":        pricing.InputPricePerToken,
 		"output_price":       pricing.OutputPricePerToken,
@@ -504,7 +512,11 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 		"cache_read_price":   pricing.CacheReadPricePerToken,
 		"image_input_price":  pricing.ImageInputPricePerToken,
 		"image_output_price": pricing.ImageOutputPricePerToken,
-	})
+	}
+	if pricing.SupportsCacheBreakdown && pricing.CacheCreation1hPrice > 0 {
+		data["cache_write_1h_price"] = pricing.CacheCreation1hPrice
+	}
+	response.Success(c, data)
 }
 
 // platformToLiteLLMProvider maps a channel platform name to the corresponding
