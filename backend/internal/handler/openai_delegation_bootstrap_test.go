@@ -185,7 +185,13 @@ func mustJSON(t *testing.T, value string) string {
 func admitCodexCallOutputRequest(t *testing.T, body []byte) (normalized []byte, accepted bool, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	normalized, _ = normalizeCodexDelegationBootstrap(body)
+	normalized = body
+	if next, changed := normalizeCodexAutomationBootstrap(normalized); changed {
+		normalized = next
+	}
+	if next, changed := normalizeCodexDelegationBootstrap(normalized); changed {
+		normalized = next
+	}
 	rec = httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
