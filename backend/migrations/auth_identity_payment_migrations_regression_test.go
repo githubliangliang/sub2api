@@ -64,6 +64,29 @@ func TestMigration135DropsLegacyProviderIndexesWithSQLiteSyntax(t *testing.T) {
 	require.Contains(t, sql, "DROP INDEX IF EXISTS pending_auth_sessions_provider_type_check")
 }
 
+func TestMigration226AddsChannelCacheWrite1hPriceWithSQLiteSyntax(t *testing.T) {
+	content, err := FS.ReadFile("226_channel_cache_write_1h_pricing.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ALTER TABLE channel_model_pricing ADD COLUMN cache_write_1h_price NUMERIC(20,12)")
+	require.Contains(t, sql, "ALTER TABLE channel_pricing_intervals ADD COLUMN cache_write_1h_price NUMERIC(20,12)")
+	require.Contains(t, sql, "ALTER TABLE channel_account_stats_model_pricing ADD COLUMN cache_write_1h_price NUMERIC(20,12)")
+	require.Contains(t, sql, "ALTER TABLE channel_account_stats_pricing_intervals ADD COLUMN cache_write_1h_price NUMERIC(20,12)")
+	require.NotContains(t, sql, "IF NOT EXISTS")
+	require.NotContains(t, sql, "COMMENT ON")
+}
+
+func TestMigration225AddsGroupReasoningEffortOverLimitWithSQLiteSyntax(t *testing.T) {
+	content, err := FS.ReadFile("225_group_reasoning_effort_over_limit.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ALTER TABLE groups ADD COLUMN max_reasoning_effort_over_limit VARCHAR(20) NOT NULL DEFAULT 'downgrade'")
+	require.NotContains(t, sql, "IF NOT EXISTS")
+	require.NotContains(t, sql, "COMMENT ON")
+}
+
 func TestMigration151AddsAccountAutoPauseExpiryPartialIndex(t *testing.T) {
 	content, err := FS.ReadFile("151_account_autopause_expiry_index_notx.sql")
 	require.NoError(t, err)

@@ -1107,6 +1107,106 @@ func TestOpenAIWSConnPool_BackgroundCleanupSweep_WithoutAcquire(t *testing.T) {
 	require.False(t, exists, "后台清理应在无新 acquire 时也回收过期连接")
 }
 
+func TestOpenAIWSConnPool_RecyclesUnsupportedIdlePingConnection(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 2
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 2
+	pool := &openAIWSConnPool{cfg: cfg}
+
+	accountID := int64(303)
+	ap := &openAIWSAccountPool{conns: make(map[string]*openAIWSConn)}
+	conn := newOpenAIWSConn("stale_unsupported_idle_ping", accountID, &openAIWSIdlePingUnsupportedConn{}, nil)
+	conn.lastUsedNano.Store(time.Now().Add(-openAIWSConnIdleRecycleAfter - time.Second).UnixNano())
+	ap.conns[conn.id] = conn
+	pool.accounts.Store(accountID, ap)
+
+	pool.runBackgroundCleanupSweep(time.Now())
+
+	ap.mu.Lock()
+	_, exists := ap.conns[conn.id]
+	ap.mu.Unlock()
+	require.False(t, exists, "不支持无 reader idle ping 的陈旧连接应被主动回收")
+	require.Equal(t, int64(1), pool.metrics.scaleDownTotal.Load())
+	select {
+	case <-conn.closedCh:
+	default:
+		t.Fatal("被回收的陈旧连接应已关闭")
+	}
+}
+
+func TestOpenAIWSConnPool_IdleRecycleKeepsPingableRentedWaiterPinnedAndFresh(t *testing.T) {
+	stale := time.Now().Add(-openAIWSConnIdleRecycleAfter - time.Second)
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 2
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 2
+
+	newUnsupported := func(id string) *openAIWSConn {
+		conn := newOpenAIWSConn(id, 404, &openAIWSIdlePingUnsupportedConn{}, nil)
+		conn.lastUsedNano.Store(stale.UnixNano())
+		return conn
+	}
+
+	t.Run("pingable_idle_kept", func(t *testing.T) {
+		pool := &openAIWSConnPool{cfg: cfg}
+		ap := &openAIWSAccountPool{conns: make(map[string]*openAIWSConn)}
+		conn := newOpenAIWSConn("pingable", 404, &openAIWSFakeConn{}, nil)
+		conn.lastUsedNano.Store(stale.UnixNano())
+		ap.conns[conn.id] = conn
+		evicted := pool.cleanupAccountLocked(ap, time.Now(), 8)
+		require.Empty(t, evicted)
+		_, exists := ap.conns[conn.id]
+		require.True(t, exists)
+		require.Equal(t, int64(0), pool.metrics.scaleDownTotal.Load())
+	})
+
+	t.Run("leased_unsupported_kept", func(t *testing.T) {
+		pool := &openAIWSConnPool{cfg: cfg}
+		ap := &openAIWSAccountPool{conns: make(map[string]*openAIWSConn)}
+		conn := newUnsupported("leased")
+		require.True(t, conn.tryAcquire())
+		ap.conns[conn.id] = conn
+		evicted := pool.cleanupAccountLocked(ap, time.Now(), 8)
+		require.Empty(t, evicted)
+		_, exists := ap.conns[conn.id]
+		require.True(t, exists)
+	})
+
+	t.Run("waiter_unsupported_kept", func(t *testing.T) {
+		pool := &openAIWSConnPool{cfg: cfg}
+		ap := &openAIWSAccountPool{conns: make(map[string]*openAIWSConn)}
+		conn := newUnsupported("waiter")
+		conn.waiters.Store(1)
+		ap.conns[conn.id] = conn
+		evicted := pool.cleanupAccountLocked(ap, time.Now(), 8)
+		require.Empty(t, evicted)
+		_, exists := ap.conns[conn.id]
+		require.True(t, exists)
+	})
+
+	t.Run("pinned_unsupported_kept", func(t *testing.T) {
+		pool := &openAIWSConnPool{cfg: cfg}
+		ap := &openAIWSAccountPool{conns: make(map[string]*openAIWSConn), pinnedConns: map[string]int{"pinned": 1}}
+		conn := newUnsupported("pinned")
+		ap.conns[conn.id] = conn
+		evicted := pool.cleanupAccountLocked(ap, time.Now(), 8)
+		require.Empty(t, evicted)
+		_, exists := ap.conns[conn.id]
+		require.True(t, exists)
+	})
+
+	t.Run("fresh_unsupported_kept", func(t *testing.T) {
+		pool := &openAIWSConnPool{cfg: cfg}
+		ap := &openAIWSAccountPool{conns: make(map[string]*openAIWSConn)}
+		conn := newOpenAIWSConn("fresh", 404, &openAIWSIdlePingUnsupportedConn{}, nil)
+		conn.lastUsedNano.Store(time.Now().UnixNano())
+		ap.conns[conn.id] = conn
+		evicted := pool.cleanupAccountLocked(ap, time.Now(), 8)
+		require.Empty(t, evicted)
+		_, exists := ap.conns[conn.id]
+		require.True(t, exists)
+	})
+}
+
 func TestOpenAIWSConnPool_BackgroundWorkerGuardBranches(t *testing.T) {
 	var nilPool *openAIWSConnPool
 	require.NotPanics(t, func() {

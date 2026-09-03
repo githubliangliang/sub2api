@@ -271,10 +271,14 @@ func (Group) Fields() []ent.Field {
 			MaxLen(20).
 			Default("").
 			Comment("OpenAI reasoning effort 上限；可选 minimal/low/medium/high/xhigh/max"),
+		field.String("max_reasoning_effort_over_limit").
+			MaxLen(20).
+			Default("downgrade").
+			Comment("超过推理强度上限时的访问控制：downgrade 自动降档，deny 拒绝访问"),
 		field.JSON("reasoning_effort_mappings", []domain.ReasoningEffortMapping{}).
 			Default([]domain.ReasoningEffortMapping{}).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
-			Comment("OpenAI reasoning effort 自定义精确映射；先映射再应用上限"),
+			Comment("OpenAI reasoning effort 自定义映射；可按模型精确名、前缀或后缀限定，先映射再应用上限"),
 
 		// 分组利润控制（migration 192/193）：openai/anthropic/gemini/grok/antigravity
 		// 的 token 分组可启用，composite 分组不能直接启用。

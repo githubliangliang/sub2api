@@ -92,6 +92,13 @@ default:
 log:
   level: "warn"   # 个人用可 info/warn，少打日志也省一点 IO
 
+# 价格目录覆盖补丁（可选，默认关闭）。启用后按字段浅合并覆盖官方目录，
+# 优先级高于 catalog 与 fallback_file。例：关掉某模型的长上下文阶梯只需
+# 写 {"gpt-5.5": {"long_context_input_token_threshold": 0}}，不必改出厂快照。
+# 缺失/非法 JSON 只跳过合并，不影响目录加载。改完需重启或等下次目录下载。
+# pricing:
+#   override_file: "/opt/sub2api/data/model_pricing_overrides.json"
+
 # 网关侧可按需再收紧（示例：不要开过大的并发池）
 # gateway:
 #   concurrency_slot_ttl_minutes: 30

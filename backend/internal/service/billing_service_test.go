@@ -520,6 +520,11 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{name: "empty model", model: "   ", expectNilPricing: true},
 		{name: "claude opus 4.6", model: "claude-opus-4.6-20260201", expectedInput: 5e-6},
 		{name: "claude opus 4.5 alt separator", model: "claude-opus-4-5-20260101", expectedInput: 5e-6},
+		{name: "claude fable 5.1 hyphen", model: "claude-fable-5-1", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 5.1 dotted", model: "claude-fable-5.1", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 5.1 compact", model: "claude-fable5.1", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 51 compact", model: "claude-fable51", expectedInput: 10e-6, expectedCacheRead: floatPtr(0.25e-6)},
+		{name: "claude fable 5", model: "claude-fable-5", expectedInput: 10e-6, expectedCacheRead: floatPtr(1e-6)},
 		{name: "claude generic model fallback sonnet", model: "claude-foo-bar", expectedInput: 3e-6},
 		{name: "gemini explicit fallback", model: "gemini-3-1-pro", expectedInput: 2e-6},
 		{name: "gemini unknown no fallback", model: "gemini-2.0-pro", expectNilPricing: true},
@@ -1602,9 +1607,25 @@ func TestCalculateCost_LargeTokenCount(t *testing.T) {
 func TestServiceTierCostMultiplier(t *testing.T) {
 	require.InDelta(t, 2.0, serviceTierCostMultiplier("priority"), 1e-12)
 	require.InDelta(t, 2.0, serviceTierCostMultiplier(" Priority "), 1e-12)
+	require.InDelta(t, 2.0, serviceTierCostMultiplier("fast"), 1e-12)
 	require.InDelta(t, 0.5, serviceTierCostMultiplier("flex"), 1e-12)
 	require.InDelta(t, 1.0, serviceTierCostMultiplier(""), 1e-12)
 	require.InDelta(t, 1.0, serviceTierCostMultiplier("default"), 1e-12)
+}
+
+func TestCalculateCostWithServiceTier_FastAliasesPriority(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50, CacheReadTokens: 20}
+
+	standard, err := svc.CalculateCost("gpt-5.1-codex", tokens, 1.0)
+	require.NoError(t, err)
+	priority, err := svc.CalculateCostWithServiceTier("gpt-5.1-codex", tokens, 1.0, "priority")
+	require.NoError(t, err)
+	fast, err := svc.CalculateCostWithServiceTier("gpt-5.1-codex", tokens, 1.0, "fast")
+	require.NoError(t, err)
+
+	require.InDelta(t, priority.TotalCost, fast.TotalCost, 1e-10)
+	require.Greater(t, fast.TotalCost, standard.TotalCost)
 }
 
 func TestCalculateCostWithServiceTier_OpenAIPriorityUsesPriorityPricing(t *testing.T) {
@@ -1911,6 +1932,120 @@ func TestGetModelPricingWithChannel_CacheWritePriceAffects5mAnd1h(t *testing.T) 
 	require.InDelta(t, 7e-6, pricing.CacheCreationPricePerToken, 1e-12)
 	require.InDelta(t, 7e-6, pricing.CacheCreation5mPrice, 1e-12)
 	require.InDelta(t, 7e-6, pricing.CacheCreation1hPrice, 1e-12)
+}
+
+func TestGetModelPricingWithChannel_CacheWriteTTLFourCombinations(t *testing.T) {
+	svc := newTestBillingService()
+	official, err := svc.GetModelPricing("claude-sonnet-4")
+	require.NoError(t, err)
+
+	t.Run("only 5m set covers both TTLs", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{
+			CacheWritePrice: testPtrFloat64(7e-6),
+		})
+		require.NoError(t, err)
+		require.InDelta(t, 7e-6, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 7e-6, pricing.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("only 1h set leaves 5m on official", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{
+			CacheWrite1hPrice: testPtrFloat64(21e-6),
+		})
+		require.NoError(t, err)
+		require.InDelta(t, official.CacheCreation5mPrice, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, pricing.CacheCreation1hPrice, 1e-12)
+		require.True(t, pricing.SupportsCacheBreakdown)
+	})
+	t.Run("both set are independent", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{
+			CacheWritePrice:   testPtrFloat64(13e-6),
+			CacheWrite1hPrice: testPtrFloat64(21e-6),
+		})
+		require.NoError(t, err)
+		require.InDelta(t, 13e-6, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, pricing.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("both nil keep official", func(t *testing.T) {
+		pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", &ChannelModelPricing{})
+		require.NoError(t, err)
+		require.InDelta(t, official.CacheCreation5mPrice, pricing.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, official.CacheCreation1hPrice, pricing.CacheCreation1hPrice, 1e-12)
+	})
+}
+
+func TestIntervalToModelPricing_CacheWriteTTLFourCombinations(t *testing.T) {
+	t.Run("only 5m set covers both TTLs", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{CacheWritePrice: testPtrFloat64(7e-6)}, true, nil)
+		require.InDelta(t, 7e-6, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 7e-6, got.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("only 1h set", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{CacheWrite1hPrice: testPtrFloat64(21e-6)}, true, nil)
+		require.InDelta(t, 0, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, got.CacheCreation1hPrice, 1e-12)
+		require.True(t, got.SupportsCacheBreakdown)
+	})
+	t.Run("both set are independent", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{
+			CacheWritePrice:   testPtrFloat64(13e-6),
+			CacheWrite1hPrice: testPtrFloat64(21e-6),
+		}, true, nil)
+		require.InDelta(t, 13e-6, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 21e-6, got.CacheCreation1hPrice, 1e-12)
+	})
+	t.Run("both nil keep zeros from interval overlay", func(t *testing.T) {
+		got := intervalToModelPricing(&PricingInterval{}, true, nil)
+		require.InDelta(t, 0, got.CacheCreation5mPrice, 1e-12)
+		require.InDelta(t, 0, got.CacheCreation1hPrice, 1e-12)
+	})
+}
+
+func TestGetModelPricing_Fable51FallbackPricing(t *testing.T) {
+	svc := newTestBillingService()
+
+	pricing, err := svc.GetModelPricing("claude-fable-5-1")
+	require.NoError(t, err)
+	require.InDelta(t, 10e-6, pricing.InputPricePerToken, 1e-12)
+	require.InDelta(t, 50e-6, pricing.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 12.5e-6, pricing.CacheCreation5mPrice, 1e-12)
+	require.InDelta(t, 20e-6, pricing.CacheCreation1hPrice, 1e-12)
+	require.InDelta(t, 0.25e-6, pricing.CacheReadPricePerToken, 1e-12)
+	require.True(t, pricing.SupportsCacheBreakdown)
+}
+
+func TestGetFallbackPricing_FableCatalogMissVsHit(t *testing.T) {
+	svc := newTestBillingService()
+
+	miss, err := svc.GetModelPricing("claude-fable-5")
+	require.NoError(t, err)
+	require.InDelta(t, 10e-6, miss.InputPricePerToken, 1e-12)
+	require.NotEqual(t, 0.0, miss.InputPricePerToken)
+	require.NotEqual(t, svc.getFallbackPricing("claude-opus-4.5").InputPricePerToken, miss.InputPricePerToken)
+
+	fable5 := svc.getFallbackPricing("claude-fable-5")
+	fable51 := svc.getFallbackPricing("claude-fable-5-1")
+	require.Less(t, fable51.CacheReadPricePerToken, fable5.CacheReadPricePerToken)
+
+	catalog := NewPricingService(&config.Config{}, nil)
+	catalog.pricingData["claude-fable-5"] = &LiteLLMModelPricing{
+		InputCostPerToken:  99e-6,
+		OutputCostPerToken: 88e-6,
+		LiteLLMProvider:    "anthropic",
+		Mode:               "chat",
+	}
+	svc.pricingService = catalog
+	hit, err := svc.GetModelPricing("claude-fable-5")
+	require.NoError(t, err)
+	require.InDelta(t, 99e-6, hit.InputPricePerToken, 1e-12)
+	require.InDelta(t, 88e-6, hit.OutputPricePerToken, 1e-12)
+}
+
+func TestGetFallbackPricing_ExistingFamiliesUnchangedByFable(t *testing.T) {
+	svc := newTestBillingService()
+	require.Same(t, svc.fallbackPrices["claude-opus-4.5"], svc.getFallbackPricing("claude-opus-4-5"))
+	require.Same(t, svc.fallbackPrices["claude-sonnet-4"], svc.getFallbackPricing("claude-sonnet-4"))
+	require.Same(t, svc.fallbackPrices["claude-3-haiku"], svc.getFallbackPricing("claude-3-haiku"))
+	require.Same(t, svc.fallbackPrices["gemini-3.1-pro"], svc.getFallbackPricing("gemini-3.1-pro"))
 }
 
 func TestGetModelPricingWithChannel_CacheReadPriceAffectsPriority(t *testing.T) {

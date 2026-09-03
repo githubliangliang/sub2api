@@ -16,11 +16,38 @@ Fork of [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) optimized for **
 
 This fork is SQLite-only and prioritizes 1C1G native deploy. Upstream multi-instance production still uses PostgreSQL + external Redis. Deeper notes: [REFACTOR.md](./REFACTOR.md), [DEV_GUIDE.md](./DEV_GUIDE.md), [REMOVED_PAGES.md](./REMOVED_PAGES.md), [deploy/START_NATIVE.md](./deploy/START_NATIVE.md).
 
-**Merging upstream:** git history was rewritten (no shared ancestor). Do **not** `git merge upstream/main`. Cherry-pick or port by feature. Process + current checklists: [docs/upstream-sync/README.md](./docs/upstream-sync/README.md), [docs/upstream-sync/PORTING-0.1.184.md](./docs/upstream-sync/PORTING-0.1.184.md) (0.1.184, 14 P0 pending — newest), [docs/upstream-sync/PORTING-0.1.183.md](./docs/upstream-sync/PORTING-0.1.183.md) (0.1.181–0.1.183 bugfixes), [docs/upstream-sync/PORTING-0.1.180.md](./docs/upstream-sync/PORTING-0.1.180.md).
+**Merging upstream:** git history was rewritten (no shared ancestor). Do **not** `git merge upstream/main`. Cherry-pick or port by feature. Process + current checklists: [docs/upstream-sync/README.md](./docs/upstream-sync/README.md), [docs/upstream-sync/PORTING-0.2.0.md](./docs/upstream-sync/PORTING-0.2.0.md) (0.1.185 + 0.2.0；第一档 §3.1–§3.7 与第二档 §3.8–§3.11 + §4 均已在 `sync/upstream-20260902-p1` 落地 — newest), [docs/upstream-sync/PORTING-0.1.184.md](./docs/upstream-sync/PORTING-0.1.184.md) (0.1.184, P0/P1 merged), [docs/upstream-sync/PORTING-0.1.183.md](./docs/upstream-sync/PORTING-0.1.183.md) (0.1.181–0.1.183 bugfixes), [docs/upstream-sync/PORTING-0.1.180.md](./docs/upstream-sync/PORTING-0.1.180.md).
 
 **Go version:** `1.27.0` (from `backend/go.mod`). CI asserts this string; bump go.mod and workflow version checks together.
 
 **Frontend package manager:** **pnpm only** (not npm). Commit `frontend/pnpm-lock.yaml` after dependency changes. pnpm v11 needs `frontend/pnpm-workspace.yaml` `allowBuilds` for `esbuild` / `vue-demi` postinstall.
+
+## Upstream release intake (run this whenever a new upstream release lands)
+
+Triggered by "check upstream", "evaluate the new release", or a new tag showing on <https://github.com/Wei-Shaw/sub2api/releases>. Produce artifacts, not a chat-only answer.
+
+**1. Fix the baseline.** `git fetch upstream --tags --prune`; list `<last-evaluated-tag>..<newest-tag>` non-merge commits. The last round's *upstream main* may already sit inside the next tag, so part of the range can already be ported — run a **reverse** `git apply --check` over the whole candidate set first (`ALREADY` state) before the forward one.
+
+**2. Judge per candidate, four states per file**: `CLEAN` (forward applies) / `ALREADY` (reverse applies = already here) / `CONFLICT` / `NOBASE`. For a feature upstream split into many micro-commits, take the whole PR diff (`git diff <merge>^1 <merge>`), never the individual commits. Then, for every new call the patch introduces, `grep -rn "func .*<symbol>"` — three states never prove it compiles. `CONFLICT` may mean the changed function does not exist here, i.e. **this fork does not have the bug**; verify before filing it as work.
+
+**3. Rank into four tiers** (this is the priority model — keep the tier numbers, downstream artifacts reference them):
+
+| Tier | Meaning | Artifact |
+|---|---|---|
+| 第一档 | Confirmed live defect here, cheap, low risk | OpenSpec change |
+| 第二档 | Worth taking, real work (manual hunks / migration / frontend) | OpenSpec change |
+| 第三档 | On-demand — only pays off if the feature is actually used | **Ask the user, do not start** |
+| 第四档 | Do not merge (PG-only, needs an absent platform, bug not applicable) | **Ask the user, do not start** |
+
+Never silently promote 第三档/第四档 into work. If measuring a base changes a tier (a "missing base" that turns out to be 11 lines), say so explicitly rather than moving it quietly.
+
+**4. Write `docs/upstream-sync/PORTING-<version>.md`**, same shape as the existing ones: §1 version table + per-cluster stats, §2 method (channels / four-state / migration numbering), §3 P0 with patch sites and base-symbol greps, §4 P1, §5 not-doing with the judgement basis, §6 N/A-or-already-merged, §7 landing order, §8 self-test, §9 new general lessons. Then update `docs/upstream-sync/README.md` (top checklist + lessons list) and the "Merging upstream" pointer above.
+
+**5. Report the older rounds' leftovers.** Every time, restate what is still unmigrated or undecided in the earlier `PORTING-*.md` files and why (取决于使用方式 / 架构上不需要 / 需要新增迁移或改 schema), so an old "needs a base" label does not get inherited unmeasured for another round. The oldest-parked item is usually the one nobody has re-measured.
+
+**6. Generate an OpenSpec change per 第一档 / 第二档 batch** under `openspec/changes/port-upstream-<version>-<slug>/`, following the newest existing change file-for-file: `README.md`, `proposal.md`, `source-baseline.md` (SHAs frozen — never edited during implementation), `source-feature-map.md`, `design.md`, `specs/<capability>/spec.md` (ADDED Requirements + Scenarios), `tasks.md`, `verification.md`. Patch sites live only in the PORTING doc; the change defines the behaviour that must hold and the acceptance evidence. Leave every checkbox unchecked and every evidence slot empty until the work is actually done.
+
+**7. Verification is part of the intake, not a follow-up.** Confirm the tests a doc points at actually exist and pass on the current baseline (`go test -list`), and `head -1` any `_integration_test.go` — a batch of them here are `//go:build integration && postgres` and never compile in this fork.
 
 ## Common commands
 

@@ -16,4 +16,10 @@ describe("groups models list layout", () => {
     expect(groupsViewSource).toContain("max-h-64 space-y-2 overflow-y-auto p-2");
     expect(groupsViewSource).not.toContain("sticky top-0");
   });
+
+  it("uses a wide dialog and keeps model pricing controls responsive", () => {
+    expect(groupsViewSource).toContain('width="wide"');
+    expect(groupsViewSource).toContain("shrink-0 whitespace-nowrap");
+    expect(groupsViewSource).toContain("flex flex-wrap items-center justify-between gap-3");
+  });
 });

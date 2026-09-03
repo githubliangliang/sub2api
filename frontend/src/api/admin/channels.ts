@@ -16,6 +16,7 @@ export interface PricingInterval {
   input_price: number | null
   output_price: number | null
   cache_write_price: number | null
+  cache_write_1h_price?: number | null
   cache_read_price: number | null
   per_request_price: number | null
   sort_order: number
@@ -29,6 +30,7 @@ export interface ChannelModelPricing {
   input_price: number | null
   output_price: number | null
   cache_write_price: number | null
+  cache_write_1h_price?: number | null
   cache_read_price: number | null
   image_input_price: number | null
   image_output_price: number | null
@@ -154,6 +156,7 @@ export interface ModelDefaultPricing {
   input_price?: number    // per-token price
   output_price?: number
   cache_write_price?: number
+  cache_write_1h_price?: number
   cache_read_price?: number
   image_input_price?: number
   image_output_price?: number

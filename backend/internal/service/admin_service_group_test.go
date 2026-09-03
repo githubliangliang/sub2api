@@ -829,6 +829,20 @@ func TestAdminService_UpdateGroup_ReasoningEffortMappingsTriState(t *testing.T) 
 			}(),
 			want: []ReasoningEffortMapping{{From: "xhigh", To: "high"}},
 		},
+		{
+			name: "model scoped mappings are canonicalized independently",
+			input: func() *UpdateGroupInput {
+				replacement := []ReasoningEffortMapping{
+					{From: " MAX ", To: " low ", MatchType: "PREFIX", Model: " gpt "},
+					{From: "max", To: "medium", Model: "gpt-5.4"},
+				}
+				return &UpdateGroupInput{ReasoningEffortMappings: &replacement}
+			}(),
+			want: []ReasoningEffortMapping{
+				{From: "max", To: "low", MatchType: "prefix", Model: "gpt"},
+				{From: "max", To: "medium", MatchType: "exact", Model: "gpt-5.4"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -878,12 +892,13 @@ func TestAdminService_UpdateGroup_RejectsInvalidReasoningEffortMappings(t *testi
 
 func TestAdminService_UpdateGroup_ClearsReasoningPolicyForUnsupportedPlatform(t *testing.T) {
 	existing := &Group{
-		ID:                      1,
-		Name:                    "openai-group",
-		Platform:                PlatformOpenAI,
-		Status:                  StatusActive,
-		MaxReasoningEffort:      "medium",
-		ReasoningEffortMappings: []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
+		ID:                          1,
+		Name:                        "openai-group",
+		Platform:                    PlatformOpenAI,
+		Status:                      StatusActive,
+		MaxReasoningEffort:          "medium",
+		MaxReasoningEffortOverLimit: ReasoningEffortOverLimitDeny,
+		ReasoningEffortMappings:     []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
 	}
 	repo := &groupRepoStubForAdmin{getByID: existing}
 	svc := &adminServiceImpl{groupRepo: repo}
@@ -892,6 +907,7 @@ func TestAdminService_UpdateGroup_ClearsReasoningPolicyForUnsupportedPlatform(t 
 
 	require.NoError(t, err)
 	require.Empty(t, repo.updated.MaxReasoningEffort)
+	require.Equal(t, ReasoningEffortOverLimitDowngrade, repo.updated.MaxReasoningEffortOverLimit)
 	require.Empty(t, repo.updated.ReasoningEffortMappings)
 }
 
