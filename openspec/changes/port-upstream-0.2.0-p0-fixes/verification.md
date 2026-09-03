@@ -1,7 +1,7 @@
 # 验收证据
 
 执行日期：2026-09-03。分支 `sync/upstream-20260902-p1`，起点 `6527a33de`
-（第二档已在此分支落地；OpenSpec 写的 `3da1c2dd0` 未另开分支）。代码尖 `e9a1c427a`。
+（第二档已在此分支落地；OpenSpec 写的 `3da1c2dd0` 未另开分支）。代码尖 `7cb024a00`。
 
 ⚠️ 本批自身 **未新增迁移**。仓库最大号仍是第二档的 `226`，不是 OpenSpec 1.3 写的 `224`。
 未合回 `main`（任务 8.7 按本目标 non-goals 不做）。
@@ -25,7 +25,7 @@
 
 ## 1. 交付后的全量信号
 
-代码尖 `e9a1c427a`。全量写入 `{SCRATCH}/full-gates.log`。
+代码尖 `7cb024a00`。全量写入 `{SCRATCH}/full-gates.log`。
 
 | 门禁 | 命令 | 结果 |
 |---|---|---|
@@ -33,7 +33,7 @@
 | 后端 unit | `go test -tags=unit ./... -count=1` | **UNIT_EXIT:0**（无新增失败） |
 | lint | `golangci-lint run ./...` | **`0 issues.` LINT_EXIT:0** |
 | 迁移号未变 | `ls backend/migrations/*.sql \| sort \| tail -1` | **`226_channel_cache_write_1h_pricing.sql`**（本批 diff 无 `migrations/`） |
-| 无越界改动 | `git diff --name-only 6527a33de..HEAD` | **17 个文件，全在 `backend/internal/{handler,pkg/claude,repository,service}`**。无 `frontend/` / `ent/` / `migrations/` / `VERSION` / `wire.go` / `wire_gen.go` |
+| 无越界改动 | `git diff --name-only 6527a33de..HEAD` | 产品码在 `backend/internal/{handler,pkg/claude,repository,service}`（含 `billing_service.go` 的 fast→priority 别名）。另有 PORTING/OpenSpec/CLAUDE 文档。**无** `frontend/` / `ent/` / `migrations/` / `VERSION` / `wire.go` / `wire_gen.go` |
 
 ## 2. 逐项证据
 
