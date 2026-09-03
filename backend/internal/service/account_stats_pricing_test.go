@@ -537,6 +537,40 @@ func TestTryModelFilePricing_AppliesServiceTierPricing(t *testing.T) {
 	}
 }
 
+func TestTryModelFilePricing_FastUsesSharedPipeline(t *testing.T) {
+	bs := newTestBillingServiceWithPrices(map[string]*ModelPricing{
+		"gpt-5.6-sol": {
+			InputPricePerToken:                 0.001,
+			InputPricePerTokenPriority:         0.002,
+			OutputPricePerToken:                0.002,
+			OutputPricePerTokenPriority:        0.004,
+			CacheCreationPricePerToken:         0.003,
+			CacheCreationPricePerTokenPriority: 0.006,
+			CacheReadPricePerToken:             0.0005,
+			CacheReadPricePerTokenPriority:     0.001,
+		},
+	})
+	tokens := UsageTokens{
+		InputTokens:         100,
+		OutputTokens:        50,
+		CacheCreationTokens: 20,
+		CacheReadTokens:     10,
+	}
+
+	got := tryModelFilePricing(bs, "gpt-5.6-sol", tokens, "fast")
+	require.NotNil(t, got)
+	unified, err := bs.CalculateCostWithServiceTier("gpt-5.6-sol", tokens, 1, "fast")
+	require.NoError(t, err)
+	require.InDelta(t, unified.TotalCost, *got, 1e-12)
+
+	// 本 fork 的 CalculateCostWithServiceTier 尚未把 fast 归一成 priority
+	//（0.1.180 §7.2 发送侧 Fast 未合）。优先级 3 必须跟那条管线走，不能再
+	// 用手算把 fast 钉在标准价上；管线以后改映射时统计会一起变。
+	standard := tryModelFilePricing(bs, "gpt-5.6-sol", tokens, "")
+	require.NotNil(t, standard)
+	require.InDelta(t, *standard, *got, 1e-12)
+}
+
 func TestTryModelFilePricing_CombinesPriorityAndLongContextPricing(t *testing.T) {
 	bs := newTestBillingServiceWithPrices(map[string]*ModelPricing{
 		"gpt-5.6-sol": {
@@ -612,8 +646,9 @@ func TestTryModelFilePricing_WithImageOutput(t *testing.T) {
 	}
 	result := tryModelFilePricing(bs, "claude-sonnet-4", tokens, "")
 	require.NotNil(t, result)
-	// 100*0.001 + 50*0.002 + 10*0.01 = 0.1 + 0.1 + 0.1 = 0.3
-	require.InDelta(t, 0.3, *result, 1e-12)
+	// ImageOutputTokens 是 OutputTokens 的子集，先扣除再按图片单价计。
+	// 100*0.001 + (50-10)*0.002 + 10*0.01 = 0.1 + 0.08 + 0.1 = 0.28
+	require.InDelta(t, 0.28, *result, 1e-12)
 }
 
 func TestTryModelFilePricing_WithCacheTokens(t *testing.T) {
@@ -783,6 +818,38 @@ func TestResolveAccountStatsCost_FallsBackToLiteLLM(t *testing.T) {
 	)
 	require.NotNil(t, result)
 	// 100*0.001 + 50*0.002 = 0.1 + 0.1 = 0.2
+	require.InDelta(t, 0.2, *result, 1e-12)
+}
+
+func TestResolveAccountStatsCost_Priority3IgnoresChannelCustomPricing(t *testing.T) {
+	input := 9.0
+	output := 9.0
+	channel := &Channel{
+		ID:                         1,
+		Status:                     StatusActive,
+		ApplyPricingToAccountStats: false,
+		ModelPricing: []ChannelModelPricing{{
+			Models:      []string{"claude-sonnet-4"},
+			BillingMode: "token",
+			InputPrice:  &input,
+			OutputPrice: &output,
+		}},
+	}
+	cs := newTestChannelServiceForStats(t, channel, 10, "anthropic")
+	bs := newTestBillingServiceWithPrices(map[string]*ModelPricing{
+		"claude-sonnet-4": {
+			InputPricePerToken:  0.001,
+			OutputPricePerToken: 0.002,
+		},
+	})
+	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50}
+	result := resolveAccountStatsCost(
+		context.Background(),
+		cs, bs,
+		1, 10, "claude-sonnet-4",
+		tokens, 1, 999.0, "",
+	)
+	require.NotNil(t, result)
 	require.InDelta(t, 0.2, *result, 1e-12)
 }
 
