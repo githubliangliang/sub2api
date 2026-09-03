@@ -1094,3 +1094,86 @@ func schedulerCacheBenchmarkAccounts(size int) []service.Account {
 	}
 	return accounts
 }
+
+// 调度投影必须保留 OpenAI 透传开关。
+//
+// 候选过滤走 ListSchedulableAccounts，读的是 buildSchedulerMetadataAccount 产出的精简投影；
+// Account.IsModelSupported 又靠 extra 上的透传开关短路 model_mapping 白名单（#4936）。
+// 一旦投影把开关裁掉、却保留了白名单，透传账号在选号阶段就会退回白名单判定并被误判成
+// model_not_supported，而转发阶段（读完整账号）仍按透传工作 —— 表现为"单独测这个账号能通、
+// 走网关却报 no available accounts"。#4936 修的是判定逻辑，这里守的是喂给判定的输入。
+func TestBuildSchedulerMetadataAccount_KeepsOpenAIPassthroughForModelGate(t *testing.T) {
+	for _, key := range []string{"openai_passthrough", "openai_oauth_passthrough"} {
+		t.Run(key, func(t *testing.T) {
+			account := service.Account{
+				ID:       383,
+				Platform: service.PlatformOpenAI,
+				Type:     service.AccountTypeOAuth,
+				Credentials: map[string]any{
+					// 账号从白名单模式切到透传后常见的残留映射，未列出请求的模型。
+					"model_mapping": map[string]any{"gpt-5.5": "gpt-5.5"},
+					"access_token":  "drop-me",
+				},
+				Extra: map[string]any{key: true},
+			}
+			require.True(t, account.IsModelSupported("gpt-5.6-sol"),
+				"前置条件：透传账号本应放行白名单外的模型")
+
+			meta := buildSchedulerMetadataAccount(account)
+
+			// 走一遍真实的序列化/反序列化路径（写入 sched:meta 再由 decodeCachedAccount 读回）。
+			payload, err := json.Marshal(meta)
+			require.NoError(t, err)
+			var restored service.Account
+			require.NoError(t, json.Unmarshal(payload, &restored))
+
+			require.Equal(t, true, restored.Extra[key])
+			require.True(t, restored.IsOpenAIPassthroughEnabled())
+			require.True(t, restored.IsModelSupported("gpt-5.6-sol"),
+				"投影裁掉透传开关会让透传账号在候选过滤阶段被误判为 model_not_supported")
+			// 白名单本身仍需保留：非透传账号依赖它做模型门。
+			require.Equal(t, map[string]any{"gpt-5.5": "gpt-5.5"}, restored.Credentials["model_mapping"])
+		})
+	}
+
+	t.Run("non_passthrough_still_uses_whitelist", func(t *testing.T) {
+		account := service.Account{
+			ID:       384,
+			Platform: service.PlatformOpenAI,
+			Type:     service.AccountTypeOAuth,
+			Credentials: map[string]any{
+				"model_mapping": map[string]any{"gpt-5.5": "gpt-5.5"},
+			},
+		}
+		require.False(t, account.IsModelSupported("gpt-5.6-sol"))
+
+		payload, err := json.Marshal(buildSchedulerMetadataAccount(account))
+		require.NoError(t, err)
+		var restored service.Account
+		require.NoError(t, json.Unmarshal(payload, &restored))
+		require.False(t, restored.IsOpenAIPassthroughEnabled())
+		require.False(t, restored.IsModelSupported("gpt-5.6-sol"))
+	})
+
+	t.Run("fingerprint_keys_still_dropped", func(t *testing.T) {
+		account := service.Account{
+			ID:       385,
+			Platform: service.PlatformOpenAI,
+			Type:     service.AccountTypeOAuth,
+			Extra: map[string]any{
+				"openai_passthrough":         true,
+				"codex_fingerprint_mode":     "sticky",
+				"codex_fingerprint_seed":     "seed-1",
+				"openai_responses_supported": true,
+			},
+		}
+		payload, err := json.Marshal(buildSchedulerMetadataAccount(account))
+		require.NoError(t, err)
+		var restored service.Account
+		require.NoError(t, json.Unmarshal(payload, &restored))
+		require.Equal(t, true, restored.Extra["openai_passthrough"])
+		require.Equal(t, true, restored.Extra["openai_responses_supported"])
+		require.Nil(t, restored.Extra["codex_fingerprint_mode"])
+		require.Nil(t, restored.Extra["codex_fingerprint_seed"])
+	})
+}
