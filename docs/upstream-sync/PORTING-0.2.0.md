@@ -151,7 +151,7 @@ SQLite 不支持 `ADD COLUMN ... IF NOT EXISTS`，也没有 `COMMENT ON`。照�
 ⚠️ 第二档必须在第一档合完之后开工——它多处 `CONFLICT` 只因第一档未落（§9.3）。
 §5 六簇（第三档/第四档）**未立项，等确认**。
 
-### 3.1 `e93e6368f` 调度快照投影裁掉透传开关（v0.2.0）—— 本轮唯一一条完整追通的活缺陷
+### 3.1 `e93e6368f` 调度快照投影裁掉透传开关（v0.2.0）—— 本轮唯一一条完整追通的活缺陷 —— **已合** `b04caf281`
 
 **上游**：2 文件 / +49（`scheduler_cache.go` +7、`scheduler_cache_unit_test.go` +42）。
 
@@ -184,7 +184,7 @@ SQLite 不支持 `ADD COLUMN ... IF NOT EXISTS`，也没有 `COMMENT ON`。照�
 **验收**：上游用例把投影 JSON round-trip 一遍（真实 `sched:meta` 写读路径）再断言模型门放行
 非白名单模型。这条必须照抄，否则改了列表却没覆盖序列化那一跳。
 
-### 3.2 `200b1406d` Anthropic `fallbacks` 未带 beta 时不剥离（v0.2.0）
+### 3.2 `200b1406d` Anthropic `fallbacks` 未带 beta 时不剥离（v0.2.0）—— **已合** `e2d524d20`
 
 **上游**：4 文件 / +404-14，**全 CLEAN**。`pkg/claude/constants.go` +11（beta 常量）、
 `service/gateway_request.go` +77-14（sanitize 主体）、`service/bedrock_request.go` +35、
@@ -197,7 +197,7 @@ SQLite 不支持 `ADD COLUMN ... IF NOT EXISTS`，也没有 `COMMENT ON`。照�
 **为什么是 P0**：这是硬 400，对以 Claude 为主用法的部署（本 fork 的主场景）一发就废。且
 4 文件全干净，是本轮性价比最高的一条。
 
-### 3.3 `1dc0a0900` ctx_pool WS ingress 漏掉容量降载改写（v0.1.185）
+### 3.3 `1dc0a0900` ctx_pool WS ingress 漏掉容量降载改写（v0.1.185）—— **已合** `8ada0bc7c`
 
 **上游**：2 文件 / +202-1，全 CLEAN。
 
@@ -216,7 +216,7 @@ http_bridge（`openai_ws_http_bridge.go`）两条路径被调用，ingress 直�
 `markOpenAIWSClientVisibleFailure` 与 `handleOpenAIWSTerminalTransientFailure` 仍要按**未改写的
 原始 payload** 判定账号状态。这正是那个 helper 注释里写明的前提，也是 http_bridge 的既有写法。
 
-### 3.4 `6d5f02784` 不支持无 reader ping 的空闲 WS 连接不被回收（v0.1.185）
+### 3.4 `6d5f02784` 不支持无 reader ping 的空闲 WS 连接不被回收（v0.1.185）—— **已合** `b9e5e6361`
 
 **上游**：2 文件 / +42-2，全 CLEAN。基座都在：`supportsIdlePingWithoutReader`
 （`internal/service/openai_ws_pool.go:466`）、`idleDuration`（`:505`）。
@@ -229,20 +229,20 @@ http_bridge（`openai_ws_http_bridge.go`）两条路径被调用，ingress 直�
 **patch site**：常量块 + `cleanupAccountLocked` 里 `maxAge` 判定之前插一段。注意上游同时对齐了
 常量块的缩进，别把那部分当成语义改动。
 
-### 3.5 `ba345f105` Codex 目录不跳过持久禁用的账号（v0.1.185）
+### 3.5 `ba345f105` Codex 目录不跳过持久禁用的账号（v0.1.185）—— **已合** `d3b90855d`
 
 **上游**：5 文件 / +146-30，**全 CLEAN**。§5.1 Codex routed catalog 整簇上一轮已合，基座齐。
 
 **缺陷**：拉 Codex 模型目录时仍会挑到被持久禁用的账号，目录请求失败或拿到过期快照。
 
-### 3.6 `57c76584a` Codex fast 模型不透出 priority service tier（v0.1.185）
+### 3.6 `57c76584a` Codex fast 模型不透出 priority service tier（v0.1.185）—— **已合** `623c555dd`
 
 **上游**：2 文件 / +81-4，全 CLEAN。同 §3.5，基座在 `openai_codex_models_service.go`。
 
 **注意归类**：这条只改**目录里怎么描述模型**，不引入 §5.1 那套 Fast mode `service_tier`
 发送逻辑，所以和 0.1.180 §7.2 未合无关，可以单独吃。
 
-### 3.7 `9eabd2a5b` + `e7c029875` 账号统计成本维护第二份定价实现（v0.1.185）
+### 3.7 `9eabd2a5b` + `e7c029875` 账号统计成本维护第二份定价实现（v0.1.185）—— **已合** `e9a1c427a`
 
 **上游**：`9eabd2a5b` 1 文件 / +8-20（CONFLICT），`e7c029875` 1 测试文件 / +3-2（CLEAN）。
 
@@ -527,14 +527,14 @@ handler 层唯一提到 `model_rate_limited` 的地方是用例里一句
 
 冲突面高度依赖顺序（§2.2），按下面走能把手改量压到最小：
 
-**第一批（P0 小项，全部低风险）**
+**第一批（P0 小项，全部低风险）** — 已合于 `sync/upstream-20260902-p1`（叠在第二档之后，起点 `6527a33de`）
 
-1. §3.1 `e93e6368f` 调度快照透传开关 —— 2 行 + 1 个 round-trip 用例。**最高优先，它是活缺陷**
-2. §3.2 `200b1406d` Anthropic `fallbacks` 剥离 —— 4 文件全干净
-3. §3.3 `1dc0a0900` ctx_pool ingress 容量降载改写
-4. §3.4 `6d5f02784` 空闲 WS 连接回收
-5. §3.5 `ba345f105` + §3.6 `57c76584a` Codex 目录两条
-6. §3.7 `9eabd2a5b` + `e7c029875` 账号统计成本（净 -12 行）
+- [x] 1. §3.1 `e93e6368f` 调度快照透传开关 —— 2 行 + 1 个 round-trip 用例。**最高优先，它是活缺陷** `b04caf281`
+- [x] 2. §3.2 `200b1406d` Anthropic `fallbacks` 剥离 —— 4 文件全干净 `e2d524d20`
+- [x] 3. §3.3 `1dc0a0900` ctx_pool ingress 容量降载改写 `8ada0bc7c`
+- [x] 4. §3.4 `6d5f02784` 空闲 WS 连接回收 `b9e5e6361`
+- [x] 5. §3.5 `ba345f105` + §3.6 `57c76584a` Codex 目录两条 `d3b90855d` / `623c555dd`
+- [x] 6. §3.7 `9eabd2a5b` + `e7c029875` 账号统计成本（净 -12 行）`e9a1c427a`
 
 **第二批（P0 余项）** — 已合于 `sync/upstream-20260902-p1`（第一档未合，从 `3da1c2dd0` 开工）
 
