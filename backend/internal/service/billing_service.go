@@ -120,7 +120,13 @@ const (
 )
 
 func normalizeBillingServiceTier(serviceTier string) string {
-	return strings.ToLower(strings.TrimSpace(serviceTier))
+	normalized := strings.ToLower(strings.TrimSpace(serviceTier))
+	// Billing alias only: clients send "fast" for the same paid priority
+	// tier. This is not send-side Fast mode (0.1.180 §7.2).
+	if normalized == "fast" {
+		return "priority"
+	}
+	return normalized
 }
 
 func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bool {

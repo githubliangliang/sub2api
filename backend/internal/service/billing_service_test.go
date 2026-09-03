@@ -1607,9 +1607,25 @@ func TestCalculateCost_LargeTokenCount(t *testing.T) {
 func TestServiceTierCostMultiplier(t *testing.T) {
 	require.InDelta(t, 2.0, serviceTierCostMultiplier("priority"), 1e-12)
 	require.InDelta(t, 2.0, serviceTierCostMultiplier(" Priority "), 1e-12)
+	require.InDelta(t, 2.0, serviceTierCostMultiplier("fast"), 1e-12)
 	require.InDelta(t, 0.5, serviceTierCostMultiplier("flex"), 1e-12)
 	require.InDelta(t, 1.0, serviceTierCostMultiplier(""), 1e-12)
 	require.InDelta(t, 1.0, serviceTierCostMultiplier("default"), 1e-12)
+}
+
+func TestCalculateCostWithServiceTier_FastAliasesPriority(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50, CacheReadTokens: 20}
+
+	standard, err := svc.CalculateCost("gpt-5.1-codex", tokens, 1.0)
+	require.NoError(t, err)
+	priority, err := svc.CalculateCostWithServiceTier("gpt-5.1-codex", tokens, 1.0, "priority")
+	require.NoError(t, err)
+	fast, err := svc.CalculateCostWithServiceTier("gpt-5.1-codex", tokens, 1.0, "fast")
+	require.NoError(t, err)
+
+	require.InDelta(t, priority.TotalCost, fast.TotalCost, 1e-10)
+	require.Greater(t, fast.TotalCost, standard.TotalCost)
 }
 
 func TestCalculateCostWithServiceTier_OpenAIPriorityUsesPriorityPricing(t *testing.T) {
@@ -2012,10 +2028,10 @@ func TestGetFallbackPricing_FableCatalogMissVsHit(t *testing.T) {
 
 	catalog := NewPricingService(&config.Config{}, nil)
 	catalog.pricingData["claude-fable-5"] = &LiteLLMModelPricing{
-		InputCostPerToken:   99e-6,
-		OutputCostPerToken:  88e-6,
-		LiteLLMProvider:     "anthropic",
-		Mode:                "chat",
+		InputCostPerToken:  99e-6,
+		OutputCostPerToken: 88e-6,
+		LiteLLMProvider:    "anthropic",
+		Mode:               "chat",
 	}
 	svc.pricingService = catalog
 	hit, err := svc.GetModelPricing("claude-fable-5")

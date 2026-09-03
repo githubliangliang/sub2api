@@ -99,7 +99,7 @@
 | 项 | 证据 |
 |---|---|
 | **标准档结果与改动前一致** | `TestTryModelFilePricing_Success`：100×0.001 + 50×0.002 = **0.2**（手算口径） |
-| `service_tier = "fast"` | `TestTryModelFilePricing_FastUsesSharedPipeline`：结果 == `CalculateCostWithServiceTier(..., "fast")`。本 fork 该函数尚未把 fast 归一成 priority，故目前与标准档同值；统计不再有独立手算钉死标准价 |
+| `service_tier = "fast"` | `TestTryModelFilePricing_FastUsesSharedPipeline`：结果 == `CalculateCostWithServiceTier(..., "fast")`，**不等于** no-tier 0.265，**等于** priority **0.53**。`normalizeBillingServiceTier("fast")` 是计费别名→`priority`（不是发送侧 Fast mode）。`TestCalculateCostWithServiceTier_FastAliasesPriority` 锁同一别名 |
 | `priority` / `flex` 行为不变 | `TestTryModelFilePricing_AppliesServiceTierPricing`：standard 0.265 / priority 0.53 / flex 0.1325 |
 | 长上下文行为不变 | `TestTryModelFilePricing_AppliesLongContextPricing` 0.233；`_CombinesPriorityAndLongContextPricing` 0.534 |
 | 图片输出按 output 子集 | `TestTryModelFilePricing_WithImageOutput` 期望 **0.28**（不再 0.3） |
@@ -113,7 +113,7 @@
 | 面 | 复核项 | 结果 |
 |---|---|---|
 | 调度 | 第 1 项会放大候选集：此前被误剔的透传账号开始参与选号。确认放大后的候选集里没有本该被其它规则挡住的账号 | 投影仍走 `filterSchedulerExtra` 白名单；非透传仍按 `model_mapping`。其它调度字段未改。透传账号若本不该接流量，用 `schedulable`，不要靠这个 bug |
-| 计费 | 第 6 项只在此前被手算分支绕过的档位上产生差异，方向是修正为更高的真实成本 | 标准档 0.2 不变。图片输出从重复计费改为子集（0.3→0.28，统计成本下降）。fast 目前与标准同值（管线未映射） |
+| 计费 | 第 6 项只在此前被手算分支绕过的档位上产生差异，方向是修正为更高的真实成本 | 标准档 0.2 不变。图片输出从重复计费改为子集（0.3→0.28，统计成本下降）。`fast` 按 priority 计（别名，高于标准档） |
 | 客户端可见行为 | 第 3 项改的是发给客户端的 payload；第 2 项改的是发给上游的请求体。两者各自的「不该改的那一侧」有反例覆盖 | 容量类改写 vs 非容量原样；fallbacks 剥离 vs 带 beta 保留；无 fallbacks 字节不变 |
 | 数据库 | 无迁移、无 schema 改动 | **确认** |
 | 配置 | 无新增配置项、无默认值变化 | **确认**。空闲回收阈值硬编码 90s |

@@ -525,6 +525,7 @@ func TestTryModelFilePricing_AppliesServiceTierPricing(t *testing.T) {
 	}{
 		{name: "standard", serviceTier: "", want: 0.265},
 		{name: "priority", serviceTier: "priority", want: 0.53},
+		{name: "fast", serviceTier: "fast", want: 0.53},
 		{name: "flex", serviceTier: "flex", want: 0.1325},
 	}
 
@@ -563,12 +564,13 @@ func TestTryModelFilePricing_FastUsesSharedPipeline(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, unified.TotalCost, *got, 1e-12)
 
-	// 本 fork 的 CalculateCostWithServiceTier 尚未把 fast 归一成 priority
-	//（0.1.180 §7.2 发送侧 Fast 未合）。优先级 3 必须跟那条管线走，不能再
-	// 用手算把 fast 钉在标准价上；管线以后改映射时统计会一起变。
 	standard := tryModelFilePricing(bs, "gpt-5.6-sol", tokens, "")
 	require.NotNil(t, standard)
-	require.InDelta(t, *standard, *got, 1e-12)
+	require.NotEqual(t, *standard, *got, "fast must not bill at the no-tier standard total")
+	priority := tryModelFilePricing(bs, "gpt-5.6-sol", tokens, "priority")
+	require.NotNil(t, priority)
+	require.InDelta(t, *priority, *got, 1e-12)
+	require.InDelta(t, 0.53, *got, 1e-12)
 }
 
 func TestTryModelFilePricing_CombinesPriorityAndLongContextPricing(t *testing.T) {
