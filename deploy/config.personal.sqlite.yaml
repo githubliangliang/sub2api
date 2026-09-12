@@ -46,14 +46,15 @@ redis:
   min_idle_conns: 0
 
 # 运维：API 与错误/系统日志可用；聚合/采集缓存仍关以省资源
-# 定时清理默认开：系统日志与错误日志共用 error_log_retention_days
+# 定时清理默认开：系统日志与错误日志分别设置保留期
 ops:
   enabled: true
   use_preaggregated_tables: false
   cleanup:
     enabled: true
     schedule: "0 3 * * *"              # 每天 03:00（时区见下方 timezone）
-    error_log_retention_days: 7        # 错误日志 + 系统日志保留天数；0=每次清空
+    error_log_retention_days: 7        # 错误日志保留天数；0=每次清空
+    system_log_retention_days: 7       # 系统日志保留天数；必须为正数
     minute_metrics_retention_days: 3
     hourly_metrics_retention_days: 14
   aggregation:
@@ -95,7 +96,9 @@ log:
 # 价格目录覆盖补丁（可选，默认关闭）。启用后按字段浅合并覆盖官方目录，
 # 优先级高于 catalog 与 fallback_file。例：关掉某模型的长上下文阶梯只需
 # 写 {"gpt-5.5": {"long_context_input_token_threshold": 0}}，不必改出厂快照。
-# 缺失/非法 JSON 只跳过合并，不影响目录加载。改完需重启或等下次目录下载。
+# 启动时缺失/非法 JSON 只跳过合并，不影响目录加载。运行期间按内容变化热重载；
+# 非法文件保留上次有效价格，删除文件则移除覆盖层。检查间隔由
+# pricing.hash_check_interval_minutes 控制，不需要重启或等待目录下载。
 # pricing:
 #   override_file: "/opt/sub2api/data/model_pricing_overrides.json"
 

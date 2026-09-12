@@ -3,12 +3,14 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"sort"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -34,7 +36,22 @@ func newProxyRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *proxyRep
 }
 
 func (r *proxyRepository) Create(ctx context.Context, proxyIn *service.Proxy) error {
-	builder := r.client.Proxy.Create().
+	client := r.client
+	var tx *dbent.Tx
+	if contextTx := dbent.TxFromContext(ctx); contextTx != nil {
+		client = contextTx.Client()
+	} else if proxyIn.BackupProxyID != nil {
+		var err error
+		tx, err = r.client.Tx(ctx)
+		if err != nil && err != dbent.ErrTxStarted {
+			return err
+		}
+		if tx != nil {
+			defer func() { _ = tx.Rollback() }()
+			client = tx.Client()
+		}
+	}
+	builder := client.Proxy.Create().
 		SetName(proxyIn.Name).
 		SetProtocol(proxyIn.Protocol).
 		SetHost(proxyIn.Host).
@@ -51,15 +68,23 @@ func (r *proxyRepository) Create(ctx context.Context, proxyIn *service.Proxy) er
 	if proxyIn.ExpiresAt != nil {
 		builder.SetExpiresAt(*proxyIn.ExpiresAt)
 	}
-	if proxyIn.BackupProxyID != nil {
-		builder.SetBackupProxyID(*proxyIn.BackupProxyID)
-	}
-
 	created, err := builder.Save(ctx)
-	if err == nil {
-		applyProxyEntityToService(proxyIn, created)
+	if err != nil {
+		return err
 	}
-	return err
+	if proxyIn.BackupProxyID != nil {
+		if err := setDirectedProxyBackup(ctx, client, created.ID, proxyIn.FallbackMode, proxyIn.BackupProxyID); err != nil {
+			return err
+		}
+		created.BackupProxyID = proxyIn.BackupProxyID
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	applyProxyEntityToService(proxyIn, created)
+	return nil
 }
 
 func (r *proxyRepository) GetByID(ctx context.Context, id int64) (*service.Proxy, error) {
@@ -171,12 +196,6 @@ func updateProxyAndInvalidateProbeSnapshots(ctx context.Context, client *dbent.C
 	} else {
 		builder.ClearExpiresAt()
 	}
-	if proxyIn.BackupProxyID != nil {
-		builder.SetBackupProxyID(*proxyIn.BackupProxyID)
-	} else {
-		builder.ClearBackupProxyID()
-	}
-
 	updated, err := builder.Save(ctx)
 	if dbent.IsNotFound(err) {
 		return nil, service.ErrProxyNotFound
@@ -184,6 +203,10 @@ func updateProxyAndInvalidateProbeSnapshots(ctx context.Context, client *dbent.C
 	if err != nil {
 		return nil, err
 	}
+	if err := setDirectedProxyBackup(ctx, client, proxyIn.ID, proxyIn.FallbackMode, proxyIn.BackupProxyID); err != nil {
+		return nil, err
+	}
+	updated.BackupProxyID = proxyIn.BackupProxyID
 	if currentIdentity == proxyProbeIdentityFromService(proxyIn) {
 		return updated, nil
 	}
@@ -195,6 +218,37 @@ func updateProxyAndInvalidateProbeSnapshots(ctx context.Context, client *dbent.C
 		return nil, err
 	}
 	return updated, nil
+}
+
+// The SQLite schema has a directed, non-unique backup_proxy_id column. Avoid
+// Ent's legacy symmetric O2O mutation, which rewrites incoming references.
+// The caller's transaction keeps this scalar update and the other fields atomic.
+func setDirectedProxyBackup(ctx context.Context, client *dbent.Client, proxyID int64, mode string, backupID *int64) error {
+	seen := map[int64]struct{}{proxyID: {}}
+	for current := backupID; current != nil; {
+		if _, exists := seen[*current]; exists {
+			return infraerrors.BadRequest("PROXY_BACKUP_CYCLE", "backup proxy chain cannot contain a cycle")
+		}
+		seen[*current] = struct{}{}
+		var next *int64
+		var nextMode string
+		err := scanSingleRow(ctx, client, `SELECT backup_proxy_id, fallback_mode FROM proxies WHERE id=$1 AND deleted_at IS NULL`, []any{*current}, &next, &nextMode)
+		if errors.Is(err, sql.ErrNoRows) {
+			return service.ErrProxyNotFound
+		}
+		if err != nil {
+			return err
+		}
+		// Legacy Ent writes can leave reverse IDs on a proxy with mode=none.
+		// Those references never participate in forwarding; retain them without
+		// treating them as cycles, but validate again when their mode is enabled.
+		if mode != service.FallbackModeProxy || nextMode != service.FallbackModeProxy {
+			break
+		}
+		current = next
+	}
+	_, err := client.ExecContext(ctx, `UPDATE proxies SET backup_proxy_id=$1 WHERE id=$2`, backupID, proxyID)
+	return err
 }
 
 func lockProxyProbeIdentity(ctx context.Context, client *dbent.Client, proxyID int64) (proxyProbeIdentity, error) {
@@ -721,7 +775,7 @@ func (r *proxyRepository) sweepOneExpiredProxy(ctx context.Context, proxyID int6
 // sweepOneExpiredProxyOnExec 在给定的 sqlExecutor 上执行：标记 expired + 改投账号。
 func (r *proxyRepository) sweepOneExpiredProxyOnExec(ctx context.Context, exec sqlExecutor, proxyID int64, target *int64, change bool) ([]int64, error) {
 	if _, err := exec.ExecContext(ctx,
-		`UPDATE proxies SET status=$1, updated_at=NOW() WHERE id=$2 AND deleted_at IS NULL`,
+		`UPDATE proxies SET status=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2 AND deleted_at IS NULL`,
 		service.StatusExpired, proxyID); err != nil {
 		return nil, err
 	}
@@ -741,25 +795,25 @@ func (r *proxyRepository) sweepOneExpiredProxyOnExec(ctx context.Context, exec s
 	)
 	if target == nil {
 		rows, err = exec.QueryContext(ctx, `
-			UPDATE accounts SET proxy_id=NULL, proxy_fallback_origin_id=$1,
+			UPDATE accounts SET proxy_id=NULL, proxy_fallback_origin_id=COALESCE(proxy_fallback_origin_id,$1),
 				extra=CASE
-					WHEN type='apikey' AND extra ? 'upstream_billing_probe'
-					THEN extra - 'upstream_billing_probe'
+					WHEN type='apikey' AND json_type(extra, '$.upstream_billing_probe') IS NOT NULL
+					THEN json_remove(extra, '$.upstream_billing_probe')
 					ELSE extra
 				END,
-				updated_at=NOW()
-			WHERE proxy_id=$1 AND proxy_fallback_origin_id IS NULL AND deleted_at IS NULL
+				updated_at=CURRENT_TIMESTAMP
+			WHERE proxy_id=$1 AND deleted_at IS NULL
 			RETURNING id`, proxyID)
 	} else {
 		rows, err = exec.QueryContext(ctx, `
-			UPDATE accounts SET proxy_id=$2, proxy_fallback_origin_id=$1,
+			UPDATE accounts SET proxy_id=$2, proxy_fallback_origin_id=COALESCE(proxy_fallback_origin_id,$1),
 				extra=CASE
-					WHEN type='apikey' AND extra ? 'upstream_billing_probe'
-					THEN extra - 'upstream_billing_probe'
+					WHEN type='apikey' AND json_type(extra, '$.upstream_billing_probe') IS NOT NULL
+					THEN json_remove(extra, '$.upstream_billing_probe')
 					ELSE extra
 				END,
-				updated_at=NOW()
-			WHERE proxy_id=$1 AND proxy_fallback_origin_id IS NULL AND deleted_at IS NULL
+				updated_at=CURRENT_TIMESTAMP
+			WHERE proxy_id=$1 AND deleted_at IS NULL
 			RETURNING id`, proxyID, *target)
 	}
 	if err != nil {

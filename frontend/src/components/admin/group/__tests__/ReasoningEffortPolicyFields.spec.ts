@@ -13,6 +13,34 @@ vi.mock("vue-i18n", async () => {
 });
 
 describe("ReasoningEffortPolicyFields", () => {
+  it("selects none as a mapping source while keeping targets and ceiling unchanged", async () => {
+    const mapping = createReasoningEffortMappingRow({ from: "low", to: "high" });
+    const wrapper = mount(ReasoningEffortPolicyFields, {
+      attachTo: document.body,
+      props: { idPrefix: "none-source", platform: "openai", maxEffort: "", overLimit: "downgrade", mappings: [mapping] },
+      global: { stubs: { Icon: true } },
+    });
+    try {
+      await wrapper.get(`#none-source-${mapping.pairs[0].id}-from`).trigger("click");
+      const choices = [...document.querySelectorAll('[role="option"]')];
+      const none = choices.find((option) => option.textContent?.trim() === "none");
+      expect(none).toBeDefined();
+      (none as HTMLElement).click();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.emitted("update:mappings")?.at(-1)?.[0]).toMatchObject([{ pairs: [{ from: "none", to: "high" }] }]);
+      await vi.waitFor(() => expect(document.querySelector('[role="listbox"]')).toBeNull());
+
+      for (const id of [`none-source-${mapping.pairs[0].id}-to`, "none-source-max-effort"]) {
+        await wrapper.get(`#${id}`).trigger("click");
+        expect([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent?.trim())).not.toContain("none");
+        await wrapper.get(`#${id}`).trigger("click");
+        await vi.waitFor(() => expect(document.querySelector('[role="listbox"]')).toBeNull());
+      }
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it("renders model scope fields for each mapping", () => {
     const mapping = createReasoningEffortMappingRow({
       from: "max",

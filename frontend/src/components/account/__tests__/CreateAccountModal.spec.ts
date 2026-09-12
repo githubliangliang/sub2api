@@ -7,11 +7,13 @@ const {
   probeUpstreamBillingMock,
   importCodexSessionMock,
   createOpenAICodexPATMock,
+  syncUpstreamModelsMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
   importCodexSessionMock: vi.fn(),
   createOpenAICodexPATMock: vi.fn(),
+  syncUpstreamModelsMock: vi.fn(),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -34,6 +36,7 @@ vi.mock('@/api/admin', () => ({
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
       importCodexSession: importCodexSessionMock,
       createOpenAICodexPAT: createOpenAICodexPATMock,
+      syncUpstreamModels: syncUpstreamModelsMock,
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -158,6 +161,26 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
       warnings: [],
     })
     createOpenAICodexPATMock.mockReset().mockResolvedValue({})
+    syncUpstreamModelsMock.mockReset().mockResolvedValue({ models: [], warnings: [] })
+  })
+
+  it('persists previewed model capabilities before finishing account creation', async () => {
+    let finishSync!: (value: { models: string[] }) => void
+    syncUpstreamModelsMock.mockReturnValue(new Promise((resolve) => { finishSync = resolve }))
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Astra account')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('test-key')
+    await selectButtonByText(wrapper, 'admin.accounts.modelWhitelist')
+    wrapper.getComponent({ name: 'ModelWhitelistSelector' }).vm.$emit('upstream-synced')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(syncUpstreamModelsMock).toHaveBeenCalledWith(42)
+    expect(wrapper.emitted('created')).toBeUndefined()
+    finishSync({ models: ['gpt-6-astra'] })
+    await flushPromises()
+    expect(wrapper.emitted('created')).toHaveLength(1)
   })
 
   it('sends false explicitly for normal OpenAI account creation by default', async () => {

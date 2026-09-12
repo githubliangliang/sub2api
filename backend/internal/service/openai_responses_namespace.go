@@ -70,30 +70,69 @@ func shouldStripOpenAIResponsesInputNamespaces(account *Account, transport OpenA
 // shouldKeepOpenAIResponsesToolCallNamespaces 判定清理 input 残留 namespace 时是否
 // 保留工具调用项上的 namespace。
 //
-// 上游对这个字段有两套互斥要求，判定按「出口 + 端点」而非工具声明内容：
+// 上游对这个字段有两套互斥要求，需要同时考虑端点与请求的工具/续聊上下文：
 //   - /backend-api/codex/responses 会按 namespace 解析历史调用，缺字段直接 400
 //     `Missing namespace for function_call '...'. Round-trip the model's
 //     function_call item with its namespace field included.`（issue #4761 回帖），
 //     故 OAuth 非 compact 请求必须保留。
 //   - compact 端点的 schema 不含该字段，携带即 400 `Unknown parameter:
 //     input[N].namespace`（issue #4761 正文），故 compact 一律清理。
-//   - API Key 出口是标准 Responses API（api.openai.com 或自定义 base_url），同样
-//     不认识该字段，维持全量清理；否则只能退化成
-//     openai_responses_rejected_field_retry 的逐项删除，6 次上限根本盖不住长历史。
+//   - API Key 也可能指向支持 namespace 的 Responses 中转。请求声明命名空间工具
+//     或继续已有会话时，必须保留历史调用的归属，不能只保留 tools 却删除 input 的
+//     namespace。没有这些上下文的旧兼容请求仍提前清理，避免逐项拒绝重试。
 //   - 摊平模式下调用项已被改写成平名，残留 namespace 指向的声明已不存在，一律清理。
 func shouldKeepOpenAIResponsesToolCallNamespaces(
 	account *Account,
 	transport OpenAIUpstreamTransport,
 	passthroughEnabled bool,
 	compactPath bool,
+	body []byte,
 ) bool {
-	if account == nil || !account.IsOpenAIOAuth() {
+	if account == nil || compactPath {
 		return false
 	}
-	if compactPath {
+	if account.IsOpenAIOAuth() {
+		return !shouldFlattenOpenAIResponsesNamespaces(account, transport, passthroughEnabled, compactPath)
+	}
+	return account.IsOpenAIApiKey() && openAIResponsesHasNamespaceContext(body)
+}
+
+func openAIResponsesHasNamespaceContext(body []byte) bool {
+	if !bytes.Contains(body, []byte(`"namespace"`)) {
 		return false
 	}
-	return !shouldFlattenOpenAIResponsesNamespaces(account, transport, passthroughEnabled, compactPath)
+	if previous := gjson.GetBytes(body, "previous_response_id"); previous.Type == gjson.String && strings.TrimSpace(previous.String()) != "" {
+		return true
+	}
+	conversation := gjson.GetBytes(body, "conversation")
+	if (conversation.Type == gjson.String && strings.TrimSpace(conversation.String()) != "") ||
+		(conversation.IsObject() && strings.TrimSpace(conversation.Get("id").String()) != "") {
+		return true
+	}
+	hasNamespaceTools := func(tools gjson.Result) bool {
+		found := false
+		if tools.IsArray() {
+			tools.ForEach(func(_, tool gjson.Result) bool {
+				found = tool.Get("type").String() == "namespace" && strings.TrimSpace(tool.Get("name").String()) != ""
+				return !found
+			})
+		}
+		return found
+	}
+	if hasNamespaceTools(gjson.GetBytes(body, "tools")) {
+		return true
+	}
+	found := false
+	if input := gjson.GetBytes(body, "input"); input.IsArray() {
+		input.ForEach(func(_, item gjson.Result) bool {
+			switch item.Get("type").String() {
+			case "additional_tools", "tool_search_output":
+				found = hasNamespaceTools(item.Get("tools"))
+			}
+			return !found
+		})
+	}
+	return found
 }
 
 // openAIResponsesToolCallItemTypes 是携带 namespace 的调用项类型集合。与

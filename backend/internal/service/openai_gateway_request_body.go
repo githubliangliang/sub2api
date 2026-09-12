@@ -55,6 +55,9 @@ func shouldPreserveOpenAIResponsesNoneReasoningEffort(account *Account) bool {
 	if account == nil {
 		return false
 	}
+	if account.IsOpenAIPassthroughEnabled() {
+		return true
+	}
 	if account.IsOpenAIOAuthLike() {
 		return true
 	}
@@ -1552,7 +1555,7 @@ func normalizeOpenAIReasoningEffort(raw string) string {
 }
 
 func normalizeOpenAIReasoningEffortForModel(raw, model string) string {
-	if strings.EqualFold(strings.TrimSpace(raw), "max") && isOpenAIGPT56Model(model) {
+	if strings.EqualFold(strings.TrimSpace(raw), "max") && (isOpenAIGPT56Model(model) || isOpenAIGPT6AstraModel(model)) {
 		return "max"
 	}
 	return normalizeOpenAIReasoningEffort(raw)

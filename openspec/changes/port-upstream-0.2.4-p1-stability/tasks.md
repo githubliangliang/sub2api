@@ -1,0 +1,22 @@
+# 实施任务
+
+- [x] 确认第一档状态，记录实际起点与用户 metadata 改动；重新检查受影响文件，不改冻结来源。实际起点 cf6b42752f88ee4eefe51e1c1c59ca1608ac20f5，第一档并行实施，协调者按第一档、第二档顺序集成。
+- [x] S01：核查所有回放正文写入者，移植不可变共享与 rejected encryption lineage，补分配/隔离/TTL/race 回归。
+- [x] S02：移植两个取消 PR，验证先 cancel 后 close、WS 客户端归因与已产生用量保留。
+- [x] S03：复核本地 snapshot/hydrate 顺序，验证持久清除、新 generation、写库失败、模型级冷却边界。
+- [x] S04：实现失败会话释放，更新 interface 与全部 mock；miniredis 验证成功和失败路径。
+- [x] S05：移植 discovery/done/bootstrap/OpenCode session，回归旧 namespace 与工具参数约束。
+- [x] S06：按 v0.2.4 终态整合 Astra，覆盖 HTTP/WS、OAuth/API Key、映射别名、能力同步与定价。
+- [x] S06：排除 pinned-account/service_tier/allowlist 与无关兑换测试；本地缺失的中间态 normalization 不引入，记录必要适配并以实际入口验收。
+- [x] S07：价格内容哈希重载与 none 来源映射；配置定时器、损坏/删除/恢复、并发快照和真实 Select 操作回归通过。
+- [x] S08：代理 omitted/null/value、backup 方向/共享/有效环、重复 fallback、日期/列表校验及旧 Ent 反向引用升级回归。
+- [x] S09：独立 system-log retention 与 access opt-in；配置 helper、旧配置、实际 SQLite cron、sink 退避和 audit/warn/error 回归通过。
+- [x] S10：compact DTO、完整详情后编辑、批量选择、停用分组、菜单定位、OAuth plan、注册入口和分页密钥过滤已实现；定向后端与前端回归通过，最终集成门禁另记。
+- [x] S11：CLI env + 内置 floor + 正常/自愈/新建指纹；本分支 identity/billing 回归通过，第一档联合门禁由协调者执行。
+- [x] S12：go-redis 9.22.0 与必要间接依赖；miniredis 索引范围/批量、单连接池取消恢复、repository unit/race 和模块校验通过。
+- [x] 对新调用、测试 fixture、构建标签逐个核查；缺函数先量必要基座，不自动引入整平台。
+- [x] 运行后端 build、unit、SQLite 方言审计，相关状态与并发包的 race 测试。
+- [x] 运行前端 typecheck、lint:check 和受影响组件 vitest；依赖若有变化一并更新 pnpm lock。
+- [x] 核对迁移最大号仍为 226，保留 SQLite/miniredis/simple-mode，VERSION 不改。
+- [x] 填写 verification.md，逐簇记录来源剔除项、落地 SHA 与未完成行为。
+- [x] 更新 PORTING / README 的落地状态，不将第三、四档记为已合。

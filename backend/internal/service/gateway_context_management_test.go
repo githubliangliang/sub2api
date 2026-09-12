@@ -113,6 +113,65 @@ func TestSanitizeAnthropicBodyForBetaTokens_EmptyBody(t *testing.T) {
 	require.Empty(t, out)
 }
 
+func TestSanitizeAnthropicBodyForBetaTokens_ThinkingBlockBindingKeptWhenBetaPresent(t *testing.T) {
+	body := []byte(`{"model":"claude-fable-5-1","thinking":{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}},"messages":[]}`)
+	out, changed := sanitizeAnthropicBodyForBetaTokens(body, "thinking-binding-controls-2026-08-01")
+	require.False(t, changed)
+	require.Equal(t, "drop_block",
+		gjson.GetBytes(out, "thinking.block_binding.prefix_mismatch_behavior").String())
+}
+
+func TestSanitizeAnthropicBodyForBetaTokens_ThinkingBlockBindingStrippedWhenBetaMissing(t *testing.T) {
+	body := []byte(`{"model":"claude-fable-5-1","thinking":{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}},"messages":[]}`)
+	out, changed := sanitizeAnthropicBodyForBetaTokens(body, claude.BetaContextManagement)
+	require.True(t, changed)
+	require.False(t, gjson.GetBytes(out, "thinking.block_binding").Exists())
+	require.Equal(t, "adaptive", gjson.GetBytes(out, "thinking.type").String())
+	require.Equal(t, "summarized", gjson.GetBytes(out, "thinking.display").String())
+}
+
+func TestBuildAnthropicRequest_ThinkingBindingMatchesFinalBeta(t *testing.T) {
+	for _, endpoint := range []string{"messages", "count_tokens"} {
+		for _, tc := range []struct {
+			name        string
+			beta        string
+			mimic       bool
+			wantBinding bool
+		}{
+			{"without_beta", "", false, false},
+			{"client_beta", "thinking-binding-controls-2026-08-01", false, true},
+			{"mimic_beta", "", true, true},
+		} {
+			t.Run(endpoint+"/"+tc.name, func(t *testing.T) {
+				svc := newTestGatewayServiceForBeta(false)
+				account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}
+				tokenType := "apikey"
+				if tc.mimic {
+					account.Type, tokenType = AccountTypeOAuth, "oauth"
+				}
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+				c.Request.Header.Set("anthropic-beta", tc.beta)
+				body := []byte(`{"model":"claude-fable-5-1","thinking":{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}},"messages":[]}`)
+				var req *http.Request
+				var err error
+				if endpoint == "messages" {
+					req, _, err = svc.buildUpstreamRequest(context.Background(), c, account, body, "test", tokenType, "claude-fable-5-1", false, tc.mimic)
+				} else {
+					req, _, err = svc.buildCountTokensRequest(context.Background(), c, account, body, "test", tokenType, "claude-fable-5-1", tc.mimic)
+				}
+				require.NoError(t, err)
+				defer req.Body.Close()
+				out, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				require.Equal(t, tc.wantBinding, gjson.GetBytes(out, "thinking.block_binding").Exists())
+				require.Equal(t, tc.wantBinding, anthropicBetaTokensContains(getHeaderRaw(req.Header, "anthropic-beta"), "thinking-binding-controls-2026-08-01"))
+				require.Equal(t, "adaptive", gjson.GetBytes(out, "thinking.type").String())
+			})
+		}
+	}
+}
+
 // ★ 关键回归断言：能力维度 sanitize 解决了 "真 CC + haiku" 路径的过度删除问题。
 // 真实 Claude Code CLI 2.1.87+ 客户端 header 含 context-management beta；
 // 即使 model 是 haiku，sanitize 也不应剥离功能字段。
@@ -144,6 +203,8 @@ func TestComputeFinalAnthropicBeta_OAuthMimic_NonHaiku_IncludesContextManagement
 		"OAuth mimic non-haiku 必须注入完整 CC mimicry beta，含 context-management-2025-06-27")
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaOAuth))
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaClaudeCode))
+	require.True(t, anthropicBetaTokensContains(final, "thinking-binding-controls-2026-08-01"),
+		"OAuth mimic 必须注入 thinking block binding 所需的 beta")
 }
 
 func TestComputeFinalAnthropicBeta_OAuthMimic_Haiku_IncludesFullClaudeCodeBetas(t *testing.T) {

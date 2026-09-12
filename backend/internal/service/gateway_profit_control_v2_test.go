@@ -396,7 +396,7 @@ func TestGatewayProfitControlSelectionCarriesGateToHandlerContext(t *testing.T) 
 	expensive := gatewayProfitTestAccount(161, PlatformAnthropic, 0.9, group.ID)
 
 	gateCtx := svc.withGatewayProfitControlGate(gatewayProfitTestContext(group), &group.ID)
-	selection, err := svc.newSelectionResult(gateCtx, &expensive, true, nil, nil)
+	selection, err := svc.newSelectionResult(gateCtx, "", &expensive, true, nil, nil)
 	require.NoError(t, err)
 	require.True(t, selection.ProfitGateActive(), "选号结果必须携带调度栈内生效的门")
 
@@ -411,7 +411,7 @@ func TestGatewayProfitControlSelectionCarriesGateToHandlerContext(t *testing.T) 
 	require.NotNil(t, latest)
 
 	// 无门选号不携带门，重放为无操作。
-	plain, err := svc.newSelectionResult(context.Background(), &expensive, true, nil, nil)
+	plain, err := svc.newSelectionResult(context.Background(), "", &expensive, true, nil, nil)
 	require.NoError(t, err)
 	require.False(t, plain.ProfitGateActive())
 	require.Equal(t, context.Background(), ContextWithSelectionProfitGate(context.Background(), plain))

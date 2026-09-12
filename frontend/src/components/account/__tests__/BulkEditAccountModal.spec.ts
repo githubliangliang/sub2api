@@ -93,6 +93,16 @@ describe('BulkEditAccountModal', () => {
     } as any)
   })
 
+  it('sends only the enabled field when compact mixed-platform rows provide IDs', async () => {
+    const wrapper = mountModal({ selectedPlatforms: ['openai', 'anthropic'], selectedTypes: ['apikey'] })
+    await wrapper.get('#bulk-edit-priority-enabled').setValue(true)
+    await wrapper.get('#bulk-edit-priority').setValue(3)
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], { priority: 3 })
+    wrapper.unmount()
+  })
+
   it('批量修改倍率时提示自动同步账号需要先关闭同步', async () => {
     const wrapper = mountModal()
 

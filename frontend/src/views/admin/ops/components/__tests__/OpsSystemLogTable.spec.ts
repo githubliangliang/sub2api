@@ -9,6 +9,8 @@ const mockListSystemLogs = vi.fn()
 const mockCleanupSystemLogs = vi.fn()
 const mockGetSystemLogSinkHealth = vi.fn()
 const mockGetRuntimeLogConfig = vi.fn()
+const mockUpdateRuntimeLogConfig = vi.fn()
+const mockResetRuntimeLogConfig = vi.fn()
 
 vi.mock('@/api/admin/ops', () => ({
   opsAPI: {
@@ -16,6 +18,8 @@ vi.mock('@/api/admin/ops', () => ({
     cleanupSystemLogs: (...args: any[]) => mockCleanupSystemLogs(...args),
     getSystemLogSinkHealth: (...args: any[]) => mockGetSystemLogSinkHealth(...args),
     getRuntimeLogConfig: (...args: any[]) => mockGetRuntimeLogConfig(...args),
+    updateRuntimeLogConfig: (...args: any[]) => mockUpdateRuntimeLogConfig(...args),
+    resetRuntimeLogConfig: (...args: any[]) => mockResetRuntimeLogConfig(...args),
   },
 }))
 
@@ -53,6 +57,7 @@ const PaginationStub = defineComponent({
 
 const runtimeConfig = {
   level: 'info',
+  persist_access_logs: false,
   enable_sampling: false,
   sampling_initial: 100,
   sampling_thereafter: 100,
@@ -124,6 +129,29 @@ describe('OpsSystemLogTable host support', () => {
     await flushPromises()
 
     expect(mockCleanupSystemLogs).toHaveBeenCalledWith(expect.objectContaining({ host: 'api-node-2' }))
+  })
+
+  it('defaults access persistence off and saves and resets an explicit opt-in', async () => {
+    mockUpdateRuntimeLogConfig.mockResolvedValue({ ...runtimeConfig, persist_access_logs: true })
+    mockResetRuntimeLogConfig.mockResolvedValue(runtimeConfig)
+    const wrapper = mount(OpsSystemLogTable, { global: { stubs: { Select: SelectStub, Pagination: PaginationStub } } })
+    try {
+      await flushPromises()
+      const label = wrapper.findAll('label').find((item) => item.text().includes('admin.ops.systemLogs.persistAccessLogs'))
+      expect(label).toBeDefined()
+      const checkbox = label!.get('input')
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+      await checkbox.setValue(true)
+      await wrapper.findAll('button').find((item) => item.text() === 'admin.ops.systemLogs.saveAndApply')!.trigger('click')
+      await flushPromises()
+      expect(mockUpdateRuntimeLogConfig).toHaveBeenLastCalledWith(expect.objectContaining({ persist_access_logs: true, retention_days: 30 }))
+      expect((checkbox.element as HTMLInputElement).checked).toBe(true)
+      await wrapper.findAll('button').find((item) => item.text() === 'admin.ops.systemLogs.resetDefaults')!.trigger('click')
+      await flushPromises()
+      expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it.each([

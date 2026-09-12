@@ -1,0 +1,386 @@
+Support S07/S09/S12 execution evidence; 2026-09-12
+Display whitespace normalized; section SHA256 values refer to original command output.
+Start: 64d0d876eb4bf4572ff756ab4c903eb9239830e6
+Code: 6620a7c0898efdf7932ca6bfe530810b052510c7
+Exact commands and interpretation: verification.md, S07/S09/S12 sections.
+S12 baseline passes; range-red uses deliberate Go overlay mutations, not a reproduced dependency panic.
+Build exit code: 0
+Repository full unit exit code: 0
+
+--- s07-backend-red.log sha256=05ddb23f9ba14805870cb10692caed9a1cf902c4ddcfb91a7b4156a10839f8d0 ---
+2026/09/12 06:25:58 Timezone initialized: UTC (UTC offset: +00:00)
+--- FAIL: TestNormalizeReasoningEffortMappings (0.00s)
+    --- FAIL: TestNormalizeReasoningEffortMappings/allows_none_only_as_a_source_for_OpenAI_routes (0.00s)
+        openai_reasoning_effort_policy_test.go:134:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:134
+                Error:          Received unexpected error:
+                                reasoning effort mapping 1 contains an empty or unknown value
+                Test:           TestNormalizeReasoningEffortMappings/allows_none_only_as_a_source_for_OpenAI_routes
+--- FAIL: TestApplyOpenAIReasoningEffortPolicy (0.00s)
+    --- FAIL: TestApplyOpenAIReasoningEffortPolicy/maps_nested_none (0.00s)
+        openai_reasoning_effort_policy_test.go:389:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:389
+                Error:          Not equal:
+                                expected: true
+                                actual  : false
+                Test:           TestApplyOpenAIReasoningEffortPolicy/maps_nested_none
+    --- FAIL: TestApplyOpenAIReasoningEffortPolicy/maps_flat_none (0.00s)
+        openai_reasoning_effort_policy_test.go:389:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:389
+                Error:          Not equal:
+                                expected: true
+                                actual  : false
+                Test:           TestApplyOpenAIReasoningEffortPolicy/maps_flat_none
+    --- FAIL: TestApplyOpenAIReasoningEffortPolicy/none_mapping_runs_before_cap (0.00s)
+        openai_reasoning_effort_policy_test.go:389:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:389
+                Error:          Not equal:
+                                expected: true
+                                actual  : false
+                Test:           TestApplyOpenAIReasoningEffortPolicy/none_mapping_runs_before_cap
+    --- FAIL: TestApplyOpenAIReasoningEffortPolicy/exact_scope_maps_none (0.00s)
+        openai_reasoning_effort_policy_test.go:389:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:389
+                Error:          Not equal:
+                                expected: true
+                                actual  : false
+                Test:           TestApplyOpenAIReasoningEffortPolicy/exact_scope_maps_none
+    --- FAIL: TestApplyOpenAIReasoningEffortPolicy/prefix_scope_maps_none (0.00s)
+        openai_reasoning_effort_policy_test.go:389:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:389
+                Error:          Not equal:
+                                expected: true
+                                actual  : false
+                Test:           TestApplyOpenAIReasoningEffortPolicy/prefix_scope_maps_none
+    --- FAIL: TestApplyOpenAIReasoningEffortPolicy/suffix_scope_maps_none (0.00s)
+        openai_reasoning_effort_policy_test.go:389:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:389
+                Error:          Not equal:
+                                expected: true
+                                actual  : false
+                Test:           TestApplyOpenAIReasoningEffortPolicy/suffix_scope_maps_none
+    --- FAIL: TestApplyOpenAIReasoningEffortPolicy/global_scope_maps_none (0.00s)
+        openai_reasoning_effort_policy_test.go:389:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/openai_reasoning_effort_policy_test.go:389
+                Error:          Not equal:
+                                expected: true
+                                actual  : false
+                Test:           TestApplyOpenAIReasoningEffortPolicy/global_scope_maps_none
+2000/01/01 00:00:00 [Pricing] Merged 1 fallback-only models
+2000/01/01 00:00:00 [Pricing] Loaded 2 models from /tmp/TestPricingCustomFilesSchedulerUsesConfiguredInterval1621406631/001/model_pricing.json
+2000/01/01 00:00:00 [Pricing] Remote sync disabled: pricing remote URL is empty
+2000/01/01 00:01:00 [Pricing] Service stopped
+2000/01/01 00:00:00 [Pricing] Merged 1 fallback-only models
+2000/01/01 00:00:00 [Pricing] Loaded 2 models from /tmp/TestPricingCustomFilesSchedulerUsesConfiguredInterval32520240309/001/model_pricing.json
+2000/01/01 00:00:00 [Pricing] Remote sync disabled: pricing remote URL is empty
+2000/01/01 00:03:00 [Pricing] Service stopped
+2000/01/01 00:00:00 [Pricing] Merged 1 fallback-only models
+2000/01/01 00:00:00 [Pricing] Loaded 2 models from /tmp/TestPricingCustomFilesSchedulerUsesConfiguredInterval0356430818/001/model_pricing.json
+2000/01/01 00:00:00 [Pricing] Remote sync disabled: pricing remote URL is empty
+2000/01/01 00:10:00 [Pricing] Service stopped
+--- FAIL: TestPricingCustomFilesSchedulerUsesConfiguredInterval (0.01s)
+    --- FAIL: TestPricingCustomFilesSchedulerUsesConfiguredInterval/1 (0.01s)
+        pricing_service_hot_reload_test.go:48:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/pricing_service_hot_reload_test.go:48
+                Error:          Not equal:
+                                expected: 5
+                                actual  : 4
+                Test:           TestPricingCustomFilesSchedulerUsesConfiguredInterval/1
+    --- FAIL: TestPricingCustomFilesSchedulerUsesConfiguredInterval/3 (0.00s)
+        pricing_service_hot_reload_test.go:48:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/pricing_service_hot_reload_test.go:48
+                Error:          Not equal:
+                                expected: 5
+                                actual  : 4
+                Test:           TestPricingCustomFilesSchedulerUsesConfiguredInterval/3
+    --- FAIL: TestPricingCustomFilesSchedulerUsesConfiguredInterval/0 (0.00s)
+        pricing_service_hot_reload_test.go:48:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/pricing_service_hot_reload_test.go:48
+                Error:          Not equal:
+                                expected: 5
+                                actual  : 4
+                Test:           TestPricingCustomFilesSchedulerUsesConfiguredInterval/0
+2000/01/01 00:00:00 [Pricing] Merged 1 fallback-only models
+2000/01/01 00:00:00 [Pricing] Loaded 2 models from /tmp/TestPricingCustomFilesSchedulerInvalidDeletedAndRecoveredLayers4056559493/001/model_pricing.json
+2000/01/01 00:00:00 [Pricing] Remote sync disabled: pricing remote URL is empty
+2000/01/01 00:04:00 [Pricing] Service stopped
+--- FAIL: TestPricingCustomFilesSchedulerInvalidDeletedAndRecoveredLayers (0.00s)
+    pricing_service_hot_reload_test.go:70:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/pricing_service_hot_reload_test.go:70
+            Error:          Not equal:
+                            expected: 9
+                            actual  : 7
+            Test:           TestPricingCustomFilesSchedulerInvalidDeletedAndRecoveredLayers
+FAIL
+FAIL    github.com/Wei-Shaw/sub2api/internal/service    0.149s
+FAIL
+
+--- s07-backend-green.log sha256=925334283a4bf17923447ec5bdf8b5a19e45bb007e63083dcb507a3f0e3502a4 ---
+ok      github.com/Wei-Shaw/sub2api/internal/service    0.168s
+
+--- s07-concurrency-red.log sha256=0eeec7e63aacbdee5b51f130ab19b905e683db4214b9b6dba527fc81f4feaf00 ---
+2026/09/12 06:28:24 Timezone initialized: UTC (UTC offset: +00:00)
+2000/01/01 00:00:00 [Pricing] Merged 1 fallback-only models
+2000/01/01 00:00:00 [Pricing] Loaded 2 models from /tmp/TestPricingCustomFilesConcurrentReadersSeeWholeSnapshots2754235737/001/model_pricing.json
+2000/01/01 00:00:00 [Pricing] Remote sync disabled: pricing remote URL is empty
+2000/01/01 00:01:00 [Pricing] Service stopped
+--- FAIL: TestPricingCustomFilesConcurrentReadersSeeWholeSnapshots (0.01s)
+    pricing_service_hot_reload_test.go:112:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/pricing_service_hot_reload_test.go:112
+            Error:          Not equal:
+                            expected: 10
+                            actual  : 7
+            Test:           TestPricingCustomFilesConcurrentReadersSeeWholeSnapshots
+FAIL
+FAIL    github.com/Wei-Shaw/sub2api/internal/service    0.037s
+FAIL
+
+--- s07-race.log sha256=035b5642fdd3428ef29e310faaf3c67d1b74c931023d2b0d6d9a5ff6c0719cd7 ---
+ok      github.com/Wei-Shaw/sub2api/internal/service    1.135s
+
+--- s07-frontend-red.log sha256=f48a86904e52de75f97bddb04458819d0f9c1378e10e488443648ee305860685 ---
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /tmp/sub2api-port-024-RLC1zS/support/frontend
+
+ ❯ src/views/admin/__tests__/groupsReasoningEffort.spec.ts (18 tests | 1 failed) 32ms
+   × groupsReasoningEffort > round trips none source mappings and rejects none targets 19ms
+     → expected [] to deeply equal [ { from: 'none', to: 'low' } ]
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/admin/group/__tests__/ReasoningEffortPolicyFields.spec.ts (3 tests | 1 failed) 87ms
+   × ReasoningEffortPolicyFields > selects none as a mapping source while keeping targets and ceiling unchanged 65ms
+     → expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/admin/__tests__/groupsReasoningEffort.spec.ts > groupsReasoningEffort > round trips none source mappings and rejects none targets
+AssertionError: expected [] to deeply equal [ { from: 'none', to: 'low' } ]
+
+- Expected
++ Received
+
+- Array [
+-   Object {
+-     "from": "none",
+-     "to": "low",
+-   },
+- ]
++ Array []
+
+ ❯ src/views/admin/__tests__/groupsReasoningEffort.spec.ts:21:48
+     19|   it("round trips none source mappings and rejects none targets", () =…
+     20|     const rows = reasoningEffortMappingsToRows([{ from: " NONE ", to: …
+     21|     expect(reasoningEffortMappingsToAPI(rows)).toEqual([{ from: "none"…
+       |                                                ^
+     22|     expect(validateReasoningEffortMappings(rows, "openai")).toEqual({}…
+     23|     const invalid = createReasoningEffortMappingRow({ from: "low", to:…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/admin/group/__tests__/ReasoningEffortPolicyFields.spec.ts > ReasoningEffortPolicyFields > selects none as a mapping source while keeping targets and ceiling unchanged
+AssertionError: expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/ReasoningEffortPolicyFields.spec.ts:27:20
+     25|       const choices = [...document.querySelectorAll('[role="option"]')…
+     26|       const none = choices.find((option) => option.textContent?.trim()…
+     27|       expect(none).toBeDefined();
+       |                    ^
+     28|       (none as HTMLElement).click();
+     29|       await wrapper.vm.$nextTick();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 19 passed (21)
+   Start at  14:25:26
+   Duration  2.01s (transform 921ms, setup 251ms, collect 1.35s, tests 119ms, environment 691ms, prepare 487ms)
+
+--- s07-frontend-green.log sha256=4dc925e4cc2d3ace50cfdc7904a3511e7906f56a8520a13758500b6fa7c1c348 ---
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /tmp/sub2api-port-024-RLC1zS/support/frontend
+
+ ✓ src/views/admin/__tests__/groupsReasoningEffort.spec.ts (18 tests) 9ms
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/components/admin/group/__tests__/ReasoningEffortPolicyFields.spec.ts (3 tests) 279ms
+
+ Test Files  2 passed (2)
+      Tests  21 passed (21)
+   Start at  14:29:17
+   Duration  1.85s (transform 932ms, setup 196ms, collect 973ms, tests 288ms, environment 645ms, prepare 132ms)
+
+--- s09-red.log sha256=eb6f501f0483991d4d5695e60401aa006719fcc2943ad448b1c3bfb53f6d1954 ---
+2026/09/12 06:32:18 Timezone initialized: UTC (UTC offset: +00:00)
+--- FAIL: TestOpsAccessPersistenceRuntimeLifecycle (0.00s)
+    ops_log_retention_regression_test.go:29:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/ops_log_retention_regression_test.go:29
+            Error:          Should be false
+            Test:           TestOpsAccessPersistenceRuntimeLifecycle
+            Messages:       old configurations must default access persistence off
+--- FAIL: TestOpsRuntimeRetentionDoesNotInheritErrorLogWindow (0.00s)
+    ops_log_retention_regression_test.go:54:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/ops_log_retention_regression_test.go:54
+            Error:          Not equal:
+                            expected: 30
+                            actual  : 90
+            Test:           TestOpsRuntimeRetentionDoesNotInheritErrorLogWindow
+--- FAIL: TestOpsAdvancedDefaultDoesNotDisableConfiguredCleanup (0.00s)
+    ops_log_retention_regression_test.go:62:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/ops_log_retention_regression_test.go:62
+            Error:          Should be true
+            Test:           TestOpsAdvancedDefaultDoesNotDisableConfiguredCleanup
+{"level":"INFO","time":"2000-01-01T00:00:00.000Z","msg":"[OpsCleanup] scheduled (schedule=\"* * * * *\" tz=UTC retention_days=err:90/min:30/hour:30)","service":"sub2api","env":"production","component":"service.ops_cleanup","legacy_printf":true}
+{"level":"INFO","time":"2000-01-01T00:01:00.000Z","msg":"[OpsCleanup] cleanup complete","service":"sub2api","env":"production","component":"service.ops_cleanup","deleted_counts":"error_logs=0 ingress_rejects=0 alert_events=0 system_logs=0 log_audits=0 system_metrics=0 hourly_preagg=0 daily_preagg=0"}
+--- FAIL: TestOpsScheduledCleanupUsesIndependentSystemRetentionOnSQLite (0.00s)
+    ops_log_retention_regression_test.go:113:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/service/ops_log_retention_regression_test.go:113
+            Error:          Not equal:
+                            expected: 1
+                            actual  : 2
+            Test:           TestOpsScheduledCleanupUsesIndependentSystemRetentionOnSQLite
+            Messages:       ops_system_logs
+FAIL
+FAIL    github.com/Wei-Shaw/sub2api/internal/service    0.028s
+FAIL
+
+--- s09-config-red.log sha256=c0432c8e9da5910c37d095761004d2d9fd6c6d834a62ab5c92c772df6c806825 ---
+2026/09/12 14:35:04 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/09/12 14:35:04 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/09/12 14:35:04 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/09/12 14:35:04 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+--- FAIL: TestLoadRejectsInvalidSystemLogRetention (0.02s)
+    --- FAIL: TestLoadRejectsInvalidSystemLogRetention/0 (0.01s)
+        config_test.go:33:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/config/config_test.go:33
+                Error:          An error is expected but got nil.
+                Test:           TestLoadRejectsInvalidSystemLogRetention/0
+    --- FAIL: TestLoadRejectsInvalidSystemLogRetention/-1 (0.01s)
+        config_test.go:33:
+                Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/config/config_test.go:33
+                Error:          An error is expected but got nil.
+                Test:           TestLoadRejectsInvalidSystemLogRetention/-1
+FAIL
+FAIL    github.com/Wei-Shaw/sub2api/internal/config 0.022s
+FAIL
+
+--- s09-config-green.log sha256=68c0030e08c9f48cffa2558341ac0d5d83c7566f3bdefb333355ef4d1080cf1b ---
+ok      github.com/Wei-Shaw/sub2api/internal/config 0.696s
+
+--- s09-backend-green.log sha256=4708776704da0b387d8e4087dc006fb1a56946322004bce294282b78e8640724 ---
+ok      github.com/Wei-Shaw/sub2api/internal/config 0.015s
+ok      github.com/Wei-Shaw/sub2api/internal/service    1.152s
+
+--- s09-race.log sha256=2b604d8619df28debaf8420b651c3fb4e96af58f5ffeef150779c85bb49ad0ec ---
+ok      github.com/Wei-Shaw/sub2api/internal/service    3.343s
+
+--- s09-frontend-red.log sha256=85734ce9909da5a9de9c90c1048111bad5387344c49e66bfcaa3a13bf50e39e2 ---
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /tmp/sub2api-port-024-RLC1zS/support/frontend
+
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/views/admin/ops/components/__tests__/OpsSystemLogTable.spec.ts (4 tests | 1 failed) 106ms
+   × OpsSystemLogTable host support > defaults access persistence off and saves and resets an explicit opt-in 17ms
+     → expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/admin/ops/components/__tests__/OpsSystemLogTable.spec.ts > OpsSystemLogTable host support > defaults access persistence off and saves and resets an explicit opt-in
+AssertionError: expected undefined to be defined
+ ❯ src/views/admin/ops/components/__tests__/OpsSystemLogTable.spec.ts:141:21
+    139|       await flushPromises()
+    140|       const label = wrapper.findAll('label').find((item) => item.text(…
+    141|       expect(label).toBeDefined()
+       |                     ^
+    142|       const checkbox = label!.get('input')
+    143|       expect((checkbox.element as HTMLInputElement).checked).toBe(fals…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  14:36:03
+   Duration  2.52s (transform 1.10s, setup 117ms, collect 1.35s, tests 106ms, environment 379ms, prepare 75ms)
+
+--- s09-frontend-green.log sha256=19ad384d2d8414f7bc5ca24b66f3cc4e78670491a652e45b80a9fd45a3b2130d ---
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /tmp/sub2api-port-024-RLC1zS/support/frontend
+
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/views/admin/ops/components/__tests__/OpsSystemLogTable.spec.ts (4 tests) 99ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  14:37:19
+   Duration  2.72s (transform 1.17s, setup 106ms, collect 1.42s, tests 99ms, environment 339ms, prepare 67ms)
+
+--- s12-baseline.log sha256=0cf1a52f95d14772b25ca4440e2e5f09dad86eec6f16d9f00da7e02d64bf7ee1 ---
+ok      github.com/Wei-Shaw/sub2api/internal/repository 0.215s
+
+--- s12-range-red.log sha256=f5ca1835f6d8ddf7561174c770c468fb75dc13804bded7f285360e4a77b0765e ---
+--- FAIL: TestRedisUpgradeActiveIndexCleanupBounds (0.05s)
+    redis_upgrade_compatibility_test.go:35:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/repository/redis_upgrade_compatibility_test.go:35
+            Error:          Not equal:
+                            expected: int(4)
+                            actual  : int64(1)
+            Test:           TestRedisUpgradeActiveIndexCleanupBounds
+            Messages:       only 1000 due entries may be removed per index
+--- FAIL: TestRedisUpgradeQueueIndexPreservesLiveLocksAndBatchLimit (0.00s)
+    redis_upgrade_compatibility_test.go:70:
+            Error Trace:    /tmp/sub2api-port-024-RLC1zS/support/backend/internal/repository/redis_upgrade_compatibility_test.go:70
+            Error:          Not equal:
+                            expected: 1
+                            actual  : 2
+            Test:           TestRedisUpgradeQueueIndexPreservesLiveLocksAndBatchLimit
+FAIL
+FAIL    github.com/Wei-Shaw/sub2api/internal/repository 0.077s
+FAIL
+
+--- s12-green.log sha256=1db2ee7fab5a0d799ee7b4b4a49f67530b187e4b884dd51edf2c97d8af7271e8 ---
+ok      github.com/Wei-Shaw/sub2api/internal/repository 0.180s
+ok      github.com/Wei-Shaw/sub2api/internal/pkg/redissession   0.004s [no tests to run]
+
+--- s12-repository-unit.log sha256=86ec63af7d7a565d1d1f938a8e9e1eee3534dfaa0d473745176a501d547c4be5 ---
+ok      github.com/Wei-Shaw/sub2api/internal/repository 25.167s
+ok      github.com/Wei-Shaw/sub2api/internal/pkg/redissession   0.010s
+
+--- s12-race.log sha256=cddc0f153cd25e6a299efd69f769df557f0cc93d2fc1160766d09bb235d76309 ---
+ok      github.com/Wei-Shaw/sub2api/internal/repository 1.949s
+
+--- support-service-unit.log sha256=fa3dedb7cd3ef62e3117eadaba6f01a7a1dc70d4bddc76e50266cddcddfd55df ---
+ok      github.com/Wei-Shaw/sub2api/internal/service    1.302s
+
+--- sqlite-audit.log sha256=110e2a762a47137fd8fb273b908bbd21e2537456a87f6cb78404492e0e6af655 ---
+=== RUN   TestProductionSQLUsesSQLiteDialect
+--- PASS: TestProductionSQLUsesSQLiteDialect (1.15s)
+PASS
+ok      github.com/Wei-Shaw/sub2api/internal/repository 1.167s
+
+--- frontend-typecheck.log sha256=227a0ac17a3915c902a482fc6115b601f140279ad7a7fc933312b2d634fc340a ---
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+$ vue-tsc --noEmit
+
+--- frontend-lint.log sha256=56b1994c92e6a464bd21ed9d246134c41aa144c516b3a44a169ffba10554e258 ---
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+$ eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+
+--- modules-verify.log sha256=b4537ed75f533f993f371954de47e42a793b8e5b0587577de7e27fb3e50696bd ---
+all modules verified
+
+--- modules-selected.log sha256=8c63132d3dfa4485f5b6d78bc1fe6df513cc07aeba92458c4aacc8c996684d9f ---
+github.com/redis/go-redis/v9 v9.22.0
+github.com/klauspost/cpuid/v2 v2.2.10
+go.uber.org/atomic v1.11.0
+modernc.org/sqlite v1.44.3
+github.com/alicebob/miniredis/v2 v2.38.0
+
+--- build.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ---

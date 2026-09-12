@@ -16,6 +16,14 @@ import {
 } from "../groupsReasoningEffort";
 
 describe("groupsReasoningEffort", () => {
+  it("round trips none source mappings and rejects none targets", () => {
+    const rows = reasoningEffortMappingsToRows([{ from: " NONE ", to: "low" }], "openai");
+    expect(reasoningEffortMappingsToAPI(rows)).toEqual([{ from: "none", to: "low" }]);
+    expect(validateReasoningEffortMappings(rows, "openai")).toEqual({});
+    const invalid = createReasoningEffortMappingRow({ from: "low", to: "none" });
+    expect(validateReasoningEffortMappings([invalid], "openai")).toEqual({ [invalid.pairs[0].id]: { to: "unsupportedTo" } });
+  });
+
   it("provides fixed OpenAI choices to OpenAI and Composite groups", () => {
     const expected = [
       "minimal",

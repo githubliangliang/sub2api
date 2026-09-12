@@ -23,6 +23,26 @@ func resetViperWithJWTSecret(t *testing.T) {
 	t.Setenv("JWT_SECRET", strings.Repeat("x", 32))
 }
 
+func TestLoadRejectsInvalidSystemLogRetention(t *testing.T) {
+	for _, days := range []int{0, -1} {
+		t.Run(fmt.Sprint(days), func(t *testing.T) {
+			resetViperWithJWTSecret(t)
+			viper.Set("ops.cleanup.enabled", true)
+			viper.Set("ops.cleanup.system_log_retention_days", days)
+			_, err := Load()
+			require.ErrorContains(t, err, "ops.cleanup.system_log_retention_days")
+		})
+	}
+}
+
+func TestLoadDefaultOpsCleanupConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.True(t, cfg.Ops.Cleanup.Enabled)
+	require.Equal(t, 30, cfg.Ops.Cleanup.SystemLogRetentionDays)
+}
+
 func TestLoadServerTimingConfig(t *testing.T) {
 	t.Run("disabled by default", func(t *testing.T) {
 		resetViperWithJWTSecret(t)

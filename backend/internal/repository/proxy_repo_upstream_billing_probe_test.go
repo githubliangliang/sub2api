@@ -29,9 +29,6 @@ func TestProxyUpdateInvalidatesBoundProbeSnapshotsAndEnqueuesOutboxAtomically(t 
 		WillReturnRows(sqlmock.NewRows([]string{"protocol", "host", "port", "username", "password", "status"}).
 			AddRow("http", "old.example", 8080, "user", "pass", service.StatusActive))
 	mock.ExpectExec(`(?s)UPDATE "proxies" SET`).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`UPDATE "proxies" SET "backup_proxy_id" = NULL WHERE "backup_proxy_id" = \$1`).
-		WithArgs(int64(9)).
-		WillReturnResult(sqlmock.NewResult(0, 0))
 	expectProxyUpdateReload(mock, 9, "new.example", "user", "pass")
 	mock.ExpectQuery(`(?s)` +
 		regexp.QuoteMeta("UPDATE accounts") + `.*` +
@@ -79,9 +76,6 @@ func TestProxyUpdateRollsBackWhenProbeInvalidationOutboxFails(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"protocol", "host", "port", "username", "password", "status"}).
 			AddRow("http", "old.example", 8080, "", "", service.StatusActive))
 	mock.ExpectExec(`(?s)UPDATE "proxies" SET`).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`UPDATE "proxies" SET "backup_proxy_id" = NULL WHERE "backup_proxy_id" = \$1`).
-		WithArgs(int64(9)).
-		WillReturnResult(sqlmock.NewResult(0, 0))
 	expectProxyUpdateReload(mock, 9, "new.example", "", "")
 	mock.ExpectQuery(`(?s)` +
 		regexp.QuoteMeta("UPDATE accounts") + `.*` +
@@ -119,9 +113,6 @@ func TestProxyUpdateSkipsProbeInvalidationForNonIdentityChange(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"protocol", "host", "port", "username", "password", "status"}).
 			AddRow("http", "same.example", 8080, "", "", service.StatusActive))
 	mock.ExpectExec(`(?s)UPDATE "proxies" SET`).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`UPDATE "proxies" SET "backup_proxy_id" = NULL WHERE "backup_proxy_id" = \$1`).
-		WithArgs(int64(9)).
-		WillReturnResult(sqlmock.NewResult(0, 0))
 	expectProxyUpdateReload(mock, 9, "same.example", "", "")
 	mock.ExpectCommit()
 
@@ -145,6 +136,9 @@ func expectProxyUpdateReload(mock sqlmock.Sqlmock, id int64, host, username, pas
 			id, now, now, nil, "proxy", "http", host, 8080,
 			username, password, service.StatusActive, nil, service.FallbackModeNone, nil, 0,
 		))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE proxies SET backup_proxy_id=$1 WHERE id=$2")).
+		WithArgs(nil, id).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 }
 
 func TestEnqueueProxyAccountChangesChunksLargePayloads(t *testing.T) {

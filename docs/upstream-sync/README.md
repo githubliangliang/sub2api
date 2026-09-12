@@ -2,9 +2,11 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-当前待移植清单有四份，**互不冲突、可并行**：
+最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.0.md](./PORTING-0.2.0.md) —— 上游 v0.1.185 + v0.2.0（2026-09-02，**最新一轮**）。60 个非 merge commit 的评估：**11 项 P0**（§3，其中 §3.1 `e93e6368f` 是本仓库已追通的活缺陷——调度快照投影裁掉透传开关，透传账号在选号阶段被误判 `model_not_supported`）、**4 项 P1**（§4，含 2 条新迁移 → 本仓库 `225` / `226`）、6 簇不做（§5：Fast 组策略按需、长上下文阶梯基座 573 行、Kimi 缺 CN 平台整支、`e21b849a9` 需先核调用点、数据库启动重试 PG-only、404-vs-429 本仓库缺陷不成立）。落地顺序见其 §7，本轮 8 条新教训见 §9。已按档固化为两个 OpenSpec change：**第一档** [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/)（§3.1–§3.7，6 项 / 6 capability，无迁移无前端）**已叠在第二档之后落地**（`sync/upstream-20260902-p1`，起点 `6527a33de`，代码尖 `e9a1c427a`）；**第二档** [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/) 的 §3.8–§3.11 + §4.1–§4.4（8 项 / 7 capability，+2 迁移）**已在同一分支落地**（起点 `3da1c2dd0`，因第一档当时未合而提前开工）。第 9 项并入的 0.1.180 §5.1 dompurify **仍未做**（不改 lockfile）。§5 的第三档/第四档**未立项，等确认**。迁移号现为 `226`。
+- [PORTING-0.2.4.md](./PORTING-0.2.4.md) —— **最新一轮，2026-09-12，第一档13项、第二档12簇已落地 main，最终构建和总检查通过**。两份 OpenSpec 的任务和验收已回填；[最终验收](./evidence-0.2.4/implementation.md)记录54包后端 unit、240文件/1720项前端测试、静态单文件构建及真实 SQLite/浏览器验证，并追加 API Key Responses namespace 修复及其定向验证。初始151条提交、114候选、1,044条四态证据保持冻结。VERSION仍为1.1.11，迁移仍为226，SQLite/miniredis/simple mode保留。第三/四档与旧DOMPurify独立待办未实施；本次未创建新 tag 或 Release。
+
+- [PORTING-0.2.0.md](./PORTING-0.2.0.md) —— 上游 v0.1.185 + v0.2.0（2026-09-02，历史轮次）。60 个非 merge commit，11 项 P0 与 4 项 P1 主体已落；两个 change 为 [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/) 与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)，已于 `c9d9bebe8` 合回 main。新迁移为 `225` 推理档位与 `226` 渠道 1h 缓存价。第二档阶段 9 DOMPurify 仍未做；旧 §5.4 API Key instructions 已在 0.2.4 重新核实并提升为 F13，其余未合项以最新 §5.3 盘点为准。历史 source-baseline 与当时验证记录不改写。
 - [PORTING-0.1.184.md](./PORTING-0.1.184.md) —— 上游 0.1.184 大混合版（2026-08-31）。**§3 的 14 项 P0 与 §4 的 11 项 P1 已全部合入**（实施记录见其 §9 / §11 / §13，验证矩阵见 §10 / §12 / §13.4）。上游 3 条新迁移全部不合，故本仓库迁移号仍是 224。**§5.1 Codex routed model catalog 整簇也已合入**（立项见 §14，落地与剔除见 §15）。**§5.7 Antigravity 混合内置工具也已合入**（其「基座」其实只是两条 ≤ v0.1.183 的漏项，见 §16）。剩下的是 §4 那组「取决于是否用到该功能」的按需项 + §5 余下五簇。⚠️ 其 §1 那句「上游 main `200602b41` 之后 3 条本文不含」说的是**该文档的覆盖范围**，不是「本仓库没有」——`e2624fb65` 实际已随 §5.1 落地，见 0.2.0 §6 / §9.1。
 - [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版。**全部合完**：§3 的 12 项 P0、§4.1（监控 v2 composite，见 0.1.184 §25）、§4.2、以及原判「缺基座不做」的 §5.1 Responses Lite 簇（更正见 0.1.184 §17–§18）。
 - [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。0.2.0 §5.2 那簇（长上下文阶梯数据驱动）的 573 行基座就是这份 §7 未合的那一支。**§5.1 dompurify 已于 2026-09-02 重新量过、改判「建议做」并曾并入 0.2.0 第二档作为阶段 9（见其 §12）**，但第二档实施时按目标 **未改 lockfile，故仍未合**：3 个文件 / 22 行 lockfile / 零代码改动，一次可清掉 18 条 advisory；同时更正了原判两处判据（暴露面是 7 个净化调用点而不是 1 个，其中 `/legal/*` 完全公开；原清单唯一引用的那条 CVE 用四种污染形态都没能复现）。量的时候还撞见两条不在任何清单里的直接依赖 high：`xlsx` 原型污染 + ReDoS（运行时，无干净升级路径，值得单独立项）与 `vite` / `vitest` 的 dev-only 项。
@@ -46,6 +48,17 @@
 - **「上游为 X 修的」不代表「本仓库因 X 受益」，但结构收益仍可能成立。** 平台 N/A 时先看它顺手修掉的结构问题在不在（`9eabd2a5b`）。
 - **安全项要单独拎出来问，而且要重量而不是重述。** 判据里「输入可信」和「受众范围」是两件事——净化跑在**访问者**的浏览器里；清单引用的 CVE 未必被验证过，安全项的「已核实」标准比功能项高一档（功能项 grep 到 patch site 即可，安全项还需要能跑的 PoC）。没有 PoC 时理由要换成可验证的那些（advisory 数量、调用点数量、暴露面）。样本：0.1.180 §5.1 → §12。
 - **`_integration_test.go` 落地前先 `head -1` 看构建标签。** 本仓库有一批是 `//go:build integration && postgres`，在 SQLite-only fork 里永远不编译（`internal/repository/migrations_schema_integration_test.go` 就是，而上游 PR#6443 / PR#6444 改了它）。这类 hunk 无论三态报什么都直接丢，**不要为了让它能打上去动构建标签**。
+
+[PORTING-0.2.4.md §9](./PORTING-0.2.4.md#9-本轮新增教训) 补充：
+
+- **按 tag 祖先统计增量，不能只看 Release 列表或作者日期。** v0.2.2 有 tag，仍需覆盖。
+- **profile 定义、getter、消费者齐全还不够，要有生产 setter。** #6281 新 LongStream profile 没有生产接入点；本 fork 原有 OpenAI H2 已启用 PING。
+- **用独立 index 固定四态，用户工作树修复单独记。** ALREADY 是文件证据，语义已合还需追调用链。
+- **缺 helper 要量函数体，原定级变化明确写出。** API Key instructions 的缺口为 3 行，日志默认值 helper 为 7 行。
+- **miniredis 仍使用 go-redis 客户端；Ultra reasoning 与 Ultrafast service_tier 不同。** 名称相似不能代替功能链核查。
+- **共享正文与 fail-open 需要专门验证。** 补丁可应用不代表所有权、CAS 或 snapshot 时序正确。
+- **整 PR 中也可能混入其它功能测试。** #6743 的兑换测试和 #6536 的外网 token 测试要排除。
+- **保留安全审计日期与证据边界。** 旧 advisory 数不是今日结果，新可选下载功能的 SSRF 修复不等于本 fork 已有漏洞。
 
 移植上游代码前先读 [第 4 节「硬约束」](#4-硬约束)，尤其是 9–12 条（SQLite 适配的四个静默陷阱）与第 13 条（守卫类单行改动的空转陷阱）。这几条的由来见 [第 7 节的事故复盘](#7-案例一次由-sqlite-适配引发的调度事故2026-08-16)。
 
@@ -370,4 +383,3 @@ DATA_DIR=/tmp/lab/data /tmp/lab/server
 ### 回归测试落点
 
 `internal/repository/scheduler_outbox_enqueue_replace_test.go`、`internal/service/scheduler_snapshot_initial_purge_test.go`。动 outbox / 快照传播链路时先跑这两个。
-

@@ -1,0 +1,152 @@
+sha	subject
+1ee929e4b9b1ec9c5aba45363f9322c845d948a6	fix: broadcast channel cache invalidations
+6d339ec93b35fb1e7b51388519c415c0ed068d54	fix: honor persisted cooldown when dropping in-process account blocks
+5fea83dcaedf49d0b6d866595de7d3c256256d2f	fix: 修复429未耗尽额度仍触发账号退避
+ca9b4d73f2bc680c243ee7a6da6667bd6e83a710	fix(openai-ws): share immutable replay bodies to stop O(T²) copying
+0e08c399994fc1934bdae20123a044b8dd0ed995	fix(openai-ws): remember rejected encrypted content across turns
+163eb7ffae9c1327735fc5cadb108eda67d3ecf2	fix(ops): bound database-backed system logs
+c74a4f521c7b71635b20a2f15e9d2758991de05c	fix(billing): 补上 glm-5.3 / glm-5.3-flash 兜底价，避免被 glm-5 子串匹配抢走
+a10ff1255cbaf2ec61dc9dcbc647cbc5bf5d3535	fix(openai-ws): classify canceled client streams
+5fb5dfb34cd1540a39639983f0e7b17c2a62ce58	fix(openai): reacquire passthrough turn slots
+222181efd6bebc28d2258a7ac5b5b4a8044fb649	fix(anthropic): scope Fable credits errors to model
+a7742306616c9596bb564d790d5a21e5a88dd0b0	fix(grok): keep inconclusive billing accounts eligible
+5097b31457e6dc9f49e5f5c9c72b925ce79543b3	chore: sync VERSION to 0.2.0 [skip ci]
+9ad386569051b60fae616932eca876a7e4f78538	fix(gateway): 负载感知调度补齐渠道模型限制的逐账号检查
+01bd9b71a26fbb28ef11840b3a7f1a3e3589ef1c	feat: add Grok media eligibility controls
+81fd8530056c6480df8e69770a85d8f411340290	feat(upstream): add HTTP/2 PING keepalive for long LLM generation streams
+9dc4c40bff675cadd95e78a106c5325472ba3f8a	test(upstream): align HTTP/2 keepalive tests with long-stream profile API
+f5e4da5e72acd4fb026e0e97e7dfc61eae29735c	style(upstream): gofmt http_upstream_profile.go
+a7f1ed8fa49a2f3a7ae9ba81eac45f8d22f426f7	fix(openai-ws): track pending passthrough turns
+9be9c0b68c47eb433d886453deecf73c7ed55d68	fix(gateway): 转发失败的请求立即释放会话槽，不再占用整个空闲超时窗口
+1859519573deed0a60bd99cc18d10216377aafa8	feat(deploy): support optional Apple network subnet
+8249ab37dbc20eff0abfebac58d63dd9a7fd62a7	feat: add Anthropic reasoning effort pricing controls
+10c8f523c49663d6061eabc1cdce13a2a975063f	fix(openai): preserve passthrough reasoning effort
+b6740c937f007a0e103d182bc6197c31e3c3a14f	fix(openai): recover unavailable continuation responses
+fdc2ec17e6776bef109c5ea614af28218e56299b	feat(pricing): fallback/override 定价文件按内容哈希随定时器热重载
+5e4958c889e0e8a31591a819eb046562807d8beb	fix(openai): schedule accounts with mapped model
+af90a9bd1fbcee62c5e8a87dbb3bd71ee4216f27	fix(openai): 兼容历史任务委派续聊
+62198286e93a6ecf3c157417c80d136b68bd84c4	[verified] fix(handler): distinguish gateway admission rejections
+e9e3c46cb76f564554357507102caf44cc79857d	fix(ops): snapshot proxy on upstream errors
+4c1f920d58d6f8b0e2421a42b76f2661fafe4a61	fix(ops): close proxy attribution gaps and bound queued upstream events
+78fc7b171ec1a802a8d267d0dcc159539ddb0094	test: skip live token comparison on network errors
+abc07bb0799c7c8cc15795898d4acec247c7a59c	test(ops): satisfy errcheck and gofmt in proxy attribution tests
+b1748c4ea99ce2120401a269142aa071e18a84da	chore: update sponsors
+de8d756afae96f74d46c08f7633eb7e186c25176	fix(payment): reconcile pending Alipay orders
+28dde982cb5526d873204a50289928357c10f64f	fix(openai): normalize automation heartbeat bootstrap
+de27905e88aa291acd2a292e2b439bce3de0f118	feat(usage): 用量记录落库上游请求标识并支持按账户配置响应头名
+3e60c3b86b4849bdd283f92cb88b5a7c1a79d456	fix: add compact admin account list DTO
+994192ef4f22baf546c032f557bfb6d14b1dcaf4	fix: type admin account list responses
+db15e0090aace48e62f952c6a294f38048cf6288	fix: keep account table on compact list responses
+a3a6a85b73887e8f7961ae25c828d64854f25b9f	test(admin): assert nested credential redaction in lite lists
+f5ae32e53f6d1b42f4da6c78ff06fbd3d870f156	fix(gateway): normalize GLM-5.3 thinking effort
+3c8be00131e69d432246855d14ff014d9f7c10e2	feat(openai): add GPT-6 Astra support
+126ac24c8cb4d98ff2a02f46f0008201cd419c10	feat(codex): support ultrafast service tier
+aa556c372f85f0f5d41398d80d5972e53f708c16	fix(frontend): allow collapsing sidebar groups while a child route is active
+6cf645f87cbe3b616fd4a977e472ee4253d8bc85	fix(openai): scope OpenCode session forwarding
+c7538cd256c2f60ed909402213ef869acef2f8b2	fix(codex): advertise search capability for bridged routes
+51631d032474fe8001d0711b067ba9ac8e65a78f	fix(apicompat): preserve discovered tools in chat fallback
+9ddf69698d41af3b05e4fe4560f5d9d41b81ebbe	fix(ops): preserve zero-valued system metrics
+28f673e4cde06ed68fc56c1718b6ac6776bef311	fix(gemini): honor custom native models list
+1e28ef59423f121761fd0b7bb95e2fac03ebe823	feat(codex): pinned-accounts Codex model manifest for OpenAI groups
+e9bad40b10a8fc8879f65ac38a31beeaa5a64523	feat(claude): allow operators to override the advertised CLI version
+4aaf5cb73bfe87e6dc8502c7bab4023229d43c5e	fix(openai): enable Astra messages prompt caching
+6271c517da6ec76905667fb5f2bcd958d5acdfd9	fix(apicompat): preserve arguments from done events
+7969751f1f0aaa262d7c0a2550d0f12c0fed8a35	feat(openai): allow none as reasoning mapping source
+983a3db3afc0a7f08b51e4e3091b0c75801b6a6f	fix(openai): persist GPT-6 Astra Codex capabilities from upstream sync
+a016bd4ba5dd1920c11d0c853f56c3f2f3c94e11	style: gofmt upstream models capability sync tests
+1cab4d8c22bb79a82970a467a2492e5ff0a763d9	fix: make custom pricing reload coherent
+708b85a6a4b853f6db3c488c0c84701edf1e7929	fix: complete upstream request id handling
+3c53ba01a7747d7f40302bd15e1d92c908fddbad	feat(images): 账户开关将生图结果 url 下载回填为 b64_json
+2da31290a1bcbf68fbf49c8f13b4c3ddb3d29d1e	fix(openai): record WS cyber policy failures across paths
+c227863d51468bee3a48f999515bd233bc2d41cf	fix(images): 生图 url 回填下载拒绝私网目的地并只信字节嗅探
+3bdb869fcad8ce2c6881a3f503c2964ef23d5575	fix(billing): resolve Gemini 3.7/3.8 Flash thinking-tier prices
+cff3f89850738e3504e35b01c9b4028d62b65a01	feat(groups)!: enforce model allowlists across gateway endpoints
+55c5eed9fc74debfeb774790f88ecfd6c3466e2f	test(repository): persist model allowlists in group fixtures
+d7f048a2656612059ae764dcf48f1571ff592e73	fix(openai): preserve synced Astra capabilities and continuation
+62cd63bfdab33d4bff289be8fe5bfc98eda23294	fix(openai): retain capabilities when model listing is unavailable
+994ca26e9270ef5bb631fc6b2dd5f4bfbd5f9e06	fix(claude): align billing fingerprint with outbound user agent
+2e1c7c00a686fbc446f94634522e31724ac23dc5	test(claude): check request body close errors
+b1ce821c497adabcdce6631577134b6ac23040ec	fix(frontend): preserve Codex manifest edit state
+ab99d56e9626e6cd731592dae8553c9758a0efa2	chore: sync VERSION to 0.2.1 [skip ci]
+a16070ccf62200674d51ad2fb3ae58ba50b013d3	fix(auth): show a loading placeholder for Turnstile
+00eabe8ab9dd9de16cf07f62a165b98671c40a97	feat(accounts): add month and year expiry presets
+f3bbb95310fe01ef29f5f86f7b7eeea991cc443e	fix(groups): react immediately to Codex manifest edits and unify dialog toggles
+3aeab296d8ec9a07bdaacdab80cfcaf011f6c15d	fix(onboarding): remove button text shadows
+cb31033972023e596d1f16f6fd944b3ca09a6478	feat(openai): reuse pinned accounts for standard model discovery
+32bf3d0f33c39e2ca8a9ca5816daccf620dc3e92	fix(settings): describe Grok cross-client mapping default as enabled
+a6430bfe20ce5ebb7c8e625d49c5540c5c8b53f0	fix(antigravity): refresh default user agent version
+c7343d2aa26274fda4d95646ba7315c5f59f4e49	fix(monitors): send explicit user role in Gemini monitor probes
+666a5c6f877a306c4743310c04dc5f400656f7a5	fix(redeem): use a fixed 10-minute failure window
+7a70de401c01ffdd8c58357451d772f757d4ec2b	fix(payment): isolate fulfillment from redeem limits
+95023e7d49cde9f740a4875b3c5d2582ea230628	fix(backup): serialize pg_dump/psql with the migrations advisory lock
+58e35a4f327e82fe4f4c9de9e53c0e53a7fd7bad	fix(antigravity): always set toolConfig for reasoning models without tools
+7ae0312091520ce46aea4fe0016f57e14c17d730	fix(claude): 🐛 补齐 thinking block binding beta
+8a469478659b0a87405193afa89df0e0a9f3302f	Fix stale official Astra input modalities
+f49a3935667e1a081cd0d2f5b9669cd429c2a597	fix(openai): retain default models in mixed account catalogs
+b3ad9b67cfb3bd7d419a924725ef6bbf2a6f2f5a	fix(i18n): fail builds on missing locale keys
+a3675552bd1af0eadb42b6992f1258ecf8d6faf2	feat(simple-mode): allow basic account grouping
+05ad6b49a1605ca0aa3c5eee597139a1037bd450	fix(simple-mode): enforce basic group capabilities
+f46038820bc29197ebf9f39e10138021e26f70f9	fix(simple-mode): enforce group capability allowlist
+4a4fd35e0cb82765059d8409fa29736ca30eef74	fix(simple-mode): guard non-empty group deletion
+985428d9d2f5fabb7aa99b10ac702f3e41dfae5d	fix(openai): preserve named standalone Responses inputs
+28167bbf8596dc031e0cea70077611890cb8940a	fix(openai): honor model_routing for Codex manifests and scheduling
+958a21ad6e2eddae4b1ebafa68c24dee8666092a	fix(billing): 修复 DeepSeek 高峰账号成本少计
+0b061c5fa133bf930981816d483d563231a63952	fix(gateway): use JSON escaping for message cache promotion
+96884dd1aee34c9c76dbe827476dcaa3bb83ad86	fix(openai-ws): isolate HTTP bridge connection state
+dc6b318c343dfc4e7b5cb2a4c4b4b6455b23237a	fix(usage): load all API keys for record filters
+76efc52fb6ca8a88b3eb1c7a643426a3e210c60c	feat(custom-page): make the open-link button draggable
+b8ed24508555406a34b0bbc9c980ff158362d678	fix(openai-ws): recover later turns from quota exhaustion
+8363d537e0dd88a749e1faa7a3f47ca3b4f91cfd	fix(gateway): fail over model-not-found responses
+f88d62ad282bd6dceffa93924e81543cf481c9ff	fix(openai): use live account models in connection tests
+2db78bd3d68f58968d73b664c289c79ebee71aee	fix(codex): preserve Astra Ultra workflow metadata
+b59f3bf46c66a24b6c59260092d66d2d871c7173	fix(simple-mode): enforce basic group boundaries
+415a0dc9d0cae3bda18bb1c1573e16de999eb3bf	fix: display multiplier-only interval prices
+f62ec2e4a0f7ad7f92359971ef52c80bfb974b48	feat(groups): 推理强度映射转发值支持拒绝
+8c8fd6e298521f1032a739d42cb0acdf0b8a1522	feat(admin): link subscriptions to user usage
+2e31d8b702aa4d27e2c71e3066d7c6c612ae2025	fix(codex): preserve allowed_tools selection constraints
+ff758f37d2e751aa26183c6b4473974eb5c69971	fix: preserve plaza 1h pricing and align interval fallbacks
+ad4b2f30f591e4aa9bf331cc450e4ffd9b02aaf9	test(codex): assert alias workflow effort before dereferencing
+6aabbdf547d305bc3d22acfa5529e47087b12892	fix(openai): 记录流式失败的上游诊断信息
+d03c42d7986cad7170d9e4751852287e84ec3374	fix: size plaza pricing columns to fit cache prices
+b939fa9d4a2128f06be9a9e86bbdfd70659d1ee9	fix(openai): select GPT-6 Astra instructions correctly
+3cb2381bdc9fafcc895f331212fd25fb74847983	fix(claude): 让伪装的 Claude Code 版本真正生效，修复 Fable 5.1 仍然 400
+ce157b32ed584bd91b1edafcf305ca5fb84c52ed	fix(claude): 指纹自愈路径同样执行 claude-cli 版本下限
+3efeba33a47a9cfc51faac6057806a50cabee12d	test(claude): 版本覆盖用例字面量随内置基线升至 2.1.259
+be4ab92b2bdcd3e27fbe819546665dd15723912e	fix: cancel streaming upstream before closing body
+0aaed397cc62cca9d954ba33e1715725cdbeccf7	fix: preserve Astra reasoning mode for Codex OAuth
+19382f275e8fdc05a655e3e20fbd688bb9a7ec2a	feat(minimax): 增加 MiniMax 平台支持
+0d3dbae710f7106e4b79d970e3a2f495850d88b2	feat(channel-monitor-v2): add user ranking toggle and keep missing TTFT neutral
+35e69af41b13f42c391f36bea0beb405bec26e7e	feat(accounts): show estimated OpenAI weekly cost
+b491c3271bd0ca33da9131528c6a85cfcb08015f	fix: rename redeemMaxErrorsPerHour to redeemMaxFailedAttempts in tests
+f6d580200a5442e2da6e4954b60208351cf50ed8	fix: update #6688 test assertions for #6678 image modality and #6718 ultra level
+6f2295bfc7a29367e3a300909c75bc79720804f1	test(minimax): 按平台注册表推导调度器 snapshot 期望数量
+dfb3978b9d95c174b3402da0f8f5358ae29a9388	feat(payment): render help text as sanitized Markdown
+7f0f579bb0a4e71c2041e9ff1fc16de4b1883fac	fix(accounts): keep failed token refresh accounts selected
+941a0487abc30ff9c66af5056244b25087d15b17	fix(accounts): allow removing inactive group assignments
+b7dba62678a834080564966c002fd0ca2b328b7a	chore: sync VERSION to 0.2.2 [skip ci]
+cc91155fe4cb7dcb37228be034749924750465c8	fix(ollama): clamp DeepSeek output limits across API protocols
+2fc24d8879951d571e540718aa011c30ccd7b9a6	fix(ollama): normalize Messages base URLs before token clamping
+57387445f3cf204717d9b15b3e8a863c52d1115d	fix(ollama): select Bearer auth for Anthropic endpoints automatically
+e094a3f40b1c84b78c5f6298004145587a3ba2a0	fix(accounts): populate display names for live test models
+335fcdc1d657f93833a5fd8183f9acb2ed142fc0	fix(plugin): 提交插件包前先关闭 ZIP 读取器
+b42157a725fa9079192c1d1badc12a8647f6ff52	test(service): 修正 Windows 下两例环境相关用例
+4a7739acdf4ff12a1683c74a9e99163d15f7d11c	fix(db): converge groups.model_allowlist on upgrade
+772a0382f079676983c06f24b0d41e09139a8462	chore: sync VERSION to 0.2.3 [skip ci]
+df64b5f368cce77b5ebc32a86084dd1f8dd40dbf	fix(frontend): keep account action menu within viewport
+efc6e4a816df82189f8e866c8a56b4b3f2032378	fix: validate announcement and proxy date ranges
+3fc08745a6a41dc8e77a526e4585d7b6cf045f22	fix(model-plaza): include active subscription groups
+38cfd7e2d94decaa2c185169955f996d9990dc37	fix(proxies): preserve omitted expiry and fallback settings
+99eba19ffce4b661f4720c139da40434784d374e	fix: 升级 go-redis 至 v9.22.0 修复连接池 nil-ctx panic
+e835f7981981a9be8a09bf072fcc7118655ad685	fix(proxies): make backup references directed and shareable
+859de4c8fddb1afe3aaebba0a7b0fcf48eaa46eb	fix(proxies): allow repeated expiry fallback and preserve origin
+7137fae2a63d20a95f75f0c6ca8eb89b3feab1b4	test(proxies): preserve incoming references when editing backups
+6c8ad0bd4a05914065c4cd22800e6624eac32b73	fix: respect registration visibility on login
+b6ee9f0a320cbdd980c68e916ff551e1feb573a0	fix(antigravity): preserve OAuth subscription plan across account creation
+c8deeb0b0571fb22f9c1b17b2481800633ece8d0	fix(grok): 移除 Chat Completions 中不支持的 external_web_access 参数
+3495635a52bb0009ad15b4a6990ac3d2b1c43811	fix(minimax): 补齐阈值停调与额度监控接线
+10940ecf39bf67000c668b07facd6321ec7fb21e	fix(minimax): gofmt MiniMax allowlist comments
+188e3a9f90498ce6104ce0158486f34f9b57b9d7	fix(proxies): reject malformed list responses
+4e5d67df358cf698134ad71ec317892c25caa9ed	fix(gateway): accept Claude Code max_tokens=1 probes for any model
+570106ac17cecfbca95a460bd5047d43e8c0aafc	chore: update sponsors
+270eac6973049fe1b50eb75560a74a029e82884c	chore: update sponsors
+7ccc8a6f5047a819ad5e57f0feaae4bd6f65840b	fix(openai): 支持 Image 2.5 并修复 OAuth 生图主控模型
