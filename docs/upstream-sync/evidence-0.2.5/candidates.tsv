@@ -1,0 +1,80 @@
+PR	SHA	tier	batch	four_state	note
+6924	2493b0dc3	第一档	openai	CLEAN	codex UA CRLF/control validation before identity pairing (header injection)
+7082	1e1d15cca	第一档	provider	CLEAN	antigravity token cache keyed on project_id → cross-account token collision
+7162	b8275209e	第一档	provider	CLEAN	antigravity gemini SSE emits \n\n\n → google-genai framer drops event 2
+7022	5948988aa	第一档	monitor	CLEAN	header_util.go accept-encoding lowercase value → duplicate header
+7073	a4c517917	第一档	monitor	CLEAN	batch_image priority sort direction reversed
+6904	685e97a3a	第一档	monitor	CLEAN	scheduler_cache filter drops account_scheduling_threshold/session_window
+6969	75b7dd1e0	第一档	billing	CLEAN	group peak-rate invalid config → 500 instead of 400
+6973	9c30951e4	第一档	billing	CLEAN	renewal modal clips long plan lists (overflow-y)
+6843	8efe2fd8c	第一档	billing	CLEAN	usage cost tooltip toFixed(6) truncates sub-µ¢ → toFixed(8)
+7012	e67ffda7a	第一档	billing	CLEAN	easypay custom-method code regex rejects dots (value gated on easypay)
+7052	ba57ea914	第一档	auth	CLEAN	transient DB error → 401 USER_NOT_FOUND → forced logout; client.ts logout on any refresh fail
+7024	d2067668d	第一档	auth	CONFLICT	subscription assignment: stale selectedUser before debounced search
+7050	67845665d	第一档	auth	CLEAN	balance notify pending email splice(idx) race → filter by identity
+7053	99b93b298	第一档	auth	CLEAN	proxies filter change doesn't reset pagination
+6912	67d3a896b	第一档	auth	CLEAN	redeem duration limit max 365→36500 to match backend
+6925	3e4b6a09b	第二档	openai	CLEAN	recover Responses text carried only on done/terminal events (+109)
+7094	d4439129a	第二档	openai	CLEAN	merge leading system/developer + downgrade mid-conv system (avoid 400)
+6965	8f9a9a255	第二档	openai	CONFLICT	WS pool resident reader loop to answer upstream pings (large +1495)
+7064	bdb42e22f	第二档	openai	CONFLICT	WS v2 ctx_pool capacity ignores max_conns_factor (openai_ws_pool.go:1877)
+7043	2a4f3d1a7	第二档	openai	CLEAN	WS max_conns_factor default 1.0→5.0 (fork verified 1.0); pair with 7064
+6689	150c52b8d	第二档	provider	CONFLICT	antigravity mixed web_search+client tools 400; drop built-ins (whole-PR)
+6977	86f93c28e	第二档	provider	CONFLICT	deepseek empty-mapping passes unknown model → 404 + 30min cooldown
+7076	dd2e6b368	第二档	provider	CONFLICT	antigravity partial-refresh response missing account field (BE+FE)
+6661	14029e50a	第二档	provider	CONFLICT	grok media concurrency-slot leak + video ownership TTL
+6964	310f8b7fa	第二档	provider	CLEAN	apicompat agent_message chat-bridge (codex multi_agent silent 200)
+6943	4adcef4ff	第二档	monitor	CONFLICT	stop stripping client system cache_control + count_tokens block guard
+7074	30ed40a56	第二档	monitor	CLEAN	codex quota reset must anchor to snapshot time not now
+7026	0a378f343	第二档	monitor	CLEAN	keys view sync status after quota reset (re-enable auto-disabled)
+7112	e9169901d	第二档	monitor	CLEAN	channel-status auto-refresh interval off-by-one + reset
+7072	2061508ad	第二档	monitor	CONFLICT	scheduler unnamed-return latency lost + sticky-hit double count
+6869	43f9383d4	第二档	monitor	CONFLICT	codex automation heartbeat accept full bootstrap envelope
+6783	88011a6a2	第二档	monitor	CONFLICT	reduce allocs for large Responses image payloads (partial NOBASE)
+7010	3a070ec1b	第二档	monitor	CLEAN	privacy client Chrome→Firefox to dodge chatgpt.com CF 403 (behavior change)
+6995	eaa4083e2	第二档	billing	CLEAN	claude mid-conversation-output-config beta strip (avoid upstream 400)
+6954	2dff7af0f	第二档	billing	CONFLICT	user_platform_quota unlimited-purge; 1 SQL migration(→227)+PG-only BatchSnapshotUsage rework; CONFIRM
+6971	7145484fd	第二档	billing	CONFLICT	ops TTFT first-token request details (manual SQLite sort port)
+6654	a444551a6	第二档	auth	CLEAN	register confirm-password (i18n present); UX enhancement
+6916	0be30886a	第二档	auth	CONFLICT	subscription assignment search uses proper admin user list (exclude deleted)
+7023	f2b51e3b2	第二档	auth	CLEAN	profile normalized api errors via extractApiErrorMessage (util present)
+7025	329641a86	第二档	auth	CLEAN	proxy import modal only emits imported after real import
+7054	f0dd49778	第二档	auth	CLEAN	usage export snapshots filter params for consistency across pages
+7055	4ff3e6dfb	第二档	auth	CLEAN	redeem preserve success when refreshUser fails (warn not error)
+7111	f7e959ae5	第二档	auth	CLEAN	proxy allow explicitly clearing stored credentials (*string pointers, BE+FE)
+5833	a59f0c7fa	第三档	openai	CONFLICT	fast policy force-priority-when-tier-missing (billing semantics decision)
+6890	4726bdd08	第三档	openai	CONFLICT	route OAuth images via native Codex Images (+900, billing paths)
+6989	623c32e39	第三档	openai	CONFLICT	map new ChatGPT plan tiers to labels (cosmetic FE)
+7129	25c21aedd	第三档	openai	CONFLICT	always write sequence_number for grok-build (reverses fork decision, global omitempty)
+7049	387321590	第三档	openai	CONFLICT	WS queue-wake perf refactor (fork already wakes via notifyAccountPoolChanged)
+6575	6254aba5e	第三档	provider	CONFLICT	antigravity gemini 3.7/3.8 flash (new models + fallback pricing)
+6968	40cf3f50a	第三档	provider	CLEAN	codex advertise deepseek vision image input (one exp model)
+6974	fd300ab6f	第三档	provider	NOBASE	deepseek V4.1-Flash pricing; needs absent peak/off-peak subsystem first
+6929	6206ce940	第三档	provider	CONFLICT	gemini in-band 2xx error signals (large +1451 ops feature, OpsStreamError ext)
+6769	9fade3e8c	第三档	provider	NOBASE	ollama async rate-limit reset (+2311, new bg service, wire regen)
+7011	f78c4b241	第三档	provider	CONFLICT	config default compact model gpt-5.4→5.5 (user-overridable)
+6945	799e9938f	第三档	monitor	CONFLICT	GET /v1/models/:model retrieve (needs absent pinned-models subsystem)
+6917	e71d291b3	第三档	monitor	CONFLICT	monitor allow upstream base-URL path prefixes (SSRF guard intact)
+6847	f4dd88b00	第三档	monitor	CONFLICT	settings hide custom-page open button
+7001	c7ed61424	第三档	billing	CLEAN	ops token stats across all platforms (remove gpt% filter)
+6845	0aac71c6e	第三档	billing	CLEAN	ops error-summary column reorder (cosmetic)
+7057	9383e0b15	第三档	billing	CLEAN	codex preserve max context window metadata (additive, codex-only)
+6913	324a47e2b	第三档	auth	CLEAN	admin bulk-delete selected users (new capability)
+6915	0116c5a1e	第三档	auth	CLEAN	risk-control async-processed label reword (cosmetic i18n)
+7085	008391f69	第三档	auth	NOBASE	strip OAuth input metadata; fork uses divergent stripper; maintainer decision
+6747	cdb5cfaf6	第三档	bigfeature	CONFLICT	OpenCode platform (108 files, PG migration→rewrite SQLite 227, ent regen)
+6986	dfa83fbe9	第三档	bigfeature	CONFLICT	site billing mode three-state toggle (46 files)
+7091	1920a7d68	第三档	bigfeature	CONFLICT	subscription bulk actions (SQLite-safe lease; SaaS-operator value)
+6691	0bba06d64	第三档	bigfeature	CONFLICT	API key bulk edit (FE-only, reuses PUT; convenience feature)
+7153	2d9af8592	第三档	bigfeature	CONFLICT	API key group provider filter (blocked: needs frontend platform types)
+6960	3fb03cdac	第四档	openai	NOBASE	WS session-preemption/exec-scope subsystem absent (nothing to fix)
+6988	642d20b8a	第四档	openai	NOBASE	codex manifest display picker absent (FetchOpenAIAccountModels/fromManifest absent)
+7126	fb90414c0	第四档	openai	CONFLICT	Responses Lite namespace already covered (fork scans additional_tools+tool_search_output superset)
+6850	87e01596b	第四档	monitor	CONFLICT	channel-monitor-v2 UTC buckets PG-only (date_bin/TIMESTAMPTZ)
+6499	264cbbec2	第四档	monitor	CONFLICT	setup PG maintenance-DB bootstrap; fork setup is SQLite-only
+7006	bae37a00f	第四档	monitor	CONFLICT	errcheck on PG-bootstrap tests absent in fork (depends on 6499)
+7062	749cd7c35	第四档	monitor	CONFLICT	add minimax to monitor allowlist; MonitorProvider CN bases absent
+7110	0a215c931	第四档	monitor	CLEAN	batch-image access cache scope — reverted upstream by 7148
+7148	1be482c31	第四档	monitor	ALREADY	revert of 7110 — net no-op pair, skip both
+6902	501cc19d0	第四档	billing	CONFLICT	apple-container self-update deploy (macOS; off-target for Linux 1C1G)
+6257	badfad8b7	第四档	auth	CLEAN	promo through OAuth — test-only for a feature the fork never implemented

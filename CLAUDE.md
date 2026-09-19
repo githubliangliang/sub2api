@@ -16,6 +16,15 @@ Fork of [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) optimized for **
 
 This fork is SQLite-only and prioritizes 1C1G native deploy. Upstream multi-instance production still uses PostgreSQL + external Redis. Deeper notes: [REFACTOR.md](./REFACTOR.md), [DEV_GUIDE.md](./DEV_GUIDE.md), [REMOVED_PAGES.md](./REMOVED_PAGES.md), [deploy/START_NATIVE.md](./deploy/START_NATIVE.md).
 
+### Personal-use scope: no payment features
+
+This is a personal-use project. **Do not introduce, enable, extend, or port payment features**, including payment providers (such as EasyPay), checkout, recharge, paid subscription purchase/renewal, refunds, and related commercial UI, configuration, dependencies, or migrations. This applies to upstream bugfixes as well as new features; a small or cleanly applicable patch does not make payment functionality in scope.
+
+- During upstream intake, classify payment-only changes as **第四档 / out of scope for personal use**, not 第一档/第二档 or optional work to carry along.
+- For mixed PRs, take only independently useful non-payment changes. Do not import payment code as a prerequisite; defer the dependent item if it cannot be separated.
+- Apply this boundary to new proposals and existing unimplemented OpenSpec tasks. An older task listing is not authorization to implement payment functionality.
+- Preserve gateway usage recording, token/cost statistics, account quotas, and upstream account subscription metadata needed for personal operation. These are not payment features. This rule does not authorize deleting existing payment code or data as an unrelated cleanup.
+
 **Merging upstream:** git history was rewritten (no shared ancestor). Do **not** `git merge upstream/main`. Cherry-pick or port by feature. Process + current checklists: [docs/upstream-sync/README.md](./docs/upstream-sync/README.md), [docs/upstream-sync/PORTING-0.2.4.md](./docs/upstream-sync/PORTING-0.2.4.md) (newest intake, 2026-09-12: v0.2.1–v0.2.4 including the v0.2.2 tag; 13 第一档 items + 12 第二档 clusters **landed on main and verified** at `a26b6b55d`, including the API Key Responses namespace follow-up fix; release target `v1.1.12`; OpenSpec changes, frozen intake evidence and final implementation report linked there; earlier leftovers rechecked), [docs/upstream-sync/PORTING-0.2.0.md](./docs/upstream-sync/PORTING-0.2.0.md) (0.1.185 + 0.2.0 first/second-tier main batches merged into main at `c9d9bebe8`; DOMPurify still pending), [docs/upstream-sync/PORTING-0.1.184.md](./docs/upstream-sync/PORTING-0.1.184.md) (0.1.184, P0/P1 merged), [docs/upstream-sync/PORTING-0.1.183.md](./docs/upstream-sync/PORTING-0.1.183.md) (0.1.181–0.1.183 bugfixes), [docs/upstream-sync/PORTING-0.1.180.md](./docs/upstream-sync/PORTING-0.1.180.md).
 
 **Go version:** `1.27.0` (from `backend/go.mod`). CI asserts this string; bump go.mod and workflow version checks together.
@@ -31,6 +40,8 @@ Triggered by "check upstream", "evaluate the new release", or a new tag showing 
 **2. Judge per candidate, four states per file**: `CLEAN` (forward applies) / `ALREADY` (reverse applies = already here) / `CONFLICT` / `NOBASE`. For a feature upstream split into many micro-commits, take the whole PR diff (`git diff <merge>^1 <merge>`), never the individual commits. Then, for every new call the patch introduces, `grep -rn "func .*<symbol>"` — three states never prove it compiles. `CONFLICT` may mean the changed function does not exist here, i.e. **this fork does not have the bug**; verify before filing it as work.
 
 **3. Rank into four tiers** (this is the priority model — keep the tier numbers, downstream artifacts reference them):
+
+Apply the personal-use scope above before ranking: payment-only changes are out of scope even when the defect exists locally and the patch is cheap.
 
 | Tier | Meaning | Artifact |
 |---|---|---|
