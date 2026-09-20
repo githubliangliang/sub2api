@@ -156,6 +156,63 @@ func TestOpsAndUsageQueriesRunOnSQLite(t *testing.T) {
 	require.Equal(t, int64(1), dashboard.TotalRequests)
 }
 
+func TestOpsRequestDetailsTTFTSortRunsOnSQLite(t *testing.T) {
+	db := openOpsUsageSQLite(t)
+	ctx := context.Background()
+	start := time.Date(2026, 8, 13, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	seedOpsUsageSQLite(t, db, start)
+
+	for _, row := range []struct {
+		requestID string
+		createdAt time.Time
+		ttft      any
+	}{
+		{requestID: "ttft-tie-older", createdAt: start.Add(10 * time.Minute), ttft: 900},
+		{requestID: "ttft-tie-newer", createdAt: start.Add(20 * time.Minute), ttft: 900},
+		{requestID: "ttft-lower", createdAt: start.Add(30 * time.Minute), ttft: 300},
+		{requestID: "ttft-null", createdAt: start.Add(40 * time.Minute), ttft: nil},
+	} {
+		_, err := db.ExecContext(ctx, `
+			INSERT INTO usage_logs (
+				user_id, api_key_id, account_id, group_id, request_id, model,
+				input_tokens, output_tokens, duration_ms, first_token_ms,
+				total_cost, actual_cost, created_at
+			) VALUES (9001, 9001, 9001, 9001, $1, 'gpt-5', 1, 1, 100, $2, 0, 0, $3)
+		`, row.requestID, row.ttft, row.createdAt)
+		require.NoError(t, err)
+	}
+
+	repo := &opsRepository{db: db}
+	startCopy, endCopy := start, end
+	details, _, err := repo.ListRequestDetails(ctx, &service.OpsRequestDetailFilter{
+		StartTime: &startCopy,
+		EndTime:   &endCopy,
+		Kind:      string(service.OpsRequestKindSuccess),
+		Sort:      "ttft_desc",
+		Page:      1,
+		PageSize:  10,
+	})
+	require.NoError(t, err)
+
+	requestIDs := make([]string, 0, len(details))
+	for _, detail := range details {
+		requestIDs = append(requestIDs, detail.RequestID)
+	}
+	require.Equal(t, []string{
+		"ttft-tie-newer",
+		"ttft-tie-older",
+		"ttft-lower",
+		"",
+		"ttft-null",
+	}, requestIDs)
+	require.Equal(t, 900, *details[0].FirstTokenMs)
+	require.Equal(t, 900, *details[1].FirstTokenMs)
+	require.Equal(t, 300, *details[2].FirstTokenMs)
+	require.Equal(t, 40, *details[3].FirstTokenMs)
+	require.Nil(t, details[4].FirstTokenMs)
+}
+
 func seedOpsUsageSQLite(t *testing.T, db *sql.DB, start time.Time) {
 	t.Helper()
 	ctx := context.Background()

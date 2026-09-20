@@ -84,3 +84,18 @@ func TestPairCodexClientIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestPairCodexClientIdentityRejectsInvalidHeaderValue(t *testing.T) {
+	for _, ua := range []string{
+		"codex-tui/1.0.0\r\nInjected: yes",
+		"codex-tui/1.0.0\x00",
+		"codex-tui/1.0.0\x7f",
+	} {
+		t.Run(ua, func(t *testing.T) {
+			originator, pairedUA, ok := PairCodexClientIdentity(ua)
+			require.False(t, ok)
+			require.Empty(t, originator)
+			require.Empty(t, pairedUA)
+		})
+	}
+}

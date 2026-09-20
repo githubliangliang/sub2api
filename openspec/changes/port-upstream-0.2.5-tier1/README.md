@@ -1,6 +1,6 @@
 # 上游 0.2.5 第一档
 
-状态：**文档已补全，产品实现未开始**。本次仅完善 OpenSpec，未修改产品代码，未执行产品构建/测试，未提交或 push。
+状态：**产品实现已完成，验收证据已回填，工作树未提交**。T01–T23 的代码与门禁已落地；T11/T16 的真实登录态浏览器验收仍为 PARTIAL。
 现行范围：22 个来源 PR，拆为 T01–T23；#7052 分为后端 T07 与前端 T08。
 原 T01–T16 编号不变，原第二档七项前移为 T17–T23；两档合计仍为原43个 PR，没有新增来源或行为。
 无迁移、无 Ent/Wire、无依赖升级；VERSION 保持 1.1.12，最大迁移保持 226。
@@ -11,7 +11,7 @@
 - [implementation-map.md](./implementation-map.md)：**实施编号与 patch site 的唯一现行清单**，含冻结来源勘误。
 - [design.md](./design.md)：移植决策、兼容边界、风险与回退。
 - [specs/single-node-correctness/spec.md](./specs/single-node-correctness/spec.md)：行为契约。
-- [tasks.md](./tasks.md)：分阶段实施任务；产品任务全部未勾选。
+- [tasks.md](./tasks.md)：分阶段实施任务与实际完成状态。
 - [verification.md](./verification.md)：文档核对结果、逐项验收矩阵和待执行门禁。
 - [source-baseline.md](./source-baseline.md)、[source-feature-map.md](./source-feature-map.md)：原始评估快照，保持冻结，不作为修订后的实施编号表。
 

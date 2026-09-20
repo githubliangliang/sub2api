@@ -309,6 +309,36 @@ func TestNormalizeOpenAIModelForUpstream(t *testing.T) {
 			model:   "gpt-4.1",
 			want:    "gpt-4.1",
 		},
+		{
+			name:    "nil account keeps codex model normalization",
+			account: nil,
+			model:   "openai/gpt-5.4",
+			want:    "gpt-5.4",
+		},
+		{
+			name:    "deepseek strips claude code long context suffix",
+			account: &Account{Type: AccountTypeAPIKey, Platform: PlatformOpenAI, Credentials: map[string]any{"base_url": "https://api.deepseek.com"}},
+			model:   "deepseek-flash[1m]",
+			want:    "deepseek-flash",
+		},
+		{
+			name:    "deepseek strips duplicated long context suffix",
+			account: &Account{Type: AccountTypeAPIKey, Platform: PlatformOpenAI, Credentials: map[string]any{"base_url": "https://api.deepseek.com"}},
+			model:   "deepseek-flash[1M][1m]",
+			want:    "deepseek-flash",
+		},
+		{
+			name:    "deepseek preserves plain model",
+			account: &Account{Type: AccountTypeAPIKey, Platform: PlatformOpenAI, Credentials: map[string]any{"base_url": "https://api.deepseek.com"}},
+			model:   "deepseek-flash",
+			want:    "deepseek-flash",
+		},
+		{
+			name:    "non deepseek preserves long context suffix",
+			account: &Account{Type: AccountTypeAPIKey, Platform: PlatformOpenAI, Credentials: map[string]any{"base_url": "https://example.invalid"}},
+			model:   "deepseek-flash[1m]",
+			want:    "deepseek-flash[1m]",
+		},
 	}
 
 	for _, tt := range tests {

@@ -1420,15 +1420,21 @@ func (h *AccountHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	if warning == "missing_project_id_temporary" {
-		response.Success(c, gin.H{
-			"message": "Token refreshed successfully, but project_id could not be retrieved (will retry automatically)",
-			"warning": "missing_project_id_temporary",
-		})
-		return
-	}
+	response.Success(c, accountRefreshSuccessData(
+		h.buildAccountResponseWithRuntime(c.Request.Context(), updatedAccount),
+		warning,
+	))
+}
 
-	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), updatedAccount))
+func accountRefreshSuccessData(account AccountWithConcurrency, warning string) any {
+	if warning != "missing_project_id_temporary" {
+		return account
+	}
+	return map[string]any{
+		"account": account,
+		"message": "Token refreshed successfully, but project_id could not be retrieved (will retry automatically)",
+		"warning": warning,
+	}
 }
 
 // ApplyOAuthCredentialsRequest is the payload for persisting re-authorized OAuth credentials.

@@ -107,7 +107,7 @@
                 <button @click="sendCodeFor(idx)" :disabled="pe.sending" class="text-xs text-primary-600 hover:text-primary-700">
                   {{ t('profile.balanceNotify.sendCode') }}
                 </button>
-                <button @click="pendingEmails.splice(idx, 1)" class="text-xs text-red-500 hover:text-red-700 ml-1">
+                <button @click="removePendingEmail(pe.email)" class="text-xs text-red-500 hover:text-red-700 ml-1">
                   {{ t('profile.balanceNotify.removeEmail') }}
                 </button>
               </div>
@@ -305,7 +305,7 @@ async function verifyPending(idx: number) {
   try {
     await userAPI.verifyNotifyEmail(pe.email, pe.code)
     if (pe.timer) clearInterval(pe.timer)
-    pendingEmails.value.splice(idx, 1)
+    pendingEmails.value = pendingEmails.value.filter(entry => entry.email !== pe.email)
     appStore.showSuccess(t('profile.balanceNotify.verifySuccess'))
     const updated = await userAPI.getProfile()
     authStore.user = updated
@@ -315,6 +315,12 @@ async function verifyPending(idx: number) {
   } finally {
     pe.verifying = false
   }
+}
+
+function removePendingEmail(email: string) {
+  const pending = pendingEmails.value.find(entry => entry.email === email)
+  if (pending?.timer) clearInterval(pending.timer)
+  pendingEmails.value = pendingEmails.value.filter(entry => entry.email !== email)
 }
 
 const handleRemoveEmail = async (email: string) => {

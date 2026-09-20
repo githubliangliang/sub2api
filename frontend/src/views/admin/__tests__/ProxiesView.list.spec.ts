@@ -54,4 +54,21 @@ describe('proxy list refresh', () => {
       errorLog.mockRestore()
     }
   })
+
+  it('resets to the first page before loading a changed filter', async () => {
+    get.mockImplementation((url: string) => Promise.resolve({ data: url.endsWith('/all') ? [] : { items: [], total: 100, pages: 5 } }))
+    const wrapper = mount(ProxiesView, { global: { stubs: {
+      AppLayout: { template: '<div><slot /></div>' },
+      TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
+      DataTable: true, BaseDialog: true, ConfirmDialog: true, ImportDataModal: true, ProxyAdBanner: true, Icon: true,
+      Select: { emits: ['change'], template: '<button data-test="filter" @click="$emit(\'change\')">filter</button>' },
+      Pagination: { emits: ['update:page'], template: '<button data-test="page" @click="$emit(\'update:page\', 5)">page</button>' },
+    } } })
+    try {
+      await flushPromises(); await wrapper.get('[data-test="page"]').trigger('click'); await flushPromises()
+      await wrapper.get('[data-test="filter"]').trigger('click'); await flushPromises()
+      const listCalls = get.mock.calls.filter(([url]) => url === '/admin/proxies')
+      expect(listCalls.at(-1)?.[1]?.params?.page).toBe(1)
+    } finally { wrapper.unmount() }
+  })
 })

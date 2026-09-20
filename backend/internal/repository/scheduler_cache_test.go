@@ -20,6 +20,34 @@ func TestFilterSchedulerCredentialsKeepsSubscriptionPlanType(t *testing.T) {
 	require.NotContains(t, filtered, "refresh_token")
 }
 
+func TestFilterSchedulerCredentialsKeepsAccountSchedulingThreshold(t *testing.T) {
+	filtered := filterSchedulerCredentials(map[string]any{
+		"account_scheduling_threshold": 0.42,
+		"refresh_token":                "secret-refresh-token",
+	})
+
+	require.Equal(t, 0.42, filtered["account_scheduling_threshold"])
+	require.NotContains(t, filtered, "refresh_token")
+}
+
+func TestFilterSchedulerExtraKeepsSharedWindowMetadata(t *testing.T) {
+	filtered := filterSchedulerExtra(map[string]any{
+		"session_window_utilization":      0,
+		"passive_usage_7d_utilization":    0.25,
+		"passive_usage_7d_reset":          "2026-09-20T00:00:00Z",
+		"passive_usage_7d_oi_utilization": 0.5,
+		"passive_usage_7d_oi_reset":       "2026-09-21T00:00:00Z",
+		"unrelated_secret":                "drop-me",
+	})
+
+	require.Equal(t, 0, filtered["session_window_utilization"])
+	require.Equal(t, 0.25, filtered["passive_usage_7d_utilization"])
+	require.Equal(t, "2026-09-20T00:00:00Z", filtered["passive_usage_7d_reset"])
+	require.Equal(t, 0.5, filtered["passive_usage_7d_oi_utilization"])
+	require.Equal(t, "2026-09-21T00:00:00Z", filtered["passive_usage_7d_oi_reset"])
+	require.NotContains(t, filtered, "unrelated_secret")
+}
+
 func TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity(t *testing.T) {
 	account := service.Account{
 		ID:       24,

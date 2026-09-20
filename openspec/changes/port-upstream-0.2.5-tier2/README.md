@@ -1,6 +1,6 @@
 # 上游 0.2.5 第二档
 
-状态：**规格已补全，产品代码未开始**。实施与测试证据仍待填写。
+状态：**现行簇已实现并完成门禁**。S02 #7043 默认值调优与 S12b #6954 迁移按批准边界延期。
 现行范围：原28个来源 PR 中7个前移第一档后，剩 **21个 PR / 11簇**。
 保留 S01–S12 既有编号，S07迁至第一档T19后退役；S11仅保留#6654/#6916/#7111。
 两档合计仍为原43个 PR，没有新增来源或行为。
@@ -10,7 +10,7 @@
 - [source-baseline.md](./source-baseline.md)、[source-feature-map.md](./source-feature-map.md)：冻结来源，实施期间不改写。
 - [design.md](./design.md)：现行来源归属、移植约束与逐簇决策（优先于冻结历史编号表）。
 - [specs/single-node-stability/spec.md](./specs/single-node-stability/spec.md)：行为契约。
-- [tasks.md](./tasks.md)、[verification.md](./verification.md)：任务清单与验收证据槽位（任务未勾选、实施结果未填）。
+- [tasks.md](./tasks.md)、[verification.md](./verification.md)：任务清单与实际验收证据。
 - 本地未找到来源文档提及的 `docs/upstream-sync/PORTING-0.2.5.md`；本次按冻结 PR/SHA 与
   [候选表](../../../docs/upstream-sync/evidence-0.2.5/candidates.tsv)、
   [文件四态](../../../docs/upstream-sync/evidence-0.2.5/files.tsv) 核对，不另建 patch site 清单。

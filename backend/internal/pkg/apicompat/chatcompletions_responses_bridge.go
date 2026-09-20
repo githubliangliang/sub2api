@@ -288,7 +288,63 @@ func responsesInputToChatMessagesWithOptions(instructions string, inputRaw json.
 	if err != nil {
 		return nil, err
 	}
-	return normalizeChatMessagesWithToolOutputMedia(built, mediaByCallID), nil
+	normalized := normalizeChatMessagesWithToolOutputMedia(built, mediaByCallID)
+	return normalizeResponsesDerivedChatMessageRoles(normalized), nil
+}
+
+// normalizeResponsesDerivedChatMessageRoles rewrites the Chat Completions
+// message list produced by the Responses bridge so that strict upstreams which
+// only accept system content at the very start of the conversation accept it.
+//
+// The bridge turns the Responses `instructions` field and every role:"developer"
+// item into a system message. Codex always sends both instructions and a leading
+// developer item, and it also injects developer notices into the middle of the
+// message history (for example when the user switches models). Forwarded as-is
+// that produces two leading system messages and mid-conversation system
+// messages, which Qwen-family upstreams reject with
+// "System message must be at the beginning." (HTTP 400).
+//
+// Leading system/developer messages are therefore merged into a single leading
+// system message, while later ones keep their position but are downgraded to
+// user messages so the same text still reaches the model.
+func normalizeResponsesDerivedChatMessageRoles(messages []ChatMessage) []ChatMessage {
+	isInstructionRole := func(role string) bool {
+		return role == "system" || role == "developer"
+	}
+
+	leading := 0
+	for leading < len(messages) && isInstructionRole(messages[leading].Role) {
+		leading++
+	}
+
+	out := make([]ChatMessage, 0, len(messages))
+	switch leading {
+	case 0:
+		// No leading instructions, nothing to merge.
+	case 1:
+		// A single leading prompt is already valid; keep its content byte for
+		// byte instead of round-tripping it through the text merge below.
+		out = append(out, messages[0])
+	default:
+		merged := make([]string, 0, leading)
+		for _, m := range messages[:leading] {
+			if text := strings.TrimSpace(chatMessageContentText(m.Content)); text != "" {
+				merged = append(merged, text)
+			}
+		}
+		if len(merged) > 0 {
+			content, _ := json.Marshal(strings.Join(merged, "\n\n"))
+			out = append(out, ChatMessage{Role: "system", Content: content})
+		}
+	}
+
+	for _, m := range messages[leading:] {
+		if isInstructionRole(m.Role) {
+			m.Role = "user"
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // buildChatMessagesFromItems walks the Responses input items and appends the
@@ -415,6 +471,20 @@ func buildChatMessagesFromItems(messages []ChatMessage, rawItems []json.RawMessa
 			messages = appendAssistantToolCall(messages, toolCall, reasoningForAssistant())
 			pendingReasoning = ""
 			continue
+		case "agent_message":
+			// Codex multi_agent_v2 uses agent_message to pass tasks and replies
+			// between parent and child agents. Chat Completions has no equivalent
+			// item, so preserve the ordered text as one user message.
+			text := agentMessageText(item["content"])
+			if text == "" {
+				pendingReasoning = ""
+				continue
+			}
+			content, _ := json.Marshal(text)
+			messages = append(messages, ChatMessage{Role: "user", Content: content})
+			pendingReasoning = ""
+			lastTurnReasoning = ""
+			continue
 		case "function_call_output", "custom_tool_call_output", "tool_search_output":
 			outputRaw := bytesTrimSpace(item["output"])
 			if itemType == "tool_search_output" && (len(outputRaw) == 0 || string(outputRaw) == "null") {
@@ -502,6 +572,34 @@ func buildChatMessagesFromItems(messages []ChatMessage, rawItems []json.RawMessa
 	}
 
 	return messages, mediaByCallID, nil
+}
+
+// agentMessageText concatenates input_text and provider-visible
+// encrypted_content parts in their original order. The custom provider sends
+// encrypted_content as plaintext, so no decryption belongs in this bridge.
+func agentMessageText(raw json.RawMessage) string {
+	raw = bytesTrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+	var parts []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &parts); err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, part := range parts {
+		switch rawString(part["type"]) {
+		case "input_text", "text":
+			_, _ = b.WriteString(rawString(part["text"]))
+		case "encrypted_content":
+			_, _ = b.WriteString(rawString(part["encrypted_content"]))
+		}
+	}
+	return b.String()
 }
 
 // extractToolOutputMedia rewrites only recognized image nodes. Media-free

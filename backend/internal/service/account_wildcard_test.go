@@ -160,6 +160,7 @@ func TestAccountIsModelSupported(t *testing.T) {
 		name           string
 		platform       string
 		credentials    map[string]any
+		extra          map[string]any
 		requestedModel string
 		expected       bool
 	}{
@@ -231,13 +232,100 @@ func TestAccountIsModelSupported(t *testing.T) {
 			requestedModel: "gemini-3-flash",
 			expected:       false,
 		},
+
+		// DeepSeek empty mapping uses the frozen official model allowlist.
+		{
+			name:           "deepseek empty mapping allows official flash",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "deepseek-flash",
+			expected:       true,
+		},
+		{
+			name:           "deepseek empty mapping normalizes claude code long context suffix",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "deepseek-flash[1m]",
+			expected:       true,
+		},
+		{
+			name:           "deepseek empty mapping matches case-insensitively",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "deepseek-FLASH",
+			expected:       true,
+		},
+		{
+			name:           "deepseek empty mapping allows versioned pro name",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "deepseek-v4-pro-0813",
+			expected:       true,
+		},
+		{
+			name:           "deepseek empty mapping rejects retired chat model",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "deepseek-chat",
+			expected:       false,
+		},
+		{
+			name:           "deepseek empty mapping rejects foreign claude model",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "claude-sonnet-4-6",
+			expected:       false,
+		},
+		{
+			name:           "deepseek empty mapping rejects unknown gpt model",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "gpt-future-model",
+			expected:       false,
+		},
+		{
+			name:           "deepseek empty mapping rejects typo",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			requestedModel: "deepseek-flas",
+			expected:       false,
+		},
+		{
+			name:     "deepseek explicit mapping wins over whitelist",
+			platform: PlatformOpenAI,
+			credentials: map[string]any{
+				"base_url": "https://api.deepseek.com",
+				"model_mapping": map[string]any{
+					"foo-bar": "deepseek-flash",
+				},
+			},
+			requestedModel: "foo-bar",
+			expected:       true,
+		},
+		{
+			name:           "deepseek passthrough bypasses frozen allowlist",
+			platform:       PlatformOpenAI,
+			credentials:    map[string]any{"base_url": "https://api.deepseek.com"},
+			extra:          map[string]any{"openai_passthrough": true},
+			requestedModel: "custom-upstream-model",
+			expected:       true,
+		},
+		{
+			name:           "non deepseek empty mapping still allows all",
+			platform:       PlatformAnthropic,
+			credentials:    map[string]any{},
+			requestedModel: "any-model",
+			expected:       true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			account := &Account{
 				Platform:    tt.platform,
+				Type:        AccountTypeAPIKey,
 				Credentials: tt.credentials,
+				Extra:       tt.extra,
 			}
 			result := account.IsModelSupported(tt.requestedModel)
 			if result != tt.expected {

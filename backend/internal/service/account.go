@@ -276,6 +276,18 @@ func (a *Account) IsOpenAICompatible() bool {
 	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok)
 }
 
+func (a *Account) isOfficialDeepSeekAPI() bool {
+	if a == nil || a.Platform != PlatformOpenAI || a.Type != AccountTypeAPIKey {
+		return false
+	}
+	parsed, err := url.Parse(strings.TrimSpace(a.GetCredential("base_url")))
+	if err != nil {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	return host == "api.deepseek.com"
+}
+
 func (a *Account) GeminiOAuthType() string {
 	if a.Platform != PlatformGemini || a.Type != AccountTypeOAuth {
 		return ""
@@ -823,6 +835,9 @@ func (a *Account) IsModelSupported(requestedModel string) bool {
 	}
 	mapping := a.GetModelMapping()
 	if len(mapping) == 0 {
+		if a.isOfficialDeepSeekAPI() {
+			return isDeepSeekModelSupported(requestedModel)
+		}
 		if a.IsOpenAIOAuth() {
 			return isOpenAIOAuthServableModel(requestedModel)
 		}
@@ -833,6 +848,31 @@ func (a *Account) IsModelSupported(requestedModel string) bool {
 	}
 	normalized := normalizeRequestedModelForLookup(a.Platform, requestedModel)
 	return normalized != requestedModel && mappingSupportsRequestedModel(mapping, normalized)
+}
+
+var deepSeekFrozenModels = map[string]struct{}{
+	"deepseek-flash":               {},
+	"deepseek-v4-pro":              {},
+	"deepseek-v4-flash":            {},
+	"deepseek-v4-flash-vision-exp": {},
+	"deepseek-v4-pro-0813":         {},
+}
+
+func normalizeDeepSeekModel(model string) string {
+	model = strings.TrimSpace(model)
+	for len(model) >= len("[1m]") && strings.EqualFold(model[len(model)-len("[1m]"):], "[1m]") {
+		model = strings.TrimSpace(model[:len(model)-len("[1m]")])
+	}
+	return model
+}
+
+func isDeepSeekModelSupported(model string) bool {
+	normalized := strings.ToLower(normalizeDeepSeekModel(model))
+	if normalized == "" {
+		return true
+	}
+	_, ok := deepSeekFrozenModels[normalized]
+	return ok
 }
 
 // GetMappedModel 获取映射后的模型名（支持通配符，最长优先匹配）
