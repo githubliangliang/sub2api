@@ -13,4 +13,4 @@
 
 本change已完成指定服务、转换器与界面修复；详细位置及评估取舍见[评估文档](../../../docs/upstream-sync/PORTING-0.2.9.md)。
 Go1.27.1环境已补齐，54个后端测试包、build、目标race和SQLite检查通过；前端全量1909项通过（2项既有支付API测试跳过），typecheck/lint/build通过。
-实际适配、审查修复及未提交状态见[验收记录](./verification.md)。
+实际适配、审查修复及提交状态见[验收记录](./verification.md)。

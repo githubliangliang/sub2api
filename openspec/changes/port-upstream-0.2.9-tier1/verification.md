@@ -1,10 +1,10 @@
 # 第一档实施验收
 
-第一档15簇/39PR已完成开发及验收，工作树未提交。第二档仍未实施。
+第一档15簇/39PR已完成开发及验收，产品提交 `fd6f79190`。第二档仍未实施。
 
 - 实际实施起点：`50c34ad498fa333e20b4ee46dfe58c4512d88a89`，开始时工作区干净。
 - 分支：`sync/upstream-0.2.9-tier1`。
-- 完成产品SHA：未提交；当前内容固定在[代码校验清单](../../../docs/upstream-sync/implementation-0.2.9-tier1/code-manifest.tsv)。
+- 完成产品SHA：`fd6f791900330c839d460e2b9d5e3303802fa445`；提交内容固定在[代码校验清单](../../../docs/upstream-sync/implementation-0.2.9-tier1/code-manifest.tsv)。
 - 执行日期：2026-09-28。
 - Go 1.27.1 / Linux amd64（WSL，GCC可用）；go.mod保持1.27.0，pnpm10.22.0，Vitest2.1.9。
 - 冻结source-*和evidence-0.2.9保持不变；[实施证据目录](../../../docs/upstream-sync/implementation-0.2.9-tier1/README.md)单独存放新证据。

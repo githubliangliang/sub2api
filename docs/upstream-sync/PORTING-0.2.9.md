@@ -1,7 +1,7 @@
 # 上游 v0.2.9 移植评估（v0.2.5 → v0.2.9）
 
 评估日期：2026-09-28。**建议分批移植第一档 39 个 PR、第二档 48 个 PR；不做整仓 merge。**
-**实施更新（2026-09-28）：第一档15簇/39PR已完成开发和验收，第二档仍未实施。** 实施起点50c34ad49，分支sync/upstream-0.2.9-tier1，产品代码尚未提交。Go1.27.1环境已补齐，后端54包unit/build/目标race/SQLite通过；前端269文件、1909项通过（2项既有跳过），typecheck/lint/build通过。详见[第一档验收](../../openspec/changes/port-upstream-0.2.9-tier1/verification.md)。下面的基线表、四态和候选分档保持评估口径。
+**实施更新（2026-09-28）：第一档15簇/39PR已完成开发和验收，第二档仍未实施。** 实施起点50c34ad49，分支sync/upstream-0.2.9-tier1，产品提交 `fd6f79190`。Go1.27.1环境已补齐，后端54包unit/build/目标race/SQLite通过；前端269文件、1909项通过（2项既有跳过），typecheck/lint/build通过。详见[第一档验收](../../openspec/changes/port-upstream-0.2.9-tier1/verification.md)。下面的基线表、四态和候选分档保持评估口径。
 
 ## 1. 版本、范围与规模
 

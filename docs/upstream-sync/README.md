@@ -4,7 +4,7 @@
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **最新一轮，2026-09-28，第一档39PR/15簇已完成开发和验收，第二档48PR/16簇仍待实施**。评估范围215条非merge、161PR和9直接提交保持冻结；实际开发从 `50c34ad49` 开始，分支 `sync/upstream-0.2.9-tier1`，产品未提交。Go1.27.1下54包unit、build、目标race、SQLite检查通过；前端269文件/1909通过/2既有跳过，typecheck/lint/build通过。[第一档验收](../../openspec/changes/port-upstream-0.2.9-tier1/verification.md)已回填。迁移仍226；第三/四档及旧遗留见§5。开发纠正#7617反向补丁匹配错误header map的ALREADY解释；未改原始四态。0.2.5主体已在 `bfbcd79` 落地。
+- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **最新一轮，2026-09-28，第一档39PR/15簇已完成开发和验收，第二档48PR/16簇仍待实施**。评估范围215条非merge、161PR和9直接提交保持冻结；实际开发从 `50c34ad49` 开始，分支 `sync/upstream-0.2.9-tier1`，产品提交 `fd6f79190`。Go1.27.1下54包unit、build、目标race、SQLite检查通过；前端269文件/1909通过/2既有跳过，typecheck/lint/build通过。[第一档验收](../../openspec/changes/port-upstream-0.2.9-tier1/verification.md)已回填。迁移仍226；第三/四档及旧遗留见§5。开发纠正#7617反向补丁匹配错误header map的ALREADY解释；未改原始四态。0.2.5主体已在 `bfbcd79` 落地。
 
 - [PORTING-0.2.4.md](./PORTING-0.2.4.md) —— **历史轮次，2026-09-12，第一档13项、第二档12簇已落地 main，最终构建和总检查通过**。两份 OpenSpec 的任务和验收已回填；[最终验收](./evidence-0.2.4/implementation.md)记录54包后端 unit、240文件/1720项前端测试、静态单文件构建及真实 SQLite/浏览器验证，并追加 API Key Responses namespace 修复及其定向验证。初始151条提交、114候选、1,044条四态证据保持冻结。VERSION仍为1.1.11，迁移仍为226，SQLite/miniredis/simple mode保留。第三/四档与旧DOMPurify独立待办未实施；本次未创建新 tag 或 Release。
 
