@@ -1,7 +1,7 @@
 # 上游 v0.2.9 移植评估（v0.2.5 → v0.2.9）
 
 评估日期：2026-09-28。**建议分批移植第一档 39 个 PR、第二档 48 个 PR；不做整仓 merge。**
-本轮只生成评估与两份 OpenSpec，产品补丁尚未实施。前端基线通过；后端缺少 Go，编译/运行验收待补，不能据此直接发布。
+**实施更新（2026-09-28）：第一档15簇/39PR已完成开发和验收，第二档仍未实施。** 实施起点50c34ad49，分支sync/upstream-0.2.9-tier1，产品代码尚未提交。Go1.27.1环境已补齐，后端54包unit/build/目标race/SQLite通过；前端269文件、1909项通过（2项既有跳过），typecheck/lint/build通过。详见[第一档验收](../../openspec/changes/port-upstream-0.2.9-tier1/verification.md)。下面的基线表、四态和候选分档保持评估口径。
 
 ## 1. 版本、范围与规模
 
@@ -96,7 +96,7 @@ A/C/X/N 依次表示 ALREADY/CLEAN/CONFLICT/NOBASE，统计含来源 PR 测试�
 - `backend/internal/service/openai_compat_model.go`
 ### F05：显式 beta 头兼容
 
-OpenAI allowed-header 文件已 ALREADY，仅补缺少的 buildUpstreamRequest 清理调用。反例/边界：未知 Anthropic beta 继续受白名单/丢弃策略限制；空请求不自动注入。
+实施时更正：文件级ALREADY反向补丁匹配到了另一份passthrough白名单，普通openaiAllowedHeaders实际仍缺openai-beta。失败回归证实后，已同时补齐普通白名单和buildUpstreamRequest清理调用。原始四态保持冻结。反例/边界：未知Anthropic beta继续受白名单/丢弃策略限制；空请求不自动注入。
 
 - `backend/internal/pkg/claude/constants.go`
 - `backend/internal/service/gateway_upstream_request.go`:490 `computeFinalAnthropicBeta`
@@ -418,15 +418,15 @@ Lite helper 42行、metadata helper 39行；仅接本地现有 fingerprint 消�
 
 ## 6. ALREADY 与无需移植的语义
 
-- 8个文件级ALREADY里，7个属于上游文档/忽略规则清理，1个是#7617的OpenAI header白名单；没有整个功能PR全文件ALREADY。
+- 8个文件级ALREADY里，7个属于上游文档/忽略规则清理，1个是#7617的OpenAI header白名单文本；后者实际上匹配到passthrough map，不能证明普通白名单已合。没有整个功能PR全文件ALREADY。
 - #7402：本地 `http_upstream.go` 已有 `openAIHTTP2ReadIdleTimeout=15s`、`openAIHTTP2PingTimeout=15s`；不受上游10s/5s回退影响。
 - #7177：本地 `BindResponseAccount` 已调用 `withOpenAIWSStateStoreRedisWriteTimeout`，后者先WithoutCancel再设3秒超时；上游另修的HTTP owner消费者在本地不存在。上层函数CONFLICT不等于缺陷仍在。
-- #7617只需补构建请求时的旧beta清理；不能因为其中一个文件ALREADY就跳过整PR。
+- #7617实际需要补普通白名单字段及旧beta清理；不能因为其中一个文件ALREADY就跳过该文件或整PR。
 - 无Go环境时上述为调用链静态证据，不是新增回归测试PASS。
 
 ## 7. 建议落地顺序
 
-1. 固定同步分支基线；补齐Go1.27环境、后端unit/build基线与SQLite方言审计。所有产品任务仍未实施。
+1. 固定同步分支基线；补齐Go1.27环境、后端unit/build基线与SQLite方言审计。第一档已完成；第二档以下排程仍待实施。
 2. 第一档先做F01–F08、F15的请求/调度正确性，再做F09–F14界面项；每簇独立验证。
 3. 第二档先S01模型→S02工具schema→S03参数/PDF；#7272先于#7570，#7509先于#7568。
 4. S04连接生命周期/终止/错误整体按v0.2.9依赖顺序落，之后S06调度、S15/S16多轮与请求边界；不能并行覆盖相同service文件。
@@ -439,7 +439,7 @@ Lite helper 42行、metadata helper 39行；仅接本地现有 fingerprint 消�
 ## 8. 自测与验收
 
 [基线验证](./evidence-0.2.9/baseline-tests.md)记录前端42项通过及后端Go缺失；[测试清单](./evidence-0.2.9/test-inventory.tsv)明确哪些引用已存在。
-两份OpenSpec任务全部未勾选，verification证据格保留空白；评估检查和产品验收分开。
+第一档tasks/verification已按实际门禁回填；第二档任务仍未勾选，证据格保持空白。评估时的[基线证据](./evidence-0.2.9/baseline-tests.md)与新的[实施证据](./implementation-0.2.9-tier1/README.md)分开保存，历史Go缺失记录不改写。
 
 实施最低门禁：目标缺陷的失败/通过及正常反例，相关Go package unit，`go build ./...`，SQLite方言与真实库用例；
 触及前端执行组件Vitest和typecheck，触及共享状态/响应体执行race及可取消的真实httptest流。
@@ -453,3 +453,5 @@ Lite helper 42行、metadata helper 39行；仅接本地现有 fingerprint 消�
 4. URL补丁也有中间态：#7395与#7622服务不同消费者，最终按原生Codex和CC Switch分别测试。
 5. 配额投影小修可能依赖整套后台服务；RPM在位可补，自动用卡重置缺失则不能只加字段。
 6. 成本统计修复必须保留本地接口与gate语义；不要为一条修复顺带导入上游多项计价策略和迁移。
+7. **反向补丁也可能匹配错误对象。** #7617的两个header map有相同上下文，ALREADY匹配到passthrough map，而目标ordinary map仍缺字段；必须用目标函数/变量及实际请求回归确认。
+8. **来源PR不代替行为规格。** F12原补丁只覆盖新增输入，已有行编辑/保存仍违约；修复后还需覆盖逐段输入的科学计数法。F07原补丁容忍缺status，本地按已批准成功契约收紧并补反例。

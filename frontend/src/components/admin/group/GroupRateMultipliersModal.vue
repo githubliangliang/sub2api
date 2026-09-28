@@ -51,19 +51,20 @@
           </div>
           <div class="w-24">
             <input
-              v-model.number="newRate"
+              :value="newRate"
               type="number"
               step="0.001"
               min="0"
               autocomplete="off"
               class="hide-spinner input w-full"
               placeholder="1.0"
+              @input="newRate = ($event.target as HTMLInputElement).value"
             />
           </div>
           <button
             type="button"
             class="btn btn-primary shrink-0"
-            :disabled="!selectedUser || !newRate"
+            :disabled="!selectedUser || !isValidRate(newRate)"
             @click="handleAddLocal"
           >
             {{ t('common.add') }}
@@ -76,18 +77,19 @@
           <div class="flex items-center gap-1.5">
             <span class="text-xs text-gray-400">×</span>
             <input
-              v-model.number="batchFactor"
+              :value="batchFactor"
               type="number"
               step="0.1"
               min="0"
               autocomplete="off"
               class="hide-spinner w-20 rounded border border-gray-200 bg-white px-2 py-1 text-center text-sm transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
               placeholder="0.5"
+              @input="batchFactor = ($event.target as HTMLInputElement).value"
             />
             <button
               type="button"
               class="btn btn-primary btn-sm shrink-0 px-2.5 py-1 text-xs"
-              :disabled="!batchFactor || batchFactor <= 0"
+              :disabled="!isValidRate(batchFactor)"
               @click="applyBatchFactor"
             >
               {{ t('admin.groups.applyMultiplier') }}
@@ -168,10 +170,11 @@
                         step="0.001"
                         min="0.001"
                         autocomplete="off"
-                        :value="entry.rate_multiplier ?? ''"
+                        :value="Number.isNaN(entry.rate_multiplier) ? '' : entry.rate_multiplier ?? ''"
+                        :aria-invalid="entry.rate_multiplier != null && !isValidRate(entry.rate_multiplier)"
                         :placeholder="String(props.group?.rate_multiplier ?? 1)"
                         class="hide-spinner w-20 rounded border border-gray-200 bg-white px-2 py-1 text-center text-sm font-medium transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
-                        @change="updateLocalRate(entry.user_id, ($event.target as HTMLInputElement).value)"
+                        @input="updateLocalRate(entry.user_id, $event.target as HTMLInputElement)"
                       />
                     </td>
                     <td v-if="showFinalRate" class="whitespace-nowrap px-3 py-2 font-medium text-primary-600 dark:text-primary-400">
@@ -225,7 +228,7 @@
             v-if="isDirty"
             type="button"
             class="btn btn-primary btn-sm px-4 py-1.5"
-            :disabled="saving"
+            :disabled="saving || hasInvalidEntries"
             @click="handleSave"
           >
             <Icon v-if="saving" name="refresh" size="sm" class="mr-1 animate-spin" />
@@ -239,7 +242,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -250,7 +253,9 @@ import Pagination from '@/components/common/Pagination.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 
-interface LocalEntry extends GroupRateMultiplierEntry {}
+interface LocalEntry extends Omit<GroupRateMultiplierEntry, 'rate_multiplier'> {
+  rate_multiplier?: number | string | null
+}
 
 const props = defineProps<{
   show: boolean
@@ -273,10 +278,18 @@ const searchQuery = ref('')
 const searchResults = ref<AdminUser[]>([])
 const showDropdown = ref(false)
 const selectedUser = ref<AdminUser | null>(null)
-const newRate = ref<number | null>(null)
+const newRate = ref<string | null>(null)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const batchFactor = ref<number | null>(null)
+const batchFactor = ref<string | null>(null)
+
+const isValidRate = (value: number | string | null | undefined): boolean => {
+  const rate = Number(value)
+  return Number.isFinite(rate) && rate > 0
+}
+const hasInvalidEntries = computed(() => localEntries.value.some(
+  entry => entry.rate_multiplier != null && !isValidRate(entry.rate_multiplier)
+))
 
 let searchTimeout: ReturnType<typeof setTimeout>
 
@@ -291,21 +304,21 @@ const platformColorClass = computed(() => {
 
 // 是否显示"最终倍率"预览列
 const showFinalRate = computed(() => {
-  return batchFactor.value != null && batchFactor.value > 0 && batchFactor.value !== 1
+  return isValidRate(batchFactor.value) && Number(batchFactor.value) !== 1
 })
 
 // 计算最终倍率预览
-const computeFinalRate = (rate: number | null | undefined) => {
-  const base = rate ?? props.group?.rate_multiplier ?? 1
-  if (!batchFactor.value) return base
-  return parseFloat((base * batchFactor.value).toFixed(6))
+const computeFinalRate = (rate: number | string | null | undefined) => {
+  const base = Number(rate ?? props.group?.rate_multiplier ?? 1)
+  if (!isValidRate(batchFactor.value)) return base
+  return Number((base * Number(batchFactor.value)).toFixed(6))
 }
 
 // 检测是否有未保存的修改
 const isDirty = computed(() => {
   if (localEntries.value.length !== serverEntries.value.length) return true
   const serverMap = new Map(serverEntries.value.map(e => [e.user_id, e.rate_multiplier ?? null]))
-  return localEntries.value.some(e => serverMap.get(e.user_id) !== (e.rate_multiplier ?? null))
+  return localEntries.value.some(e => serverMap.get(e.user_id) !== (e.rate_multiplier == null ? null : Number(e.rate_multiplier)))
 })
 
 const paginatedLocalEntries = computed(() => {
@@ -386,7 +399,7 @@ const selectUser = (user: AdminUser) => {
 
 // 本地添加（或覆盖已有用户）
 const handleAddLocal = () => {
-  if (!selectedUser.value || !newRate.value) return
+  if (!selectedUser.value || !isValidRate(newRate.value)) return
   const user = selectedUser.value
   const idx = localEntries.value.findIndex(e => e.user_id === user.id)
   const entry: LocalEntry = {
@@ -395,7 +408,7 @@ const handleAddLocal = () => {
     user_email: user.email,
     user_notes: user.notes || '',
     user_status: user.status || 'active',
-    rate_multiplier: newRate.value,
+    rate_multiplier: Number(newRate.value),
     rpm_override: null
   }
   if (idx >= 0) {
@@ -410,16 +423,11 @@ const handleAddLocal = () => {
 }
 
 // 本地修改倍率
-const updateLocalRate = (userId: number, value: string) => {
+const updateLocalRate = (userId: number, input: HTMLInputElement) => {
   const entry = localEntries.value.find(e => e.user_id === userId)
   if (!entry) return
-  if (value.trim() === '') {
-    entry.rate_multiplier = null
-    return
-  }
-  const num = parseFloat(value)
-  if (isNaN(num)) return
-  entry.rate_multiplier = num
+  // A deliberately cleared value removes the override; incomplete input remains invalid.
+  entry.rate_multiplier = input.validity.badInput ? NaN : input.value === '' ? null : input.value
 }
 
 // 本地删除
@@ -430,10 +438,10 @@ const removeLocal = (userId: number) => {
 
 // 批量乘数应用到本地
 const applyBatchFactor = () => {
-  if (!batchFactor.value || batchFactor.value <= 0) return
+  if (!isValidRate(batchFactor.value)) return
   for (const entry of localEntries.value) {
     if (entry.rate_multiplier != null) {
-      entry.rate_multiplier = parseFloat((entry.rate_multiplier * batchFactor.value).toFixed(6))
+      entry.rate_multiplier = Number((Number(entry.rate_multiplier) * Number(batchFactor.value)).toFixed(6))
     }
   }
   batchFactor.value = null
@@ -453,14 +461,14 @@ const handleCancel = () => {
 
 // 保存：一次性提交所有数据（只提交 rate_multiplier；rpm_override 由独立弹窗管理）
 const handleSave = async () => {
-  if (!props.group) return
+  if (!props.group || hasInvalidEntries.value) return
   saving.value = true
   try {
     const entries = localEntries.value
       .filter(e => e.rate_multiplier != null)
       .map(e => ({
         user_id: e.user_id,
-        rate_multiplier: e.rate_multiplier as number
+        rate_multiplier: Number(e.rate_multiplier)
       }))
     await adminAPI.groups.batchSetGroupRateMultipliers(props.group.id, entries)
     appStore.showSuccess(t('admin.groups.rateSaved'))
@@ -490,6 +498,10 @@ const handleClickOutside = () => {
 if (typeof document !== 'undefined') {
   document.addEventListener('click', handleClickOutside)
 }
+onUnmounted(() => {
+  clearTimeout(searchTimeout)
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>

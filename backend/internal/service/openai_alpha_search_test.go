@@ -36,7 +36,7 @@ func alphaSearchResponsesSSE(output string) string {
 		"event: response.output_text.annotation.added\n" +
 		`data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","url":"https://example.com/news","title":"Example News"}}` + "\n\n" +
 		"event: response.completed\n" +
-		`data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":` + strconv.Quote(output) + `}]}]}}` + "\n\n"
+		`data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":` + strconv.Quote(output) + `}]}]}}` + "\n\n"
 }
 
 func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
@@ -199,8 +199,8 @@ func TestForwardAlphaSearchPATBackfillsMissingChatGPTAccountMetadata(t *testing.
 
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(`{"output":"search result"}`)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(alphaSearchResponsesSSE("search result"))),
 	}}
 	oauthService := NewOpenAIOAuthService(nil, nil)
 	service := &OpenAIGatewayService{

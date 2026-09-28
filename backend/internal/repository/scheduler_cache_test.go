@@ -1,12 +1,42 @@
 package repository
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSchedulerMetadataAccountPreservesRPMPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		extra map[string]any
+		rpm   int
+		want  service.WindowCostSchedulability
+	}{
+		{"tiered red zone", map[string]any{"base_rpm": 10, "rpm_strategy": "tiered", "rpm_sticky_buffer": 1}, 11, service.WindowCostNotSchedulable},
+		{"sticky exempt", map[string]any{"base_rpm": 10, "rpm_strategy": "sticky_exempt"}, 100, service.WindowCostStickyOnly},
+		{"unconfigured", nil, 100, service.WindowCostSchedulable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			account := service.Account{ID: 7311, Platform: service.PlatformAnthropic, Type: service.AccountTypeOAuth, Extra: tc.extra}
+			require.Equal(t, tc.want, account.CheckRPMSchedulability(tc.rpm))
+			payload, err := json.Marshal(buildSchedulerMetadataAccount(account))
+			require.NoError(t, err)
+			var restored service.Account
+			require.NoError(t, json.Unmarshal(payload, &restored))
+			require.Equal(t, account.GetBaseRPM(), restored.GetBaseRPM())
+			require.Equal(t, account.GetRPMStrategy(), restored.GetRPMStrategy())
+			require.Equal(t, account.GetRPMStickyBuffer(), restored.GetRPMStickyBuffer())
+			require.Equal(t, tc.want, restored.CheckRPMSchedulability(tc.rpm))
+			if tc.extra == nil {
+				require.NotContains(t, restored.Extra, "base_rpm")
+			}
+		})
+	}
+}
 
 func TestFilterSchedulerCredentialsKeepsSubscriptionPlanType(t *testing.T) {
 	filtered := filterSchedulerCredentials(map[string]any{

@@ -1,0 +1,260 @@
+
+ RUN  v2.1.9 D:/work/work_space/github_code/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/account/__tests__/UsageProgressBar.spec.ts (9 tests | 1 failed) 178ms
+   × UsageProgressBar > showNowWhenIdle=true 且利用率为 0 但有未来 resetsAt 时显示倒计时 72ms
+     → expected '5h0%usage.resetNow' to contain '2h 30m'
+ ❯ src/views/user/__tests__/UsageView.spec.ts (13 tests | 7 failed) 507ms
+   × user UsageView > exports csv with current filters and without admin-only fields 56ms
+     → expected 'Time,API Key Name,Model,Reasoning Eff…' to be 'Time,API Key Name,Model,Reasoning Eff…' // Object.is equality
+   × user UsageView > keeps formula-injection protection for dangerous exported value "-1+1" 27ms
+     → expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'-1+1",gpt-5.4,-,'
+   × user UsageView > keeps formula-injection protection for dangerous exported value "=1+1" 25ms
+     → expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'=1+1",gpt-5.4,-,'
+   × user UsageView > keeps formula-injection protection for dangerous exported value "+1+1" 21ms
+     → expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'+1+1",gpt-5.4,-,'
+   × user UsageView > keeps formula-injection protection for dangerous exported value "@SUM(1)" 22ms
+     → expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'@SUM(1)",gpt-5.4,-,'
+   × user UsageView > keeps formula-injection protection for dangerous exported value "\t1+1" 21ms
+     → expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'\t1+1",gpt-5.4,-,'
+   × user UsageView > keeps formula-injection protection for dangerous exported value "\r1+1" 25ms
+     → expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'\r1+1",gpt-5.4,-,'
+ ❯ src/components/admin/channel/__tests__/IntervalRow.spec.ts (5 tests | 3 failed) 77ms
+   × pricing interval token bounds > parses 1e5 without losing the exponent 52ms
+     → expected { min_tokens: 1, …(9) } to match object { min_tokens: 100000 }
+(9 matching properties omitted from actual)
+   × pricing interval token bounds > parses 1e6 without losing the exponent 8ms
+     → expected { min_tokens: 1, …(9) } to match object { min_tokens: 1000000 }
+(9 matching properties omitted from actual)
+   × pricing interval token bounds > parses 2.72e5 without losing the exponent 7ms
+     → expected { min_tokens: 2, …(9) } to match object { min_tokens: 272000 }
+(9 matching properties omitted from actual)
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/UsageProgressBar.spec.ts > UsageProgressBar > showNowWhenIdle=true 且利用率为 0 但有未来 resetsAt 时显示倒计时
+AssertionError: expected '5h0%usage.resetNow' to contain '2h 30m'
+
+Expected: "2h 30m"
+Received: "5h0%usage.resetNow"
+
+ ❯ src/components/account/__tests__/UsageProgressBar.spec.ts:38:28
+     36|     })
+     37| 
+     38|     expect(wrapper.text()).toContain('2h 30m')
+       |                            ^
+     39|     expect(wrapper.text()).not.toContain('usage.resetNow')
+     40|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > exports csv with current filters and without admin-only fields
+AssertionError: expected 'Time,API Key Name,Model,Reasoning Eff…' to be 'Time,API Key Name,Model,Reasoning Eff…' // Object.is equality
+
+- Expected
++ Received
+
+  Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)
+- 2026-03-08T00:00:00Z,demo-key,gpt-5.4,-,,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
++ 2026-03-08T00:00:00Z,demo-key,gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:344:33
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps formula-injection protection for dangerous exported value "-1+1"
+AssertionError: expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'-1+1",gpt-5.4,-,'
+
+- Expected
++ Received
+
+- ,"'-1+1",gpt-5.4,-,
++ ﻿Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)
++ 2026-03-08T00:00:00Z,"'-1+1",gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:386:24
+    384|     await flushPromises()
+    385| 
+    386|     expect(csvContent).toContain(`,"'${value}",gpt-5.4,-,`)
+       |                        ^
+    387|     expect(showSuccess).toHaveBeenCalled()
+    388| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps formula-injection protection for dangerous exported value "=1+1"
+AssertionError: expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'=1+1",gpt-5.4,-,'
+
+- Expected
++ Received
+
+- ,"'=1+1",gpt-5.4,-,
++ ﻿Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)
++ 2026-03-08T00:00:00Z,"'=1+1",gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:386:24
+    384|     await flushPromises()
+    385| 
+    386|     expect(csvContent).toContain(`,"'${value}",gpt-5.4,-,`)
+       |                        ^
+    387|     expect(showSuccess).toHaveBeenCalled()
+    388| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps formula-injection protection for dangerous exported value "+1+1"
+AssertionError: expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'+1+1",gpt-5.4,-,'
+
+- Expected
++ Received
+
+- ,"'+1+1",gpt-5.4,-,
++ ﻿Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)
++ 2026-03-08T00:00:00Z,"'+1+1",gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:386:24
+    384|     await flushPromises()
+    385| 
+    386|     expect(csvContent).toContain(`,"'${value}",gpt-5.4,-,`)
+       |                        ^
+    387|     expect(showSuccess).toHaveBeenCalled()
+    388| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps formula-injection protection for dangerous exported value "@SUM(1)"
+AssertionError: expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'@SUM(1)",gpt-5.4,-,'
+
+- Expected
++ Received
+
+- ,"'@SUM(1)",gpt-5.4,-,
++ ﻿Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)
++ 2026-03-08T00:00:00Z,"'@SUM(1)",gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:386:24
+    384|     await flushPromises()
+    385| 
+    386|     expect(csvContent).toContain(`,"'${value}",gpt-5.4,-,`)
+       |                        ^
+    387|     expect(showSuccess).toHaveBeenCalled()
+    388| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps formula-injection protection for dangerous exported value "\t1+1"
+AssertionError: expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'\t1+1",gpt-5.4,-,'
+
+- Expected
++ Received
+
+- ,"'	1+1",gpt-5.4,-,
++ ﻿Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)
++ 2026-03-08T00:00:00Z,"'	1+1",gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:386:24
+    384|     await flushPromises()
+    385| 
+    386|     expect(csvContent).toContain(`,"'${value}",gpt-5.4,-,`)
+       |                        ^
+    387|     expect(showSuccess).toHaveBeenCalled()
+    388| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps formula-injection protection for dangerous exported value "\r1+1"
+AssertionError: expected '\ufeffTime,API Key Name,Model,Reasoni…' to contain ',"\'\r1+1",gpt-5.4,-,'
+
+- Expected
++ Received
+
+- ,"'
+1+1",gpt-5.4,-,
++ ﻿Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,IP Address,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)
++ 2026-03-08T00:00:00Z,"'
+1+1",gpt-5.4,"'-",,203.0.113.10,Sync,Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:386:24
+    384|     await flushPromises()
+    385| 
+    386|     expect(csvContent).toContain(`,"'${value}",gpt-5.4,-,`)
+       |                        ^
+    387|     expect(showSuccess).toHaveBeenCalled()
+    388| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  src/components/admin/channel/__tests__/IntervalRow.spec.ts > pricing interval token bounds > parses 1e5 without losing the exponent
+AssertionError: expected { min_tokens: 1, …(9) } to match object { min_tokens: 100000 }
+(9 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "min_tokens": 100000,
++   "min_tokens": 1,
+  }
+
+ ❯ src/components/admin/channel/__tests__/IntervalRow.spec.ts:26:49
+     24|     await inputs[0].setValue(value)
+     25|     await inputs[1].setValue(value)
+     26|     expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({ min_to…
+       |                                                 ^
+     27|     expect(wrapper.emitted('update')?.[1]?.[0]).toMatchObject({ max_to…
+     28|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  src/components/admin/channel/__tests__/IntervalRow.spec.ts > pricing interval token bounds > parses 1e6 without losing the exponent
+AssertionError: expected { min_tokens: 1, …(9) } to match object { min_tokens: 1000000 }
+(9 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "min_tokens": 1000000,
++   "min_tokens": 1,
+  }
+
+ ❯ src/components/admin/channel/__tests__/IntervalRow.spec.ts:26:49
+     24|     await inputs[0].setValue(value)
+     25|     await inputs[1].setValue(value)
+     26|     expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({ min_to…
+       |                                                 ^
+ Test Files  3 failed (3)
+     27|     expect(wrapper.emitted('update')?.[1]?.[0]).toMatchObject({ max_to…
+     28|   })
+      Tests  11 failed | 16 passed (27)
+   Start at  18:37:14
+   Duration  16.95s (transform 5.36s, setup 1.04s, collect 8.62s, tests 762ms, environment 9.95s, prepare 1.24s)
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  src/components/admin/channel/__tests__/IntervalRow.spec.ts > pricing interval token bounds > parses 2.72e5 without losing the exponent
+AssertionError: expected { min_tokens: 2, …(9) } to match object { min_tokens: 272000 }
+(9 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "min_tokens": 272000,
++   "min_tokens": 2,
+  }
+
+ ❯ src/components/admin/channel/__tests__/IntervalRow.spec.ts:26:49
+     24|     await inputs[0].setValue(value)
+     25|     await inputs[1].setValue(value)
+     26|     expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({ min_to…
+       |                                                 ^
+     27|     expect(wrapper.emitted('update')?.[1]?.[0]).toMatchObject({ max_to…
+     28|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯

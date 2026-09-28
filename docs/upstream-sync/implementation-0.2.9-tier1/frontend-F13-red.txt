@@ -1,0 +1,345 @@
+
+ RUN  v2.1.9 D:/work/work_space/github_code/sub2api/frontend
+
+ ❯ src/components/user/__tests__/UserErrorDetailModal.spec.ts (4 tests | 3 failed) 255ms
+   × user error detail requests > keeps the newer detail when an earlier request finishes last 147ms
+     → expected 'usage.errors.time2026-09-20usage.erro…' to contain 'current-model'
+   × user error detail requests > keeps loading until the current request settles 61ms
+     → expected false to be true // Object.is equality
+   × user error detail requests > ignores an obsolete failure, including when reopening the same record 35ms
+     → expected 'usage.errors.detail.loadFailed' to contain 'current-model'
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/admin/user/__tests__/UserApiKeysModal.spec.ts (4 tests | 4 failed) 193ms
+   × user API key loading > does not display the previous user keys when the next load fails 123ms
+     → expected 'Uuser2@example.comuser2first-user-key…' not to contain 'first-user-key'
+   × user API key loading > does not replace current keys with a late previous response 25ms
+     → expected 'Uuser2@example.comuser2old-user-keyac…' to contain 'current-user-key'
+   × user API key loading > keeps the current request loading when an obsolete request fails 26ms
+     → expected false to be true // Object.is equality
+   × user API key loading > loads keys when the selected user changes while the dialog is open 17ms
+     → expected last "spy" call to have been called with [ 2 ]
+ ❯ src/components/account/__tests__/TempUnschedStatusModal.spec.ts (3 tests | 3 failed) 160ms
+   × temporary unschedulable status requests > does not let a late response replace the next account status 99ms
+     → expected 'admin.accounts.recoverStateHintadmin.…' to contain 'current-error'
+   × temporary unschedulable status requests > keeps recovery disabled while loading a different account 36ms
+     → expected undefined to be defined
+   × temporary unschedulable status requests > ignores old errors without dismissing the current loading state 22ms
+     → expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      "obsolete",
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts (4 tests | 4 failed) 146ms
+   × group modal lifecycle > removes its document click listener on unmount 81ms
+     → expected "removeEventListener" to be called with arguments: [ 'click', …(1) ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+   × group modal lifecycle > cancels a queued search when navigating away 38ms
+     → expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      1,
+      10,
+      Object {
+        "search": "alice",
+      },
+    ]
+
+
+Number of calls: 1
+
+   × group modal lifecycle > removes its document click listener on unmount 14ms
+     → expected "removeEventListener" to be called with arguments: [ 'click', …(1) ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+   × group modal lifecycle > cancels a queued search when navigating away 11ms
+     → expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      1,
+      10,
+      Object {
+        "search": "alice",
+      },
+    ]
+
+
+Number of calls: 1
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/TempUnschedStatusModal.spec.ts > temporary unschedulable status requests > does not let a late response replace the next account status
+AssertionError: expected 'admin.accounts.recoverStateHintadmin.…' to contain 'current-error'
+
+Expected: "current-error"
+Received: "admin.accounts.recoverStateHintadmin.accounts.tempUnschedulable.accountNamesecondadmin.accounts.tempUnschedulable.triggeredAt-admin.accounts.tempUnschedulable.untildateadmin.accounts.tempUnschedulable.remainingadmin.accounts.tempUnschedulable.remainingHoursadmin.accounts.tempUnschedulable.errorCode-admin.accounts.tempUnschedulable.matchedKeyword-admin.accounts.tempUnschedulable.ruleOrder-admin.accounts.tempUnschedulable.errorMessageold-errorcommon.close admin.accounts.recoverState"
+
+ ❯ src/components/account/__tests__/TempUnschedStatusModal.spec.ts:30:22
+     28|     const w = await open(); await w.setProps({ account: { id: 2, name:…
+     29|     old.resolve(active('old-error')); await flushPromises()
+     30|     expect(w.text()).toContain('current-error'); expect(w.text()).not.…
+       |                      ^
+     31|   })
+     32|   it('keeps recovery disabled while loading a different account', asyn…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  src/components/account/__tests__/TempUnschedStatusModal.spec.ts > temporary unschedulable status requests > keeps recovery disabled while loading a different account
+AssertionError: expected undefined to be defined
+ ❯ src/components/account/__tests__/TempUnschedStatusModal.spec.ts:37:64
+     35|     const w = await open(); await flushPromises()
+     36|     await w.setProps({ account: { id: 2 } as Account })
+     37|     expect(w.get('button.btn-primary').attributes('disabled')).toBeDef…
+       |                                                                ^
+     38|     current.resolve(active('current-error')); await flushPromises()
+     39|     expect(w.get('button.btn-primary').attributes('disabled')).toBeUnd…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  src/components/account/__tests__/TempUnschedStatusModal.spec.ts > temporary unschedulable status requests > ignores old errors without dismissing the current loading state
+AssertionError: expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      "obsolete",
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/components/account/__tests__/TempUnschedStatusModal.spec.ts:46:33
+     44|     const w = await open(); await w.setProps({ show: false }); await w…
+     45|     old.reject(new Error('obsolete')); await flushPromises()
+     46|     expect(mocks.showError).not.toHaveBeenCalled(); expect(w.find('.an…
+       |                                 ^
+     47|     current.resolve({ active: false }); await flushPromises()
+     48|     expect(w.text()).toContain('admin.accounts.tempUnschedulable.notAc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  src/components/user/__tests__/UserErrorDetailModal.spec.ts > user error detail requests > keeps the newer detail when an earlier request finishes last
+AssertionError: expected 'usage.errors.time2026-09-20usage.erro…' to contain 'current-model'
+
+Expected: "current-model"
+Received: "usage.errors.time2026-09-20usage.errors.modelold-modelusage.errors.endpoint-usage.errors.status500usage.errors.categoryusage.errors.categories.upstreamusage.errors.platform-"
+
+ ❯ src/components/user/__tests__/UserErrorDetailModal.spec.ts:37:28
+     35|     current.resolve(detail('current-model')); await flushPromises()
+     36|     old.resolve(detail('old-model')); await flushPromises()
+     37|     expect(wrapper.text()).toContain('current-model')
+       |                            ^
+     38|     expect(wrapper.text()).not.toContain('old-model')
+     39|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  src/components/user/__tests__/UserErrorDetailModal.spec.ts > user error detail requests > keeps loading until the current request settles
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/user/__tests__/UserErrorDetailModal.spec.ts:47:52
+     45|     await wrapper.setProps({ errorId: 2 })
+     46|     old.resolve(detail('old-model')); await flushPromises()
+     47|     expect(wrapper.find('.animate-spin').exists()).toBe(true)
+       |                                                    ^
+     48|     current.resolve(detail('current-model')); await flushPromises()
+     49|     expect(wrapper.find('.animate-spin').exists()).toBe(false)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  src/components/user/__tests__/UserErrorDetailModal.spec.ts > user error detail requests > ignores an obsolete failure, including when reopening the same record
+AssertionError: expected 'usage.errors.detail.loadFailed' to contain 'current-model'
+
+Expected: "current-model"
+Received: "usage.errors.detail.loadFailed"
+
+ ❯ src/components/user/__tests__/UserErrorDetailModal.spec.ts:60:28
+     58|     await wrapper.setProps({ show: true }); await flushPromises()
+     59|     old.reject(new Error('obsolete')); await flushPromises()
+     60|     expect(wrapper.text()).toContain('current-model')
+       |                            ^
+     61|     expect(wrapper.text()).not.toContain('usage.errors.detail.loadFail…
+     62|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts > group modal lifecycle > removes its document click listener on unmount
+AssertionError: expected "removeEventListener" to be called with arguments: [ 'click', …(1) ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+ ❯ src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts:23:52
+     21|     expect(handlers.length).toBeGreaterThan(0)
+     22|     w.unmount()
+     23|     for (const handler of handlers) expect(remove).toHaveBeenCalledWit…
+       |                                                    ^
+     24|   })
+     25|   it('cancels a queued search when navigating away', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts > group modal lifecycle > cancels a queued search when navigating away
+ FAIL  src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts > group modal lifecycle > cancels a queued search when navigating away
+AssertionError: expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      1,
+      10,
+      Object {
+        "search": "alice",
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts:28:28
+     26|     const w = open(); await w.get('input[type="text"]').setValue('alic…
+     27|     w.unmount(); await vi.advanceTimersByTimeAsync(300); await flushPr…
+     28|     expect(mocks.list).not.toHaveBeenCalled()
+       |                            ^
+     29|   })
+     30| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts > group modal lifecycle > removes its document click listener on unmount
+ Test Files  4 failed (4)
+      Tests  14 failed | 1 passed (15)
+   Start at  18:36:08
+   Duration  23.01s (transform 1.98s, setup 2.33s, collect 2.52s, tests 755ms, environment 19.81s, prepare 2.61s)
+
+AssertionError: expected "removeEventListener" to be called with arguments: [ 'click', …(1) ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+ ❯ src/components/admin/group/__tests__/GroupModal.cleanup.spec.ts:23:52
+     21|     expect(handlers.length).toBeGreaterThan(0)
+     22|     w.unmount()
+     23|     for (const handler of handlers) expect(remove).toHaveBeenCalledWit…
+       |                                                    ^
+     24|   })
+     25|   it('cancels a queued search when navigating away', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  src/components/admin/user/__tests__/UserApiKeysModal.spec.ts > user API key loading > does not display the previous user keys when the next load fails
+AssertionError: expected 'Uuser2@example.comuser2first-user-key…' not to contain 'first-user-key'
+
+Expected: "first-user-key"
+Received: "Uuser2@example.comuser2first-user-keyactivesk-example-key-value...or-testsadmin.users.group:admin.users.noneadmin.users.columns.created: 2026-09-20"
+
+ ❯ src/components/admin/user/__tests__/UserApiKeysModal.spec.ts:47:32
+     45|     await switchUser(wrapper); await flushPromises()
+     46|     expect(wrapper.text()).toContain('user2@example.com')
+     47|     expect(wrapper.text()).not.toContain('first-user-key')
+       |                                ^
+     48|   })
+     49| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  src/components/admin/user/__tests__/UserApiKeysModal.spec.ts > user API key loading > does not replace current keys with a late previous response
+AssertionError: expected 'Uuser2@example.comuser2old-user-keyac…' to contain 'current-user-key'
+
+Expected: "current-user-key"
+Received: "Uuser2@example.comuser2old-user-keyactivesk-example-key-value...or-testsadmin.users.group:admin.users.noneadmin.users.columns.created: 2026-09-20"
+
+ ❯ src/components/admin/user/__tests__/UserApiKeysModal.spec.ts:56:28
+     54|     await switchUser(wrapper); await flushPromises()
+     55|     old.resolve(keys(1, 'old-user-key')); await flushPromises()
+     56|     expect(wrapper.text()).toContain('current-user-key')
+       |                            ^
+     57|     expect(wrapper.text()).not.toContain('old-user-key')
+     58|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  src/components/admin/user/__tests__/UserApiKeysModal.spec.ts > user API key loading > keeps the current request loading when an obsolete request fails
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/admin/user/__tests__/UserApiKeysModal.spec.ts:66:52
+     64|     await switchUser(wrapper)
+     65|     old.reject(new Error('obsolete')); await flushPromises()
+     66|     expect(wrapper.find('.animate-spin').exists()).toBe(true)
+       |                                                    ^
+     67|     current.resolve(keys(2, 'current-user-key')); await flushPromises()
+     68|     expect(wrapper.text()).toContain('current-user-key')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  src/components/admin/user/__tests__/UserApiKeysModal.spec.ts > user API key loading > loads keys when the selected user changes while the dialog is open
+AssertionError: expected last "spy" call to have been called with [ 2 ]
+
+- Expected
++ Received
+
+  Array [
+-   2,
++   1,
+  ]
+
+ ❯ src/components/admin/user/__tests__/UserApiKeysModal.spec.ts:76:21
+     74|     const wrapper = await open(); await flushPromises()
+     75|     await wrapper.setProps({ user: user(2) }); await flushPromises()
+     76|     expect(getKeys).toHaveBeenLastCalledWith(2)
+       |                     ^
+     77|     expect(wrapper.text()).toContain('second-user-key')
+     78|     expect(wrapper.text()).not.toContain('first-user-key')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯

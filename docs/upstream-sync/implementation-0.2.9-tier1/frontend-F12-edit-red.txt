@@ -1,0 +1,147 @@
+
+ RUN  v2.1.9 D:/work/work_space/github_code/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts (14 tests | 6 failed) 360ms
+   × GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "0" and allows correction 26ms
+     → expected undefined to be defined
+   × GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "-1" and allows correction 21ms
+     → expected undefined to be defined
+   × GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "1e309" and allows correction 20ms
+     → expected undefined to be defined
+   × GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "1e" and allows correction 15ms
+     → expected undefined to be defined
+   × GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "1abc" and allows correction 16ms
+     → expected undefined to be defined
+   × GroupRateMultipliersModal existing override validation > blocks non-finite values produced by batch multiplication at final save 16ms
+     → expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts (16 tests | 8 failed) 397ms
+   × GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "" and allows zero after correction 29ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1.5" and allows zero after correction 19ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "-0.5" and allows zero after correction 14ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "-1" and allows zero after correction 16ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1e309" and allows zero after correction 16ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1e" and allows zero after correction 17ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1abc" and allows zero after correction 13ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal existing override validation > parses a complete exponent without truncating it 30ms
+     → expected "spy" to be called with arguments: [ 1, [ { user_id: 7, …(1) }, …(1) ] ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+    1,
+    Array [
+      Object {
+-       "rpm_override": 1000,
++       "rpm_override": 1,
+        "user_id": 7,
+      },
+      Object {
+        "rpm_override": 200,
+        "user_id": 8,
+      },
+    ],
+  ]
+
+
+Number of calls: 1
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts > GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "0" and allows correction
+ FAIL  src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts > GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "-1" and allows correction
+ FAIL  src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts > GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "1e309" and allows correction
+ FAIL  src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts > GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "1e" and allows correction
+ FAIL  src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts > GroupRateMultipliersModal existing override validation > blocks the whole save for invalid edited rate "1abc" and allows correction
+AssertionError: expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts:83:41
+     81|     await inputs[1].setValue('3')
+     82|     const save = wrapper.findAll('button').find(b => b.text() === 'com…
+     83|     expect(save.attributes('disabled')).toBeDefined()
+       |                                         ^
+     84|     // The submit handler must also reject invalid rows if invoked pro…
+     85|     ;(save.element as HTMLButtonElement).disabled = false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts > GroupRateMultipliersModal existing override validation > blocks non-finite values produced by batch multiplication at final save
+AssertionError: expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts:114:41
+    112|     await wrapper.findAll('button').find(b => b.text() === 'admin.grou…
+    113|     const save = wrapper.findAll('button').find(b => b.text() === 'com…
+    114|     expect(save.attributes('disabled')).toBeDefined()
+       |                                         ^
+    115|     ;(save.element as HTMLButtonElement).disabled = false
+    116|     await save.trigger('click')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "" and allows zero after correction
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1.5" and allows zero after correction
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "-0.5" and allows zero after correction
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "-1" and allows zero after correction
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1e309" and allows zero after correction
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1e" and allows zero after correction
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > blocks the whole save for invalid edited RPM "1abc" and allows zero after correction
+AssertionError: expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts:79:41
+     77|     await inputs[1].setValue('2')
+     78|     const save = wrapper.findAll('button').find(b => b.text() === 'com…
+     79|     expect(save.attributes('disabled')).toBeDefined()
+       |                                         ^
+     80|     ;(save.element as HTMLButtonElement).disabled = false
+     81|     await save.trigger('click')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal existing override validation > parses a complete exponent without truncating it
+AssertionError: expected "spy" to be called with arguments: [ 1, [ { user_id: 7, …(1) }, …(1) ] ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+    1,
+    Array [
+      Object {
+-       "rpm_override": 1000,
++       "rpm_override": 1,
+        "user_id": 7,
+      },
+      Object {
+        "rpm_override": 200,
+        "user_id": 8,
+      },
+    ],
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts:99:45
+     97|     await wrapper.findAll('button').find(b => b.text() === 'common.sav…
+     98|     await flushPromises()
+     99|     expect(mocks.batchSetGroupRPMOverrides).toHaveBeenCalledWith(1, [
+       |                                             ^
+    100|       { user_id: 7, rpm_override: 1000 }, { user_id: 8, rpm_override: …
+    101|     ])
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ Test Files  2 failed (2)
+      Tests  14 failed | 16 passed (30)
+   Start at  19:10:01
+   Duration  15.56s (transform 2.50s, setup 768ms, collect 3.24s, tests 757ms, environment 24.29s, prepare 1.22s)

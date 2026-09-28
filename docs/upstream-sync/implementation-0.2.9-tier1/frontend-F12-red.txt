@@ -1,0 +1,209 @@
+
+ RUN  v2.1.9 D:/work/work_space/github_code/sub2api/frontend
+
+ ❯ src/stores/__tests__/adminSettings.retry.spec.ts (4 tests | 2 failed) 50ms
+   × admin settings fetch retry > retries a failed initial settings request without forcing a refresh 35ms
+     → expected true to be false // Object.is equality
+   × admin settings fetch retry > retries a failed initial payment request without forcing a refresh 4ms
+     → expected true to be false // Object.is equality
+ ❯ src/composables/__tests__/antigravityMappings.retry.spec.ts (4 tests | 2 failed) 2056ms
+   × Antigravity default mapping cache > retries after a failed fetch rather than caching the empty fallback 2025ms
+     → expected [] to deeply equal [ { from: 'alias', …(1) } ]
+   × Antigravity default mapping cache > does not erase a successful concurrent result when an older request fails 11ms
+     → expected [] to deeply equal [ { from: 'alias', …(1) } ]
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/admin/user/__tests__/GroupReplaceModal.spec.ts (4 tests | 3 failed) 516ms
+   × GroupReplaceModal feedback > shows API errors and keeps the dialog available for retry 403ms
+     → expected "spy" to be called with arguments: [ 'Group is unavailable' ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+   × GroupReplaceModal feedback > shows API errors and keeps the dialog available for retry 37ms
+     → expected "spy" to be called with arguments: [ 'Permission denied' ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+   × GroupReplaceModal feedback > shows API errors and keeps the dialog available for retry 34ms
+     → expected "spy" to be called with arguments: [ 'common.error' ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+ ❯ src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts (5 tests | 2 failed) 341ms
+   × GroupRPMOverridesModal new override validation > does not add invalid RPM "" 183ms
+     → expected undefined to be defined
+   × GroupRPMOverridesModal new override validation > does not add invalid RPM "1.5" 40ms
+     → expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts (5 tests | 1 failed) 374ms
+   × GroupRateMultipliersModal new override validation > does not add invalid rate "-1" 40ms
+     → expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/composables/__tests__/antigravityMappings.retry.spec.ts > Antigravity default mapping cache > retries after a failed fetch rather than caching the empty fallback
+AssertionError: expected [] to deeply equal [ { from: 'alias', …(1) } ]
+
+- Expected
++ Received
+
+- Array [
+-   Object {
+-     "from": "alias",
+-     "to": "upstream-model",
+-   },
+- ]
++ Array []
+
+ ❯ src/composables/__tests__/antigravityMappings.retry.spec.ts:18:27
+     16|     const { fetchAntigravityDefaultMappings: fetch } = await import('.…
+     17|     expect(await fetch()).toEqual([])
+     18|     expect(await fetch()).toEqual([{ from: 'alias', to: 'upstream-mode…
+       |                           ^
+     19|     expect(getMapping).toHaveBeenCalledTimes(2)
+     20|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  src/composables/__tests__/antigravityMappings.retry.spec.ts > Antigravity default mapping cache > does not erase a successful concurrent result when an older request fails
+AssertionError: expected [] to deeply equal [ { from: 'alias', …(1) } ]
+
+- Expected
++ Received
+
+- Array [
+-   Object {
+-     "from": "alias",
+-     "to": "upstream-model",
+-   },
+- ]
++ Array []
+
+ ❯ src/composables/__tests__/antigravityMappings.retry.spec.ts:47:27
+     45|     reject(new Error('offline'))
+     46|     expect(await older).toEqual([])
+     47|     expect(await fetch()).toEqual([{ from: 'alias', to: 'upstream-mode…
+       |                           ^
+     48|     expect(getMapping).toHaveBeenCalledTimes(2)
+     49|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  src/stores/__tests__/adminSettings.retry.spec.ts > admin settings fetch retry > retries a failed initial settings request without forcing a refresh
+ FAIL  src/stores/__tests__/adminSettings.retry.spec.ts > admin settings fetch retry > retries a failed initial payment request without forcing a refresh
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/stores/__tests__/adminSettings.retry.spec.ts:23:26
+     21|     const store = useAdminSettingsStore()
+     22|     await store.fetch()
+     23|     expect(store.loaded).toBe(false)
+       |                          ^
+     24|     expect(store.loading).toBe(false)
+     25|     await store.fetch()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts > GroupRateMultipliersModal new override validation > does not add invalid rate "-1"
+AssertionError: expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/GroupRateMultipliersModal.spec.ts:44:40
+     42|     await input.setValue(value)
+     43|     const add = wrapper.findAll('button').find(b => b.text() === 'comm…
+     44|     expect(add.attributes('disabled')).toBeDefined()
+       |                                        ^
+     45|     await add.trigger('click')
+     46|     expect(wrapper.find('tbody tr').exists()).toBe(false)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal new override validation > does not add invalid RPM ""
+ FAIL  src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts > GroupRPMOverridesModal new override validation > does not add invalid RPM "1.5"
+AssertionError: expected undefined to be defined
+ ❯ src/components/admin/group/__tests__/GroupRPMOverridesModal.spec.ts:44:40
+     42|     await input.setValue(value)
+     43|     const add = wrapper.findAll('button').find(b => b.text() === 'comm…
+     44|     expect(add.attributes('disabled')).toBeDefined()
+       |                                        ^
+     45|     await add.trigger('click')
+     46|     expect(wrapper.find('tbody tr').exists()).toBe(false)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  src/components/admin/user/__tests__/GroupReplaceModal.spec.ts > GroupReplaceModal feedback > shows API errors and keeps the dialog available for retry
+AssertionError: expected "spy" to be called with arguments: [ 'Group is unavailable' ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+ ❯ src/components/admin/user/__tests__/GroupReplaceModal.spec.ts:41:29
+     39|     await wrapper.get('button.btn-primary').trigger('click')
+     40|     await flushPromises()
+     41|     expect(mocks.showError).toHaveBeenCalledWith(message)
+       |                             ^
+     42|     expect(wrapper.emitted('success')).toBeUndefined()
+     43|     expect(wrapper.emitted('close')).toBeUndefined()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  src/components/admin/user/__tests__/GroupReplaceModal.spec.ts > GroupReplaceModal feedback > shows API errors and keeps the dialog available for retry
+AssertionError: expected "spy" to be called with arguments: [ 'Permission denied' ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+ ❯ src/components/admin/user/__tests__/GroupReplaceModal.spec.ts:41:29
+     39|     await wrapper.get('button.btn-primary').trigger('click')
+     40|     await flushPromises()
+     41|     expect(mocks.showError).toHaveBeenCalledWith(message)
+       |                             ^
+     42|     expect(wrapper.emitted('success')).toBeUndefined()
+     43|     expect(wrapper.emitted('close')).toBeUndefined()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  src/components/admin/user/__tests__/GroupReplaceModal.spec.ts > GroupReplaceModal feedback > shows API errors and keeps the dialog available for retry
+AssertionError: expected "spy" to be called with arguments: [ 'common.error' ]
+
+Received: 
+
+
+
+Number of calls: 0
+
+ ❯ src/components/admin/user/__tests__/GroupReplaceModal.spec.ts:41:29
+     39|     await wrapper.get('button.btn-primary').trigger('click')
+     40|     await flushPromises()
+     41|     expect(mocks.showError).toHaveBeenCalledWith(message)
+       |                             ^
+     42|     expect(wrapper.emitted('success')).toBeUndefined()
+     43|     expect(wrapper.emitted('close')).toBeUndefined()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ Test Files  5 failed (5)
+      Tests  10 failed | 12 passed (22)
+   Start at  18:34:27
+   Duration  37.61s (transform 9.56s, setup 13.37s, collect 12.20s, tests 3.34s, environment 121.93s, prepare 8.38s)

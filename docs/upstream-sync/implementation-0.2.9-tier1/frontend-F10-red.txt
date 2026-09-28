@@ -1,0 +1,779 @@
+
+ RUN  v2.1.9 D:/work/work_space/github_code/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/composables/__tests__/useClipboard.spec.ts (10 tests | 2 failed) 79ms
+   × useClipboard > reports a thrown fallback error (secure context: false) 23ms
+     → promise rejected "DOMException{ stack: 'NotAllowedErro…', …(1) }" instead of resolving
+   × useClipboard > reports a thrown fallback error (secure context: true) 7ms
+     → promise rejected "DOMException{ stack: 'NotAllowedErro…', …(1) }" instead of resolving
+ ❯ src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts (4 tests | 4 failed) 175ms
+   × model tag keyboard navigation > allows leaving an empty input with Tab (shift: false) 105ms
+     → expected true to be false // Object.is equality
+   × model tag keyboard navigation > allows leaving an empty input with Tab (shift: true) 14ms
+     → expected true to be false // Object.is equality
+   × model tag keyboard navigation > allows leaving a whitespace-only input 25ms
+     → expected true to be false // Object.is equality
+   × model tag keyboard navigation > still commits a pending model with Tab, then allows the next Tab to leave 29ms
+     → expected true to be false // Object.is equality
+ ❯ src/components/common/__tests__/BaseDialog.ids.spec.ts (2 tests | 1 failed) 192ms
+   × dialog accessible titles > associates simultaneous dialogs with their own title 147ms
+     → expected [ 'Edit account', 'Edit account' ] to deeply equal [ 'Edit account', 'Confirm deletion' ]
+ ❯ src/components/common/__tests__/SearchInput.spec.ts (3 tests | 1 failed) 158ms
+   × SearchInput composition > waits for committed IME text before updating or searching 109ms
+     → expected [ [ 'zhong' ] ] to be undefined
+ ❯ src/components/common/__tests__/DateRangePicker.dismiss.spec.ts (4 tests | 3 failed) 278ms
+   × DateRangePicker unapplied changes > discards draft dates when dismissed with outside 131ms
+     → expected 'dates.last7Days' to contain 'dates.today'
+   × DateRangePicker unapplied changes > discards draft dates when dismissed with escape 44ms
+     → expected 'dates.last7Days' to contain 'dates.today'
+   × DateRangePicker unapplied changes > discards draft dates when dismissed with toggle 41ms
+     → expected 'dates.last7Days' to contain 'dates.today'
+ ❯ src/components/common/__tests__/DateRangePicker.midnight.spec.ts (4 tests | 4 failed) 369ms
+   × date presets after midnight > refreshes dates.today when the page stays mounted overnight 188ms
+     → expected { startDate: '2026-09-30', …(2) } to match object { startDate: '2026-10-01', …(1) }
+(1 matching property omitted from actual)
+   × date presets after midnight > refreshes dates.last7Days when the page stays mounted overnight 84ms
+     → expected { startDate: '2026-09-25', …(2) } to match object { startDate: '2026-09-25', …(1) }
+(1 matching property omitted from actual)
+   × date presets after midnight > refreshes dates.thisMonth when the page stays mounted overnight 50ms
+     → expected { startDate: '2026-10-01', …(2) } to match object { startDate: '2026-10-01', …(1) }
+(1 matching property omitted from actual)
+   × date presets after midnight > updates the maximum selectable date when reopened 45ms
+     → expected '2026-10-01' to be '2026-10-02' // Object.is equality
+ ❯ src/components/common/__tests__/Select.keyboard.spec.ts (4 tests | 3 failed) 360ms
+   × Select keyboard focus > selects an enabled option without a search input (false) 179ms
+     → expected <button data-v-65acb12c …(5)>…(2)</button> to be <div data-v-65acb12c …(3)>…(1)</div> // Object.is equality
+   × Select keyboard focus > selects an enabled option without a search input (auto) 57ms
+     → expected <button data-v-65acb12c …(5)>…(2)</button> to be <div data-v-65acb12c …(3)>…(1)</div> // Object.is equality
+   × Select keyboard focus > allows Escape to close a non-searchable dropdown and restore trigger focus 58ms
+     → expected 'true' to be 'false' // Object.is equality
+ ❯ src/components/common/__tests__/Select.searchHighlight.spec.ts (5 tests | 4 failed) 406ms
+   × Select highlight after result changes > selects a filtered result when the previous highlight index is no longer valid 150ms
+     → expected undefined to deeply equal [ [ 'alpha' ] ]
+   × Select highlight after result changes > restores keyboard selection after a search with no matches 68ms
+     → expected undefined to deeply equal [ [ 'beta' ] ]
+   × Select highlight after result changes > highlights the first enabled result when remote options arrive 49ms
+     → expected undefined to deeply equal [ [ 'result' ] ]
+   × Select highlight after result changes > does not retain an old index that now points to a disabled option 49ms
+     → expected undefined to deeply equal [ [ 'result' ] ]
+stderr | src/components/common/__tests__/Pagination.jump.spec.ts > pagination jump input > jumps to the entered numeric page using click
+[Vue warn]: Unhandled error during execution of native event handler 
+  at <Pagination total=200 page=1 pageSize=20  ... > 
+  at <VTUROOT>
+Error: Uncaught [TypeError: jumpPage.value.trim is not a function]
+    at reportException (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\helpers\runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:353:9)
+    at invokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLButtonElementImpl._dispatch (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLButtonElementImpl.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLButtonElement.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34)
+    at DOMWrapper.<anonymous> (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:7323:34)
+    at step (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:107:23)
+    at Object.next (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:88:53)
+    at D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:81:71 TypeError: jumpPage.value.trim is not a function
+    at submitJump (D:\work\work_space\github_code\sub2api\frontend\src\components\common\Pagination.vue:233:32)
+    at callWithErrorHandling (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-core@3.5.26\node_modules\@vue\runtime-core\dist\runtime-core.cjs.js:200:19)
+    at Object.callWithAsyncErrorHandling (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-core@3.5.26\node_modules\@vue\runtime-core\dist\runtime-core.cjs.js:207:17)
+    at HTMLButtonElement.invoker (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-dom@3.5.26\node_modules\@vue\runtime-dom\dist\runtime-dom.cjs.js:665:17)
+    at HTMLButtonElement.callTheUserObjectsOperation (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventListener.js:26:30)
+    at innerInvokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:350:25)
+    at invokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLButtonElementImpl._dispatch (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLButtonElementImpl.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLButtonElement.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34) {
+  stackStr: 'TypeError: jumpPage.value.trim is not a function\n' +
+    '    at submitJump (D:\\work\\work_space\\github_code\\sub2api\\frontend\\src\\components\\common\\Pagination.vue:233:32)\n' +
+    '    at callWithErrorHandling (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-core@3.5.26\\node_modules\\@vue\\runtime-core\\dist\\runtime-core.cjs.js:200:19)\n' +
+    '    at Object.callWithAsyncErrorHandling (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-core@3.5.26\\node_modules\\@vue\\runtime-core\\dist\\runtime-core.cjs.js:207:17)\n' +
+    '    at HTMLButtonElement.invoker (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-dom@3.5.26\\node_modules\\@vue\\runtime-dom\\dist\\runtime-dom.cjs.js:665:17)\n' +
+    '    at HTMLButtonElement.callTheUserObjectsOperation (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\generated\\EventListener.js:26:30)\n' +
+    '    at innerInvokeEventListeners (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:350:25)\n' +
+    '    at invokeEventListeners (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:286:3)\n' +
+    '    at HTMLButtonElementImpl._dispatch (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:233:9)\n' +
+    '    at HTMLButtonElementImpl.dispatchEvent (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:104:17)\n' +
+    '    at HTMLButtonElement.dispatchEvent (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\generated\\EventTarget.js:241:34)',
+  nameStr: 'TypeError',
+  expected: 'undefined',
+  actual: 'undefined'
+}
+
+stderr | src/components/common/__tests__/Pagination.jump.spec.ts > pagination jump input > jumps to the entered numeric page using enter
+[Vue warn]: Unhandled error during execution of native event handler 
+  at <Pagination total=200 page=1 pageSize=20  ... > 
+  at <VTUROOT>
+Error: Uncaught [TypeError: jumpPage.value.trim is not a function]
+    at reportException (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\helpers\runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:353:9)
+    at invokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLInputElementImpl._dispatch (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLInputElementImpl.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLInputElement.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34)
+    at DOMWrapper.<anonymous> (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:7323:34)
+    at step (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:107:23)
+    at Object.next (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:88:53)
+    at D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:81:71 TypeError: jumpPage.value.trim is not a function
+    at submitJump (D:\work\work_space\github_code\sub2api\frontend\src\components\common\Pagination.vue:233:32)
+    at cache.<computed>.cache.<computed> (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-dom@3.5.26\node_modules\@vue\runtime-dom\dist\runtime-dom.cjs.js:1722:14)
+    at callWithErrorHandling (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-core@3.5.26\node_modules\@vue\runtime-core\dist\runtime-core.cjs.js:200:19)
+    at Object.callWithAsyncErrorHandling (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-core@3.5.26\node_modules\@vue\runtime-core\dist\runtime-core.cjs.js:207:17)
+    at HTMLInputElement.invoker (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-dom@3.5.26\node_modules\@vue\runtime-dom\dist\runtime-dom.cjs.js:665:17)
+    at HTMLInputElement.callTheUserObjectsOperation (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventListener.js:26:30)
+    at innerInvokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:350:25)
+    at invokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLInputElementImpl._dispatch (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLInputElementImpl.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17) {
+  stackStr: 'TypeError: jumpPage.value.trim is not a function\n' +
+    '    at submitJump (D:\\work\\work_space\\github_code\\sub2api\\frontend\\src\\components\\common\\Pagination.vue:233:32)\n' +
+    '    at cache.<computed>.cache.<computed> (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-dom@3.5.26\\node_modules\\@vue\\runtime-dom\\dist\\runtime-dom.cjs.js:1722:14)\n' +
+    '    at callWithErrorHandling (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-core@3.5.26\\node_modules\\@vue\\runtime-core\\dist\\runtime-core.cjs.js:200:19)\n' +
+    '    at Object.callWithAsyncErrorHandling (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-core@3.5.26\\node_modules\\@vue\\runtime-core\\dist\\runtime-core.cjs.js:207:17)\n' +
+    '    at HTMLInputElement.invoker (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-dom@3.5.26\\node_modules\\@vue\\runtime-dom\\dist\\runtime-dom.cjs.js:665:17)\n' +
+    '    at HTMLInputElement.callTheUserObjectsOperation (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\generated\\EventListener.js:26:30)\n' +
+    '    at innerInvokeEventListeners (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:350:25)\n' +
+    '    at invokeEventListeners (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:286:3)\n' +
+    '    at HTMLInputElementImpl._dispatch (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:233:9)\n' +
+    '    at HTMLInputElementImpl.dispatchEvent (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:104:17)',
+  nameStr: 'TypeError',
+  expected: 'undefined',
+  actual: 'undefined'
+}
+
+stderr | src/components/common/__tests__/Pagination.jump.spec.ts > pagination jump input > clamps an entered page to the last page
+[Vue warn]: Unhandled error during execution of native event handler 
+  at <Pagination total=200 page=1 pageSize=20  ... > 
+  at <VTUROOT>
+Error: Uncaught [TypeError: jumpPage.value.trim is not a function]
+    at reportException (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\helpers\runtime-script-errors.js:66:24)
+    at innerInvokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:353:9)
+    at invokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLButtonElementImpl._dispatch (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLButtonElementImpl.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLButtonElement.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34)
+    at DOMWrapper.<anonymous> (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:7323:34)
+    at step (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:107:23)
+    at Object.next (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:88:53)
+    at D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+test-utils@2.4.6\node_modules\@vue\test-utils\dist\vue-test-utils.cjs.js:81:71 TypeError: jumpPage.value.trim is not a function
+    at submitJump (D:\work\work_space\github_code\sub2api\frontend\src\components\common\Pagination.vue:233:32)
+    at callWithErrorHandling (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-core@3.5.26\node_modules\@vue\runtime-core\dist\runtime-core.cjs.js:200:19)
+    at Object.callWithAsyncErrorHandling (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-core@3.5.26\node_modules\@vue\runtime-core\dist\runtime-core.cjs.js:207:17)
+    at HTMLButtonElement.invoker (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\@vue+runtime-dom@3.5.26\node_modules\@vue\runtime-dom\dist\runtime-dom.cjs.js:665:17)
+    at HTMLButtonElement.callTheUserObjectsOperation (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventListener.js:26:30)
+    at innerInvokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:350:25)
+    at invokeEventListeners (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:286:3)
+    at HTMLButtonElementImpl._dispatch (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:233:9)
+    at HTMLButtonElementImpl.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\events\EventTarget-impl.js:104:17)
+    at HTMLButtonElement.dispatchEvent (D:\work\work_space\github_code\sub2api\frontend\node_modules\.pnpm\jsdom@24.1.3_supports-color@7.2.0\node_modules\jsdom\lib\jsdom\living\generated\EventTarget.js:241:34) {
+  stackStr: 'TypeError: jumpPage.value.trim is not a function\n' +
+    '    at submitJump (D:\\work\\work_space\\github_code\\sub2api\\frontend\\src\\components\\common\\Pagination.vue:233:32)\n' +
+    '    at callWithErrorHandling (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-core@3.5.26\\node_modules\\@vue\\runtime-core\\dist\\runtime-core.cjs.js:200:19)\n' +
+    '    at Object.callWithAsyncErrorHandling (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-core@3.5.26\\node_modules\\@vue\\runtime-core\\dist\\runtime-core.cjs.js:207:17)\n' +
+    '    at HTMLButtonElement.invoker (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\@vue+runtime-dom@3.5.26\\node_modules\\@vue\\runtime-dom\\dist\\runtime-dom.cjs.js:665:17)\n' +
+    '    at HTMLButtonElement.callTheUserObjectsOperation (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\generated\\EventListener.js:26:30)\n' +
+    '    at innerInvokeEventListeners (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:350:25)\n' +
+    '    at invokeEventListeners (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:286:3)\n' +
+    '    at HTMLButtonElementImpl._dispatch (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:233:9)\n' +
+    '    at HTMLButtonElementImpl.dispatchEvent (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\events\\EventTarget-impl.js:104:17)\n' +
+    '    at HTMLButtonElement.dispatchEvent (D:\\work\\work_space\\github_code\\sub2api\\frontend\\node_modules\\.pnpm\\jsdom@24.1.3_supports-color@7.2.0\\node_modules\\jsdom\\lib\\jsdom\\living\\generated\\EventTarget.js:241:34)',
+  nameStr: 'TypeError',
+  expected: 'undefined',
+  actual: 'undefined'
+}
+
+ ❯ src/components/common/__tests__/Pagination.jump.spec.ts (4 tests | 3 failed) 369ms
+   × pagination jump input > jumps to the entered numeric page using click 234ms
+     → expected undefined to deeply equal [ [ 3 ] ]
+   × pagination jump input > jumps to the entered numeric page using enter 61ms
+     → expected undefined to deeply equal [ [ 3 ] ]
+   × pagination jump input > clamps an entered page to the last page 46ms
+     → expected undefined to deeply equal [ [ 10 ] ]
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 25 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/composables/__tests__/useClipboard.spec.ts > useClipboard > reports a thrown fallback error (secure context: false)
+ FAIL  src/composables/__tests__/useClipboard.spec.ts > useClipboard > reports a thrown fallback error (secure context: true)
+AssertionError: promise rejected "DOMException{ stack: 'NotAllowedErro…', …(1) }" instead of resolving
+ ❯ src/composables/__tests__/useClipboard.spec.ts:137:41
+    135|     })
+    136|     const { copyToClipboard, copied } = useClipboard()
+    137|     await expect(copyToClipboard('text')).resolves.toBe(false)
+       |                                         ^
+    138|     expect(copied.value).toBe(false)
+    139|     expect(mockShowError).toHaveBeenCalledWith('common.copyFailed')
+
+Caused by: NotAllowedError: Copy denied
+ ❯ Document.<anonymous> src/composables/__tests__/useClipboard.spec.ts:134:34
+ ❯ fallbackCopy src/composables/useClipboard.ts:28:21
+ ❯ copyToClipboard src/composables/useClipboard.ts:54:17
+ ❯ src/composables/__tests__/useClipboard.spec.ts:137:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: +0, INDEX_SIZE_ERR: 1, DOMSTRING_SIZE_ERR: 2, HIERARCHY_REQUEST_ERR: 3, WRONG_DOCUMENT_ERR: 4, INVALID_CHARACTER_ERR: 5, NO_DATA_ALLOWED_ERR: 6, NO_MODIFICATION_ALLOWED_ERR: 7, NOT_FOUND_ERR: 8, NOT_SUPPORTED_ERR: 9, INUSE_ATTRIBUTE_ERR: 10, INVALID_STATE_ERR: 11, SYNTAX_ERR: 12, INVALID_MODIFICATION_ERR: 13, NAMESPACE_ERR: 14, INVALID_ACCESS_ERR: 15, VALIDATION_ERR: 16, TYPE_MISMATCH_ERR: 17, SECURITY_ERR: 18, NETWORK_ERR: 19, ABORT_ERR: 20, URL_MISMATCH_ERR: 21, QUOTA_EXCEEDED_ERR: 22, TIMEOUT_ERR: 23, INVALID_NODE_TYPE_ERR: 24, DATA_CLONE_ERR: 25 }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/25]⎯
+
+ FAIL  src/components/common/__tests__/BaseDialog.ids.spec.ts > dialog accessible titles > associates simultaneous dialogs with their own title
+AssertionError: expected [ 'Edit account', 'Edit account' ] to deeply equal [ 'Edit account', 'Confirm deletion' ]
+
+- Expected
++ Received
+
+  Array [
+    "Edit account",
+-   "Confirm deletion",
++   "Edit account",
+  ]
+
+ ❯ src/components/common/__tests__/BaseDialog.ids.spec.ts:20:20
+     18|     expect(dialogs).toHaveLength(2)
+     19|     const titles = dialogs.map(dialog => document.getElementById(dialo…
+     20|     expect(titles).toEqual(['Edit account', 'Confirm deletion'])
+       |                    ^
+     21|   })
+     22| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/25]⎯
+
+ FAIL  src/components/common/__tests__/DateRangePicker.dismiss.spec.ts > DateRangePicker unapplied changes > discards draft dates when dismissed with outside
+ FAIL  src/components/common/__tests__/DateRangePicker.dismiss.spec.ts > DateRangePicker unapplied changes > discards draft dates when dismissed with escape
+ FAIL  src/components/common/__tests__/DateRangePicker.dismiss.spec.ts > DateRangePicker unapplied changes > discards draft dates when dismissed with toggle
+AssertionError: expected 'dates.last7Days' to contain 'dates.today'
+
+Expected: "dates.today"
+Received: "dates.last7Days"
+
+ ❯ src/components/common/__tests__/DateRangePicker.dismiss.spec.ts:31:56
+     29|     await nextTick()
+     30|     expect(wrapper.emitted('change')).toBeUndefined()
+     31|     expect(wrapper.get('.date-picker-trigger').text()).toContain('date…
+       |                                                        ^
+     32|     await wrapper.get('.date-picker-trigger').trigger('click')
+     33|     expect(wrapper.findAll<HTMLInputElement>('input[type="date"]').map…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/25]⎯
+
+ FAIL  src/components/common/__tests__/DateRangePicker.midnight.spec.ts > date presets after midnight > refreshes dates.today when the page stays mounted overnight
+AssertionError: expected { startDate: '2026-09-30', …(2) } to match object { startDate: '2026-10-01', …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "endDate": "2026-10-01",
+-   "startDate": "2026-10-01",
++   "endDate": "2026-09-30",
++   "startDate": "2026-09-30",
+  }
+
+ ❯ src/components/common/__tests__/DateRangePicker.midnight.spec.ts:27:43
+     25|     await w.findAll('.date-picker-preset').find(b => b.text() === labe…
+     26|     await w.get('.date-picker-apply').trigger('click')
+     27|     expect(w.emitted('change')?.[0]?.[0]).toMatchObject({ startDate, e…
+       |                                           ^
+     28|   })
+     29|   it('updates the maximum selectable date when reopened', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/25]⎯
+
+ FAIL  src/components/common/__tests__/DateRangePicker.midnight.spec.ts > date presets after midnight > refreshes dates.last7Days when the page stays mounted overnight
+AssertionError: expected { startDate: '2026-09-25', …(2) } to match object { startDate: '2026-09-25', …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "endDate": "2026-10-01",
++   "endDate": "2026-09-30",
+    "startDate": "2026-09-25",
+  }
+
+ ❯ src/components/common/__tests__/DateRangePicker.midnight.spec.ts:27:43
+     25|     await w.findAll('.date-picker-preset').find(b => b.text() === labe…
+     26|     await w.get('.date-picker-apply').trigger('click')
+     27|     expect(w.emitted('change')?.[0]?.[0]).toMatchObject({ startDate, e…
+       |                                           ^
+     28|   })
+     29|   it('updates the maximum selectable date when reopened', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/25]⎯
+
+ FAIL  src/components/common/__tests__/DateRangePicker.midnight.spec.ts > date presets after midnight > refreshes dates.thisMonth when the page stays mounted overnight
+AssertionError: expected { startDate: '2026-10-01', …(2) } to match object { startDate: '2026-10-01', …(1) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+-   "endDate": "2026-10-01",
++   "endDate": "2026-09-30",
+    "startDate": "2026-10-01",
+  }
+
+ ❯ src/components/common/__tests__/DateRangePicker.midnight.spec.ts:27:43
+     25|     await w.findAll('.date-picker-preset').find(b => b.text() === labe…
+     26|     await w.get('.date-picker-apply').trigger('click')
+     27|     expect(w.emitted('change')?.[0]?.[0]).toMatchObject({ startDate, e…
+       |                                           ^
+     28|   })
+     29|   it('updates the maximum selectable date when reopened', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/25]⎯
+
+ FAIL  src/components/common/__tests__/DateRangePicker.midnight.spec.ts > date presets after midnight > updates the maximum selectable date when reopened
+AssertionError: expected '2026-10-01' to be '2026-10-02' // Object.is equality
+
+Expected: "2026-10-02"
+Received: "2026-10-01"
+
+ ❯ src/components/common/__tests__/DateRangePicker.midnight.spec.ts:31:66
+     29|   it('updates the maximum selectable date when reopened', async () => {
+     30|     const w = await reopenNextDay()
+     31|     expect(w.findAll('input[type="date"]')[1].attributes('max')).toBe(…
+       |                                                                  ^
+     32|   })
+     33| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/25]⎯
+
+ FAIL  src/components/common/__tests__/Pagination.jump.spec.ts > pagination jump input > jumps to the entered numeric page using click
+ FAIL  src/components/common/__tests__/Pagination.jump.spec.ts > pagination jump input > jumps to the entered numeric page using enter
+AssertionError: expected undefined to deeply equal [ [ 3 ] ]
+
+- Expected: 
+Array [
+  Array [
+    3,
+  ],
+]
+
++ Received: 
+undefined
+
+ ❯ src/components/common/__tests__/Pagination.jump.spec.ts:22:44
+     20|     if (action === 'click') await wrapper.get('.btn').trigger('click')
+     21|     else await input.trigger('keyup', { key: 'Enter' })
+     22|     expect(wrapper.emitted('update:page')).toEqual([[3]])
+       |                                            ^
+     23|     expect((input.element as HTMLInputElement).value).toBe('')
+     24|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/25]⎯
+
+ FAIL  src/components/common/__tests__/Pagination.jump.spec.ts > pagination jump input > clamps an entered page to the last page
+AssertionError: expected undefined to deeply equal [ [ 10 ] ]
+
+- Expected: 
+Array [
+  Array [
+    10,
+  ],
+]
+
++ Received: 
+undefined
+
+ ❯ src/components/common/__tests__/Pagination.jump.spec.ts:30:44
+     28|     await wrapper.get('input').setValue('99')
+     29|     await wrapper.get('.btn').trigger('click')
+     30|     expect(wrapper.emitted('update:page')).toEqual([[10]])
+       |                                            ^
+     31|   })
+     32| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/25]⎯
+
+ FAIL  src/components/common/__tests__/SearchInput.spec.ts > SearchInput composition > waits for committed IME text before updating or searching
+AssertionError: expected [ [ 'zhong' ] ] to be undefined
+
+- Expected: 
+undefined
+
++ Received: 
+Array [
+  Array [
+    "zhong",
+  ],
+]
+
+ ❯ src/components/common/__tests__/SearchInput.spec.ts:20:50
+     18|     await input.trigger('input')
+     19|     await vi.advanceTimersByTimeAsync(500)
+     20|     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+       |                                                  ^
+     21|     expect(wrapper.emitted('search')).toBeUndefined()
+     22|     input.element.value = '中文'
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/25]⎯
+
+ FAIL  src/components/common/__tests__/Select.keyboard.spec.ts > Select keyboard focus > selects an enabled option without a search input (false)
+ FAIL  src/components/common/__tests__/Select.keyboard.spec.ts > Select keyboard focus > selects an enabled option without a search input (auto)
+AssertionError: expected <button data-v-65acb12c …(5)>…(2)</button> to be <div data-v-65acb12c …(3)>…(1)</div> // Object.is equality
+
+- Expected
++ Received
+
+- <div
+-   class="select-dropdown-portal select-33yqmr9 select-dropdown-enter-from select-dropdown-enter-active"
++ <button
++   aria-expanded="true"
++   aria-haspopup="true"
++   aria-label="Select option"
++   class="select-trigger select-trigger-open"
+    data-v-65acb12c=""
+-   role="listbox"
+-   style="position: fixed; left: 8px; min-width: 200px; max-width: 1008px; z-index: 100000020; top: 4px;"
++   type="button"
+  >
+-   <!-- Search input -->
+-   <!--v-if-->
+-   <!-- Options list -->
+-   <div
+-     class="select-options"
++   <span
++     class="select-value"
+      data-v-65acb12c=""
+    >
+      
+-     <div
+-       aria-disabled="false"
+-       aria-selected="true"
+-       class="select-option select-option-selected select-option-focused"
+-       data-v-65acb12c=""
+-       role="option"
+-     >
++     Alpha
+      
++   </span>
+    <!--v-if-->
+    <span
+-         class="select-option-label"
++     class="select-icon"
+      data-v-65acb12c=""
+    >
+-         Alpha
+-       </span>
+      <svg
+-         class="h-4 w-4 text-primary-500"
++       class="h-5 w-5 transition-transform duration-200 rotate-180"
+        data-v-65acb12c=""
+        fill="none"
+        stroke="currentColor"
+-         stroke-width="2"
++       stroke-width="1.5"
+        viewBox="0 0 24 24"
+      >
+        <path
+-           d="M4.5 12.75l6 6 9-13.5"
++         d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+-       
+-     </div>
+-     <div
+-       aria-disabled="true"
+-       aria-selected="false"
+-       class="select-option select-option-disabled"
+-       data-v-65acb12c=""
+-       role="option"
+-     >
+-       
+-       <!--v-if-->
+-       <span
+-         class="select-option-label"
+-         data-v-65acb12c=""
+-       >
+-         Disabled
+    </span>
+-       <!--v-if-->
+-       
+-     </div>
+-     <div
+-       aria-disabled="false"
+-       aria-selected="false"
+-       class="select-option"
+-       data-v-65acb12c=""
+-       role="option"
+-     >
+-       
+-       <!--v-if-->
+-       <span
+-         class="select-option-label"
+-         data-v-65acb12c=""
+-       >
+-         Beta
+-       </span>
+-       <!--v-if-->
+-       
+-     </div>
+-     
+-     <!-- Empty state -->
+-     <!--v-if-->
+-   </div>
+- </div>
++ </button>
+
+ ❯ src/components/common/__tests__/Select.keyboard.spec.ts:32:36
+     30|   it.each([false, 'auto'] as const)('selects an enabled option without…
+     31|     await open(searchable)
+     32|     expect(document.activeElement).toBe(document.querySelector('[role=…
+       |                                    ^
+     33|     await press('ArrowDown')
+     34|     await press('Enter')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/25]⎯
+
+ FAIL  src/components/common/__tests__/Select.keyboard.spec.ts > Select keyboard focus > allows Escape to close a non-searchable dropdown and restore trigger focus
+AssertionError: expected 'true' to be 'false' // Object.is equality
+
+Expected: "false"
+Received: "true"
+
+ ❯ src/components/common/__tests__/Select.keyboard.spec.ts:43:63
+     41|     await open(false)
+     42|     await press('Escape')
+     43|     expect(wrapper.get('button').attributes('aria-expanded')).toBe('fa…
+       |                                                               ^
+     44|     expect(document.activeElement).toBe(wrapper.get('button').element)
+     45|     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/25]⎯
+
+ FAIL  src/components/common/__tests__/Select.searchHighlight.spec.ts > Select highlight after result changes > selects a filtered result when the previous highlight index is no longer valid
+AssertionError: expected undefined to deeply equal [ [ 'alpha' ] ]
+
+- Expected: 
+Array [
+  Array [
+    "alpha",
+  ],
+]
+
++ Received: 
+undefined
+
+ ❯ src/components/common/__tests__/Select.searchHighlight.spec.ts:42:50
+     40|     await search('alpha')
+     41|     await enter()
+     42|     expect(wrapper.emitted('update:modelValue')).toEqual([['alpha']])
+       |                                                  ^
+     43|   })
+     44| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/25]⎯
+
+ FAIL  src/components/common/__tests__/Select.searchHighlight.spec.ts > Select highlight after result changes > restores keyboard selection after a search with no matches
+AssertionError: expected undefined to deeply equal [ [ 'beta' ] ]
+
+- Expected: 
+Array [
+  Array [
+    "beta",
+  ],
+]
+
++ Received: 
+undefined
+
+ ❯ src/components/common/__tests__/Select.searchHighlight.spec.ts:52:50
+     50|     await search('beta')
+     51|     await enter()
+     52|     expect(wrapper.emitted('update:modelValue')).toEqual([['beta']])
+       |                                                  ^
+     53|   })
+     54| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/25]⎯
+
+ FAIL  src/components/common/__tests__/Select.searchHighlight.spec.ts > Select highlight after result changes > highlights the first enabled result when remote options arrive
+AssertionError: expected undefined to deeply equal [ [ 'result' ] ]
+
+- Expected: 
+Array [
+  Array [
+    "result",
+  ],
+]
+
++ Received: 
+undefined
+
+ ❯ src/components/common/__tests__/Select.searchHighlight.spec.ts:62:50
+     60|     ] })
+     61|     await enter()
+     62|     expect(wrapper.emitted('update:modelValue')).toEqual([['result']])
+       |                                                  ^
+     63|   })
+     64| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/25]⎯
+
+ FAIL  src/components/common/__tests__/Select.searchHighlight.spec.ts > Select highlight after result changes > does not retain an old index that now points to a disabled option
+AssertionError: expected undefined to deeply equal [ [ 'result' ] ]
+
+- Expected: 
+Array [
+  Array [
+    "result",
+  ],
+]
+
++ Received: 
+undefined
+
+ ❯ src/components/common/__tests__/Select.searchHighlight.spec.ts:73:50
+     71|     ] })
+     72|     await enter()
+     73|     expect(wrapper.emitted('update:modelValue')).toEqual([['result']])
+       |                                                  ^
+     74|   })
+     75| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/25]⎯
+
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > allows leaving an empty input with Tab (shift: false)
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > allows leaving an empty input with Tab (shift: true)
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts:18:76
+     16|   it.each([false, true])('allows leaving an empty input with Tab (shif…
+     17|     const wrapper = mount(ModelTagInput, { props: { models: ['gpt-4o']…
+     18|     expect(pressTab(wrapper.get('input').element, shift).defaultPreven…
+       |                                                                            ^
+     19|     expect(wrapper.emitted('update:models')).toBeUndefined()
+     20|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/25]⎯
+
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > allows leaving a whitespace-only input
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts:25:69
+     23|     const wrapper = mount(ModelTagInput, { props: { models: [] } })
+     24|     await wrapper.get('input').setValue('   ')
+     25|     expect(pressTab(wrapper.get('input').element).defaultPrevented).to…
+       |                                                                     ^
+     26|     expect(wrapper.emitted('update:models')).toBeUndefined()
+     27|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/25]⎯
+
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > still commits a pending model with Tab, then allows the next Tab to leave
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts:37:54
+     35|     expect(wrapper.emitted('update:models')).toEqual([[['gpt-4o', 'gpt…
+     36|     expect((input.element as HTMLInputElement).value).toBe('')
+     37|     expect(pressTab(input.element).defaultPrevented).toBe(false)
+       |                                                      ^
+     38|   })
+     39| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/25]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 3 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+TypeError: jumpPage.value.trim is not a function
+ ❯ submitJump src/components/common/Pagination.vue:233:32
+    231| 
+    232| const submitJump = () => {
+    233|   const value = jumpPage.value.trim()
+       |                                ^
+    234|   if (!value) return
+    235|   const pageNum = Number.parseInt(value, 10)
+ ❯ callWithErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.26/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:200:19
+ ❯ Object.callWithAsyncErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.26/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:207:17
+ ❯ HTMLButtonElement.invoker node_modules/.pnpm/@vue+runtime-dom@3.5.26/node_modules/@vue/runtime-dom/dist/runtime-dom.cjs.js:665:17
+ ❯ HTMLButtonElement.callTheUserObjectsOperation node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30
+ ❯ innerInvokeEventListeners node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:350:25
+ ❯ invokeEventListeners node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:286:3
+ ❯ HTMLButtonElementImpl._dispatch node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:233:9
+ ❯ HTMLButtonElementImpl.dispatchEvent node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:104:17
+ ❯ HTMLButtonElement.dispatchEvent node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:241:34
+
+This error originated in "src/components/common/__tests__/Pagination.jump.spec.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "jumps to the entered numeric page using click". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+TypeError: jumpPage.value.trim is not a function
+ ❯ submitJump src/components/common/Pagination.vue:233:32
+    231| 
+    232| const submitJump = () => {
+    233|   const value = jumpPage.value.trim()
+       |                                ^
+    234|   if (!value) return
+    235|   const pageNum = Number.parseInt(value, 10)
+ ❯ cache.<computed>.cache.<computed> node_modules/.pnpm/@vue+runtime-dom@3.5.26/node_modules/@vue/runtime-dom/dist/runtime-dom.cjs.js:1722:14
+ ❯ callWithErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.26/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:200:19
+ ❯ Object.callWithAsyncErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.26/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:207:17
+ ❯ HTMLInputElement.invoker node_modules/.pnpm/@vue+runtime-dom@3.5.26/node_modules/@vue/runtime-dom/dist/runtime-dom.cjs.js:665:17
+ ❯ HTMLInputElement.callTheUserObjectsOperation node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30
+ ❯ innerInvokeEventListeners node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:350:25
+ ❯ invokeEventListeners node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:286:3
+ ❯ HTMLInputElementImpl._dispatch node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:233:9
+ ❯ HTMLInputElementImpl.dispatchEvent node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:104:17
+
+This error originated in "src/components/common/__tests__/Pagination.jump.spec.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "jumps to the entered numeric page using enter". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+TypeError: jumpPage.value.trim is not a function
+ ❯ submitJump src/components/common/Pagination.vue:233:32
+    231| 
+    232| const submitJump = () => {
+    233|   const value = jumpPage.value.trim()
+       |                                ^
+    234|   if (!value) return
+    235|   const pageNum = Number.parseInt(value, 10)
+ ❯ callWithErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.26/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:200:19
+ ❯ Object.callWithAsyncErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.26/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:207:17
+ ❯ HTMLButtonElement.invoker node_modules/.pnpm/@vue+runtime-dom@3.5.26/node_modules/@vue/runtime-dom/dist/runtime-dom.cjs.js:665:17
+ ❯ HTMLButtonElement.callTheUserObjectsOperation node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30
+ ❯ innerInvokeEventListeners node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:350:25
+ ❯ invokeEventListeners node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:286:3
+ ❯ HTMLButtonElementImpl._dispatch node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:233:9
+ ❯ HTMLButtonElementImpl.dispatchEvent node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:104:17
+ ❯ HTMLButtonElement.dispatchEvent node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:241:34
+
+This error originated in "src/components/common/__tests__/Pagination.jump.spec.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "clamps an entered page to the last page". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ Test Files  9 failed (9)
+      Tests  25 failed | 15 passed (40)
+     Errors  3 errors
+   Start at  18:32:03
+   Duration  9.55s (transform 3.22s, setup 7.04s, collect 7.36s, tests 2.39s, environment 53.99s, prepare 2.49s)

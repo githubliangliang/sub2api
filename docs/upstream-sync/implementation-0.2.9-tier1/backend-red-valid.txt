@@ -1,0 +1,1162 @@
+--- FAIL: TestSchedulerMetadataAccountPreservesRPMPolicy (0.00s)
+    --- FAIL: TestSchedulerMetadataAccountPreservesRPMPolicy/tiered_red_zone (0.00s)
+        scheduler_cache_test.go:30: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/repository/scheduler_cache_test.go:30
+            	Error:      	Not equal: 
+            	            	expected: 10
+            	            	actual  : 0
+            	Test:       	TestSchedulerMetadataAccountPreservesRPMPolicy/tiered_red_zone
+    --- FAIL: TestSchedulerMetadataAccountPreservesRPMPolicy/sticky_exempt (0.00s)
+        scheduler_cache_test.go:30: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/repository/scheduler_cache_test.go:30
+            	Error:      	Not equal: 
+            	            	expected: 10
+            	            	actual  : 0
+            	Test:       	TestSchedulerMetadataAccountPreservesRPMPolicy/sticky_exempt
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/repository	0.032s
+--- FAIL: TestApplyOAuthCredentialsPreservesExistingNonAuthCredentials (0.00s)
+    account_handler_long_context_billing_test.go:175: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/handler/admin/account_handler_long_context_billing_test.go:175
+        	Error:      	Not equal: 
+        	            	expected: map[string]interface {}{"access_token":"new-token", "account_id":"existing-account-id", "model_mapping":map[string]interface {}{"gpt-5":"gpt-5"}, "refresh_token":"new-refresh-token"}
+        	            	actual  : map[string]interface {}{"access_token":"new-token", "refresh_token":"new-refresh-token"}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,7 +1,3 @@
+        	            	-(map[string]interface {}) (len=4) {
+        	            	+(map[string]interface {}) (len=2) {
+        	            	  (string) (len=12) "access_token": (string) (len=9) "new-token",
+        	            	- (string) (len=10) "account_id": (string) (len=19) "existing-account-id",
+        	            	- (string) (len=13) "model_mapping": (map[string]interface {}) (len=1) {
+        	            	-  (string) (len=5) "gpt-5": (string) (len=5) "gpt-5"
+        	            	- },
+        	            	  (string) (len=13) "refresh_token": (string) (len=17) "new-refresh-token"
+        	Test:       	TestApplyOAuthCredentialsPreservesExistingNonAuthCredentials
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler/admin	0.032s
+--- FAIL: TestAnthropicToResponses_ThinkingDisabled (0.00s)
+    anthropic_responses_test.go:1140: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/anthropic_responses_test.go:1140
+        	Error:      	Not equal: 
+        	            	expected: "none"
+        	            	actual  : "medium"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-none
+        	            	+medium
+        	Test:       	TestAnthropicToResponses_ThinkingDisabled
+    anthropic_responses_test.go:1141: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/anthropic_responses_test.go:1141
+        	Error:      	Should be empty, but was auto
+        	Test:       	TestAnthropicToResponses_ThinkingDisabled
+--- FAIL: TestAnthropicToResponses_ThinkingDisabledOverridesOutputEffort (0.00s)
+    anthropic_responses_test.go:1156: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/anthropic_responses_test.go:1156
+        	Error:      	Not equal: 
+        	            	expected: "none"
+        	            	actual  : "xhigh"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-none
+        	            	+xhigh
+        	Test:       	TestAnthropicToResponses_ThinkingDisabledOverridesOutputEffort
+--- FAIL: TestAnthropicToChatCompletionsRequest_ThinkingDisabledOverridesOutputEffort (0.00s)
+    chatcompletions_anthropic_bridge_test.go:164: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/chatcompletions_anthropic_bridge_test.go:164
+        	Error:      	Not equal: 
+        	            	expected: "none"
+        	            	actual  : "xhigh"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-none
+        	            	+xhigh
+        	Test:       	TestAnthropicToChatCompletionsRequest_ThinkingDisabledOverridesOutputEffort
+--- FAIL: TestChatCompletionsToResponses_MessageTypesWithReasoningAndTools (0.00s)
+    chatcompletions_responses_test.go:131: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/chatcompletions_responses_test.go:131
+        	Error:      	Not equal: 
+        	            	expected: "message"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-message
+        	            	+
+        	Test:       	TestChatCompletionsToResponses_MessageTypesWithReasoningAndTools
+        	Messages:   	input item 0 type
+    chatcompletions_responses_test.go:131: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/chatcompletions_responses_test.go:131
+        	Error:      	Not equal: 
+        	            	expected: "message"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-message
+        	            	+
+        	Test:       	TestChatCompletionsToResponses_MessageTypesWithReasoningAndTools
+        	Messages:   	input item 1 type
+    chatcompletions_responses_test.go:131: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/chatcompletions_responses_test.go:131
+        	Error:      	Not equal: 
+        	            	expected: "message"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-message
+        	            	+
+        	Test:       	TestChatCompletionsToResponses_MessageTypesWithReasoningAndTools
+        	Messages:   	input item 2 type
+    chatcompletions_responses_test.go:131: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/chatcompletions_responses_test.go:131
+        	Error:      	Not equal: 
+        	            	expected: "message"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-message
+        	            	+
+        	Test:       	TestChatCompletionsToResponses_MessageTypesWithReasoningAndTools
+        	Messages:   	input item 5 type
+    chatcompletions_responses_test.go:131: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/chatcompletions_responses_test.go:131
+        	Error:      	Not equal: 
+        	            	expected: "message"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-message
+        	            	+
+        	Test:       	TestChatCompletionsToResponses_MessageTypesWithReasoningAndTools
+        	Messages:   	input item 6 type
+--- FAIL: TestSupplementResponseOutput_RecoversTextWhenTerminalMessageIsEmpty (0.00s)
+    responses_to_chatcompletions_text_recovery_test.go:36: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/responses_to_chatcompletions_text_recovery_test.go:36
+        	Error:      	Expected value not to be nil.
+        	Test:       	TestSupplementResponseOutput_RecoversTextWhenTerminalMessageIsEmpty
+        	Messages:   	the client must not receive an empty reply
+--- FAIL: TestSupplementResponseOutput_RecoversTextWhenTerminalTextIsBlank (0.00s)
+    responses_to_chatcompletions_text_recovery_test.go:62: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/responses_to_chatcompletions_text_recovery_test.go:62
+        	Error:      	Not equal: 
+        	            	expected: "real text"
+        	            	actual  : "   "
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-real text
+        	            	+   
+        	Test:       	TestSupplementResponseOutput_RecoversTextWhenTerminalTextIsBlank
+--- FAIL: TestSupplementResponseOutput_AppendsMessageWhenTerminalHasNoMessage (0.00s)
+    responses_to_chatcompletions_text_recovery_test.go:91: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/responses_to_chatcompletions_text_recovery_test.go:91
+        	Error:      	Not equal: 
+        	            	expected: "only in the stream"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-only in the stream
+        	            	+
+        	Test:       	TestSupplementResponseOutput_AppendsMessageWhenTerminalHasNoMessage
+    responses_to_chatcompletions_text_recovery_test.go:93: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/pkg/apicompat/responses_to_chatcompletions_text_recovery_test.go:93
+        	Error:      	"[{function_call   []   [] call_1 verify    <nil>}]" should have 2 item(s), but has 1
+        	Test:       	TestSupplementResponseOutput_AppendsMessageWhenTerminalHasNoMessage
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/pkg/apicompat	0.014s
+2026/09/28 11:25:08 Timezone initialized: UTC (UTC offset: +00:00)
+--- FAIL: TestOpenAIThresholdCandidate_StaleSnapshotFutureReset (0.00s)
+    --- FAIL: TestOpenAIThresholdCandidate_StaleSnapshotFutureReset/absolute_future (0.00s)
+        account_scheduling_threshold_eval_test.go:203: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/account_scheduling_threshold_eval_test.go:203
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestOpenAIThresholdCandidate_StaleSnapshotFutureReset/absolute_future
+    --- FAIL: TestOpenAIThresholdCandidate_StaleSnapshotFutureReset/relative_future (0.00s)
+        account_scheduling_threshold_eval_test.go:203: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/account_scheduling_threshold_eval_test.go:203
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestOpenAIThresholdCandidate_StaleSnapshotFutureReset/relative_future
+--- FAIL: TestResolveOpenAIQuotaUtilization_StaleSnapshotFutureReset (0.00s)
+    --- FAIL: TestResolveOpenAIQuotaUtilization_StaleSnapshotFutureReset/absolute_future (0.00s)
+        account_scheduling_threshold_eval_test.go:233: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/account_scheduling_threshold_eval_test.go:233
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestResolveOpenAIQuotaUtilization_StaleSnapshotFutureReset/absolute_future
+    --- FAIL: TestResolveOpenAIQuotaUtilization_StaleSnapshotFutureReset/relative_future (0.00s)
+        account_scheduling_threshold_eval_test.go:233: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/account_scheduling_threshold_eval_test.go:233
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestResolveOpenAIQuotaUtilization_StaleSnapshotFutureReset/relative_future
+--- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError (0.00s)
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/cached_expired_access/usage (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/cached_expired_access/usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/cached_expired_access/forced_usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/cached_valid_access_invalid_refresh/usage (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/cached_valid_access_invalid_refresh/usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/cached_valid_access_invalid_refresh/forced_usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/failed_probe_missing_access/usage (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/failed_probe_missing_access/usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/failed_probe_missing_access/forced_usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/probe_throttled/usage (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/probe_throttled/usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+    --- FAIL: TestAccountUsageService_OpenAIQueriesPreserveRefreshError/probe_throttled/forced_usage_batch (0.00s)
+        account_usage_service_batch_test.go:267: query erased refresh error: clearCalls=1 status="active" error=""
+--- FAIL: TestStructuredOutputsBetaOAuthMimic (0.00s)
+    --- FAIL: TestStructuredOutputsBetaOAuthMimic/explicit (0.00s)
+        gateway_structured_outputs_beta_test.go:39: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/gateway_structured_outputs_beta_test.go:39
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestStructuredOutputsBetaOAuthMimic/explicit
+    --- FAIL: TestStructuredOutputsBetaOAuthMimic/mixed_and_duplicate (0.00s)
+        gateway_structured_outputs_beta_test.go:39: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/gateway_structured_outputs_beta_test.go:39
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestStructuredOutputsBetaOAuthMimic/mixed_and_duplicate
+--- FAIL: TestBuildUpstreamRequestStructuredOutputsBeta (0.00s)
+    --- FAIL: TestBuildUpstreamRequestStructuredOutputsBeta/preserved (0.00s)
+        gateway_structured_outputs_beta_test.go:70: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/gateway_structured_outputs_beta_test.go:70
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestBuildUpstreamRequestStructuredOutputsBeta/preserved
+--- FAIL: TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused (0.00s)
+    --- FAIL: TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/payment_cooldown (0.00s)
+        grok_quota_cooldown_test.go:39: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/grok_quota_cooldown_test.go:39
+            	Error:      	Received unexpected error:
+            	            	error: code=502 reason="GROK_QUOTA_TOKEN_UNAVAILABLE" message="failed to acquire access token: oauth refresh account state changed" metadata=map[]
+            	Test:       	TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/payment_cooldown
+    --- FAIL: TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/rate_limited (0.00s)
+        grok_quota_cooldown_test.go:39: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/grok_quota_cooldown_test.go:39
+            	Error:      	Received unexpected error:
+            	            	error: code=502 reason="GROK_QUOTA_TOKEN_UNAVAILABLE" message="failed to acquire access token: oauth refresh account state changed" metadata=map[]
+            	Test:       	TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/rate_limited
+    --- FAIL: TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/overloaded (0.00s)
+        grok_quota_cooldown_test.go:39: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/grok_quota_cooldown_test.go:39
+            	Error:      	Received unexpected error:
+            	            	error: code=502 reason="GROK_QUOTA_TOKEN_UNAVAILABLE" message="failed to acquire access token: oauth refresh account state changed" metadata=map[]
+            	Test:       	TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/overloaded
+    --- FAIL: TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/manually_paused (0.00s)
+        grok_quota_cooldown_test.go:39: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/grok_quota_cooldown_test.go:39
+            	Error:      	Received unexpected error:
+            	            	error: code=502 reason="GROK_QUOTA_TOKEN_UNAVAILABLE" message="failed to acquire access token: oauth refresh account state changed" metadata=map[]
+            	Test:       	TestGrokQuotaQueryRemainsAvailableWhileSchedulingIsPaused/manually_paused
+--- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion (0.00s)
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/failed (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/failed
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/incomplete (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/incomplete
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/error (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/error
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/invalid_completed (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/invalid_completed
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/missing_response (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/missing_response
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/empty (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/empty
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/truncated (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/truncated
+    --- FAIL: TestAlphaSearchFallbackRequiresSuccessfulCompletion/done_only (0.00s)
+        openai_alpha_search_completion_test.go:45: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_alpha_search_completion_test.go:45
+            	Error:      	An error is expected but got nil.
+            	Test:       	TestAlphaSearchFallbackRequiresSuccessfulCompletion/done_only
+--- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity (0.00s)
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/browser (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "Mozilla/0.154.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+Mozilla/0.154.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/browser
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/arbitrary (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "not-a-codex-client"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+not-a-codex-client
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/arbitrary
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/unknown_client (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "custom/0.154.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+custom/0.154.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/unknown_client
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/missing_version (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/missing_version
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/crlf (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.154.0 (Linux)\r\nX-Injected: value"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1,2 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.154.0 (Linux)
+            	            	+X-Injected: value
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/crlf
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/nul (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.154.0 (Linux\x00)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.154.0 (Linux\x00)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/nul
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/del (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.154.0 terminal\x7f"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.154.0 terminal
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/del
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/leading_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.154.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.154.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/leading_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/trailing_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.154.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.154.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/trailing_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/recognized_trailer (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.154.0 (Linux) (codex-tui; 0.154.0)"
+            	            	actual  : "custom/0.154.0 (Linux) (codex-tui; 0.154.0)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.154.0 (Linux) (codex-tui; 0.154.0)
+            	            	+custom/0.154.0 (Linux) (codex-tui; 0.154.0)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/manual/recognized_trailer
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/browser (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "Mozilla/0.155.1 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+Mozilla/0.155.1 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/browser
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/arbitrary (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "not-a-codex-client"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+not-a-codex-client
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/arbitrary
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/unknown_client (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "custom/0.155.1 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+custom/0.155.1 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/unknown_client
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/missing_version (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/missing_version
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/crlf (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux)\r\nX-Injected: value"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1,2 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux)
+            	            	+X-Injected: value
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/crlf
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/nul (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux\x00)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux\x00)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/nul
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/del (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 terminal\x7f"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 terminal
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/del
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/leading_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/leading_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/trailing_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/trailing_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/recognized_trailer (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Linux) (codex-tui; 0.155.1)"
+            	            	actual  : "custom/0.155.1 (Linux) (codex-tui; 0.155.1)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Linux) (codex-tui; 0.155.1)
+            	            	+custom/0.155.1 (Linux) (codex-tui; 0.155.1)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/synced/recognized_trailer
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/browser (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "Mozilla/0.155.1 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+Mozilla/0.155.1 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/browser
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/arbitrary (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "not-a-codex-client"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+not-a-codex-client
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/arbitrary
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/unknown_client (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "custom/0.155.1 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+custom/0.155.1 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/unknown_client
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/missing_version (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/missing_version
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/crlf (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux)\r\nX-Injected: value"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1,2 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux)
+            	            	+X-Injected: value
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/crlf
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/nul (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux\x00)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux\x00)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/nul
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/del (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 terminal\x7f"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 terminal
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/del
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/leading_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/leading_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/trailing_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.155.1 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.155.1 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/trailing_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/recognized_trailer (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.155.1 (Linux) (codex-tui; 0.155.1)"
+            	            	actual  : "custom/0.155.1 (Linux) (codex-tui; 0.155.1)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.155.1 (Linux) (codex-tui; 0.155.1)
+            	            	+custom/0.155.1 (Linux) (codex-tui; 0.155.1)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_manual/recognized_trailer
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/browser (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "Mozilla/0.146.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+Mozilla/0.146.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/browser
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/arbitrary (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "not-a-codex-client"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+not-a-codex-client
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/arbitrary
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/unknown_client (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "custom/0.146.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+custom/0.146.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/unknown_client
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/missing_version (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/missing_version
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/crlf (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux)\r\nX-Injected: value"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1,2 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux)
+            	            	+X-Injected: value
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/crlf
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/nul (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux\x00)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux\x00)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/nul
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/del (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 terminal\x7f"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 terminal
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/del
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/leading_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/leading_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/trailing_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/trailing_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/recognized_trailer (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Linux) (codex-tui; 0.146.0)"
+            	            	actual  : "custom/0.146.0 (Linux) (codex-tui; 0.146.0)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Linux) (codex-tui; 0.146.0)
+            	            	+custom/0.146.0 (Linux) (codex-tui; 0.146.0)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/default/recognized_trailer
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/browser (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "Mozilla/0.146.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+Mozilla/0.146.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/browser
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/arbitrary (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "not-a-codex-client"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+not-a-codex-client
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/arbitrary
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/unknown_client (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "custom/0.146.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+custom/0.146.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/unknown_client
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/missing_version (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/missing_version
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/crlf (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux)\r\nX-Injected: value"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1,2 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux)
+            	            	+X-Injected: value
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/crlf
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/nul (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux\x00)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux\x00)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/nul
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/del (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 terminal\x7f"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 terminal
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/del
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/leading_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/leading_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/trailing_newline (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+            	            	actual  : "codex_cli_rs/0.146.0 (Linux)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Ubuntu 22.4.0; x86_64) xterm-256color
+            	            	+codex_cli_rs/0.146.0 (Linux)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/trailing_newline
+    --- FAIL: TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/recognized_trailer (0.00s)
+        openai_codex_version_sync_service_test.go:529: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_codex_version_sync_service_test.go:529
+            	Error:      	Not equal: 
+            	            	expected: "codex-tui/0.146.0 (Linux) (codex-tui; 0.146.0)"
+            	            	actual  : "custom/0.146.0 (Linux) (codex-tui; 0.146.0)"
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-codex-tui/0.146.0 (Linux) (codex-tui; 0.146.0)
+            	            	+custom/0.146.0 (Linux) (codex-tui; 0.146.0)
+            	Test:       	TestGetOpenAICodexCanonicalUserAgentOutboundIdentity/invalid_versions/recognized_trailer
+--- FAIL: TestForwardAsAnthropic_DisabledThinkingOverridesMaxForResponses (0.00s)
+    openai_compat_model_test.go:336: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_compat_model_test.go:336
+        	Error:      	Not equal: 
+        	            	expected: "none"
+        	            	actual  : "max"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-none
+        	            	+max
+        	Test:       	TestForwardAsAnthropic_DisabledThinkingOverridesMaxForResponses
+--- FAIL: TestShouldStripOpenAIResponsesInputItemID_Reasoning (0.00s)
+    --- FAIL: TestShouldStripOpenAIResponsesInputItemID_Reasoning/message_65_byte_id (0.00s)
+        openai_gateway_apikey_item_id_test.go:133: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_apikey_item_id_test.go:133
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestShouldStripOpenAIResponsesInputItemID_Reasoning/message_65_byte_id
+    --- FAIL: TestShouldStripOpenAIResponsesInputItemID_Reasoning/reasoning_65_byte_id (0.00s)
+        openai_gateway_apikey_item_id_test.go:133: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_apikey_item_id_test.go:133
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestShouldStripOpenAIResponsesInputItemID_Reasoning/reasoning_65_byte_id
+    --- FAIL: TestShouldStripOpenAIResponsesInputItemID_Reasoning/function_call_65_byte_id (0.00s)
+        openai_gateway_apikey_item_id_test.go:133: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_apikey_item_id_test.go:133
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestShouldStripOpenAIResponsesInputItemID_Reasoning/function_call_65_byte_id
+    --- FAIL: TestShouldStripOpenAIResponsesInputItemID_Reasoning/custom_call_65_byte_id (0.00s)
+        openai_gateway_apikey_item_id_test.go:133: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_apikey_item_id_test.go:133
+            	Error:      	Not equal: 
+            	            	expected: true
+            	            	actual  : false
+            	Test:       	TestShouldStripOpenAIResponsesInputItemID_Reasoning/custom_call_65_byte_id
+--- FAIL: TestSanitizeOpenAIResponsesInputItemIDsRemovesOverlongIDs (0.00s)
+    openai_gateway_apikey_item_id_test.go:143: 
+        	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_apikey_item_id_test.go:143
+        	Error:      	Should be true
+        	Test:       	TestSanitizeOpenAIResponsesInputItemIDsRemovesOverlongIDs
+--- FAIL: TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta (0.00s)
+    --- FAIL: TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/preserves_caller_multi-agent_beta (0.00s)
+        openai_gateway_service_test.go:3204: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_service_test.go:3204
+            	Error:      	Not equal: 
+            	            	expected: "responses_multi_agent=v1"
+            	            	actual  : ""
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-responses_multi_agent=v1
+            	            	+
+            	Test:       	TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/preserves_caller_multi-agent_beta
+    --- FAIL: TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/preserves_mixed_beta_tokens_and_removes_legacy_token (0.00s)
+        openai_gateway_service_test.go:3211: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_service_test.go:3211
+            	Error:      	Not equal: 
+            	            	expected: []string{"responses_multi_agent=v1", "future_feature=v2"}
+            	            	actual  : []string(nil)
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1,5 +1,2 @@
+            	            	-([]string) (len=2) {
+            	            	- (string) (len=24) "responses_multi_agent=v1",
+            	            	- (string) (len=17) "future_feature=v2"
+            	            	-}
+            	            	+([]string) <nil>
+            	            	 
+            	Test:       	TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/preserves_mixed_beta_tokens_and_removes_legacy_token
+    --- FAIL: TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/api_key_remains_caller_controlled (0.00s)
+        openai_gateway_service_test.go:3225: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_service_test.go:3225
+            	Error:      	Not equal: 
+            	            	expected: []string{"responses=experimental, responses_multi_agent=v1"}
+            	            	actual  : []string(nil)
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1,4 +1,2 @@
+            	            	-([]string) (len=1) {
+            	            	- (string) (len=48) "responses=experimental, responses_multi_agent=v1"
+            	            	-}
+            	            	+([]string) <nil>
+            	            	 
+            	Test:       	TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/api_key_remains_caller_controlled
+    --- FAIL: TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/compact_OAuth_removes_legacy_token_and_preserves_independent_beta (0.00s)
+        openai_gateway_service_test.go:3233: 
+            	Error Trace:	/mnt/d/work/work_space/github_code/sub2api/backend/internal/service/openai_gateway_service_test.go:3233
+            	Error:      	Not equal: 
+            	            	expected: "future_feature=v1"
+            	            	actual  : ""
+            	            	
+            	            	Diff:
+            	            	--- Expected
+            	            	+++ Actual
+            	            	@@ -1 +1 @@
+            	            	-future_feature=v1
+            	            	+
+            	Test:       	TestOpenAIBuildUpstreamRequestOAuthResponsesPreservesCallerBeta/compact_OAuth_removes_legacy_token_and_preserves_independent_beta
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.048s
+FAIL

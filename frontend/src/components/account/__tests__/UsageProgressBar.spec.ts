@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import UsageProgressBar from '../UsageProgressBar.vue'
 
 vi.mock('vue-i18n', async () => {
@@ -12,6 +12,8 @@ vi.mock('vue-i18n', async () => {
   }
 })
 
+enableAutoUnmount(afterEach)
+
 describe('UsageProgressBar', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -22,7 +24,7 @@ describe('UsageProgressBar', () => {
     vi.useRealTimers()
   })
 
-  it('showNowWhenIdle=true 且利用率为 0 时显示“现在”', () => {
+  it('showNowWhenIdle=true 且利用率为 0 但有未来 resetsAt 时显示倒计时', () => {
     const wrapper = mount(UsageProgressBar, {
       props: {
         label: '5h',
@@ -33,8 +35,15 @@ describe('UsageProgressBar', () => {
       }
     })
 
+    expect(wrapper.text()).toContain('2h 30m')
+    expect(wrapper.text()).not.toContain('usage.resetNow')
+  })
+
+  it('shows immediate availability for an idle window with no reset timestamp', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: { label: '5h', utilization: 0, showNowWhenIdle: true, color: 'indigo' }
+    })
     expect(wrapper.text()).toContain('usage.resetNow')
-    expect(wrapper.text()).not.toContain('2h 30m')
   })
 
   it('showNowWhenIdle=true 但利用率大于 0 时显示倒计时', () => {

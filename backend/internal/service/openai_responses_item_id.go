@@ -15,13 +15,13 @@ func shouldStripOpenAIResponsesInputItemID(itemType, id string) bool {
 		return false
 	}
 	if itemType == "message" {
-		return !strings.HasPrefix(id, "msg")
+		return len(id) > 64 || !strings.HasPrefix(id, "msg")
 	}
 	if itemType == "reasoning" {
-		return !strings.HasPrefix(id, "rs")
+		return len(id) > 64 || !strings.HasPrefix(id, "rs")
 	}
 	if isCodexToolCallInputType(itemType) {
-		return !strings.HasPrefix(id, "fc")
+		return len(id) > 64 || !strings.HasPrefix(id, "fc")
 	}
 	return false
 }

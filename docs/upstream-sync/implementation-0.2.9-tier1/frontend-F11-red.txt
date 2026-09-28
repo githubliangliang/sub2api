@@ -1,0 +1,75 @@
+
+ RUN  v2.1.9 D:/work/work_space/github_code/sub2api/frontend
+
+ ❯ src/utils/__tests__/proxyExpiry.boundary.spec.ts (6 tests | 4 failed) 51ms
+   × proxy expiry at the deadline > shows expired at offset 0 before the backend status changes 31ms
+     → expected { …(2) } to deeply equal { key: 'admin.proxies.expired' }
+   × proxy expiry at the deadline > shows expired at offset -1 before the backend status changes 6ms
+     → expected { …(2) } to deeply equal { key: 'admin.proxies.expired' }
+   × proxy expiry at the deadline > shows expired at offset -3600000 before the backend status changes 5ms
+     → expected { …(2) } to deeply equal { key: 'admin.proxies.expired' }
+   × proxy expiry at the deadline > shows expired at offset -86399999 before the backend status changes 3ms
+     → expected { …(2) } to deeply equal { key: 'admin.proxies.expired' }
+ ✓ src/utils/__tests__/proxyExpiry.spec.ts (9 tests) 27ms
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/common/__tests__/ProxySelector.testing.spec.ts (2 tests | 1 failed) 496ms
+   × proxy connection tests > does not restart an individual test when a batch is started 223ms
+     → expected [ 1, 1, 2 ] to deeply equal [ 1, 2 ]
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/utils/__tests__/proxyExpiry.boundary.spec.ts > proxy expiry at the deadline > shows expired at offset 0 before the backend status changes
+ FAIL  src/utils/__tests__/proxyExpiry.boundary.spec.ts > proxy expiry at the deadline > shows expired at offset -1 before the backend status changes
+ FAIL  src/utils/__tests__/proxyExpiry.boundary.spec.ts > proxy expiry at the deadline > shows expired at offset -3600000 before the backend status changes
+ FAIL  src/utils/__tests__/proxyExpiry.boundary.spec.ts > proxy expiry at the deadline > shows expired at offset -86399999 before the backend status changes
+AssertionError: expected { …(2) } to deeply equal { key: 'admin.proxies.expired' }
+
+- Expected
++ Received
+
+  Object {
+-   "key": "admin.proxies.expired",
++   "key": "admin.proxies.expiringInDays",
++   "params": Object {
++     "days": 0,
++   },
+  }
+
+ ❯ src/utils/__tests__/proxyExpiry.boundary.spec.ts:16:63
+     14|   it.each([0, -1, -60 * 60 * 1000, -24 * 60 * 60 * 1000 + 1])(
+     15|     'shows expired at offset %i before the backend status changes', of…
+     16|       expect(proxyExpiryLabelKey(atOffset(offset), 'active')).toEqual(…
+       |                                                               ^
+     17|     }
+     18|   )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/components/common/__tests__/ProxySelector.testing.spec.ts > proxy connection tests > does not restart an individual test when a batch is started
+AssertionError: expected [ 1, 1, 2 ] to deeply equal [ 1, 2 ]
+
+- Expected
++ Received
+
+  Array [
+    1,
++   1,
+    2,
+  ]
+
+ ❯ src/components/common/__tests__/ProxySelector.testing.spec.ts:33:52
+     31|     await wrapper.get('.batch-test-btn').trigger('click')
+     32|     await flushPromises()
+     33|     expect(testProxy.mock.calls.map(([id]) => id)).toEqual([1, 2])
+       |                                                    ^
+     34|     expect(wrapper.findAll('.test-btn')[0].attributes('disabled')).toB…
+     35|     finish({ success: true, country: 'US' })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  5 failed | 12 passed (17)
+   Start at  18:32:56
+   Duration  17.50s (transform 1.43s, setup 2.75s, collect 1.54s, tests 574ms, environment 29.69s, prepare 4.32s)

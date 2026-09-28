@@ -120,6 +120,12 @@ func TestShouldStripOpenAIResponsesInputItemID_Reasoning(t *testing.T) {
 		{"message item id", "message", "item_x", true},
 		{"function_call fc id", "function_call", "fc_abc", false},
 		{"function_call item id", "function_call", "item_x", true},
+		{"message 64 byte id", "message", "msg" + strings.Repeat("x", 61), false},
+		{"message 65 byte id", "message", "msg" + strings.Repeat("x", 62), true},
+		{"reasoning 65 byte id", "reasoning", "rs" + strings.Repeat("x", 63), true},
+		{"function call 65 byte id", "function_call", "fc" + strings.Repeat("x", 63), true},
+		{"custom call 65 byte id", "custom_tool_call", "fc" + strings.Repeat("x", 63), true},
+		{"unconstrained long id", "web_search_call", strings.Repeat("x", 65), false},
 		{"unconstrained type", "web_search_call", "ws_001", false},
 	}
 	for _, tc := range cases {
@@ -127,6 +133,18 @@ func TestShouldStripOpenAIResponsesInputItemID_Reasoning(t *testing.T) {
 			require.Equal(t, tc.want, shouldStripOpenAIResponsesInputItemID(tc.itemType, tc.id))
 		})
 	}
+}
+
+func TestSanitizeOpenAIResponsesInputItemIDsRemovesOverlongIDs(t *testing.T) {
+	longID := "msg" + strings.Repeat("x", 62)
+	body := []byte(fmt.Sprintf(`{"input":[{"type":"message","id":%q,"role":"user","content":[{"type":"input_text","text":"keep me"}]},{"type":"message","id":"msg_ok","role":"assistant"}]}`, longID))
+	sanitized, changed, err := sanitizeOpenAIResponsesInputItemIDs(body)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.False(t, gjson.GetBytes(sanitized, "input.0.id").Exists())
+	require.Equal(t, "keep me", gjson.GetBytes(sanitized, "input.0.content.0.text").String())
+	require.Equal(t, "msg_ok", gjson.GetBytes(sanitized, "input.1.id").String())
+	require.Equal(t, longID, gjson.GetBytes(body, "input.0.id").String(), "ingress body remains reusable for another account")
 }
 
 func TestSanitizeOpenAIResponsesInputItemIDs_AllocationGrowthIsLinear(t *testing.T) {

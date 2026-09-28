@@ -50,19 +50,20 @@
           </div>
           <div class="w-24">
             <input
-              v-model.number="newRpm"
+              :value="newRpm"
               type="number"
               step="1"
               min="0"
               autocomplete="off"
               class="hide-spinner input w-full"
               placeholder="100"
+              @input="newRpm = ($event.target as HTMLInputElement).value"
             />
           </div>
           <button
             type="button"
             class="btn btn-primary shrink-0"
-            :disabled="!selectedUser || newRpm == null || newRpm < 0"
+            :disabled="!selectedUser || !isValidRpm(newRpm)"
             @click="handleAddLocal"
           >
             {{ t('common.add') }}
@@ -143,9 +144,10 @@
                         step="1"
                         min="0"
                         autocomplete="off"
-                        :value="entry.rpm_override"
+                        :value="Number.isNaN(entry.rpm_override) ? '' : entry.rpm_override"
+                        :aria-invalid="!isValidRpm(entry.rpm_override)"
                         class="hide-spinner w-20 rounded border border-gray-200 bg-white px-2 py-1 text-center text-sm font-medium transition-colors focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500/20 dark:border-dark-500 dark:bg-dark-700 dark:focus:border-primary-500"
-                        @change="updateLocalRpm(entry.user_id, ($event.target as HTMLInputElement).value)"
+                        @input="updateLocalRpm(entry.user_id, $event.target as HTMLInputElement)"
                       />
                     </td>
                     <td class="px-2 py-2">
@@ -193,7 +195,7 @@
             v-if="isDirty"
             type="button"
             class="btn btn-primary btn-sm px-4 py-1.5"
-            :disabled="saving"
+            :disabled="saving || hasInvalidEntries"
             @click="handleSave"
           >
             <Icon v-if="saving" name="refresh" size="sm" class="mr-1 animate-spin" />
@@ -206,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -217,7 +219,9 @@ import Pagination from '@/components/common/Pagination.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 
-interface LocalEntry extends GroupRPMOverrideEntry {}
+interface LocalEntry extends Omit<GroupRPMOverrideEntry, 'rpm_override'> {
+  rpm_override: number | string
+}
 
 const props = defineProps<{
   show: boolean
@@ -240,9 +244,16 @@ const searchQuery = ref('')
 const searchResults = ref<AdminUser[]>([])
 const showDropdown = ref(false)
 const selectedUser = ref<AdminUser | null>(null)
-const newRpm = ref<number | null>(null)
+const newRpm = ref<string | null>(null)
 const currentPage = ref(1)
 const pageSize = ref(10)
+
+const isValidRpm = (value: number | string | null): boolean => {
+  if (value == null || (typeof value === 'string' && !value.trim())) return false
+  const rpm = Number(value)
+  return Number.isInteger(rpm) && rpm >= 0
+}
+const hasInvalidEntries = computed(() => localEntries.value.some(entry => !isValidRpm(entry.rpm_override)))
 
 let searchTimeout: ReturnType<typeof setTimeout>
 
@@ -258,7 +269,7 @@ const platformColorClass = computed(() => {
 const isDirty = computed(() => {
   if (localEntries.value.length !== serverEntries.value.length) return true
   const serverMap = new Map(serverEntries.value.map(e => [e.user_id, e.rpm_override]))
-  return localEntries.value.some(e => serverMap.get(e.user_id) !== e.rpm_override)
+  return localEntries.value.some(e => !isValidRpm(e.rpm_override) || serverMap.get(e.user_id) !== Number(e.rpm_override))
 })
 
 const paginatedLocalEntries = computed(() => {
@@ -333,7 +344,7 @@ const selectUser = (user: AdminUser) => {
 }
 
 const handleAddLocal = () => {
-  if (!selectedUser.value || newRpm.value == null || newRpm.value < 0) return
+  if (!selectedUser.value || !isValidRpm(newRpm.value)) return
   const user = selectedUser.value
   const idx = localEntries.value.findIndex(e => e.user_id === user.id)
   const entry: LocalEntry = {
@@ -342,7 +353,7 @@ const handleAddLocal = () => {
     user_email: user.email,
     user_notes: user.notes || '',
     user_status: user.status || 'active',
-    rpm_override: newRpm.value
+    rpm_override: Number(newRpm.value)
   }
   if (idx >= 0) {
     localEntries.value[idx] = entry
@@ -355,11 +366,9 @@ const handleAddLocal = () => {
   adjustPage()
 }
 
-const updateLocalRpm = (userId: number, value: string) => {
-  const num = parseInt(value, 10)
-  if (isNaN(num) || num < 0) return
+const updateLocalRpm = (userId: number, input: HTMLInputElement) => {
   const entry = localEntries.value.find(e => e.user_id === userId)
-  if (entry) entry.rpm_override = num
+  if (entry) entry.rpm_override = input.value
 }
 
 const removeLocal = (userId: number) => {
@@ -390,12 +399,12 @@ const handleCancel = () => {
 }
 
 const handleSave = async () => {
-  if (!props.group) return
+  if (!props.group || hasInvalidEntries.value) return
   saving.value = true
   try {
     const entries = localEntries.value.map(e => ({
       user_id: e.user_id,
-      rpm_override: e.rpm_override
+      rpm_override: Number(e.rpm_override)
     }))
     await adminAPI.groups.batchSetGroupRPMOverrides(props.group.id, entries)
     appStore.showSuccess(t('admin.groups.rpmSaved'))
@@ -420,6 +429,10 @@ const handleClickOutside = () => { showDropdown.value = false }
 if (typeof document !== 'undefined') {
   document.addEventListener('click', handleClickOutside)
 }
+onUnmounted(() => {
+  clearTimeout(searchTimeout)
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>
