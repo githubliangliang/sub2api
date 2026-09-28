@@ -4,7 +4,9 @@
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.4.md](./PORTING-0.2.4.md) —— **最新一轮，2026-09-12，第一档13项、第二档12簇已落地 main，最终构建和总检查通过**。两份 OpenSpec 的任务和验收已回填；[最终验收](./evidence-0.2.4/implementation.md)记录54包后端 unit、240文件/1720项前端测试、静态单文件构建及真实 SQLite/浏览器验证，并追加 API Key Responses namespace 修复及其定向验证。初始151条提交、114候选、1,044条四态证据保持冻结。VERSION仍为1.1.11，迁移仍为226，SQLite/miniredis/simple mode保留。第三/四档与旧DOMPurify独立待办未实施；本次未创建新 tag 或 Release。
+- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **最新一轮，2026-09-28，只完成评估，未实施产品补丁**。以本地 `bfbcd79` / v1.1.13 对照上游 v0.2.5→v0.2.9：215条非 merge、161个PR和9个直接提交；第一档39个PR/15簇、第二档48个PR/16簇已生成待实施 OpenSpec。前端 typecheck 和8文件/42测试通过，后端缺少Go，未运行编译/unit/race。SQLite最大迁移仍226；第三/四档及旧轮次遗留见§5。0.2.5主体已在 `bfbcd79` 落地，旧验收文档里的“未提交”是历史状态，不作为当前待办。
+
+- [PORTING-0.2.4.md](./PORTING-0.2.4.md) —— **历史轮次，2026-09-12，第一档13项、第二档12簇已落地 main，最终构建和总检查通过**。两份 OpenSpec 的任务和验收已回填；[最终验收](./evidence-0.2.4/implementation.md)记录54包后端 unit、240文件/1720项前端测试、静态单文件构建及真实 SQLite/浏览器验证，并追加 API Key Responses namespace 修复及其定向验证。初始151条提交、114候选、1,044条四态证据保持冻结。VERSION仍为1.1.11，迁移仍为226，SQLite/miniredis/simple mode保留。第三/四档与旧DOMPurify独立待办未实施；本次未创建新 tag 或 Release。
 
 - [PORTING-0.2.0.md](./PORTING-0.2.0.md) —— 上游 v0.1.185 + v0.2.0（2026-09-02，历史轮次）。60 个非 merge commit，11 项 P0 与 4 项 P1 主体已落；两个 change 为 [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/) 与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)，已于 `c9d9bebe8` 合回 main。新迁移为 `225` 推理档位与 `226` 渠道 1h 缓存价。第二档阶段 9 DOMPurify 仍未做；旧 §5.4 API Key instructions 已在 0.2.4 重新核实并提升为 F13，其余未合项以最新 §5.3 盘点为准。历史 source-baseline 与当时验证记录不改写。
 - [PORTING-0.1.184.md](./PORTING-0.1.184.md) —— 上游 0.1.184 大混合版（2026-08-31）。**§3 的 14 项 P0 与 §4 的 11 项 P1 已全部合入**（实施记录见其 §9 / §11 / §13，验证矩阵见 §10 / §12 / §13.4）。上游 3 条新迁移全部不合，故本仓库迁移号仍是 224。**§5.1 Codex routed model catalog 整簇也已合入**（立项见 §14，落地与剔除见 §15）。**§5.7 Antigravity 混合内置工具也已合入**（其「基座」其实只是两条 ≤ v0.1.183 的漏项，见 §16）。剩下的是 §4 那组「取决于是否用到该功能」的按需项 + §5 余下五簇。⚠️ 其 §1 那句「上游 main `200602b41` 之后 3 条本文不含」说的是**该文档的覆盖范围**，不是「本仓库没有」——`e2624fb65` 实际已随 §5.1 落地，见 0.2.0 §6 / §9.1。
@@ -61,6 +63,8 @@
 - **保留安全审计日期与证据边界。** 旧 advisory 数不是今日结果，新可选下载功能的 SSRF 修复不等于本 fork 已有漏洞。
 
 移植上游代码前先读 [第 4 节「硬约束」](#4-硬约束)，尤其是 9–12 条（SQLite 适配的四个静默陷阱）与第 13 条（守卫类单行改动的空转陷阱）。这几条的由来见 [第 7 节的事故复盘](#7-案例一次由-sqlite-适配引发的调度事故2026-08-16)。
+
+[PORTING-0.2.9.md §9](./PORTING-0.2.9.md#9-本轮可复用的结论) 补充：上游参数回退前先核对fork是否受影响；文档删除的ALREADY不代表业务已合；原生Codex与CC Switch的URL规则分开验证；调度投影字段必须确认对应后台功能已接线。旧verification里的“未提交”要与实际commit交叉核对，不改写冻结历史。
 
 写 / 改 SQL 时对照 [第 5 节「PG → SQLite 转换速查」](#5-pg--sqlite-转换速查)。上一次 PG 残留核查的结论与复查命令：[PG-REMNANTS-AUDIT.md](./PG-REMNANTS-AUDIT.md)（2026-08-16，基线 `a8ccd19`）。
 
