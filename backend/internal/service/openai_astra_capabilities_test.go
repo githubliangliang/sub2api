@@ -16,7 +16,8 @@ func TestAstraDefaultCatalogDescribesUltraAndContext(t *testing.T) {
 		require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromManifestModel(t, model))
 		require.Equal(t, "xhigh", model["multi_agent_reasoning_effort"])
 		require.Equal(t, "v2", model["multi_agent_version"])
-		messages := model["model_messages"].(map[string]any)
+		messages, ok := model["model_messages"].(map[string]any)
+		require.True(t, ok)
 		require.Contains(t, messages["instructions_template"], "You are Codex, an agent based on GPT-6.")
 	}
 }

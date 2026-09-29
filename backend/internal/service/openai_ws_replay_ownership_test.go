@@ -49,7 +49,8 @@ func TestOpenAIWSReplayConcurrentMetadataAndLineageOwnership(t *testing.T) {
 }
 
 func TestOpenAIWSLineageCleanupExpiresSessions(t *testing.T) {
-	store := NewOpenAIWSStateStore(nil).(*defaultOpenAIWSStateStore)
+	store, ok := NewOpenAIWSStateStore(nil).(*defaultOpenAIWSStateStore)
+	require.True(t, ok)
 	store.MarkSessionInvalidEncryptedContent(1, "expired", []string{"digest"}, time.Minute)
 	store.sessionInvalidEncryptedMu.Lock()
 	binding := store.sessionInvalidEncrypted["1:expired"]

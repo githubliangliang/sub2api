@@ -13,7 +13,9 @@ import (
 
 func TestFingerprintVersionOverrideIdentityConsistency(t *testing.T) {
 	if os.Getenv("SUB2API_TEST_CLI_OVERRIDE_CHILD") != "1" {
-		cmd := exec.Command(os.Args[0], "-test.run=^TestFingerprintVersionOverrideIdentityConsistency$")
+		executable, err := os.Executable()
+		require.NoError(t, err)
+		cmd := exec.Command(executable, "-test.run=^TestFingerprintVersionOverrideIdentityConsistency$")
 		cmd.Env = append(os.Environ(), "SUB2API_TEST_CLI_OVERRIDE_CHILD=1", "SUB2API_CLAUDE_CLI_VERSION=2.2.0")
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(output))
