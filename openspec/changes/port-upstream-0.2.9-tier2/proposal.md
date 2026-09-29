@@ -11,5 +11,5 @@
 
 ## Impact
 
-本次交付规格，尚未修改产品。实施涉及现有服务/转换器/界面；详细patch位置仅在[评估文档](../../../docs/upstream-sync/PORTING-0.2.9.md)。
-前端现有基线通过；后端工具链缺失，需在实施前补齐unit/build/race与SQLite验证。
+实现涉及现有服务、转换器、SQLite repository 和界面，未增加迁移或平台。来源 patch 位置见[评估文档](../../../docs/upstream-sync/PORTING-0.2.9.md)。
+Go 1.27 自动工具链已可用；实际实施起点、回归与 unit/build/race/SQLite 结果见 [verification.md](./verification.md)。

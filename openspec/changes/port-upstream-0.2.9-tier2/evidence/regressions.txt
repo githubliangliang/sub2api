@@ -1,0 +1,350 @@
+Failure evidence excerpts. Only executed assertions are listed; import/compile errors are not passing evidence. Full session logs remain in /tmp.
+
+
+S01
+
+tier2-s01-service-red.log (sha256 ff5fc906439fa3bfd0f2108f6757281ed6025cd13e40c700cb8d7944369dff59)
+--- FAIL: TestTier2ModelBillingAliases (0.00s)
+    --- FAIL: TestTier2ModelBillingAliases/gpt-6-sol (0.00s)
+    --- FAIL: TestTier2ModelBillingAliases/openai/gpt-6-sol-max (0.00s)
+    --- FAIL: TestTier2ModelBillingAliases/gpt-6-luna (0.00s)
+    --- FAIL: TestTier2ModelBillingAliases/claude-opus-5-5 (0.00s)
+    --- FAIL: TestTier2ModelBillingAliases/anthropic/claude-opus-5.5 (0.00s)
+--- FAIL: TestTier2Grok47BridgeAndMapping (0.00s)
+
+tier2-s01-red.log (sha256 b8353e3a5f77f851cf728111e5c5bfc48b5a61f6a040c1612623627136407411)
+--- FAIL: TestTier2ReasoningGenerations (0.00s)
+    --- FAIL: TestTier2ReasoningGenerations/gpt-6-astra (0.00s)
+    --- FAIL: TestTier2ReasoningGenerations/gpt-6-sol (0.00s)
+    --- FAIL: TestTier2ReasoningGenerations/gpt-6-luna (0.00s)
+    --- FAIL: TestTier2ReasoningGenerations/gpt-7-future (0.00s)
+    --- FAIL: TestTier2ReasoningGenerations/GPT-6-Astra (0.00s)
+--- FAIL: TestTier2OpusAdaptiveAndSignedHistory (0.00s)
+    --- FAIL: TestTier2OpusAdaptiveAndSignedHistory/claude-opus-5-5 (0.00s)
+    --- FAIL: TestTier2OpusAdaptiveAndSignedHistory/anthropic/claude-opus-5.5 (0.00s)
+--- FAIL: TestTier2DottedOpusEffort (0.00s)
+
+
+S02
+
+tier2-s02-red.log (sha256 251a8b48a2533c1158224dcf49ffdffe20beeead0e7635fcab937e826cec2409)
+--- FAIL: TestResponsesToAnthropic_ObjectUnionRootFlattened (0.00s)
+--- FAIL: TestResponsesToAnthropic_ObjectUnionRootMergesBranches (0.00s)
+--- FAIL: TestResponsesToAnthropic_AllOfRootKeepsUnionRequired (0.00s)
+--- FAIL: TestResponsesToAnthropic_RootUnionDropsNonObjectBranches (0.00s)
+--- FAIL: TestResponsesToAnthropic_RootUnionKeepsRootPropertiesAndRequired (0.00s)
+--- FAIL: TestResponsesToAnthropic_CodexNamespaceRootUnionTool (0.00s)
+--- FAIL: TestCleanJSONSchema_ArrayPrefixItems (0.00s)
+--- FAIL: TestCleanJSONSchema_ArrayMissingItemsFallback (0.00s)
+--- FAIL: TestCleanJSONSchema_EnumOnlySchemaInTuple (0.00s)
+--- FAIL: TestCleanJSONSchema_ConstKeywordConversion (0.00s)
+--- FAIL: TestCleanJSONSchema_AnyOfNestedPrefixItems (0.00s)
+--- FAIL: TestCleanJSONSchema_EmptyPrefixItems (0.00s)
+
+tier2-s02-service-red.log (sha256 5eecc000b4f73012cc38dd0df2bbdb1ffdd608d432a9213cc7ed5411ab884add)
+--- FAIL: TestSanitizeOpenAIResponsesToolParameterTypes_DropsNullRequired (0.00s)
+--- FAIL: TestSanitizeOpenAIResponsesToolParameterTypes_AnthropicInputSchema (0.00s)
+--- FAIL: TestSanitizeOpenAIResponsesToolParameterTypes_AnthropicInputSchemaNullType (0.00s)
+--- FAIL: TestSanitizeOpenAIResponsesToolParameterTypes_ContentSchema (0.00s)
+
+tier2-schema-native-red.log (sha256 6746bac377c8d0c0eb0e97d0623b2675566b2cbbf667942e766c4a3b9791dd34)
+--- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch (0.00s)
+    --- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch/messages (0.00s)
+
+
+S03
+
+tier2-s03-red.log (sha256 0c80d19df72e59d9dd3f3855b40c1e607179ffbec6828467c680e9e2d68da01f)
+--- FAIL: TestAnthropicEventToResponses_ToolCallArgumentsDoneMatchesDeltas (0.00s)
+--- FAIL: TestAnthropicEventToResponses_ToolInputOnContentBlockStart (0.00s)
+--- FAIL: TestToolInputOnContentBlockStart_SurvivesClientToolRestore (0.00s)
+--- FAIL: TestToolInputOnContentBlockStart_PlainFunctionToolChain (0.00s)
+--- FAIL: TestResponsesToAnthropic_InputFileDataURIBecomesDocument (0.00s)
+--- FAIL: TestBuildParts_DocumentBecomesInlineData (0.00s)
+
+
+S04
+
+tier2-s04-body-red.log (sha256 c5118a8f08ff24b65ececa44963b286230dbef7e69d71a42979fee95fc584699)
+--- FAIL: TestHTTPUpstreamConcurrentEarlyCloseDoesNotPoisonNextResponse (10.02s)
+    --- FAIL: TestHTTPUpstreamConcurrentEarlyCloseDoesNotPoisonNextResponse/tls=false (5.00s)
+    --- FAIL: TestHTTPUpstreamConcurrentEarlyCloseDoesNotPoisonNextResponse/tls=true (5.02s)
+
+tier2-s04-stream-red.log (sha256 1334c145e99d5292c947f549dfb9884d91f7bf7c6bd191e738b19ae8ecb798b3)
+--- FAIL: TestOpenAIResponseFlush_TerminalEventEndsStreamWithoutEOF (3.00s)
+--- FAIL: TestOpenAIStreamingTimeout (1.00s)
+--- FAIL: TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema (0.00s)
+    --- FAIL: TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema/reset (0.00s)
+    --- FAIL: TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema/http2 (0.00s)
+--- FAIL: TestOpenAIStreamingTooLong (0.00s)
+
+tier2-s04-heartbeat-red.log (sha256 687afabd43b69f5d490f5000c97f79a9924dde9ae0bd0029f2ff2d6e006f1a23)
+--- FAIL: TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken (0.00s)
+    --- FAIL: TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken/native (0.00s)
+    --- FAIL: TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken/passthrough (0.00s)
+--- FAIL: TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapacityFailover (0.00s)
+--- FAIL: TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure (0.00s)
+    --- FAIL: TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure/write_error (0.00s)
+    --- FAIL: TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure/client_disconnect (0.00s)
+--- FAIL: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver (0.00s)
+    --- FAIL: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/overload_followed_by_failed_usage (0.00s)
+    --- FAIL: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/upstream_read_failure (0.00s)
+    --- FAIL: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/upstream_EOF_without_terminal (0.00s)
+    --- FAIL: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/done_without_terminal (0.00s)
+
+tier2-s04-cancel-red.log (sha256 d59d8f5b293875ed49809425c0eb2fcdf2c4be29cb16b827f25aed05c3d1089e)
+--- FAIL: TestTransportErrorHandlers_ClientDisconnectRecordsNoOpsEvent (0.00s)
+    --- FAIL: TestTransportErrorHandlers_ClientDisconnectRecordsNoOpsEvent/anthropic/client_disconnected (0.00s)
+    --- FAIL: TestTransportErrorHandlers_ClientDisconnectRecordsNoOpsEvent/openai/client_disconnected (0.00s)
+--- FAIL: TestAntigravityCompatTransportError_ClientDisconnectWrites499 (0.00s)
+--- FAIL: TestAntigravityWriteGoogleError_ClientClosedStatus (0.00s)
+--- FAIL: TestGeminiForwardNative_TransientTransportErrorFailsOverWithoutRetry (13.58s)
+--- FAIL: TestGeminiForwardNative_PersistentTransportErrorEvictsAccount (15.45s)
+--- FAIL: TestGeminiForwardNative_ClientCanceledReturnsOriginalError (14.31s)
+--- FAIL: TestGeminiForwardNative_CountTokensTransportErrorFallsBackToEstimate (14.84s)
+--- FAIL: TestGeminiForward_TransportErrorFailsOverWithoutRetry (15.34s)
+--- FAIL: TestGeminiForwardAsChatCompletions_TransportErrorFailsOverWithoutRetry (13.93s)
+--- FAIL: TestGoogleConcurrencyError (0.00s)
+
+tier2-bare-error-red.log (sha256 40ffbfba59719471fc0e0ca49754eab4d647bac04685631e6f947214bc5d59c7)
+--- FAIL: TestTier2BareErrorWaitsForAuthoritativeTerminal (0.00s)
+    --- FAIL: TestTier2BareErrorWaitsForAuthoritativeTerminal/native/eof (0.00s)
+    --- FAIL: TestTier2BareErrorWaitsForAuthoritativeTerminal/native/completed (0.00s)
+    --- FAIL: TestTier2BareErrorWaitsForAuthoritativeTerminal/passthrough/eof (0.00s)
+    --- FAIL: TestTier2BareErrorWaitsForAuthoritativeTerminal/passthrough/completed (0.00s)
+    --- FAIL: TestTier2BareErrorWaitsForAuthoritativeTerminal/ws-http/eof (0.00s)
+    --- FAIL: TestTier2BareErrorWaitsForAuthoritativeTerminal/ws-http/completed (0.00s)
+
+tier2-bare-error-policy-red.log (sha256 e76b41f314f4e3c25fbdeeb0254bb030b92232893993a77cf0b6a23d4a3a238a)
+--- FAIL: TestTier2BareErrorExplicitPassthroughRuleWins (0.00s)
+
+
+S05
+
+tier2-s04-green-s05-red.log (sha256 038c94b3dbcd3db81dcce47049f39f806184043ebb562e98343ca65edabe21ac)
+--- FAIL: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver (0.00s)
+    --- FAIL: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/overload_followed_by_failed_usage (0.00s)
+--- FAIL: TestTier2AntigravityBareModelFallback (0.00s)
+--- FAIL: TestTier2AntigravityControlEventsAreNotContent (0.00s)
+
+
+S06
+
+tier2-s06-red.log (sha256 121fd40dbb8a5e593aeeb841ce3a36f75e9c492dd7d4e3d16c7cefc14f96e161)
+--- FAIL: TestLegacySchedulerDecision_StickySessionLayer (0.00s)
+    --- FAIL: TestLegacySchedulerDecision_StickySessionLayer/load_batch (0.00s)
+    --- FAIL: TestLegacySchedulerDecision_StickySessionLayer/priority_lru (0.00s)
+--- FAIL: TestLegacySchedulerDecision_PreviousResponseRouting (0.00s)
+    --- FAIL: TestLegacySchedulerDecision_PreviousResponseRouting/routes_to_the_account_owning_the_response (0.00s)
+    --- FAIL: TestLegacySchedulerDecision_PreviousResponseRouting/transport-incompatible_owner_releases_its_slot_and_falls_back (0.00s)
+    --- FAIL: TestLegacySchedulerDecision_PreviousResponseRouting/channel-restricted_upstream_model_of_the_owner_releases_its_slot_and_falls_back (0.00s)
+    --- FAIL: TestLegacySchedulerDecision_PreviousResponseRouting/quarantined_owner_proxy_releases_its_slot_and_falls_back (0.00s)
+    --- FAIL: TestLegacySchedulerDecision_PreviousResponseRouting/all_proxies_quarantined_fails_open_to_the_owner (0.00s)
+--- FAIL: TestRateLimitService_HandleUpstreamError_APIKeyModel401UsesModelRateLimit (0.00s)
+
+tier2-s06-sqlite-red.log (sha256 136c6ac7bef43eea3cc42d82d70e2cb9d80720f7e4ee5a63db64c770fd461fcb)
+--- FAIL: TestTier2PausedOAuthRefreshCandidatesSQLite (0.71s)
+
+
+S07
+
+tier2-s07-red.log (sha256 91d6b7619dc33d7e2a7893b0d49ec172ef13d0ea03bbe103f5a6ec4a146419a7)
+--- FAIL: TestTier2AccountStatsLongContextGate (0.00s)
+--- FAIL: TestTier2ChannelImagePriceInheritsCatalogUnlessExplicit (0.00s)
+
+
+S08
+
+tier2-s08-red.log (sha256 fd56684eafbd9e56420cb1af381ef66b253b33cd85df8e4a3953be55886e1653)
+ FAIL  src/utils/__tests__/ccswitchImport.antigravityUrl.spec.ts > Antigravity CC Switch endpoint > joins the platform path onto https://api.example.com/ for both clients
+AssertionError: expected 'https://api.example.com//antigravity' to be 'https://api.example.com/antigravity' // Object.is equality
+ FAIL  src/utils/__tests__/ccswitchImport.antigravityUrl.spec.ts > Antigravity CC Switch endpoint > joins the platform path onto https://api.example.com/// for both clients
+AssertionError: expected 'https://api.example.com////antigravity' to be 'https://api.example.com/antigravity' // Object.is equality
+ FAIL  src/utils/__tests__/ccswitchImport.antigravityUrl.spec.ts > Antigravity CC Switch endpoint > joins the platform path onto https://api.example.com/sub2api/ for both clients
+AssertionError: expected 'https://api.example.com/sub2api//anti…' to be 'https://api.example.com/sub2api/antig…' // Object.is equality
+ FAIL  src/utils/__tests__/ccswitchImport.spec.ts > ccswitchImport utils > keeps Codex imports on the configured endpoint for base URL https://api.example.com/
+AssertionError: expected 'https://api.example.com/' to be 'https://api.example.com' // Object.is equality
+ FAIL  src/utils/__tests__/ccswitchImport.spec.ts > ccswitchImport utils > keeps Codex imports on the configured endpoint for base URL https://api.example.com/v1/
+AssertionError: expected 'https://api.example.com/v1/' to be 'https://api.example.com/v1' // Object.is equality
+ FAIL  src/utils/__tests__/ccswitchImport.spec.ts > CC Switch usage script > queries exactly one /v1/usage for base URL https://api.example.com
+ FAIL  src/utils/__tests__/ccswitchImport.spec.ts > CC Switch usage script > queries exactly one /v1/usage for base URL https://api.example.com/
+
+tier2-s08-windows-red.log (sha256 c4a058f7a7ae956d36181eac76addb7d95f2c84dcbc9c58e4ad327dfca6c62d7)
+ FAIL  src/components/keys/__tests__/UseKeyModal.spec.ts > UseKeyModal > uses a Codex-expandable catalog path on Windows for openai
+AssertionError: expected 'model_provider = "OpenAI"\nmodel = "g…' to contain 'model_catalog_json = "~/.codex/codex-…'
+ FAIL  src/components/keys/__tests__/UseKeyModal.spec.ts > UseKeyModal > uses a Codex-expandable catalog path on Windows for grok
+AssertionError: expected 0 to be greater than 0
+
+tier2-s08-baseline-script.log (sha256 50a5171415b8a56840bd0deb02aa7f0163205cf80843791e1d84cca231360ed4)
+{"base":"https://example.com/v1","before":"https://example.com/v1/v1/usage","after":"https://example.com/v1/usage"}
+{"base":"https://example.com/x/v1/","before":"https://example.com/x/v1//v1/usage","after":"https://example.com/x/v1/usage"}
+
+
+S09
+
+tier2-s09-red.log (sha256 16fe269d2baf7718b153ad1ce9ccd4d3f99e16bbd9a2cf418371e8c07367f6e0)
+--- FAIL: TestTier2RevertProxyInvalidatesOnlyChangedIdentitySQLite (0.71s)
+--- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite (6.13s)
+    --- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite/renew (0.87s)
+    --- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite/disable (1.74s)
+    --- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite/fallback (1.77s)
+    --- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite/backup (1.05s)
+
+tier2-s09-revert-red.log (sha256 b490ad9f9bcd8da5faf5df99c91ec9cc64b242f3c40ad0397e42933ec3ad2608)
+--- FAIL: TestTier2RevertProxyInvalidatesOnlyChangedIdentitySQLite (1.47s)
+    --- FAIL: TestTier2RevertProxyInvalidatesOnlyChangedIdentitySQLite/true (0.75s)
+
+tier2-s09-fallback-red.log (sha256 2d63b3f21b3b28fd0b1455492dd9ebe594f06c963faa06ddd4835bd100ba8f8a)
+--- FAIL: TestResolveFallbackSkipsInactiveBackup (0.00s)
+    --- FAIL: TestResolveFallbackSkipsInactiveBackup/none (0.00s)
+    --- FAIL: TestResolveFallbackSkipsInactiveBackup/proxy (0.00s)
+    --- FAIL: TestResolveFallbackSkipsInactiveBackup/direct (0.00s)
+    --- FAIL: TestResolveFallbackSkipsInactiveBackup/inactive_cycle (0.00s)
+
+tier2-audit-boundaries-red.log (sha256 6449e3ef56e53c169162465e1245b703669dd2ac11f03f07d5f5e983b46c67cf)
+--- FAIL: TestTier2CodexWebSocketBoundaries (0.00s)
+    --- FAIL: TestTier2CodexWebSocketBoundaries/mapped_Lite (0.00s)
+--- FAIL: TestTier2MappedLiteCreatePayloadDoesNotMutateInput (0.00s)
+--- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch (0.00s)
+    --- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch/messages (0.00s)
+    --- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch/responses (0.00s)
+    --- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch/chat (0.00s)
+--- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite (3.96s)
+    --- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite/target_disabled (0.66s)
+
+
+S10
+
+tier2-s10-red.log (sha256 43925efec8cef92c7fadb3ecd06f883575615a43fcb144fbf44282c9e4f6f62f)
+--- FAIL: TestResponsesProbeModelUnavailableIsInconclusive (0.00s)
+--- FAIL: TestSelectResponsesProbeModelPrefersGeneralTextModel (0.00s)
+
+
+S11
+
+tier2-s10-green-s11-red.log (sha256 ff23688629b2a7885ff66ce4edbe3c7641a56e5938f304baa64b5b299d9490b6)
+--- FAIL: TestReplaceModelInSSELine (0.00s)
+    --- FAIL: TestReplaceModelInSSELine/上游别名仍替换 (0.00s)
+    --- FAIL: TestReplaceModelInSSELine/同时替换两个_model (0.00s)
+--- FAIL: TestReplaceModelInSSEBody (0.00s)
+    --- FAIL: TestReplaceModelInSSEBody/上游别名_body (0.00s)
+--- FAIL: TestReplaceModelInResponseBody (0.00s)
+    --- FAIL: TestReplaceModelInResponseBody/上游别名仍替换 (0.00s)
+
+tier2-s11-s12-red.log (sha256 21426bcb93ba7b3dc122adb359b2b8c6d6e846536a41b71157b95c530f450d04)
+--- FAIL: TestExtractContentModerationInput_AnthropicTrailingSystemExtractsLatestUser (0.00s)
+--- FAIL: TestContentModerationCheck_ReminderKeywordModes (0.34s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/suffix/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/suffix/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/inside/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/inside/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/prefix/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/prefix/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/inside/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/inside/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/prefix/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/prefix/keyword_and_api (0.00s)
+
+
+S12
+
+tier2-s11-s12-red.log (sha256 21426bcb93ba7b3dc122adb359b2b8c6d6e846536a41b71157b95c530f450d04)
+--- FAIL: TestExtractContentModerationInput_AnthropicTrailingSystemExtractsLatestUser (0.00s)
+--- FAIL: TestContentModerationCheck_ReminderKeywordModes (0.34s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/suffix/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/suffix/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/inside/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/inside/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/prefix/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/anthropic_messages/prefix/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/inside/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/inside/keyword_and_api (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/prefix/keyword_only (0.00s)
+    --- FAIL: TestContentModerationCheck_ReminderKeywordModes/openai_chat_completions/prefix/keyword_and_api (0.00s)
+
+
+S13
+
+tier2-s13-red.log (sha256 5c54de68ef690cde597fe13e508b5b298fff957185ad4cbb6b1e7a2c58a55736)
+--- FAIL: TestTransformClaudeToGemini_AttributionSystemText (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/metadata_only/string (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/metadata_only/array (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/metadata_with_newline/string (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/metadata_with_newline/array (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/leading_whitespace/string (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/leading_whitespace/array (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/following_instructions/string (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/following_instructions/array (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/CRLF/string (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/CRLF/array (0.00s)
+    --- FAIL: TestTransformClaudeToGemini_AttributionSystemText/CR/string (0.00s)
+
+
+S14
+
+tier2-s14-red.log (sha256 16c4deb8b1ad910d5e01059c90bc96a06eaed16c061e7caa2c3664f9998c4bd0)
+ FAIL  src/components/common/__tests__/BaseDialog.scrollLock.spec.ts > dialog body scroll lock > keeps the body locked when a hidden sibling mounts or unmounts
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/components/common/__tests__/BaseDialog.scrollLock.spec.ts > dialog body scroll lock > keeps the lock until the last visible dialog closes
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/components/common/__tests__/BaseDialog.scrollLock.spec.ts > dialog body scroll lock > keeps the lock until the last visible dialog unmounts
+AssertionError: expected false to be true // Object.is equality
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > leaves composing Enter to the input method
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > leaves composing Tab to the input method
+AssertionError: expected true to be false // Object.is equality
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > leaves composing Backspace to the input method
+AssertionError: expected [ [ [] ] ] to be undefined
+ FAIL  src/components/admin/channel/__tests__/ModelTagInput.keyboard.spec.ts > model tag keyboard navigation > keeps tags on Delete and removes the last tag only on Backspace
+
+
+S15
+
+tier2-s15-s16-red.log (sha256 ff743472ee49857ce9df2d4c32365dfe34c7151fac4b96d39badb73c13c0cdc2)
+--- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_header (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_map (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_raw (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_header#01 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_map#01 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_raw#01 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_header#02 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_map#02 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_raw#02 (0.00s)
+--- FAIL: TestMappedGPT55LiteBuildersPreserveIngressForFailover (0.00s)
+--- FAIL: TestTier2CodexWindowChangeStartsNewRoot (0.00s)
+
+tier2-s15-s16-boundaries-red.log (sha256 ca03a90c948327c9df035f9b9173b387d54c14bf2fcd3a7711e443965820d809)
+--- FAIL: TestMappedGPT55LiteHTTPBridgePreservesRequest (0.00s)
+--- FAIL: TestTier2CodexFailedWindowDoesNotAdvanceAnchor (0.00s)
+
+
+S16
+
+tier2-s15-s16-red.log (sha256 ff743472ee49857ce9df2d4c32365dfe34c7151fac4b96d39badb73c13c0cdc2)
+--- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_header (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_map (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_raw (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_header#01 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_map#01 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_raw#01 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_header#02 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_map#02 (0.00s)
+    --- FAIL: TestCodexTurnMetadataRewritePreservesHeaderSafeJSON/fingerprint_body_raw#02 (0.00s)
+--- FAIL: TestMappedGPT55LiteBuildersPreserveIngressForFailover (0.00s)
+--- FAIL: TestTier2CodexWindowChangeStartsNewRoot (0.00s)
+
+tier2-s15-s16-boundaries-red.log (sha256 ca03a90c948327c9df035f9b9173b387d54c14bf2fcd3a7711e443965820d809)
+--- FAIL: TestMappedGPT55LiteHTTPBridgePreservesRequest (0.00s)
+--- FAIL: TestTier2CodexFailedWindowDoesNotAdvanceAnchor (0.00s)
+
+tier2-audit-boundaries-red.log (sha256 6449e3ef56e53c169162465e1245b703669dd2ac11f03f07d5f5e983b46c67cf)
+--- FAIL: TestTier2CodexWebSocketBoundaries (0.00s)
+    --- FAIL: TestTier2CodexWebSocketBoundaries/mapped_Lite (0.00s)
+--- FAIL: TestTier2MappedLiteCreatePayloadDoesNotMutateInput (0.00s)
+--- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch (0.00s)
+    --- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch/messages (0.00s)
+    --- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch/responses (0.00s)
+    --- FAIL: TestTier2ToolSchemaNativeAnthropicDispatch/chat (0.00s)
+--- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite (3.96s)
+    --- FAIL: TestTier2ProxySweepRejectsStaleSnapshotSQLite/target_disabled (0.66s)

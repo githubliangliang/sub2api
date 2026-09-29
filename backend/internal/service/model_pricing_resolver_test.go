@@ -142,7 +142,7 @@ func TestGPT56ExplicitZeroCacheWritePriceIsPreserved(t *testing.T) {
 	})
 
 	t.Run("interval price", func(t *testing.T) {
-		pricing := intervalToModelPricing(&PricingInterval{CacheWritePrice: &zero}, false, nil)
+		pricing := intervalToModelPricing(&PricingInterval{CacheWritePrice: &zero}, false, nil, nil)
 		require.True(t, pricing.CacheCreationPriceExplicit)
 
 		cost, err := bs.CalculateCostUnified(CostInput{
@@ -712,7 +712,7 @@ func TestFilterValidIntervals(t *testing.T) {
 // 9. ImageOutputPriceExplicit tests
 // ===========================================================================
 
-func TestApplyTokenOverrides_FlatSetsImageOutputPriceExplicit(t *testing.T) {
+func TestApplyTokenOverrides_FlatLeavesMissingImagePriceImplicit(t *testing.T) {
 	r := newResolverWithChannel(t, []ChannelModelPricing{{
 		Platform:    "anthropic",
 		Models:      []string{"claude-sonnet-4"},
@@ -727,7 +727,7 @@ func TestApplyTokenOverrides_FlatSetsImageOutputPriceExplicit(t *testing.T) {
 	})
 
 	require.Equal(t, PricingSourceChannel, resolved.Source)
-	require.True(t, resolved.BasePricing.ImageOutputPriceExplicit)
+	require.False(t, resolved.BasePricing.ImageOutputPriceExplicit)
 	require.Equal(t, 0.0, resolved.BasePricing.ImageOutputPricePerToken)
 }
 
@@ -749,7 +749,7 @@ func TestApplyTokenOverrides_FlatWithImageOutputPriceSetsExplicit(t *testing.T) 
 	require.InDelta(t, 50e-6, resolved.BasePricing.ImageOutputPricePerToken, 1e-12)
 }
 
-func TestApplyTokenOverrides_IntervalSetsImageOutputPriceExplicit(t *testing.T) {
+func TestApplyTokenOverrides_IntervalLeavesMissingImagePriceImplicit(t *testing.T) {
 	r := newResolverWithChannel(t, []ChannelModelPricing{{
 		Platform:    "anthropic",
 		Models:      []string{"claude-sonnet-4"},
@@ -764,13 +764,13 @@ func TestApplyTokenOverrides_IntervalSetsImageOutputPriceExplicit(t *testing.T) 
 		GroupID: groupIDPtr(),
 	})
 
-	// BasePricing should have explicit mark (for interval fallback)
-	require.True(t, resolved.BasePricing.ImageOutputPriceExplicit)
+	// BasePricing must preserve the implicit catalog price (for interval fallback)
+	require.False(t, resolved.BasePricing.ImageOutputPriceExplicit)
 	require.Equal(t, 0.0, resolved.BasePricing.ImageOutputPricePerToken)
 
-	// intervalToModelPricing should also have explicit mark
+	// intervalToModelPricing must preserve the implicit catalog price
 	pricing := r.GetIntervalPricing(resolved, 50000)
-	require.True(t, pricing.ImageOutputPriceExplicit)
+	require.False(t, pricing.ImageOutputPriceExplicit)
 	require.Equal(t, 0.0, pricing.ImageOutputPricePerToken)
 }
 
@@ -825,7 +825,7 @@ func TestApplyTokenOverrides_IntervalDoesNotPolluteFallbackPrices(t *testing.T) 
 	})
 
 	require.NotNil(t, resolved)
-	require.True(t, resolved.BasePricing.ImageOutputPriceExplicit)
+	require.False(t, resolved.BasePricing.ImageOutputPriceExplicit, "omitted image price inherits the implicit catalog price")
 
 	// Global fallbackPrices must NOT be polluted
 	fp := r.billingService.fallbackPrices["claude-sonnet-4"]

@@ -1147,7 +1147,6 @@ func (r *accountRepository) ListOAuthRefreshCandidatePage(ctx context.Context, o
 		SELECT id
 		FROM accounts
 		WHERE deleted_at IS NULL
-			AND schedulable = 1
 			AND platform IN (%s)
 			AND id > ?`, strings.Join(placeholders, ", "))
 	args := make([]any, 0, len(options.Platforms)+2)
@@ -1174,7 +1173,9 @@ func (r *accountRepository) ListOAuthRefreshCandidatePage(ctx context.Context, o
 	if options.ExcludeRetryCooldown {
 		query += `
 			AND NOT (
-				temp_unschedulable_until > CURRENT_TIMESTAMP
+				temp_unschedulable_until IS NOT NULL
+				AND temp_unschedulable_reason IS NOT NULL
+				AND temp_unschedulable_until > CURRENT_TIMESTAMP
 				AND temp_unschedulable_reason LIKE 'token refresh retry exhausted:%'
 			)`
 	}
@@ -3531,7 +3532,10 @@ func updateFixedQuotaResetAt(extra map[string]any, name string, now time.Time) {
 // 若影响行数为 0，则返回 ErrAccountNotInFallback（账号存在但不在 fallback 状态）。
 func (r *accountRepository) RevertProxyFallback(ctx context.Context, accountID int64) error {
 	res, err := r.sql.ExecContext(ctx, `
-		UPDATE accounts SET proxy_id=proxy_fallback_origin_id, proxy_fallback_origin_id=NULL, updated_at=CURRENT_TIMESTAMP
+		UPDATE accounts SET
+			extra=CASE WHEN type='apikey' AND proxy_id IS NOT proxy_fallback_origin_id
+				THEN json_remove(extra, '$.upstream_billing_probe') ELSE extra END,
+			proxy_id=proxy_fallback_origin_id, proxy_fallback_origin_id=NULL, updated_at=CURRENT_TIMESTAMP
 		WHERE id=$1 AND proxy_fallback_origin_id IS NOT NULL AND deleted_at IS NULL`, accountID)
 	if err != nil {
 		return err

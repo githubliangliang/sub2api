@@ -497,7 +497,7 @@ func grokChatResponsesCacheIntentBody(body []byte) ([]byte, error) {
 
 func grokChatResponsesRuntimeEligible(upstreamModel, cacheIdentity string) bool {
 	model := strings.TrimSpace(upstreamModel)
-	return (model == "grok-4.5" || model == "grok-4.6") && strings.TrimSpace(cacheIdentity) != ""
+	return (model == "grok-4.5" || model == "grok-4.6" || model == "grok-4.7" || model == "grok-4.7-latest") && strings.TrimSpace(cacheIdentity) != ""
 }
 
 // grokChatImageBridgeModel reports whether an inline-image Chat request on this
@@ -511,7 +511,7 @@ func grokChatResponsesRuntimeEligible(upstreamModel, cacheIdentity string) bool 
 // so the -latest aliases are covered too.
 func grokChatImageBridgeModel(upstreamModel string) bool {
 	switch strings.ToLower(strings.TrimSpace(upstreamModel)) {
-	case "grok-4.5", "grok-4.6":
+	case "grok-4.5", "grok-4.6", "grok-4.7", "grok-4.7-latest":
 		return true
 	default:
 		return false

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"net/http"
 	"strings"
 
@@ -509,8 +510,11 @@ func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) string {
 }
 
 func (s *OpenAIGatewayService) replaceModelInResponseBody(body []byte, fromModel, toModel string) []byte {
-	// 使用 gjson/sjson 精确替换 model 字段，避免全量 JSON 反序列化
-	if m := gjson.GetBytes(body, "model"); m.Exists() && m.Str == fromModel {
+	// A mapped request must retain its public name even when upstream uses an alias.
+	if fromModel == "" || toModel == "" || fromModel == toModel || !gjson.ValidBytes(body) {
+		return body
+	}
+	if m := gjson.GetBytes(body, "model"); m.Type == gjson.String {
 		newBody, err := sjson.SetBytes(body, "model", toModel)
 		if err != nil {
 			return body
@@ -1555,8 +1559,48 @@ func normalizeOpenAIReasoningEffort(raw string) string {
 }
 
 func normalizeOpenAIReasoningEffortForModel(raw, model string) string {
-	if strings.EqualFold(strings.TrimSpace(raw), "max") && (isOpenAIGPT56Model(model) || isOpenAIGPT6AstraModel(model)) {
+	if strings.EqualFold(strings.TrimSpace(raw), "none") && openai.IsGPT6SolOrLunaModelSpelling(model) {
+		return "none"
+	}
+	if strings.EqualFold(strings.TrimSpace(raw), "max") && (isOpenAIGPT56Model(model) || isOpenAIGPT6Model(model)) {
 		return "max"
 	}
 	return normalizeOpenAIReasoningEffort(raw)
+}
+
+func normalizeGPT6ResponsesSampling(body []byte, model string) ([]byte, bool, error) {
+	if model == "" {
+		model = gjson.GetBytes(body, "model").String()
+	}
+	if !openai.IsGPT6SolOrLunaModelSpelling(model) || gjson.GetBytes(body, "reasoning.effort").String() == "none" {
+		return body, false, nil
+	}
+	out := body
+	changed := false
+	for _, key := range []string{"temperature", "top_p", "top_logprobs", "logprobs"} {
+		if !gjson.GetBytes(out, key).Exists() {
+			continue
+		}
+		var err error
+		out, err = sjson.DeleteBytes(out, key)
+		if err != nil {
+			return body, false, fmt.Errorf("remove GPT-6 sampling parameter %s: %w", key, err)
+		}
+		changed = true
+	}
+	if include := gjson.GetBytes(out, "include"); include.IsArray() {
+		items := include.Array()
+		for i := len(items) - 1; i >= 0; i-- {
+			if items[i].String() != "message.output_text.logprobs" {
+				continue
+			}
+			var err error
+			out, err = sjson.DeleteBytes(out, fmt.Sprintf("include.%d", i))
+			if err != nil {
+				return body, false, fmt.Errorf("remove GPT-6 logprobs include: %w", err)
+			}
+			changed = true
+		}
+	}
+	return out, changed, nil
 }

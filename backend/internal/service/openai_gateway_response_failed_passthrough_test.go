@@ -11,12 +11,34 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+func TestTier2BareErrorExplicitPassthroughRuleWins(t *testing.T) {
+	for _, passthrough := range []bool{false, true} {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+		bindPassthroughRule(c, PlatformOpenAI, []string{"configured rejection"}, 451)
+		resp := &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("event: error\ndata: " + `{"type":"error","error":{"code":"policy_rejected","message":"configured rejection"}}` + "\n\n"))}
+		svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig()}
+		account := &Account{ID: 113, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+		var err error
+		if passthrough {
+			_, err = svc.handleStreamingResponsePassthrough(context.Background(), resp, c, account, time.Now(), "model", "model")
+		} else {
+			_, err = svc.handleStreamingResponse(context.Background(), resp, c, account, time.Now(), "model", "model")
+		}
+		require.Error(t, err)
+		require.Equal(t, 451, rec.Code)
+		require.Contains(t, rec.Body.String(), "configured rejection")
+	}
+}
 
 func buildContextLengthFailedSSE() string {
 	failed := `{"type":"response.failed","response":{"id":"resp_err","object":"response","status":"failed","error":{"code":"context_length_exceeded","type":"invalid_request_error","message":"Your input exceeds the context window of this model. Please adjust your input and try again."},"output":[],"usage":{"input_tokens":100000,"output_tokens":0,"total_tokens":100000}}}`

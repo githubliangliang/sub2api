@@ -1975,12 +1975,12 @@ func TestGetModelPricingWithChannel_CacheWriteTTLFourCombinations(t *testing.T) 
 
 func TestIntervalToModelPricing_CacheWriteTTLFourCombinations(t *testing.T) {
 	t.Run("only 5m set covers both TTLs", func(t *testing.T) {
-		got := intervalToModelPricing(&PricingInterval{CacheWritePrice: testPtrFloat64(7e-6)}, true, nil)
+		got := intervalToModelPricing(&PricingInterval{CacheWritePrice: testPtrFloat64(7e-6)}, true, nil, nil)
 		require.InDelta(t, 7e-6, got.CacheCreation5mPrice, 1e-12)
 		require.InDelta(t, 7e-6, got.CacheCreation1hPrice, 1e-12)
 	})
 	t.Run("only 1h set", func(t *testing.T) {
-		got := intervalToModelPricing(&PricingInterval{CacheWrite1hPrice: testPtrFloat64(21e-6)}, true, nil)
+		got := intervalToModelPricing(&PricingInterval{CacheWrite1hPrice: testPtrFloat64(21e-6)}, true, nil, nil)
 		require.InDelta(t, 0, got.CacheCreation5mPrice, 1e-12)
 		require.InDelta(t, 21e-6, got.CacheCreation1hPrice, 1e-12)
 		require.True(t, got.SupportsCacheBreakdown)
@@ -1989,12 +1989,12 @@ func TestIntervalToModelPricing_CacheWriteTTLFourCombinations(t *testing.T) {
 		got := intervalToModelPricing(&PricingInterval{
 			CacheWritePrice:   testPtrFloat64(13e-6),
 			CacheWrite1hPrice: testPtrFloat64(21e-6),
-		}, true, nil)
+		}, true, nil, nil)
 		require.InDelta(t, 13e-6, got.CacheCreation5mPrice, 1e-12)
 		require.InDelta(t, 21e-6, got.CacheCreation1hPrice, 1e-12)
 	})
 	t.Run("both nil keep zeros from interval overlay", func(t *testing.T) {
-		got := intervalToModelPricing(&PricingInterval{}, true, nil)
+		got := intervalToModelPricing(&PricingInterval{}, true, nil, nil)
 		require.InDelta(t, 0, got.CacheCreation5mPrice, 1e-12)
 		require.InDelta(t, 0, got.CacheCreation1hPrice, 1e-12)
 	})
@@ -2074,7 +2074,7 @@ func TestGetModelPricingWithChannel_UnknownModelReturnsError(t *testing.T) {
 	require.Contains(t, err.Error(), "pricing not found")
 }
 
-func TestGetModelPricingWithChannel_NilImageOutputPriceZerosAndMarksExplicit(t *testing.T) {
+func TestGetModelPricingWithChannel_NilImageOutputPricePreservesCatalogFallback(t *testing.T) {
 	svc := newTestBillingService()
 
 	chPricing := &ChannelModelPricing{
@@ -2086,7 +2086,7 @@ func TestGetModelPricingWithChannel_NilImageOutputPriceZerosAndMarksExplicit(t *
 	require.NoError(t, err)
 
 	require.Equal(t, 0.0, pricing.ImageOutputPricePerToken)
-	require.True(t, pricing.ImageOutputPriceExplicit)
+	require.False(t, pricing.ImageOutputPriceExplicit)
 }
 
 func TestComputeTokenBreakdown_ExplicitZeroImagePrice_NoFallback(t *testing.T) {

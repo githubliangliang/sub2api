@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -1514,4 +1515,206 @@ func TestOpenAIWSHTTPBridgeObjectToolOutputWithoutPreviousResponseIDReplaysMatch
 	require.Equal(t, "call_1", secondInput[1].Get("call_id").String())
 	require.Equal(t, "custom_tool_call_output", secondInput[2].Get("type").String())
 	require.Equal(t, "call_1", secondInput[2].Get("call_id").String())
+}
+
+func TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapacityFailover(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	preamble := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_shed"}}`,
+		"",
+		`data: {"type":"response.in_progress","response":{"id":"resp_shed"}}`,
+		"",
+		`data: {"type":"keepalive"}`,
+		"",
+		"",
+	}, "\n")
+	reader, writer := io.Pipe()
+	defer func() { _ = reader.Close() }()
+	defer func() { _ = writer.Close() }()
+	keepaliveReceived := make(chan struct{}, 1)
+	writerDone := make(chan error, 1)
+	go func() {
+		_, writeErr := io.WriteString(writer, preamble)
+		if writeErr == nil {
+			// The upstream stays idle until the heartbeat reaches the client.
+			// Flushing it only with later output or EOF must not pass this test.
+			select {
+			case <-keepaliveReceived:
+				_, writeErr = io.WriteString(writer, "data: {\"type\":\"response.failed\",\"response\":{\"id\":\"resp_shed\",\"status\":\"failed\",\"error\":{\"message\":\"Our servers are currently overloaded. Please try again later.\"}}}\n\n")
+			case <-time.After(2 * time.Second):
+				writeErr = errors.New("keepalive was not forwarded while upstream was idle")
+			}
+		}
+		_ = writer.CloseWithError(writeErr)
+		writerDone <- writeErr
+	}()
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"X-Request-Id": []string{"rid-ws-bridge-capacity"}},
+		Body:       reader,
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	account := &Account{ID: 12, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	payload := []byte(`{"type":"response.create","model":"gpt-5","input":"hi"}`)
+	var writes [][]byte
+
+	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+		context.Background(), c, account, "sk-test", payload, len(payload),
+		"gpt-5", "", "", "", "", 1,
+		func(message []byte) error {
+			writes = append(writes, append([]byte(nil), message...))
+			if gjson.GetBytes(message, "type").String() == "keepalive" {
+				keepaliveReceived <- struct{}{}
+			}
+			return nil
+		},
+	)
+
+	require.NoError(t, <-writerDone)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, failoverErr.RequestScopedTransient)
+	require.Len(t, writes, 1)
+	require.JSONEq(t, `{"type":"keepalive"}`, string(writes[0]))
+}
+
+func TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name      string
+		writeErr  error
+		wantDrain bool
+	}{
+		{name: "write error", writeErr: errors.New("downstream write failed")},
+		{name: "client disconnect", writeErr: io.EOF, wantDrain: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := strings.Join([]string{
+				`data: {"type":"response.created","response":{"id":"resp_disconnect"}}`,
+				"",
+				`data: {"type":"keepalive"}`,
+				"",
+				`data: {"type":"response.completed","response":{"id":"resp_disconnect","usage":{"input_tokens":3,"output_tokens":2}}}`,
+				"",
+			}, "\n")
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			account := &Account{ID: 14, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+			payload := []byte(`{"type":"response.create","model":"gpt-5","input":"hi"}`)
+			var writes [][]byte
+
+			result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+				context.Background(), c, account, "sk-test", payload, len(payload),
+				"gpt-5", "", "", "", "", 1,
+				func(message []byte) error {
+					writes = append(writes, append([]byte(nil), message...))
+					return tc.writeErr
+				},
+			)
+
+			require.Len(t, writes, 1)
+			require.JSONEq(t, `{"type":"keepalive"}`, string(writes[0]))
+			if tc.wantDrain {
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, 3, result.Usage.InputTokens)
+				require.Equal(t, 2, result.Usage.OutputTokens)
+			} else {
+				require.Nil(t, result)
+				require.ErrorIs(t, err, tc.writeErr)
+				var turnErr *openAIWSIngressTurnError
+				require.ErrorAs(t, err, &turnErr)
+				require.Equal(t, "write_client", turnErr.stage)
+				require.False(t, turnErr.wroteDownstream)
+				require.False(t, isOpenAIWSIngressTurnRetryable(err))
+			}
+		})
+	}
+}
+
+func TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name         string
+		tail         string
+		readErr      error
+		wantTerminal bool
+	}{
+		{
+			name: "overload followed by failed usage",
+			tail: "data: {\"type\":\"error\",\"error\":{\"code\":\"server_is_overloaded\",\"message\":\"overloaded\"}}\n\n" +
+				"data: {\"type\":\"response.failed\",\"response\":{\"id\":\"resp_disconnect\",\"status\":\"failed\",\"error\":{\"code\":\"server_is_overloaded\",\"message\":\"overloaded\"},\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n",
+			wantTerminal: true,
+		},
+		{name: "upstream read failure", readErr: io.ErrUnexpectedEOF},
+		{name: "upstream EOF without terminal"},
+		{name: "done without terminal", tail: "data: [DONE]\n\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			preamble := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_disconnect\"}}\n\n" +
+				"data: {\"type\":\"keepalive\"}\n\n" +
+				"data: {\"type\":\"keepalive\"}\n\n"
+			var reader io.Reader = strings.NewReader(preamble + tc.tail)
+			if tc.readErr != nil {
+				reader = io.MultiReader(reader, iotest.ErrReader(tc.readErr))
+			}
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(reader),
+			}}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			account := &Account{ID: 15, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1}
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+			payload := []byte(`{"type":"response.create","model":"gpt-5","input":"hi"}`)
+			var writes [][]byte
+
+			result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+				context.Background(), c, account, "sk-test", payload, len(payload),
+				"gpt-5", "", "", "", "", 1,
+				func(message []byte) error {
+					writes = append(writes, append([]byte(nil), message...))
+					if len(writes) == 1 {
+						return nil
+					}
+					return io.EOF
+				},
+			)
+
+			require.NotNil(t, result)
+			var failoverErr *UpstreamFailoverError
+			require.False(t, errors.As(err, &failoverErr))
+			require.Len(t, writes, 2)
+			for _, message := range writes {
+				require.JSONEq(t, `{"type":"keepalive"}`, string(message))
+			}
+			require.Nil(t, result.FirstTokenMs)
+			if tc.wantTerminal {
+				// Preserve this fork's upstream failure attribution while preventing replay.
+				require.ErrorContains(t, err, "overloaded")
+				require.Equal(t, "response.failed", result.UpstreamTerminalEvent)
+				require.Equal(t, 3, result.Usage.InputTokens)
+				require.Equal(t, 2, result.Usage.OutputTokens)
+			} else {
+				require.Error(t, err)
+				if tc.readErr != nil {
+					require.ErrorIs(t, err, tc.readErr)
+				}
+			}
+		})
+	}
 }

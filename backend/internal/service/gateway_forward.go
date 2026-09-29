@@ -92,6 +92,24 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	if parsed == nil {
 		return nil, fmt.Errorf("parse request: empty request")
 	}
+	if sanitized, changed, err := sanitizeOpenAIResponsesToolParameterTypes(parsed.Body.Bytes()); err != nil {
+		return nil, err
+	} else if changed {
+		if err := parsed.ReplaceBody(sanitized); err != nil {
+			return nil, err
+		}
+	}
+	// API-key mappings and OAuth native IDs are resolved before mimicry.
+	validationModel := parsed.Model
+	if account != nil && account.Type == AccountTypeAPIKey {
+		validationModel = account.GetMappedModel(validationModel)
+	}
+	if account != nil && account.Platform == PlatformAnthropic && !account.IsBedrock() && account.Type != AccountTypeServiceAccount {
+		if err := validateClaudeOpus55Request(parsed.Body.Bytes(), validationModel); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"type": "error", "error": gin.H{"type": "invalid_request_error", "message": err.Error()}})
+			return nil, err
+		}
+	}
 	beginUpstreamResponseModelObservation(c)
 
 	// Web Search 模拟：纯 web_search 请求时，直接调用搜索 API 构造响应

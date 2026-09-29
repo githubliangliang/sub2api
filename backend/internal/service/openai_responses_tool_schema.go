@@ -21,8 +21,9 @@ const (
 // openAIResponsesToolSchemaNullType 记录一处待修正的 null，用原始 body 上的
 // 绝对字节偏移表示，便于最后一次性拼接。
 type openAIResponsesToolSchemaNullType struct {
-	offset int
-	length int
+	offset      int
+	length      int
+	replacement string
 }
 
 // sanitizeOpenAIResponsesToolParameterTypes 修正请求体中显式为 null 的
@@ -69,7 +70,7 @@ func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error
 			continue
 		}
 		sanitized = append(sanitized, body[cursor:hit.offset]...)
-		sanitized = append(sanitized, openAIResponsesToolSchemaFallbackType...)
+		sanitized = append(sanitized, hit.replacement...)
 		cursor = hit.offset + hit.length
 	}
 	sanitized = append(sanitized, body[cursor:]...)
@@ -91,7 +92,7 @@ func collectOpenAIResponsesToolSchemaNullTypes(
 		}
 		// Responses 形态用顶层 parameters，ChatCompletions 形态用 function.parameters，
 		// 两种都可能出现在 Responses 请求里（见 normalizeCodexTools）。
-		for _, suffix := range []string{"parameters", "function.parameters"} {
+		for _, suffix := range []string{"parameters", "function.parameters", "input_schema"} {
 			params := tool.Get(suffix)
 			if !params.IsObject() {
 				continue
@@ -101,6 +102,7 @@ func collectOpenAIResponsesToolSchemaNullTypes(
 			if typ := params.Get("type"); typ.Type == gjson.Null && typ.Raw == openAIResponsesToolSchemaNullLiteral {
 				appendOpenAIResponsesToolSchemaNullType(body, typ, hits)
 			}
+			collectOpenAISchemaNullRequired(body, params, hits)
 		}
 		// 历史输入里的工具定义会再嵌套一层 tools（upstream 报错路径形如
 		// input[234].tools[0].tools[3].parameters）。
@@ -123,5 +125,61 @@ func appendOpenAIResponsesToolSchemaNullType(
 	if !bytes.Equal(body[typ.Index:end], []byte(typ.Raw)) {
 		return
 	}
-	*hits = append(*hits, openAIResponsesToolSchemaNullType{offset: typ.Index, length: len(typ.Raw)})
+	*hits = append(*hits, openAIResponsesToolSchemaNullType{offset: typ.Index, length: len(typ.Raw), replacement: openAIResponsesToolSchemaFallbackType})
+}
+
+// Walk only JSON Schema keywords. default/enum/const/examples contain instance
+// data, where a field named required must remain untouched. The work list also
+// avoids growing the Go call stack for deeply nested schemas.
+func collectOpenAISchemaNullRequired(body []byte, root gjson.Result, hits *[]openAIResponsesToolSchemaNullType) {
+	pending := []gjson.Result{root}
+	for len(pending) > 0 {
+		schema := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if schema.IsArray() {
+			pending = append(pending, schema.Array()...)
+			continue
+		}
+		if !schema.IsObject() {
+			continue
+		}
+		schema.ForEach(func(key, value gjson.Result) bool {
+			switch key.String() {
+			case "required":
+				if value.Type != gjson.Null || value.Raw != "null" {
+					break
+				}
+				start, end := key.Index, value.Index+len(value.Raw)
+				if start <= 0 || end > len(body) {
+					break
+				}
+				// Prefer consuming the following comma. For the last member,
+				// consume the preceding comma instead; for the sole member neither.
+				next := end
+				for next < len(body) && (body[next] == ' ' || body[next] == '\t' || body[next] == '\r' || body[next] == '\n') {
+					next++
+				}
+				if next < len(body) && body[next] == ',' {
+					end = next + 1
+				} else {
+					prev := start - 1
+					for prev >= 0 && (body[prev] == ' ' || body[prev] == '\t' || body[prev] == '\r' || body[prev] == '\n') {
+						prev--
+					}
+					if prev >= 0 && body[prev] == ',' {
+						start = prev
+					}
+				}
+				*hits = append(*hits, openAIResponsesToolSchemaNullType{offset: start, length: end - start})
+			case "properties", "patternProperties", "$defs", "definitions", "dependentSchemas":
+				value.ForEach(func(_, child gjson.Result) bool {
+					pending = append(pending, child)
+					return true
+				})
+			case "items", "prefixItems", "allOf", "anyOf", "oneOf", "additionalProperties", "additionalItems", "contains", "not", "if", "then", "else", "propertyNames", "unevaluatedProperties", "unevaluatedItems", "contentSchema":
+				pending = append(pending, value)
+			}
+			return true
+		})
+	}
 }

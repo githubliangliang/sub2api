@@ -626,7 +626,7 @@ func normalizeGrokReasoningEffortValue(raw, model string) (string, bool) {
 	case "minimal":
 		return "low", true
 	case "xhigh", "extrahigh":
-		// grok-4.6 是目前唯一接受 xhigh 的档位；其余模型仍降到 high，
+		// grok-4.6/4.7 接受 xhigh 档位；其余模型仍降到 high，
 		// 否则上游会因未知档位报错。
 		if grokSupportsXHighReasoningEffort(model) {
 			return "xhigh", true
@@ -642,13 +642,13 @@ func normalizeGrokReasoningEffortValue(raw, model string) (string, bool) {
 
 func grokSupportsXHighReasoningEffort(model string) bool {
 	model = strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model)))
-	return model == "grok-4.6" || model == "grok-4.6-latest"
+	return model == "grok-4.6" || model == "grok-4.6-latest" || model == "grok-4.7" || model == "grok-4.7-latest"
 }
 
 func grokSupportsReasoningEffort(model string) bool {
 	model = strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model)))
 	switch model {
-	case "grok-4.5", "grok-4.5-latest", "grok-4.6", "grok-4.6-latest",
+	case "grok-4.5", "grok-4.5-latest", "grok-4.6", "grok-4.6-latest", "grok-4.7", "grok-4.7-latest",
 		"grok-4.3", "grok-4.3-latest",
 		"grok-3-mini", "grok-3-mini-fast", "grok-4.20-0309-reasoning",
 		"grok-4.20-reasoning", "grok-4.20-multi-agent-0309":

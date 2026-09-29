@@ -28,6 +28,7 @@ func resolveAccountStatsCost(
 	requestCount int,
 	totalCost float64,
 	serviceTier string,
+	longContextPricingEnabled bool,
 ) *float64 {
 	if channelService == nil || upstreamModel == "" {
 		return nil
@@ -55,7 +56,7 @@ func resolveAccountStatsCost(
 
 	// 优先级 3：模型定价文件（LiteLLM）默认价格
 	if billingService != nil {
-		return tryModelFilePricing(billingService, upstreamModel, tokens, serviceTier)
+		return tryModelFilePricing(billingService, upstreamModel, tokens, serviceTier, longContextPricingEnabled)
 	}
 
 	return nil
@@ -65,9 +66,9 @@ func resolveAccountStatsCost(
 // 与用户计费共用同一条定价管线，避免这里维护第二份"单价 × token 数"实现后，
 // 每加一个定价特性都要手工镜像一次。channelPricing 为 nil，保持优先级 3 的
 // 语义：只取模型定价文件，不引入渠道自定义定价。
-func tryModelFilePricing(billingService *BillingService, model string, tokens UsageTokens, serviceTier string) *float64 {
-	breakdown, err := billingService.CalculateCostWithServiceTier(
-		model, tokens, 1, normalizeBillingServiceTier(serviceTier),
+func tryModelFilePricing(billingService *BillingService, model string, tokens UsageTokens, serviceTier string, longContextPricingEnabled bool) *float64 {
+	breakdown, err := billingService.calculateCostWithServiceTierPolicy(
+		model, tokens, 1, normalizeBillingServiceTier(serviceTier), longContextPricingEnabled,
 	)
 	if err != nil || breakdown == nil || breakdown.TotalCost <= 0 {
 		return nil
@@ -233,6 +234,7 @@ func applyAccountStatsCost(
 	upstreamModel, requestedModel string,
 	tokens UsageTokens,
 	totalCost float64,
+	longContextPricingEnabled bool,
 ) {
 	model := upstreamModel
 	if model == "" {
@@ -247,6 +249,6 @@ func applyAccountStatsCost(
 		serviceTier = *usageLog.ServiceTier
 	}
 	usageLog.AccountStatsCost = resolveAccountStatsCost(
-		ctx, cs, bs, accountID, groupID, model, tokens, requestCount, totalCost, serviceTier,
+		ctx, cs, bs, accountID, groupID, model, tokens, requestCount, totalCost, serviceTier, longContextPricingEnabled,
 	)
 }

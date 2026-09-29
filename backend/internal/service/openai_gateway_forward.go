@@ -98,6 +98,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if toolSchemaSanitized {
 		body = sanitizedToolBody
 	}
+	if normalized, _, err := normalizeGPT6ResponsesSampling(body, account.GetMappedModel(gjson.GetBytes(body, "model").String())); err != nil {
+		return nil, err
+	} else {
+		body = normalized
+	}
 	// 门槛从 IsOpenAIOAuth() 放宽到 IsOpenAI()：normalizeOpenAIResponsesLitePayloadForAccount
 	// 内部自己按账号形态分派（OAuth/SetupToken 走完整 tools 归一化，API Key 只钉
 	// parallel_tool_calls），卡在 OAuth 上等于把 API Key 那一半功能废掉——而 Lite 的
@@ -1299,6 +1304,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 
+	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
+		return nil, err
+	}
 	return req, nil
 }
 

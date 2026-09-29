@@ -182,7 +182,7 @@ func (r *ModelPricingResolver) applyFirstTokenTier(resolved *ResolvedPricing, co
 			first = interval
 		}
 	}
-	resolved.BasePricing = intervalToModelPricing(&first, resolved.SupportsCacheBreakdown, config)
+	resolved.BasePricing = intervalToModelPricing(&first, resolved.SupportsCacheBreakdown, config, resolved.BasePricing)
 	resolved.Intervals = nil
 }
 
@@ -259,13 +259,7 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 			cloned := *resolved.BasePricing
 			resolved.BasePricing = &cloned
 		}
-		if chPricing.ImageOutputPrice != nil {
-			resolved.BasePricing.ImageOutputPricePerToken = *chPricing.ImageOutputPrice
-		} else {
-			resolved.BasePricing.ImageOutputPricePerToken = 0
-		}
-		resolved.BasePricing.ImageOutputPriceExplicit = true
-		applyChannelImageInputPrice(chPricing, resolved.BasePricing)
+		applyChannelImagePriceOverrides(chPricing, resolved.BasePricing)
 		return
 	}
 
@@ -303,26 +297,22 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 		resolved.BasePricing.CacheReadPricePerToken = *chPricing.CacheReadPrice
 		resolved.BasePricing.CacheReadPricePerTokenPriority = *chPricing.CacheReadPrice
 	}
-	// 渠道定价覆盖一切：显式配置则用配置值，未配置则归零（不回退到 LiteLLM）
-	if chPricing.ImageOutputPrice != nil {
-		resolved.BasePricing.ImageOutputPricePerToken = *chPricing.ImageOutputPrice
-	} else {
-		resolved.BasePricing.ImageOutputPricePerToken = 0
-	}
-	resolved.BasePricing.ImageOutputPriceExplicit = true
-	applyChannelImageInputPrice(chPricing, resolved.BasePricing)
+	// 图片价留空时继承目录，显式 0 保持免费。
+	applyChannelImagePriceOverrides(chPricing, resolved.BasePricing)
 }
 
-// applyChannelImageInputPrice 应用渠道图片输入价：显式配置则用配置值；
-// 未配置时归零，使 computeTokenBreakdown 回退到文本输入价（向后兼容，
-// 避免 commit 引入的 LiteLLM 图片输入价泄漏进渠道自定义定价）。
-// 与 image_output 不同，此处不设 Explicit 标志——图片输入未配置应回退文本价，
-// 而非硬置 0。
-func applyChannelImageInputPrice(chPricing *ChannelModelPricing, pricing *ModelPricing) {
-	if chPricing != nil && chPricing.ImageInputPrice != nil {
+// applyChannelImagePriceOverrides 应用渠道图片输入/输出价，规则与其他 token 字段一致：
+// nil 继承目录价，显式 0 覆盖为免费。
+func applyChannelImagePriceOverrides(chPricing *ChannelModelPricing, pricing *ModelPricing) {
+	if chPricing == nil || pricing == nil {
+		return
+	}
+	if chPricing.ImageOutputPrice != nil {
+		pricing.ImageOutputPricePerToken = *chPricing.ImageOutputPrice
+		pricing.ImageOutputPriceExplicit = true
+	}
+	if chPricing.ImageInputPrice != nil {
 		pricing.ImageInputPricePerToken = *chPricing.ImageInputPrice
-	} else {
-		pricing.ImageInputPricePerToken = 0
 	}
 }
 
@@ -360,11 +350,11 @@ func (r *ModelPricingResolver) GetIntervalPricing(resolved *ResolvedPricing, tot
 		return resolved.BasePricing
 	}
 
-	return intervalToModelPricing(iv, resolved.SupportsCacheBreakdown, resolved.channelPricing)
+	return intervalToModelPricing(iv, resolved.SupportsCacheBreakdown, resolved.channelPricing, resolved.BasePricing)
 }
 
 // intervalToModelPricing 将区间定价转换为 ModelPricing
-func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool, chPricing *ChannelModelPricing) *ModelPricing {
+func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool, chPricing *ChannelModelPricing, base *ModelPricing) *ModelPricing {
 	pricing := &ModelPricing{
 		SupportsCacheBreakdown: supportsCacheBreakdown,
 	}
@@ -381,15 +371,12 @@ func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool, ch
 		pricing.CacheReadPricePerToken = *iv.CacheReadPrice
 		pricing.CacheReadPricePerTokenPriority = *iv.CacheReadPrice
 	}
-	// 渠道定价存在时，ImageOutputPrice 显式覆盖；图片输入价用渠道级配置
-	// （区间不携带图片输入价，与 image_output 一致）。
-	if chPricing != nil {
-		pricing.ImageOutputPriceExplicit = true
-		if chPricing.ImageOutputPrice != nil {
-			pricing.ImageOutputPricePerToken = *chPricing.ImageOutputPrice
-		}
-		applyChannelImageInputPrice(chPricing, pricing)
+	if base != nil {
+		pricing.ImageInputPricePerToken = base.ImageInputPricePerToken
+		pricing.ImageOutputPricePerToken = base.ImageOutputPricePerToken
+		pricing.ImageOutputPriceExplicit = base.ImageOutputPriceExplicit
 	}
+	applyChannelImagePriceOverrides(chPricing, pricing)
 	return pricing
 }
 
