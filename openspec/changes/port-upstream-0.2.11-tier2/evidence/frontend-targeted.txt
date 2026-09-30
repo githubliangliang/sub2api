@@ -1,0 +1,240 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/components/account/__tests__/credentialsBuilder.spec.ts (56 tests | 5 failed) 28ms
+   × plan_type helpers > planTypeDisplayLabel > maps canonical + alias values to friendly labels 4ms
+     → expected 'Pro 200' to be 'Pro' // Object.is equality
+   × plan_type helpers > buildPlanTypeOptions > returns clear + presets when current is empty 4ms
+     → expected [ Array(19) ] to deeply equal [ { value: '', label: 'Clear' }, …(3) ]
+   × plan_type helpers > buildPlanTypeOptions > keeps canonical chatgptpro under a single friendly "Pro" option (no duplicate) 1ms
+     → expected [] to have a length of 1 but got +0
+   × plan_type helpers > buildPlanTypeOptions > appends an unknown-but-labeled value (team) as its own option 1ms
+     → expected { value: 'team', label: 'Business' } to deeply equal { value: 'team', label: 'Team' }
+   × plan_type helpers > buildPlanTypeOptions > does not duplicate an exact preset value 1ms
+     → expected [ '', 'free', 'go', 'plus', …(15) ] to deeply equal [ '', 'plus', 'pro', 'free' ]
+ ✓ src/components/common/__tests__/PlatformTypeBadge.openaiPlans.spec.ts (15 tests) 55ms
+ ✓ src/components/keys/__tests__/CodexRemoteCatalog.spec.ts (2 tests) 67ms
+ ❯ src/components/keys/__tests__/UseKeyModal.spec.ts (21 tests | 3 failed) 194ms
+   × UseKeyModal > uses a Codex-expandable catalog path on Windows for openai / codexCli 37ms
+     → expected 0 to be greater than 0
+   × UseKeyModal > uses a Codex-expandable catalog path on Windows for openai / codexCliWs 9ms
+     → expected 0 to be greater than 0
+   × UseKeyModal > uses a Codex-expandable catalog path on Windows for grok / codexCli 9ms
+     → expected 0 to be greater than 0
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/credentialsBuilder.spec.ts > plan_type helpers > planTypeDisplayLabel > maps canonical + alias values to friendly labels
+AssertionError: expected 'Pro 200' to be 'Pro' // Object.is equality
+
+Expected: "Pro"
+Received: "Pro 200"
+
+ ❯ src/components/account/__tests__/credentialsBuilder.spec.ts:393:43
+    391|     it('maps canonical + alias values to friendly labels', () => {
+    392|       expect(planTypeDisplayLabel('plus')).toBe('Plus')
+    393|       expect(planTypeDisplayLabel('pro')).toBe('Pro')
+       |                                           ^
+    394|       expect(planTypeDisplayLabel('chatgptpro')).toBe('Pro')
+    395|       expect(planTypeDisplayLabel('free')).toBe('Free')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  src/components/account/__tests__/credentialsBuilder.spec.ts > plan_type helpers > buildPlanTypeOptions > returns clear + presets when current is empty
+AssertionError: expected [ Array(19) ] to deeply equal [ { value: '', label: 'Clear' }, …(3) ]
+
+- Expected
++ Received
+
+  Array [
+    Object {
+      "label": "Clear",
+      "value": "",
+    },
+    Object {
++     "label": "Free",
++     "value": "free",
++   },
++   Object {
++     "label": "Go",
++     "value": "go",
++   },
++   Object {
+      "label": "Plus",
+      "value": "plus",
++   },
++   Object {
++     "label": "Pro 100",
++     "value": "prolite",
+    },
+    Object {
+-     "label": "Pro",
++     "label": "Pro 200",
+      "value": "pro",
+    },
+    Object {
+-     "label": "Free",
+-     "value": "free",
++     "label": "Pro 500",
++     "value": "promax",
++   },
++   Object {
++     "label": "Business",
++     "value": "team",
++   },
++   Object {
++     "label": "Business",
++     "value": "self_serve_business_usage_based",
++   },
++   Object {
++     "label": "Business Premium",
++     "value": "self_serve_business_prolite",
++   },
++   Object {
++     "label": "Enterprise",
++     "value": "business",
++   },
++   Object {
++     "label": "Enterprise",
++     "value": "enterprise",
++   },
++   Object {
++     "label": "Enterprise",
++     "value": "ent26",
++   },
++   Object {
++     "label": "Enterprise",
++     "value": "enterprise_cbp_usage_based",
++   },
++   Object {
++     "label": "Enterprise (Automation)",
++     "value": "enterprise_cbp_automation",
++   },
++   Object {
++     "label": "Edu",
++     "value": "edu",
++   },
++   Object {
++     "label": "Edu Plus",
++     "value": "edu_plus",
++   },
++   Object {
++     "label": "Edu Pro",
++     "value": "edu_pro",
++   },
++   Object {
++     "label": "Unknown",
++     "value": "unknown",
+    },
+  ]
+
+ ❯ src/components/account/__tests__/credentialsBuilder.spec.ts:420:47
+    418|     const clear = 'Clear'
+    419|     it('returns clear + presets when current is empty', () => {
+    420|       expect(buildPlanTypeOptions('', clear)).toEqual([
+       |                                               ^
+    421|         { value: '', label: clear },
+    422|         { value: 'plus', label: 'Plus' },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  src/components/account/__tests__/credentialsBuilder.spec.ts > plan_type helpers > buildPlanTypeOptions > keeps canonical chatgptpro under a single friendly "Pro" option (no duplicate)
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/components/account/__tests__/credentialsBuilder.spec.ts:430:20
+    428|       const opts = buildPlanTypeOptions('chatgptpro', clear)
+    429|       const pros = opts.filter(o => o.label === 'Pro')
+    430|       expect(pros).toHaveLength(1)
+       |                    ^
+    431|       expect(pros[0].value).toBe('chatgptpro')
+    432|       expect(opts.map(o => o.value)).toEqual(['', 'plus', 'chatgptpro'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  src/components/account/__tests__/credentialsBuilder.spec.ts > plan_type helpers > buildPlanTypeOptions > appends an unknown-but-labeled value (team) as its own option
+AssertionError: expected { value: 'team', label: 'Business' } to deeply equal { value: 'team', label: 'Team' }
+
+- Expected
++ Received
+
+  Object {
+-   "label": "Team",
++   "label": "Business",
+    "value": "team",
+  }
+
+ ❯ src/components/account/__tests__/credentialsBuilder.spec.ts:436:50
+    434|     it('appends an unknown-but-labeled value (team) as its own option'…
+    435|       const opts = buildPlanTypeOptions('team', clear)
+    436|       expect(opts.find(o => o.value === 'team')).toEqual({ value: 'tea…
+       |                                                  ^
+    437|       // presets untouched
+    438|       expect(opts.map(o => o.value)).toEqual(['', 'plus', 'pro', 'free…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  src/components/account/__tests__/credentialsBuilder.spec.ts > plan_type helpers > buildPlanTypeOptions > does not duplicate an exact preset value
+AssertionError: expected [ '', 'free', 'go', 'plus', …(15) ] to deeply equal [ '', 'plus', 'pro', 'free' ]
+
+- Expected
++ Received
+
+  Array [
+    "",
++   "free",
++   "go",
+    "plus",
++   "prolite",
+    "pro",
+-   "free",
++   "promax",
++   "team",
++   "self_serve_business_usage_based",
++   "self_serve_business_prolite",
++   "business",
++   "enterprise",
++   "ent26",
++   "enterprise_cbp_usage_based",
++   "enterprise_cbp_automation",
++   "edu",
++   "edu_plus",
++   "edu_pro",
++   "unknown",
+  ]
+
+ ❯ src/components/account/__tests__/credentialsBuilder.spec.ts:447:38
+    445|       const opts = buildPlanTypeOptions('pro', clear)
+    446|       expect(opts.filter(o => o.value === 'pro')).toHaveLength(1)
+    447|       expect(opts.map(o => o.value)).toEqual(['', 'plus', 'pro', 'free…
+       |                                      ^
+    448|     })
+    449|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  src/components/keys/__tests__/UseKeyModal.spec.ts > UseKeyModal > uses a Codex-expandable catalog path on Windows for openai / codexCli
+ FAIL  src/components/keys/__tests__/UseKeyModal.spec.ts > UseKeyModal > uses a Codex-expandable catalog path on Windows for openai / codexCliWs
+ FAIL  src/components/keys/__tests__/UseKeyModal.spec.ts > UseKeyModal > uses a Codex-expandable catalog path on Windows for grok / codexCli
+AssertionError: expected 0 to be greater than 0
+ ❯ src/components/keys/__tests__/UseKeyModal.spec.ts:36:28
+     34|     await windows!.trigger('click')
+     35|     const configs = wrapper.findAll('pre code').map(code => code.text(…
+     36|     expect(configs.length).toBeGreaterThan(0)
+       |                            ^
+     37|     configs.forEach(config => expect(config).toContain('model_catalog_…
+     38|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ Test Files  2 failed | 2 passed (4)
+      Tests  8 failed | 86 passed (94)
+   Start at  20:24:47
+   Duration  1.22s (transform 1.08s, setup 201ms, collect 1.53s, tests 344ms, environment 976ms, prepare 195ms)
+

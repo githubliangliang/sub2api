@@ -1,0 +1,44 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/account/__tests__/ModelWhitelistSelector.spec.ts (9 tests | 1 failed) 234ms
+   × ModelWhitelistSelector > rejects a custom whitelist model that is already mapped to a different target 84ms
+     → expected [ [ [ 'gpt-latest' ] ] ] to be undefined
+ ✓ src/components/keys/__tests__/UseKeyModal.spec.ts (20 tests) 402ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/ModelWhitelistSelector.spec.ts > ModelWhitelistSelector > rejects a custom whitelist model that is already mapped to a different target
+AssertionError: expected [ [ [ 'gpt-latest' ] ] ] to be undefined
+
+- Expected: 
+undefined
+
++ Received: 
+Array [
+  Array [
+    Array [
+      "gpt-latest",
+    ],
+  ],
+]
+
+ ❯ src/components/account/__tests__/ModelWhitelistSelector.spec.ts:99:50
+     97|     await wrapper.findAll('button').find(button => button.text() === '…
+     98| 
+     99|     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+       |                                                  ^
+    100|     expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('gpt…
+    101|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 28 passed (29)
+   Start at  20:00:22
+   Duration  2.48s (transform 1.06s, setup 187ms, collect 1.68s, tests 635ms, environment 874ms, prepare 161ms)
+

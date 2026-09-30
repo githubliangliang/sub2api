@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildCodexModelsManifestUrl,
+  buildCodexModelCatalogUrl,
   fetchCodexModelsManifest
 } from '../codex'
 
@@ -11,8 +12,26 @@ describe('Codex models API', () => {
 
   it('builds the authenticated Codex manifest endpoint from the public API base', () => {
     expect(buildCodexModelsManifestUrl('https://example.com/api/v1/')).toBe(
-      'https://example.com/api/v1/models?client_version=0.147.0'
+      'https://example.com/api/v1/models?client_version=0.158.0'
     )
+  })
+
+  it.each([
+    ['https://example.com', 'https://example.com/v1/models'],
+    ['https://example.com/v1/', 'https://example.com/v1/models'],
+    ['https://example.com/prefix/', 'https://example.com/prefix/v1/models'],
+    ['https://example.com/prefix/v1/', 'https://example.com/prefix/v1/models']
+  ])('normalizes the remote catalog URL %s', (base, expected) => {
+    expect(buildCodexModelCatalogUrl(base)).toBe(expected)
+  })
+
+  it('measures raw UTF-8 bytes while preserving the full manifest for download', async () => {
+    const raw = '{"models":[{"slug":"测试","description":"你好"}]}'
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(raw)))
+    const result = await fetchCodexModelsManifest('https://example.com', 'sk-test')
+    expect(result.responseBytes).toBe(new TextEncoder().encode(raw).byteLength)
+    expect(result.responseBytes).toBeGreaterThan(raw.length)
+    expect(JSON.parse(result.content)).toEqual(JSON.parse(raw))
   })
 
   it('fetches a manifest with the current API key without adding it to the catalog', async () => {
@@ -43,14 +62,14 @@ describe('Codex models API', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => manifest
+      text: async () => JSON.stringify(manifest)
     })
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await fetchCodexModelsManifest('https://example.com/v1', 'sk-user-test')
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://example.com/v1/models?client_version=0.147.0',
+      'https://example.com/v1/models?client_version=0.158.0',
       expect.objectContaining({
         headers: {
           Accept: 'application/json',
@@ -70,7 +89,7 @@ describe('Codex models API', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ object: 'list', data: [] })
+      text: async () => JSON.stringify({ object: 'list', data: [] })
     }))
 
     await expect(fetchCodexModelsManifest('https://example.com/v1', 'sk-user-test'))

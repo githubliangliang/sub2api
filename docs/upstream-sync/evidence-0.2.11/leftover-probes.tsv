@@ -1,0 +1,16 @@
+item	path	pattern	result
+0.2.9 F01	backend/internal/repository/scheduler_cache.go	base_rpm|rpm_strategy|rpm_sticky_buffer	NO_MATCH
+0.2.9 F04	backend/internal/pkg/apicompat/anthropic_to_responses.go	"func anthropicReasoningEffort|Thinking.Type == ""disabled"""	NO_MATCH
+0.2.9 first-tier S14 prerequisites	frontend/src/components/common/BaseDialog.vue	nextDialogId|dialogId|dialogIdCounter	"8::aria-labelledby=""dialogId""; 17:<h3 :id=""dialogId"" class=""modal-title"">; 46:let dialogIdCounter = 0; 55:const dialogId = `modal-title-${++dialogIdCounter}`; 120:if (isOpen) openDialogs.add(dialogId); 121:else openDialogs.delete(dialogId)"
+0.2.9 model_allowlist	backend/ent/schema/group.go	model_allowlist	NO_MATCH
+0.2.5 WS factors	backend/internal/config/config.go	oauth_max_conns_factor.*1.0|apikey_max_conns_factor.*1.0	"2426:viper.SetDefault(""gateway.openai_ws.oauth_max_conns_factor"", 1.0); 2427:viper.SetDefault(""gateway.openai_ws.apikey_max_conns_factor"", 1.0)"
+Fast/Ultrafast policy	backend/internal/service/service_tier_billing.go	.	FILE_ABSENT
+Fast billing alias only	backend/internal/service/billing_service.go	"normalized == ""fast""|func .*tryModelFilePricing"	"128:if normalized == ""fast"" {"
+OpenCode platform	backend/internal/service/opencode_go.go	.	FILE_ABSENT
+native Anthropic bridge	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	.	FILE_ABSENT
+CN generic usage base	backend/internal/pkg/apicompat/types.go	AnthropicPromptTokensDetails|PromptCacheMissTokens	NO_MATCH
+Claude native reset	backend/internal/service/claude_reset_credits.go	.	FILE_ABSENT
+inflight reservation	backend/internal/service/billing_inflight_reservation.go	.	FILE_ABSENT
+SQLite skipped services	backend/internal/service/wire.go	skipSQLiteBackgroundJobs|UsageCleanupService|AccountExpiryService|ScheduledTestRunnerService	20:// skipSQLiteBackgroundJobs disables PG-only polling workers on SQLite personal deploys.; 22:func skipSQLiteBackgroundJobs(cfg *config.Config) bool {; 324:// ProvideUsageCleanupService 创建并启动使用记录清理任务服务; 325:func ProvideUsageCleanupService(repo UsageCleanupRepository, timingWheel *TimingWheelService, dashboardAgg *DashboardAggregationService, cfg *config.Config) *UsageCleanupService {; 326:svc := NewUsageCleanupService(repo, timingWheel, dashboardAgg, cfg); 327:if !skipSQLiteBackgroundJobs(cfg) {; 333:// ProvideAccountExpiryService creates and starts AccountExpiryService.; 334:func ProvideAccountExpiryService(accountRepo AccountRepository, cfg *config.Config) *AccountExpiryService {; 335:svc := NewAccountExpiryService(accountRepo, time.Minute); 336:if !skipSQLiteBackgroundJobs(cfg) {; 419:// 与其它 skipSQLiteBackgroundJobs 服务不同，快照 worker 必须在 SQLite 上照常; 574:// ProvideScheduledTestRunnerService creates and starts ScheduledTestRunnerService.; 575:func ProvideScheduledTestRunnerService(; 581:) *ScheduledTestRunnerService {; 582:svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg); 583:if !skipSQLiteBackgroundJobs(cfg) {
+DOMPurify/xlsx	frontend/package.json	dompurify|xlsx	"25:""dompurify"": ""^3.3.1"",; 36:""xlsx"": ""^0.18.5""; 40:""@types/dompurify"": ""^3.0.5"","
+maximum SQLite migration	backend/migrations	numeric prefix	226

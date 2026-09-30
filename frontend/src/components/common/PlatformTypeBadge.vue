@@ -65,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { openAIPlanTypeLabel } from '@/utils/planType'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AccountPlatform, AccountType } from '@/types'
@@ -124,6 +125,10 @@ const normalizedPlanType = computed(() =>
 
 const planLabel = computed(() => {
   if (!normalizedPlanType.value) return ''
+  if (props.platform === 'openai') {
+    const label = openAIPlanTypeLabel(props.planType)
+    if (label) return label
+  }
   switch (normalizedPlanType.value) {
     case 'plus':
       return 'Plus'
@@ -223,10 +228,10 @@ const planBadgeClass = computed(() => {
   if (normalizedPlanType.value === 'plus') {
     return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'
   }
-  if (normalizedPlanType.value === 'team') {
+  if (normalizedPlanType.value === 'team' || (props.platform === 'openai' && ['selfservebusinessprolite', 'selfservebusinessusagebased', 'business', 'enterprise', 'ent26', 'enterprisecbpautomation', 'enterprisecbpusagebased', 'edu', 'eduplus', 'edupro'].includes(normalizedPlanType.value))) {
     return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
   }
-  if (normalizedPlanType.value === 'pro' || normalizedPlanType.value === 'chatgptpro') {
+  if (normalizedPlanType.value === 'pro' || normalizedPlanType.value === 'chatgptpro' || (props.platform === 'openai' && ['prolite', 'promax'].includes(normalizedPlanType.value))) {
     return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
   }
   return typeClass.value

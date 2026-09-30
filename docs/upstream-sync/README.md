@@ -2,9 +2,13 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
+最新通用教训（[0.2.11 §9](./PORTING-0.2.11.md#9-新增通用结论)）：同区间可能撤换设计，按目标tag终态排名；CLEAN流处理补丁也可能提前提交HTTP响应；先核实simple模式是否实际启用；模型/套餐元数据与Ultrafast能力按行为拆；旧第四档只有可独立复用子集时，量出基座并明确记录提升范围。
+
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **最新一轮，2026-09-28，只完成评估，未实施产品补丁**。以本地 `bfbcd79` / v1.1.13 对照上游 v0.2.5→v0.2.9：215条非 merge、161个PR和9个直接提交；第一档39个PR/15簇、第二档48个PR/16簇已生成待实施 OpenSpec。前端 typecheck 和8文件/42测试通过，后端缺少Go，未运行编译/unit/race。SQLite最大迁移仍226；第三/四档及旧轮次遗留见§5。0.2.5主体已在 `bfbcd79` 落地，旧验收文档里的“未提交”是历史状态，不作为当前待办。
+- [PORTING-0.2.11.md](./PORTING-0.2.11.md) —— **最新一轮，2026-09-30，第一档4簇与第二档6簇开发验收完成**。改动在 `sync/upstream-0.2.11` 分支，基线 `f13dee245` / v1.1.14。[第一档验收](../../openspec/changes/port-upstream-0.2.11-tier1/verification.md)与[第二档验收](../../openspec/changes/port-upstream-0.2.11-tier2/verification.md)记录全量Go unit/build、定向race、SQLite和前端1836通过/2既有跳过、typecheck/lint/build。包含旧0.2.9 F04两桥前置与695ebede7仅14行通用usage字段；采用#7736最终目录设计。VERSION仍1.1.14，最大迁移226，无依赖变更；第三/四档及Astra Ultrafast未引入，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
+
+- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **历史评估2026-09-28；第二档已于2026-09-29落地159d04222，第一档仍待实施**。以本地 `bfbcd79` / v1.1.13 对照上游 v0.2.5→v0.2.9：215条非 merge、161个PR和9个直接提交。第二档48PR/16簇的[实施验收](../../openspec/changes/port-upstream-0.2.9-tier2/verification.md)记录后端unit/build/race、SQLite与前端1808通过/2既有跳过及浏览器验证；包含在v1.1.14。第一档原39PR/15簇此前只落了第二档S14所需dialog ID和空Tab前置；本次0.2.11另外完成F04 thinking禁用契约，其余仍待实施。原PORTING/source-baseline保留评估时历史快照，不当当前实施状态。第三/四档及更早遗留见最新评估§5。
 
 - [PORTING-0.2.4.md](./PORTING-0.2.4.md) —— **历史轮次，2026-09-12，第一档13项、第二档12簇已落地 main，最终构建和总检查通过**。两份 OpenSpec 的任务和验收已回填；[最终验收](./evidence-0.2.4/implementation.md)记录54包后端 unit、240文件/1720项前端测试、静态单文件构建及真实 SQLite/浏览器验证，并追加 API Key Responses namespace 修复及其定向验证。初始151条提交、114候选、1,044条四态证据保持冻结。VERSION仍为1.1.11，迁移仍为226，SQLite/miniredis/simple mode保留。第三/四档与旧DOMPurify独立待办未实施；本次未创建新 tag 或 Release。
 

@@ -1,0 +1,120 @@
+2026/09/30 12:54:58 Timezone initialized: UTC (UTC offset: +00:00)
+2026/09/30 12:54:59 [antigravity] dropping built-in tools (web_search/code_execution) because client function tools are present; Antigravity v1internal rejects the mix
+2026/09/30 12:54:59 [antigravity] dropping built-in tools (web_search/code_execution) because client function tools are present; Antigravity v1internal rejects the mix
+2026/09/30 12:54:59 Empty Antigravity compatibility stream, triggering failover
+2026/09/30 12:54:59 Empty Antigravity compatibility stream, triggering failover
+2026/09/30 12:54:59 Empty Antigravity compatibility stream, triggering failover
+2026/09/30 12:54:59 Empty Antigravity compatibility stream, triggering failover
+2026/09/30 12:54:59 [antigravity-Forward] warning: empty stream response (claude non-stream), triggering failover
+2026/09/30 12:54:59 [antigravity-Forward] warning: empty stream response (claude non-stream), triggering failover
+2026/09/30 12:55:00 Empty Antigravity compatibility stream, triggering failover
+2026/09/30 12:55:00 Client disconnected during streaming (antigravity chat completions stream), continuing to drain upstream for billing
+2026/09/30 12:55:01 Empty Antigravity compatibility stream, triggering failover
+==================
+WARNING: DATA RACE
+Write at 0x00000a953fb0 by goroutine 200:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:72 +0x4b
+  github.com/Wei-Shaw/sub2api/internal/service.TestHandleResponsesStreamingResponse_PreservesMessageStartCacheUsage()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_forward_as_responses_test.go:247 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Previous write at 0x00000a953fb0 by goroutine 199:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:72 +0x4b
+  github.com/Wei-Shaw/sub2api/internal/service.TestHandleResponsesBufferedStreamingResponse_PreservesMessageStartCacheUsage()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_forward_as_responses_test.go:214 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Goroutine 200 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13328 +0x164
+
+Goroutine 199 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13328 +0x164
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00000a873470 by goroutine 200:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:77 +0x64
+  github.com/Wei-Shaw/sub2api/internal/service.TestHandleResponsesStreamingResponse_PreservesMessageStartCacheUsage()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_forward_as_responses_test.go:247 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Previous write at 0x00000a873470 by goroutine 199:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:77 +0x64
+  github.com/Wei-Shaw/sub2api/internal/service.TestHandleResponsesBufferedStreamingResponse_PreservesMessageStartCacheUsage()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_forward_as_responses_test.go:214 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Goroutine 200 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13328 +0x164
+
+Goroutine 199 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13328 +0x164
+==================
+--- FAIL: TestHandleResponsesBufferedStreamingResponse_PreservesMessageStartCacheUsage (0.00s)
+    testing.go:1865: race detected during execution of test
+--- FAIL: TestHandleResponsesStreamingResponse_PreservesMessageStartCacheUsage (0.00s)
+    testing.go:1865: race detected during execution of test
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	4.511s
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	1.360s
+FAIL

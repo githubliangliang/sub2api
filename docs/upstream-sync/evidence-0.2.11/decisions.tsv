@@ -1,0 +1,20 @@
+candidate	sha	tier	cluster	reason
+9a62841fd	9a62841fd124d026cf3694fcf9b79e98addcdbdc	4	VERSION	上游版本号同步，不覆盖fork自有1.1.14
+#7683	dd6cb410e6db51b5c5662f4edce562b3b68c271b	2	S01	Sonnet 5.5目录、定价、effort、thinking签名与工具beta在本地已有入口中一致。 使用映射后的模型；保留Opus 5.5和其它模型契约，排除不存在的原生Anthropic平台路径。
+#7701	1dca86f287ad6b20ece6e329856d1d9914bf6434	1	F01	工具声明、强制工具选择和历史tool_use中的同名工具保持一致，改名不破坏JSON或无关内容。 只改选中的工具名；内置工具、参数、缓存断点和未映射名称保留。排除图片keepalive测试的无关sleep。
+#7646	b35a611538ad713d1e39ce4e9dd3242a36f3cb15	3	D01	用量/费用趋势展示增强，个人展示需求未明确；不恢复裁剪页面
+#7643	883a53fea0aeb26b1268f582e2676ed2fb21d5c2	2	S04	兼容流等待首内容时15秒发送注释保活，并在2分钟无语义内容时终止；已提交响应后的失败通过单次SSE错误报告。 ping不算首token或语义输出；HTTP 200提交后不得换号重放。保持既有断开和用量处理。
+#7542	f50b99b66cccfe0d91cfd553b27f78eda78355e9	1	F02	在新增白名单项会覆盖from到不同to的映射时提示并拒绝该新增，保留已有映射。 覆盖创建、编辑、批量编辑的现有账号表单；不引入分组model_allowlist schema。
+#7378	ccb027b51506b2f64c16290ac33b185c547d8963	2	S05	OpenAI两种调度执行公开alias归属检查，WS按responses/any解析路由并隔离公开模型与出站映射。 只支持既有OpenAI/Grok目标，不引入model_allowlist或插件；Wire依赖正确生成。
+#7380	1f955af353f0e0a3f6137aa26090e85aee1109cc	2	S03	现有Anthropic到Responses/Chat桥在收到真实usage时转发，并将权威prompt总量与缓存桶统一到计费口径。 只补695ebede7的14行通用字段及现有消费者；不引入缺失native平台。保留取消drain、成功去重和终态结束。
+#7684	052e08e764b8c1899202f1b81524cb4443317fb4	3	D02	Claude原生额度查询需新service/handler/UI；非支付，按账号管理需求决定
+#7680	41dcfec4895a868ee8b4a92526d0aecd9afb4418	2	S06	提供Codex 0.156.0+远程目录和旧客户端本地文件选择，采用v0.2.11最终行为。 不单独实施#7680隐藏OpenAI目录的中间态；保留旧S08 URL/Windows/CC Switch契约，不恢复缺失平台。
+#7679	fe9dadfc7d929957de908aba17c3fb0da76e8e86	3	D03	新增风控豁免策略，不是修复现有审计必要前置
+#7678	2f3fed2fdb0787141294cec81487a5df30426f7f	1	F04	受Claude Code限制的分组只显示Claude客户端标签，分组限制改变时重置当前客户端选择。 前端不代替服务端授权；其它分组的现有客户端选项保持。
+a60a29549	a60a29549f488a854966aaec9541abbe006cac22	4	VERSION	上游版本号同步，不覆盖fork自有1.1.14
+#7579	a0f41f95a07ee6ca0b1300d3c96ce4b62e24724b	1	F03	Claude Code限制分组配置fallback时，Chat Completions和Responses请求沿现有调度选择降级分组账号。 无fallback仍拒绝；循环、缺失或不可用目标不得绕过现有检查。
+#7752	b0cfff9826524fdedb45de1d030654c00bbb08f1	3	D04	200有效Key/60次每小时默认限制是新策略；需miniredis/并发验证，0可关闭
+#7681	4f0c079e27505ae37af8e2645867bb7f5f69f095	3	D05	余额准入预占非支付；上游源码simple mode禁用，普通余额模式有需求时选用
+#7736	48b71095887f8f150a26d3f471a344565c31ea58	2	S06	提供Codex 0.156.0+远程目录和旧客户端本地文件选择，采用v0.2.11最终行为。 不单独实施#7680隐藏OpenAI目录的中间态；保留旧S08 URL/Windows/CC Switch契约，不恢复缺失平台。
+#7730	327c32218406cef47186736c7473275cd1b39918	2	S02	现有网关路径识别GPT-6.1 Sol并一致执行请求能力、模型目录与价格规则，账号套餐显示保留SKU身份。 先完成0.2.9 F04两桥契约；不引入Astra Ultrafast/Fast发送策略、新价格引擎或支付功能。
+#7726	96f4c115c9749078f90cbf210a01d39baf3f53b6	3	D02	原生额度兑换依赖#7684，服务端选grant、确认和未知结果处理；按需且非支付
