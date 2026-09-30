@@ -19,7 +19,7 @@
 
 两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
 
-`openspec/changes/` 当前全貌（按时间倒序）：[`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/)（§3.1–§3.7 已在 `sync/upstream-20260902-p1` 落地）与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)（§3.8–§3.11 + §4 已落地，阶段 9 dompurify 未做）→ [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（5 项交付 + 1 项撤回）→ [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)（4 项 P1 + 3 个决策）→ 上面那两批 P0。新一轮的立项规则见 [CLAUDE.md](../../CLAUDE.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
+`openspec/changes/` 当前全貌（按时间倒序）：[`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/)（§3.1–§3.7 已在 `sync/upstream-20260902-p1` 落地）与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)（§3.8–§3.11 + §4 已落地，阶段 9 dompurify 未做）→ [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（5 项交付 + 1 项撤回）→ [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)（4 项 P1 + 3 个决策）→ 上面那两批 P0。新一轮的立项规则见 [AGENTS.md](../../AGENTS.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
 
 两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
 
@@ -212,7 +212,7 @@ go generate ./cmd/server     # 动了 wire.go
 
     移植上游新表时：加迁移的同时检查 `sqlite_aux_tables.go` 有没有同名表；两边都要建就让 DDL 完全一致。**改 aux 表的列类型只对新装库生效**，已有库不会重建——需要为存量库单独写迁移，或让读取端兼容两种形态。
 
-11. **读 SQLite 的时间列要类型无关。** `modernc.org/sqlite` 对 `TEXT` 列返回 `string`，对 `DATETIME` 列才返回 `time.Time`。直接 `rows.Scan(&t)`（`*time.Time`）扫一个历史上被建成 `TEXT` 的列，会每次都报 `unsupported Scan, storing driver.Value type string into type *time.Time`。存量库的列类型不由你的代码决定，所以**读取端要兼容两种**（参考 `scanSchedulerOutboxTime`）。这条是 CLAUDE.md「时间戳用 DATETIME」的延伸：写入端约定管不住已经建错的存量库。
+11. **读 SQLite 的时间列要类型无关。** `modernc.org/sqlite` 对 `TEXT` 列返回 `string`，对 `DATETIME` 列才返回 `time.Time`。直接 `rows.Scan(&t)`（`*time.Time`）扫一个历史上被建成 `TEXT` 的列，会每次都报 `unsupported Scan, storing driver.Value type string into type *time.Time`。存量库的列类型不由你的代码决定，所以**读取端要兼容两种**（参考 `scanSchedulerOutboxTime`）。这条是 AGENTS.md「时间戳用 DATETIME」的延伸：写入端约定管不住已经建错的存量库。
 
 12. **去重（dedup）语义不能默认消费者活着。** `INSERT ... ON CONFLICT (dedup_key) DO NOTHING` 的隐含前提是「冲突的那行马上会被消费掉」。消费者一旦停摆，滞留行的 `dedup_key` 就永久占位，**后续同 key 的新事件在入队处被静默吞掉**——没有报错、没有日志，只有功能不生效。
 
