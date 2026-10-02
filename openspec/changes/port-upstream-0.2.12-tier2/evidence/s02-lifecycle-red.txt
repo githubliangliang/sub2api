@@ -1,0 +1,209 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/components/account/__tests__/AccountPriorityCell.spec.ts (16 tests | 5 failed) 76ms
+   × AccountPriorityCell lifecycle and input > does not submit invalid input "12oops" 6ms
+     → expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      7,
+      Object {
+        "priority": 12,
+      },
+    ]
+
+
+Number of calls: 1
+
+   × AccountPriorityCell lifecycle and input > does not submit invalid input "1e3" 3ms
+     → expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      7,
+      Object {
+        "priority": 1,
+      },
+    ]
+
+
+Number of calls: 1
+
+   × AccountPriorityCell lifecycle and input > does not submit invalid input "2.5" 3ms
+     → expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      7,
+      Object {
+        "priority": 2,
+      },
+    ]
+
+
+Number of calls: 1
+
+   × AccountPriorityCell lifecycle and input > saves pending changes to their original account when a row is reused 3ms
+     → expected "spy" to be called with arguments: [ 7, { priority: 4 } ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   7,
++   8,
+    Object {
+      "priority": 4,
+    },
+  ]
+
+
+Number of calls: 1
+
+   × AccountPriorityCell lifecycle and input > ignores an old account response after reuse 3ms
+     → expected '4' to be '20' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/AccountPriorityCell.spec.ts > AccountPriorityCell lifecycle and input > does not submit invalid input "12oops"
+AssertionError: expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      7,
+      Object {
+        "priority": 12,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/components/account/__tests__/AccountPriorityCell.spec.ts:117:24
+    115|     await input.trigger('blur')
+    116|     await flushPromises()
+    117|     expect(update).not.toHaveBeenCalled()
+       |                        ^
+    118|     expect(wrapper.get('[data-testid="account-priority-value"]').text(…
+    119|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/components/account/__tests__/AccountPriorityCell.spec.ts > AccountPriorityCell lifecycle and input > does not submit invalid input "1e3"
+AssertionError: expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      7,
+      Object {
+        "priority": 1,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/components/account/__tests__/AccountPriorityCell.spec.ts:117:24
+    115|     await input.trigger('blur')
+    116|     await flushPromises()
+    117|     expect(update).not.toHaveBeenCalled()
+       |                        ^
+    118|     expect(wrapper.get('[data-testid="account-priority-value"]').text(…
+    119|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/components/account/__tests__/AccountPriorityCell.spec.ts > AccountPriorityCell lifecycle and input > does not submit invalid input "2.5"
+AssertionError: expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      7,
+      Object {
+        "priority": 2,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/components/account/__tests__/AccountPriorityCell.spec.ts:117:24
+    115|     await input.trigger('blur')
+    116|     await flushPromises()
+    117|     expect(update).not.toHaveBeenCalled()
+       |                        ^
+    118|     expect(wrapper.get('[data-testid="account-priority-value"]').text(…
+    119|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/components/account/__tests__/AccountPriorityCell.spec.ts > AccountPriorityCell lifecycle and input > saves pending changes to their original account when a row is reused
+AssertionError: expected "spy" to be called with arguments: [ 7, { priority: 4 } ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   7,
++   8,
+    Object {
+      "priority": 4,
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/components/account/__tests__/AccountPriorityCell.spec.ts:168:20
+    166|     await vi.runAllTimersAsync()
+    167|     await flushPromises()
+    168|     expect(update).toHaveBeenCalledWith(7, { priority: 4 })
+       |                    ^
+    169|     expect(update).toHaveBeenCalledTimes(1)
+    170|     expect(wrapper.get('[data-testid="account-priority-value"]').text(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/components/account/__tests__/AccountPriorityCell.spec.ts > AccountPriorityCell lifecycle and input > ignores an old account response after reuse
+AssertionError: expected '4' to be '20' // Object.is equality
+
+Expected: "20"
+Received: "4"
+
+ ❯ src/components/account/__tests__/AccountPriorityCell.spec.ts:184:74
+    182|     finish(account({ priority: 4 }))
+    183|     await flushPromises()
+    184|     expect(wrapper.get('[data-testid="account-priority-value"]').text(…
+       |                                                                          ^
+    185|     expect(wrapper.emitted('updated')).toBeUndefined()
+    186|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 11 passed (16)
+   Start at  15:42:19
+   Duration  935ms (transform 238ms, setup 57ms, collect 235ms, tests 76ms, environment 226ms, prepare 45ms)
+

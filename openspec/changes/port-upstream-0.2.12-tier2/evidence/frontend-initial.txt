@@ -1,0 +1,55 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/components/account/__tests__/AccountPriorityCell.spec.ts (5 tests) 48ms
+stderr | src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'current_concurrency' 'asc'
+[Vue warn]: Component emitted event "update:selectedKeys" but it is neither declared in the emits option nor as an "onUpdate:selectedKeys" prop.
+
+stderr | src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'asc'
+[Vue warn]: Component emitted event "update:selectedKeys" but it is neither declared in the emits option nor as an "onUpdate:selectedKeys" prop.
+
+ ❯ src/views/user/__tests__/KeysView.spec.ts (14 tests | 3 failed) 218ms
+   × user KeysView column settings > keeps filters and resets pagination and selection when sorting 'current_concurrency' 'asc' 14ms
+     → expected undefined to deeply equal [ 1 ]
+   × user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'asc' 16ms
+     → expected undefined to deeply equal [ 1 ]
+   × user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'desc' 16ms
+     → expected undefined to deeply equal [ 1 ]
+stderr | src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'desc'
+[Vue warn]: Component emitted event "update:selectedKeys" but it is neither declared in the emits option nor as an "onUpdate:selectedKeys" prop.
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'current_concurrency' 'asc'
+ FAIL  src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'asc'
+ FAIL  src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'desc'
+AssertionError: expected undefined to deeply equal [ 1 ]
+
+- Expected: 
+Array [
+  1,
+]
+
++ Received: 
+undefined
+
+ ❯ src/views/user/__tests__/KeysView.spec.ts:477:41
+    475|     table.vm.$emit('update:selectedKeys', [1])
+    476|     await nextTick()
+    477|     expect(table.props('selectedKeys')).toEqual([1])
+       |                                         ^
+    478|     expect(visibleColumnMeta(wrapper).find((column) => column.key === …
+    479|     listKeys.mockClear()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 16 passed (19)
+   Start at  15:41:33
+   Duration  2.03s (transform 1.17s, setup 113ms, collect 1.51s, tests 266ms, environment 522ms, prepare 87ms)
+

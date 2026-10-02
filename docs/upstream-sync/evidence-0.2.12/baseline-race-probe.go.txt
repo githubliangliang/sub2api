@@ -1,0 +1,49 @@
+package service
+
+import (
+ "context"
+ "sync"
+ "testing"
+ "time"
+)
+
+// Deterministic cache snapshot barriers model concurrent read-modify-write requests.
+// These assertions characterize the OLD defect; they are not acceptance tests.
+type intakeEmailRaceCache struct {
+ EmailCache
+ mu sync.Mutex
+ ready sync.WaitGroup
+ reads, writes, deletes int
+ attempts int
+}
+func (c *intakeEmailRaceCache) GetVerificationCode(context.Context,string)(*VerificationCodeData,error){
+ c.mu.Lock(); n:=c.attempts; c.reads++; c.mu.Unlock()
+ c.ready.Done(); c.ready.Wait()
+ return &VerificationCodeData{Code:"123456",Attempts:n,ExpiresAt:time.Now().Add(time.Minute)},nil
+}
+func (c *intakeEmailRaceCache) SetVerificationCode(_ context.Context,_ string,d *VerificationCodeData,_ time.Duration)error{
+ c.mu.Lock(); defer c.mu.Unlock(); c.writes++; c.attempts=d.Attempts; return nil
+}
+func(c *intakeEmailRaceCache) GetPasswordResetToken(context.Context,string)(*PasswordResetTokenData,error){
+ c.ready.Done(); c.ready.Wait(); return &PasswordResetTokenData{Token:"test-token"},nil
+}
+func(c *intakeEmailRaceCache) DeletePasswordResetToken(context.Context,string)error{
+ c.mu.Lock(); defer c.mu.Unlock(); c.deletes++; return nil
+}
+func TestIntake012ExistingEmailRace(t *testing.T){
+ const n=20
+ c:=&intakeEmailRaceCache{}; c.ready.Add(n); svc:=&EmailService{cache:c}
+ var wg sync.WaitGroup; wg.Add(n)
+ for i:=0;i<n;i++ {go func(){defer wg.Done(); _=svc.VerifyCode(context.Background(),"test@example.com","000000")}()}; wg.Wait()
+ if c.writes!=n || c.attempts!=1 {t.Fatalf("expected old lost-update defect, writes=%d attempts=%d",c.writes,c.attempts)}
+ t.Logf("BASELINE DEFECT: %d concurrent wrong guesses evaluated; stored attempts=%d (limit=%d)",c.writes,c.attempts,maxVerifyCodeAttempts)
+}
+func TestIntake012ExistingResetRace(t *testing.T){
+ const n=20
+ c:=&intakeEmailRaceCache{}; c.ready.Add(n); svc:=&EmailService{cache:c}
+ results:=make(chan error,n)
+ for i:=0;i<n;i++ {go func(){results<-svc.ConsumePasswordResetToken(context.Background(),"test@example.com","test-token")}()}
+ success:=0; for i:=0;i<n;i++ {if <-results==nil {success++}}
+ if success!=n {t.Fatalf("expected old consume race, successful consumers=%d",success)}
+ t.Logf("BASELINE DEFECT: same reset token accepted by %d concurrent consumers",success)
+}

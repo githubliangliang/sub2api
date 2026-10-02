@@ -1,0 +1,77 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/components/account/__tests__/AccountPriorityCell.spec.ts (0 test)
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+stderr | src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'current_concurrency' 'asc'
+[Vue warn]: Component emitted event "update:selectedKeys" but it is neither declared in the emits option nor as an "onUpdate:selectedKeys" prop.
+
+stderr | src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'asc'
+[Vue warn]: Component emitted event "update:selectedKeys" but it is neither declared in the emits option nor as an "onUpdate:selectedKeys" prop.
+
+ ❯ src/views/user/__tests__/KeysView.spec.ts (14 tests | 3 failed) 224ms
+   × user KeysView column settings > keeps filters and resets pagination and selection when sorting 'current_concurrency' 'asc' 14ms
+     → expected undefined to deeply equal [ 1 ]
+   × user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'asc' 22ms
+     → expected undefined to deeply equal [ 1 ]
+   × user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'desc' 16ms
+     → expected undefined to deeply equal [ 1 ]
+stderr | src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'desc'
+[Vue warn]: Component emitted event "update:selectedKeys" but it is neither declared in the emits option nor as an "onUpdate:selectedKeys" prop.
+
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/AccountPriorityCell.spec.ts [ src/components/account/__tests__/AccountPriorityCell.spec.ts ]
+Error: Failed to resolve import "../AccountPriorityCell.vue" from "src/components/account/__tests__/AccountPriorityCell.spec.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/liang/myself/work_space/idea/github/sub2api/frontend/src/components/account/__tests__/AccountPriorityCell.spec.ts:4:38
+  2  |  vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key) => key }) }));
+  3  |  const __vi_import_0__ = await import('@vue/test-utils')
+  4  |  const __vi_import_1__ = await import('../AccountPriorityCell.vue')
+     |                                       ^
+  5  |  const __vi_import_2__ = await import('@/api/admin/accounts')
+  6  |  import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ ❯ TransformPluginContext._formatError node_modules/.pnpm/vite@5.4.21_@types+node@20.19.27/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41
+ ❯ TransformPluginContext.error node_modules/.pnpm/vite@5.4.21_@types+node@20.19.27/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16
+ ❯ normalizeUrl node_modules/.pnpm/vite@5.4.21_@types+node@20.19.27/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23
+ ❯ node_modules/.pnpm/vite@5.4.21_@types+node@20.19.27/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+ ❯ TransformPluginContext.transform node_modules/.pnpm/vite@5.4.21_@types+node@20.19.27/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7
+ ❯ PluginContainer.transform node_modules/.pnpm/vite@5.4.21_@types+node@20.19.27/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18
+ ❯ loadAndTransform node_modules/.pnpm/vite@5.4.21_@types+node@20.19.27/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'current_concurrency' 'asc'
+ FAIL  src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'asc'
+ FAIL  src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > keeps filters and resets pagination and selection when sorting 'group' 'desc'
+AssertionError: expected undefined to deeply equal [ 1 ]
+
+- Expected: 
+Array [
+  1,
+]
+
++ Received: 
+undefined
+
+ ❯ src/views/user/__tests__/KeysView.spec.ts:477:41
+    475|     table.vm.$emit('update:selectedKeys', [1])
+    476|     await nextTick()
+    477|     expect(table.props('selectedKeys')).toEqual([1])
+       |                                         ^
+    478|     expect(visibleColumnMeta(wrapper).find((column) => column.key === …
+    479|     listKeys.mockClear()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 11 passed (14)
+   Start at  15:40:27
+   Duration  2.49s (transform 1.29s, setup 249ms, collect 1.47s, tests 224ms, environment 640ms, prepare 84ms)
+

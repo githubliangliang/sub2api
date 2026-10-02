@@ -2,11 +2,22 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-最新通用教训（[0.2.11 §9](./PORTING-0.2.11.md#9-新增通用结论)）：同区间可能撤换设计，按目标tag终态排名；CLEAN流处理补丁也可能提前提交HTTP响应；先核实simple模式是否实际启用；模型/套餐元数据与Ultrafast能力按行为拆；旧第四档只有可独立复用子集时，量出基座并明确记录提升范围。
+最新通用教训（[0.2.12 §9](./PORTING-0.2.12.md#9-新增通用教训)）：payment-only安全修复也先排除；混合PR的无关依赖升级独立处理；CLEAN缓存补丁仍需并发/TTL/旧链接失效验收；保留包级与transport不同版本下限；按用户选择调整档位须明示；Release/tag与VERSION同步可能错位。
+
+最新轮次检查清单：
+
+- [x] 冻结v0.2.11→v0.2.12来源与本地SHA，9PR完整diff，先反向后正向四态检查。
+- [x] 逐候选分档、关键基座与测试存在性核对、基线测试及旧并发缺陷探针。
+- [x] 第一档3簇/第二档3簇OpenSpec计划；用户要求的优先级与密钥排序已明确从第三档提升。
+- [x] 两批实现于`405246789`，新增行为验收已回填；未发布或部署。
+
+上一轮通用教训（[0.2.11 §9](./PORTING-0.2.11.md#9-新增通用结论)）：同区间可能撤换设计，按目标tag终态排名；CLEAN流处理补丁也可能提前提交HTTP响应；先核实simple模式是否实际启用；模型/套餐元数据与Ultrafast能力按行为拆；旧第四档只有可独立复用子集时，量出基座并明确记录提升范围。
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.11.md](./PORTING-0.2.11.md) —— **最新一轮，2026-09-30，第一档4簇与第二档6簇开发验收完成**。改动在 `sync/upstream-0.2.11` 分支，基线 `f13dee245` / v1.1.14。[第一档验收](../../openspec/changes/port-upstream-0.2.11-tier1/verification.md)与[第二档验收](../../openspec/changes/port-upstream-0.2.11-tier2/verification.md)记录全量Go unit/build、定向race、SQLite和前端1836通过/2既有跳过、typecheck/lint/build。包含旧0.2.9 F04两桥前置与695ebede7仅14行通用usage字段；采用#7736最终目录设计。VERSION仍1.1.14，最大迁移226，无依赖变更；第三/四档及Astra Ultrafast未引入，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
+- [PORTING-0.2.12.md](./PORTING-0.2.12.md) —— **最新评估及实施2026-10-02，第一档3簇/第二档3簇完成于`405246789`**。19条非merge、9PR、1直接提交，冻结四态A0/C108/X42/N10。[第一档验收](../../openspec/changes/port-upstream-0.2.12-tier1/verification.md)：Grok CLI身份、Antigravity脱敏、错误码文案；[第二档验收](../../openspec/changes/port-upstream-0.2.12-tier2/verification.md)：邮箱原子化及用户确认的账号优先级/密钥排序。补齐旧验证码次数继承和优先级异步归属；全量Go unit/build、定向race、SQLite方言/用量去重/排序，前端typecheck/lint/build与1854通过/2既有跳过。支付两PR/TypeSafe/axios排除，VERSION 1.1.15、迁移226不变，未发布/部署。历史遗留见§5。
+
+- [PORTING-0.2.11.md](./PORTING-0.2.11.md) —— **上一轮，2026-09-30，第一档4簇与第二档6簇开发验收完成**。改动在 `sync/upstream-0.2.11` 分支，基线 `f13dee245` / v1.1.14。[第一档验收](../../openspec/changes/port-upstream-0.2.11-tier1/verification.md)与[第二档验收](../../openspec/changes/port-upstream-0.2.11-tier2/verification.md)记录全量Go unit/build、定向race、SQLite和前端1836通过/2既有跳过、typecheck/lint/build。包含旧0.2.9 F04两桥前置与695ebede7仅14行通用usage字段；采用#7736最终目录设计。VERSION仍1.1.14，最大迁移226，无依赖变更；第三/四档及Astra Ultrafast未引入，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
 
 - [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **历史评估2026-09-28；第二档已于2026-09-29落地159d04222，第一档仍待实施**。以本地 `bfbcd79` / v1.1.13 对照上游 v0.2.5→v0.2.9：215条非 merge、161个PR和9个直接提交。第二档48PR/16簇的[实施验收](../../openspec/changes/port-upstream-0.2.9-tier2/verification.md)记录后端unit/build/race、SQLite与前端1808通过/2既有跳过及浏览器验证；包含在v1.1.14。第一档原39PR/15簇此前只落了第二档S14所需dialog ID和空Tab前置；本次0.2.11另外完成F04 thinking禁用契约，其余仍待实施。原PORTING/source-baseline保留评估时历史快照，不当当前实施状态。第三/四档及更早遗留见最新评估§5。
 

@@ -1,0 +1,33 @@
+2026/10/02 07:40:43 Timezone initialized: UTC (UTC offset: +00:00)
+2026/10/02 07:40:43 [Antigravity] Cleaned request schema in forwarded request for account
+2026/10/02 07:40:43 [antigravity-Forward] upstream error status=400 body={"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Invalid input projects/123456789 sa@pool.iam.gserviceaccount.com https://example.com/?key=secret-key","details":[{"project":"private-project"}]}}
+2026/10/02 07:40:43 [Antigravity] Cleaned request schema in forwarded request for account
+2026/10/02 07:40:43 [antigravity-Forward] upstream error status=400 body=Invalid input projects/123456789 sa@pool.iam.gserviceaccount.com
+2026/10/02 07:40:43 [Antigravity] Cleaned request schema in forwarded request for account
+2026/10/02 07:40:43 [antigravity-Forward] upstream error status=400 body=
+--- FAIL: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError (0.00s)
+    --- FAIL: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com_https://example.com/?key=secret-key","details":[{"project":"private-project"}]}} (0.00s)
+        antigravity_gateway_service_test.go:1991: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_gateway_service_test.go:1991
+            	Error:      	"text/plain" does not contain "application/json"
+            	Test:       	TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com_https://example.com/?key=secret-key","details":[{"project":"private-project"}]}}
+    --- FAIL: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com (0.00s)
+        antigravity_gateway_service_test.go:1991: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_gateway_service_test.go:1991
+            	Error:      	"text/plain" does not contain "application/json"
+            	Test:       	TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com
+    --- FAIL: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/#00 (0.00s)
+        antigravity_gateway_service_test.go:1991: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_gateway_service_test.go:1991
+            	Error:      	"text/plain" does not contain "application/json"
+            	Test:       	TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/#00
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.024s
+--- FAIL: TestEmailCache_ConcurrentWrongCodesCannotExceedAttemptCap (0.02s)
+    email_cache_atomic_test.go:58: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/email_cache_atomic_test.go:58
+        	Error:      	"13" is not less than or equal to "4"
+        	Test:       	TestEmailCache_ConcurrentWrongCodesCannotExceedAttemptCap
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/repository	0.041s
+FAIL
