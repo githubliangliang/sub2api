@@ -1969,3 +1969,36 @@ func generateLargeUnwrapJSON(minSize int) []byte {
 	b, _ := json.Marshal(outer)
 	return b
 }
+
+func TestAntigravityGatewayService_ForwardGemini_SanitizesClientError(t *testing.T) {
+	for _, body := range []string{
+		`{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Invalid input projects/123456789 sa@pool.iam.gserviceaccount.com https://example.com/?key=secret-key","details":[{"project":"private-project"}]}}`,
+		"Invalid input projects/123456789 sa@pool.iam.gserviceaccount.com",
+		"",
+	} {
+		t.Run(body, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			writer := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(writer)
+			request := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:generateContent", bytes.NewReader(request))
+			upstream := &queuedHTTPUpstreamStub{responses: []*http.Response{{StatusCode: 400, Header: http.Header{"Content-Type": []string{"text/plain"}}, Body: io.NopCloser(strings.NewReader(body))}}}
+			svc := &AntigravityGatewayService{settingService: NewSettingService(&antigravitySettingRepoStub{}, &config.Config{}), tokenProvider: &AntigravityTokenProvider{}, httpUpstream: upstream}
+			account := &Account{ID: 101, Platform: PlatformAntigravity, Type: AccountTypeOAuth, Status: StatusActive, Concurrency: 1, Credentials: map[string]any{"access_token": "token", antigravityProjectIDFallbackCredentialKey: "configured-project"}}
+			_, err := svc.ForwardGemini(context.Background(), c, account, "gemini-2.5-flash", "generateContent", false, request, false)
+			require.Error(t, err)
+			require.Equal(t, 400, writer.Code)
+			require.Contains(t, writer.Header().Get("Content-Type"), "application/json")
+			for _, secret := range []string{"123456789", "sa@pool", "private-project", "secret-key", "details"} {
+				require.NotContains(t, writer.Body.String(), secret)
+			}
+			var out map[string]map[string]any
+			require.NoError(t, json.Unmarshal(writer.Body.Bytes(), &out))
+			require.Len(t, out["error"], 3)
+			require.Equal(t, float64(400), out["error"]["code"])
+			require.Equal(t, "INVALID_ARGUMENT", out["error"]["status"])
+			require.NotEmpty(t, out["error"]["message"])
+			require.Len(t, upstream.requestBodies, 1)
+		})
+	}
+}

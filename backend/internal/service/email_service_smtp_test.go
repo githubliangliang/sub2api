@@ -60,6 +60,7 @@ type fakeSMTPServer struct {
 
 	mu       sync.Mutex
 	commands []string
+	messages []string
 	conns    atomic.Int64
 	wg       sync.WaitGroup
 }
@@ -179,6 +180,7 @@ func (srv *fakeSMTPServer) serve(conn net.Conn, allowStartTLS bool) {
 			if !writeLine("354 go ahead") {
 				return
 			}
+			var message strings.Builder
 			for {
 				dataLine, err := reader.ReadString('\n')
 				if err != nil {
@@ -187,7 +189,11 @@ func (srv *fakeSMTPServer) serve(conn net.Conn, allowStartTLS bool) {
 				if strings.TrimRight(dataLine, "\r\n") == "." {
 					break
 				}
+				message.WriteString(dataLine)
 			}
+			srv.mu.Lock()
+			srv.messages = append(srv.messages, message.String())
+			srv.mu.Unlock()
 			if !writeLine("250 message accepted") {
 				return
 			}
@@ -242,6 +248,7 @@ func (srv *fakeSMTPServer) serveCommands(reader *bufio.Reader, writer *bufio.Wri
 			if !writeLine("354 go ahead") {
 				return
 			}
+			var message strings.Builder
 			for {
 				dataLine, err := reader.ReadString('\n')
 				if err != nil {
@@ -250,7 +257,11 @@ func (srv *fakeSMTPServer) serveCommands(reader *bufio.Reader, writer *bufio.Wri
 				if strings.TrimRight(dataLine, "\r\n") == "." {
 					break
 				}
+				message.WriteString(dataLine)
 			}
+			srv.mu.Lock()
+			srv.messages = append(srv.messages, message.String())
+			srv.mu.Unlock()
 			if !writeLine("250 message accepted") {
 				return
 			}
