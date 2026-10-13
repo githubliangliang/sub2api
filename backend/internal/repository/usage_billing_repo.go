@@ -487,6 +487,8 @@ func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 	extra["quota_used"] = state.TotalUsed
 	state.DailyUsed = updateUsageBillingQuotaWindow(extra, "daily", 24*time.Hour, state.DailyLimit, state.DailyUsed, amount, now)
 	state.WeeklyUsed = updateUsageBillingQuotaWindow(extra, "weekly", 7*24*time.Hour, state.WeeklyLimit, state.WeeklyUsed, amount, now)
+	updateFixedQuotaResetAt(extra, "daily", now)
+	updateFixedQuotaResetAt(extra, "weekly", now)
 	encoded, err := json.Marshal(extra)
 	if err != nil {
 		return nil, err

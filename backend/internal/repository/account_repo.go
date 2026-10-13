@@ -3515,7 +3515,10 @@ func updateFixedQuotaResetAt(extra map[string]any, name string, now time.Time) {
 	local := now.In(location)
 	next := time.Date(local.Year(), local.Month(), local.Day(), hour, 0, 0, 0, location)
 	if name == "weekly" {
-		target := int(quotaNumber(extra, "quota_weekly_reset_day")) % 7
+		target := int(time.Monday)
+		if _, ok := extra["quota_weekly_reset_day"]; ok {
+			target = int(quotaNumber(extra, "quota_weekly_reset_day")) % 7
+		}
 		days := (target - int(local.Weekday()) + 7) % 7
 		next = next.AddDate(0, 0, days)
 		if days == 0 && !next.After(local) {
