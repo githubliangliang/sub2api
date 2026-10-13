@@ -1,0 +1,16 @@
+=== RUN   TestIntakeProbeSetupValidationMismatch
+    intake_probe_test.go:13: CONFIRMED: setup accepts an email rejected by login and 73-byte password; actual empty SQLite bootstrap accepts a three-byte password. No production database accessed.
+--- PASS: TestIntakeProbeSetupValidationMismatch (0.07s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/setup	0.098s
+=== RUN   TestIntakeProbeDeletedKeyRollback
+    intake_probe_test.go:43: CONFIRMED: deleted API Key aborts Apply, rolls back balance and dedup entry; actual SQLite, all data in memory.
+--- PASS: TestIntakeProbeDeletedKeyRollback (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/repository	0.023s
+2026/10/13 12:23:45 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestIntakeProbeGeminiQuotaAndCodexNull
+    intake_probe_test.go:9: CONFIRMED: third-party Gemini receives AI Studio free tier; image limit expands to Gemini family key; Codex service_tiers null is already normalized by fork metadata completion (PR7811 path not needed).
+--- PASS: TestIntakeProbeGeminiQuotaAndCodexNull (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	0.038s

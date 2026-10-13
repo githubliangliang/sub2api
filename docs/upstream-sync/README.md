@@ -2,20 +2,25 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-最新通用教训（[0.2.12 §9](./PORTING-0.2.12.md#9-新增通用教训)）：payment-only安全修复也先排除；混合PR的无关依赖升级独立处理；CLEAN缓存补丁仍需并发/TTL/旧链接失效验收；保留包级与transport不同版本下限；按用户选择调整档位须明示；Release/tag与VERSION同步可能错位。
+最新通用教训（[0.2.16 §9](./PORTING-0.2.16.md#9-新增通用教训)）：同名功能先核对本地替代调用链；大PR独立修复只补最小基座；缺平台的消费者不当现存缺陷；SSE心跳写出响应需验证失败语义；过期fixture的overlay诊断不等于源码已修；依赖audit重跑并处理pnpm11覆盖位置，例外不自动延期。
 
 最新轮次检查清单：
 
-- [x] 冻结v0.2.11→v0.2.12来源与本地SHA，9PR完整diff，先反向后正向四态检查。
-- [x] 逐候选分档、关键基座与测试存在性核对、基线测试及旧并发缺陷探针。
-- [x] 第一档3簇/第二档3簇OpenSpec计划；用户要求的优先级与密钥排序已明确从第三档提升。
-- [x] 两批实现于`405246789`，新增行为验收已回填；未发布或部署。
+- [x] 冻结v0.2.12→v0.2.16与fork `128c5f7bf`：149非merge、89PR、4直接提交，575文件先反向后正向四态检查。
+- [x] 全部候选分档、最小基座、旧待办与测试首行核对；SQLite/安装/元数据探针和当前依赖audit完成。
+- [x] 第一档14簇/第二档16簇OpenSpec计划，覆盖69个本轮PR选定行为；用户明确暂不增加新功能。
+- [x] 记录基线通过与失败：定向后端/SQLite、前端242项/typecheck通过；embed两处旧logo用例失败、audit103条记录仍待修。
+- [ ] 第一/第二档实施与验收：尚未开始；VERSION 1.1.16、迁移226、产品代码/依赖未变。
+
+上一轮教训（[0.2.12 §9](./PORTING-0.2.12.md#9-新增通用教训)）：payment-only安全修复仍排除；无关依赖子项独立处理；缓存并发/TTL/旧链接必须验收；保留minimum与preferred pin区别；调整档位与tag/VERSION错位须明确记录。
 
 上一轮通用教训（[0.2.11 §9](./PORTING-0.2.11.md#9-新增通用结论)）：同区间可能撤换设计，按目标tag终态排名；CLEAN流处理补丁也可能提前提交HTTP响应；先核实simple模式是否实际启用；模型/套餐元数据与Ultrafast能力按行为拆；旧第四档只有可独立复用子集时，量出基座并明确记录提升范围。
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.12.md](./PORTING-0.2.12.md) —— **最新评估及实施2026-10-02，第一档3簇/第二档3簇完成于`405246789`**。19条非merge、9PR、1直接提交，冻结四态A0/C108/X42/N10。[第一档验收](../../openspec/changes/port-upstream-0.2.12-tier1/verification.md)：Grok CLI身份、Antigravity脱敏、错误码文案；[第二档验收](../../openspec/changes/port-upstream-0.2.12-tier2/verification.md)：邮箱原子化及用户确认的账号优先级/密钥排序。补齐旧验证码次数继承和优先级异步归属；全量Go unit/build、定向race、SQLite方言/用量去重/排序，前端typecheck/lint/build与1854通过/2既有跳过。支付两PR/TypeSafe/axios排除，VERSION 1.1.15、迁移226不变，未发布/部署。历史遗留见§5。
+- [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **最新评估2026-10-13，未实施**。涵盖0.2.13–0.2.16；第一档14簇、第二档16簇，详见[第一档计划](../../openspec/changes/port-upstream-0.2.16-tier1/README.md)与[第二档计划](../../openspec/changes/port-upstream-0.2.16-tier2/README.md)。优先删除Key结算、安装校验、协议与重试、Gemini已有路径、前端竞态；S16依据当前audit接管DOMPurify/axios旧维护。新能力按用户决定暂缓，支付/缺平台排除。基线测试及两个已知门禁问题见[报告](./evidence-0.2.16/baseline-tests.md)，历史未合项见§5。
+
+- [PORTING-0.2.12.md](./PORTING-0.2.12.md) —— **上一轮评估及实施2026-10-02，第一档3簇/第二档3簇完成于`405246789`**。19条非merge、9PR、1直接提交，冻结四态A0/C108/X42/N10。[第一档验收](../../openspec/changes/port-upstream-0.2.12-tier1/verification.md)：Grok CLI身份、Antigravity脱敏、错误码文案；[第二档验收](../../openspec/changes/port-upstream-0.2.12-tier2/verification.md)：邮箱原子化及用户确认的账号优先级/密钥排序。补齐旧验证码次数继承和优先级异步归属；全量Go unit/build、定向race、SQLite方言/用量去重/排序，前端typecheck/lint/build与1854通过/2既有跳过。支付两PR/TypeSafe/axios当轮排除，VERSION 1.1.15、迁移226不变，未发布/部署。历史遗留见最新§5。
 
 - [PORTING-0.2.11.md](./PORTING-0.2.11.md) —— **上一轮，2026-09-30，第一档4簇与第二档6簇开发验收完成**。改动在 `sync/upstream-0.2.11` 分支，基线 `f13dee245` / v1.1.14。[第一档验收](../../openspec/changes/port-upstream-0.2.11-tier1/verification.md)与[第二档验收](../../openspec/changes/port-upstream-0.2.11-tier2/verification.md)记录全量Go unit/build、定向race、SQLite和前端1836通过/2既有跳过、typecheck/lint/build。包含旧0.2.9 F04两桥前置与695ebede7仅14行通用usage字段；采用#7736最终目录设计。VERSION仍1.1.14，最大迁移226，无依赖变更；第三/四档及Astra Ultrafast未引入，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
 

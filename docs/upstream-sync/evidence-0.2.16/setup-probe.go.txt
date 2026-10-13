@@ -1,0 +1,14 @@
+package setup
+import("testing";"strings";"database/sql";"path/filepath";"github.com/gin-gonic/gin/binding")
+func TestIntakeProbeSetupValidationMismatch(t *testing.T){
+ email:="Owner <owner@example.com>"
+ if !validateEmail(email){t.Fatal("baseline changed: setup rejects display-name email")}
+ req:=struct {Email string `binding:"required,email"`}{email}
+ if binding.Validator.ValidateStruct(&req)==nil {t.Fatal("expected login to reject display-name email")}
+ if validatePassword(strings.Repeat("a",73))!=nil {t.Fatal("expected baseline to accept 73-byte password")}
+ path:=filepath.Join(t.TempDir(),"setup.db");db,err:=sql.Open("sqlite",path);if err!=nil{t.Fatal(err)};defer db.Close()
+ _,err=db.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,password_hash TEXT,role TEXT,balance REAL,concurrency INTEGER,status TEXT,created_at DATETIME,updated_at DATETIME)`);if err!=nil{t.Fatal(err)}
+ cfg:=&SetupConfig{Database:DatabaseConfig{Driver:"sqlite",Path:path},Admin:AdminConfig{Email:"probe@example.com",Password:"123"}}
+ created,_,err:=createAdminUser(cfg);if err!=nil||!created{t.Fatalf("expected old bootstrap to accept three-byte password: created=%v err=%v",created,err)}
+ t.Log("CONFIRMED: setup accepts an email rejected by login and 73-byte password; actual empty SQLite bootstrap accepts a three-byte password. No production database accessed.")
+}

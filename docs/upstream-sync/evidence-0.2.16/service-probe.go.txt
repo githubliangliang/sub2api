@@ -1,0 +1,10 @@
+package service
+import("testing";"encoding/json";"github.com/stretchr/testify/require")
+func TestIntakeProbeGeminiQuotaAndCodexNull(t *testing.T){
+ account:=&Account{Platform:PlatformGemini,Type:AccountTypeAPIKey,Credentials:map[string]any{"base_url":"https://gateway.example.com"}}
+ require.Equal(t,GeminiTierAIStudioFree,geminiQuotaTierKeyForAccount(account))
+ require.Contains(t,antigravityModelRateLimitKeys("gemini-3.1-flash-image"),antigravityGeminiModelRateLimitKey)
+ body,err:=completeAPIKeyCodexModelsManifestMetadata([]byte(`{"models":[{"slug":"gpt-6.1-sol","service_tiers":null}]}`),true,&Account{Platform:PlatformOpenAI,Type:AccountTypeAPIKey});require.NoError(t,err)
+ var got struct{Models []map[string]any `json:"models"`};require.NoError(t,json.Unmarshal(body,&got));require.NotNil(t,got.Models[0]["service_tiers"])
+ t.Log("CONFIRMED: third-party Gemini receives AI Studio free tier; image limit expands to Gemini family key; Codex service_tiers null is already normalized by fork metadata completion (PR7811 path not needed).")
+}
