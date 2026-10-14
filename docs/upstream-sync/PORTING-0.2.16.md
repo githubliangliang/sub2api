@@ -1,5 +1,7 @@
 # 上游 v0.2.16 移植评估（v0.2.12 → v0.2.16）
 
+> 当前实施进展（2026-10-14）：第一档14簇已在 `0fbcab935` 后的工作区完成，验收见[第一档 verification](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)。第二档仍待实施。下文为2026-10-13评估快照，来源SHA/四态/基线证据保持冻结。
+
 评估日期：2026-10-13。**仅评估，尚未实施：第一档14簇、第二档16簇，覆盖69个本轮PR的选定行为。**
 用户已选择“暂不增加，优先现有功能修复”。新增平台、Haiku 5.5、Gemini缓存管理/Vertex新认证、模型级冷却配置、分组多语言、TPS和紧凑筛选暂不加入。支付功能始终第四档。
 
@@ -142,6 +144,8 @@ frontend/src/components/common/{BaseDialog.vue,Select.vue,ProxySelector.vue}；�
 ### F10 patch sites / 基座
 
 frontend/src/components/admin/user/BulkEditUserModal.vue、frontend/src/composables/useGeminiOAuth.ts、frontend/src/components/admin/ErrorPassthroughRulesModal.vue；#8006 仅 frontend/src/components/account/ModelWhitelistSelector.vue 的 catch。extractApiErrorMessage 已存在，不引入 platformCatalog import。
+
+实施补充（2026-10-14）：实测 `frontend/src/utils/apiError.ts:extractApiErrorMessage` 优先返回 Axios 通用 message 且未验证值为字符串，单独替换 catch 不满足F10。小范围适配该既有helper：后端 detail/message 优先，跳过结构化对象、空文本及仅含HTTP状态的通用错误，保留规范化错误和i18n映射；没有扩展支付专用解析逻辑或引入平台目录。
 
 应达到：使用统一解析显示后端原因和合适 fallback；开关状态取服务端返回 enabled。
 

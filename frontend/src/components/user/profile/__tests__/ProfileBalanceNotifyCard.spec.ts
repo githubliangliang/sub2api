@@ -37,3 +37,34 @@ describe('ProfileBalanceNotifyCard pending email identity', () => {
     wrapper.unmount()
   })
 })
+
+
+describe('ProfileBalanceNotifyCard late responses', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.resetAllMocks() })
+  afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
+
+  it.each(['remove', 'unmount', 'saved unmount'])('does not restart timers after %s', async (action) => {
+    let resolve!: (value: object) => void
+    sendNotifyEmailCode.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const wrapper = mount(ProfileBalanceNotifyCard, {
+      props: {
+        enabled: true, threshold: null, systemDefaultThreshold: 5, userEmail: '',
+        extraEmails: action === 'saved unmount' ? [{ email: 'saved@example.com', disabled: false, verified: false }] : [],
+      },
+    })
+    const button = (label: string) => wrapper.findAll('button').find(b => b.text() === label)!
+    if (action === 'saved unmount') {
+      await button('profile.balanceNotify.verify').trigger('click')
+    } else {
+      await wrapper.get('input[type="email"]').setValue('pending@example.com')
+      await button('common.add').trigger('click')
+      await button('profile.balanceNotify.sendCode').trigger('click')
+    }
+    if (action === 'remove') await button('profile.balanceNotify.removeEmail').trigger('click')
+    else wrapper.unmount()
+    resolve({})
+    await flushPromises()
+    expect(vi.getTimerCount()).toBe(0)
+    if (action === 'remove') wrapper.unmount()
+  })
+})

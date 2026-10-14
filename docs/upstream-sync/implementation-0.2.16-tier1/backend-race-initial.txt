@@ -1,0 +1,145 @@
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/apicompat	1.470s
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/antigravity	1.169s
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/xai	1.029s
+ok  	github.com/Wei-Shaw/sub2api/internal/repository	21.339s
+2026/10/14 12:13:04 Timezone initialized: UTC (UTC offset: +00:00)
+2026/10/14 12:13:05 [test] pre_check: model_rate_limited_credits_inject model=claude-sonnet-4-5 account=103 (injecting enabledCreditTypes)
+2026/10/14 12:13:05 [test] pre_check: credits_injected_ignore_rate_limit remaining=29m59.912s model=claude-sonnet-4-5 account=103
+2026/10/14 12:13:05 [antigravity-Forward] account=acc-rate-limited pre_check: rate_limit_switch remaining=29.903s model=claude-opus-4-6 account=1
+2026/10/14 12:13:05 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-rate-limited
+2026/10/14 12:13:05 [antigravity-Forward] account=acc-gemini-rate-limited pre_check: rate_limit_switch remaining=29.902s model=gemini-2.5-flash account=2
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=1 reset_in=15s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=1 reset_in=14s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=2 reset_in=4s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=2 reset_at=12:13:10 reset_in=4s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-opus-4-6-thinking account=20 reset_in=4s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-opus-4-6-thinking account=20 reset_at=12:13:10 reset_in=4s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=123 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=gemini-3-pro-high account=123 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=gemini-3-flash account=123 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited_after_smart_retry model=claude-sonnet-4-5 account=456 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=gemini-3-pro account=789 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=antigravity:gemini account=789 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=790 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=790 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=791 reset_in=30s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=791 reset_in=29s
+2026/10/14 12:13:05 [test] status=429 model_rate_limited model=gemini-3.1-flash-image account=789 reset_in=29s
+2026/10/14 12:13:05 INFO sticky.hash_source source=cacheable_content hash=207ju72u1q3tl
+2026/10/14 12:13:05 INFO sticky.hash_source source=cacheable_content hash=207ju72u1q3tl
+2026/10/14 12:13:05 [OpenAI 自动透传] 命中自动透传分支: account=5151 name=openai-image-controls type=apikey model=gpt-5.6-sol stream=true
+2026/10/14 12:13:05 [OpenAI 自动透传] 命中自动透传分支: account=5151 name=openai-image-controls type=apikey model=gpt-5.6-sol stream=true
+2026/10/14 12:13:05 [OpenAI 自动透传] 命中自动透传分支: account=5151 name=openai-image-controls type=apikey model=gpt-5.6-sol stream=true
+2026/10/14 12:13:06 INFO anthropic_fable_window_model_rate_limited account_id=42 scope=claude-fable-5 reset_at=2026-10-17T20:13:06.000Z reset_in=79h59m59s
+2026/10/14 12:13:06 INFO anthropic_fable_credits_required_model_rate_limited account_id=42 scope=claude-fable-5 reset_at=2026-11-12T12:13:06.000Z reset_in=695h59m59s
+2026/10/14 12:13:06 INFO upstream_model_not_found_model_rate_limited account_id=101 model=gpt-5.4 reason=upstream_404_model_not_found reset_at=2026-10-14T12:43:06.277Z
+2026/10/14 12:13:06 INFO upstream_model_not_found_model_rate_limited account_id=101 model=definitely-not-real reason=upstream_401_model_not_found reset_at=2026-10-14T12:43:06.277Z
+2026/10/14 12:13:06 INFO upstream_model_not_found_model_rate_limited account_id=202 model=gpt-5.6-sol reason=upstream_400_codex_plan_gated_model reset_at=2026-10-14T12:43:06.280Z
+==================
+WARNING: DATA RACE
+Write at 0x00000a98c2e8 by goroutine 178:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:72 +0x4b
+  github.com/Wei-Shaw/sub2api/internal/service.TestForwardAsAnthropic_APIKeyMetadataSessionSurvivesChangingCacheControlAnchorAfterContinuationDisabled()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_compat_model_test.go:996 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Previous write at 0x00000a98c2e8 by goroutine 179:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:72 +0x4b
+  github.com/Wei-Shaw/sub2api/internal/service.TestForwardAsAnthropic_OAuthMetadataSessionSurvivesChangingCacheControlAnchor()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_compat_model_test.go:1316 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Goroutine 178 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13382 +0x164
+
+Goroutine 179 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13382 +0x164
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00000a8ab370 by goroutine 178:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:77 +0x64
+  github.com/Wei-Shaw/sub2api/internal/service.TestForwardAsAnthropic_APIKeyMetadataSessionSurvivesChangingCacheControlAnchorAfterContinuationDisabled()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_compat_model_test.go:996 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Previous write at 0x00000a8ab370 by goroutine 179:
+  github.com/gin-gonic/gin.SetMode()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/mode.go:77 +0x64
+  github.com/Wei-Shaw/sub2api/internal/service.TestForwardAsAnthropic_OAuthMetadataSessionSurvivesChangingCacheControlAnchor()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_compat_model_test.go:1316 +0x3f
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0x38
+
+Goroutine 178 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13382 +0x164
+
+Goroutine 179 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2258 +0xb12
+  testing.runTests.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2742 +0x84
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2193 +0x21c
+  testing.runTests()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2740 +0x9e9
+  testing.(*M).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.0.linux-amd64/src/testing/testing.go:2600 +0xf44
+  main.main()
+      _testmain.go:13382 +0x164
+==================
+--- FAIL: TestForwardAsAnthropic_OAuthMetadataSessionSurvivesChangingCacheControlAnchor (0.00s)
+    testing.go:1865: race detected during execution of test
+--- FAIL: TestForwardAsAnthropic_APIKeyMetadataSessionSurvivesChangingCacheControlAnchorAfterContinuationDisabled (0.01s)
+    testing.go:1865: race detected during execution of test
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	1.555s
+ok  	github.com/Wei-Shaw/sub2api/internal/handler/admin	1.161s
+FAIL

@@ -136,16 +136,15 @@ export function extractApiErrorMessage(
   // Plain object from API client interceptor (most common case)
   if (typeof err === 'object' && err !== null) {
     const e = err as ApiErrorLike
-    // Interceptor shape: { message, error }
-    if (e.message) return e.message
-    if (e.error) return e.error
-    // Legacy axios shape: { response.data.detail }
-    if (e.response?.data?.detail) return e.response.data.detail
-    if (e.response?.data?.message) return e.response.data.message
+    // Prefer backend reasons over Axios transport messages. Error fields may
+    // contain structured data; only display non-empty text.
+    for (const value of [e.response?.data?.detail, e.response?.data?.message, e.message, e.error]) {
+      if (typeof value === 'string' && value.trim() && !/^Request failed with status code \d+$/.test(value)) {
+        return value
+      }
+    }
+    return fallback
   }
-
-  // Standard Error
-  if (err instanceof Error) return err.message
 
   // Last resort
   const str = String(err)

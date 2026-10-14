@@ -1322,3 +1322,18 @@ func TestNormalizeAntigravityModelName(t *testing.T) {
 		})
 	}
 }
+
+func TestSetAntigravityImageRateLimitDoesNotBlockTextFamily(t *testing.T) {
+	repo := &stubAntigravityAccountRepo{}
+	svc := &AntigravityGatewayService{}
+	account := &Account{ID: 789, Platform: PlatformAntigravity}
+	resetAt := time.Now().Add(30 * time.Second)
+	require.True(t, svc.setAntigravityModelRateLimits(context.Background(), repo, account, "gemini-3.1-flash-image", "[test]", 429, resetAt, false))
+	require.Len(t, repo.modelRateLimitCalls, 1)
+	require.Equal(t, "gemini-3.1-flash-image", repo.modelRateLimitCalls[0].modelKey)
+	account.Extra = map[string]any{modelRateLimitsKey: map[string]any{
+		repo.modelRateLimitCalls[0].modelKey: map[string]any{"rate_limit_reset_at": resetAt.Format(time.RFC3339)},
+	}}
+	require.True(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-3.1-flash-image"))
+	require.False(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-3-flash"))
+}

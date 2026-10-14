@@ -63,3 +63,24 @@ describe('Codex remote catalogs', () => {
     wrapper.unmount()
   })
 })
+
+
+it.each([
+  ['openai', 'codexCli'], ['openai', 'codexCliWs'], ['grok', 'codexCli'], ['gemini', 'codexCli'],
+])('enables discovery only for remote %s/%s configurations', async (platform, tab) => {
+  const wrapper = mountModal()
+  await wrapper.setProps({ platform })
+  await wrapper.findAll('nav[aria-label="Client"] button').find(button => button.text().trim() === `keys.useKeyModal.cliTabs.${tab}`)!.trigger('click')
+  for (const shell of ['macOS / Linux', 'Windows']) {
+    await wrapper.findAll('button').find(button => button.text().trim() === shell)!.trigger('click')
+    await wrapper.get('[data-testid="codex-model-catalog-mode"]').setValue('remote')
+    expect(configs(wrapper)).toContain('[features]')
+    expect(configs(wrapper)).toContain('api_key_model_discovery = true')
+    expect(configs(wrapper)).toContain('model_catalog_url')
+    await wrapper.get('[data-testid="codex-model-catalog-mode"]').setValue('file')
+    expect(configs(wrapper)).not.toContain('api_key_model_discovery')
+    expect(configs(wrapper)).not.toContain('model_catalog_url')
+    expect(configs(wrapper)).toContain('model_catalog_json')
+  }
+  wrapper.unmount()
+})

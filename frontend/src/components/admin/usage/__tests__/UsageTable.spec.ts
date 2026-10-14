@@ -165,7 +165,7 @@ describe('admin UsageTable tooltip', () => {
     })
 
     expect(wrapper.findAll('[data-testid="long-context-billing-marker"]')).toHaveLength(1)
-    expect(wrapper.get('[data-testid="long-context-billing-marker"]').text()).toBe('x2')
+    expect(wrapper.get('[data-testid="long-context-billing-marker"]').text()).toBe('admin.usage.longContext')
   })
 
   it('shows service tier and billing breakdown in cost tooltip', async () => {
@@ -686,4 +686,17 @@ describe('admin UsageTable deleted-user badge', () => {
     expect(wrapper.text()).not.toContain('Deleted')
     expect(wrapper.text()).toContain('active@test.com')
   })
+})
+
+
+it.each([0, null, undefined])('preserves zero rate and defaults missing rate (%s)', async (rate) => {
+  const wrapper = mount(UsageTable, {
+    props: { data: [{ ...baseImageRow, rate_multiplier: rate }], loading: false, columns: [] },
+    global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+  })
+  const triggers = wrapper.findAll('.group.relative')
+  await triggers[triggers.length - 1].trigger('mouseenter')
+  const rateRow = wrapper.get('.fixed').findAll('span').find(span => span.text() === 'Rate')!.element.parentElement!
+  expect(rateRow.textContent).toContain(rate === 0 ? '0.0x' : '1.00x')
+  wrapper.unmount()
 })

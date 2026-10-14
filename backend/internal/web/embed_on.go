@@ -365,6 +365,17 @@ func shouldBypassEmbeddedFrontend(path string) bool {
 		trimmed == "/responses" ||
 		strings.HasPrefix(trimmed, "/responses/") ||
 		trimmed == "/alpha/search" ||
+		trimmed == "/chat/completions" ||
+		trimmed == "/embeddings" ||
+		trimmed == "/messages/count_tokens" ||
+		trimmed == "/web_search" ||
+		trimmed == "/x_search" ||
+		trimmed == "/tts" ||
+		trimmed == "/stt" ||
+		trimmed == "/realtime" ||
+		trimmed == "/custom-voices" ||
+		trimmed == "/videos" ||
+		strings.HasPrefix(trimmed, "/custom-voices/") ||
 		strings.HasPrefix(trimmed, "/images/") ||
 		strings.HasPrefix(trimmed, "/videos/")
 }

@@ -24,7 +24,7 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string, params?: Record<string, string>) => key === 'common.copy' ? '复制' : key === 'admin.accounts.modelMappingConflict' ? `Model mapping conflict: ${params?.from} → ${params?.to}` : key
+      t: (key: string, params?: Record<string, string>) => key === 'admin.accounts.syncUpstreamModelsError' ? `${key}: ${params?.message}` : key === 'common.copy' ? '复制' : key === 'admin.accounts.modelMappingConflict' ? `Model mapping conflict: ${params?.from} → ${params?.to}` : key
     })
   }
 })
@@ -250,4 +250,18 @@ describe('ModelWhitelistSelector', () => {
     expect(wrapper.emitted('upstream-synced')).toEqual([[]])
     expect(wrapper.emitted('update:modelValue')).toEqual([[['x-preview-f-free']]])
   })
+})
+
+
+it.each([
+  [{ message: 'Request failed with status code 403', response: { data: { detail: 'upstream denied' } } }, 'upstream denied'],
+  [{}, 'admin.accounts.syncUpstreamModelsFailed'],
+])('reports normalized upstream sync errors', async (error, reason) => {
+  syncUpstreamModels.mockRejectedValueOnce(error)
+  const wrapper = mountSelector({ accountId: 1 })
+  await wrapper.findAll('button').find(button => button.text() === 'admin.accounts.syncUpstreamModels')!.trigger('click')
+  await flushPromises()
+  expect(showError).toHaveBeenLastCalledWith(`admin.accounts.syncUpstreamModelsError: ${reason}`)
+  expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  wrapper.unmount()
 })

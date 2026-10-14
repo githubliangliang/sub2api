@@ -3268,6 +3268,7 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 		case []any:
 			// 如果只有一个 block，不过滤空白（让上游 API 报错）
 			singleBlock := len(content) == 1
+			var toolImageParts []any
 
 			for _, block := range content {
 				bm, ok := block.(map[string]any)
@@ -3308,14 +3309,20 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 					if name == "" {
 						name = "tool"
 					}
+					text := extractClaudeContentText(bm["content"])
+					images := extractClaudeToolResultImageParts(bm["content"])
+					if text == "" && len(images) > 0 {
+						text = "[image attached below]"
+					}
 					parts = append(parts, map[string]any{
 						"functionResponse": map[string]any{
 							"name": name,
 							"response": map[string]any{
-								"content": extractClaudeContentText(bm["content"]),
+								"content": text,
 							},
 						},
 					})
+					toolImageParts = append(toolImageParts, images...)
 				case "image":
 					if src, ok := bm["source"].(map[string]any); ok {
 						if srcType, _ := src["type"].(string); srcType == "base64" {
@@ -3338,6 +3345,7 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 					}
 				}
 			}
+			parts = append(parts, toolImageParts...)
 		default:
 			// ignore
 		}
@@ -3372,6 +3380,40 @@ func extractClaudeContentText(v any) string {
 		b, _ := json.Marshal(t)
 		return string(b)
 	}
+}
+
+func extractClaudeToolResultImageParts(v any) []any {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+
+	parts := make([]any, 0)
+	for _, part := range arr {
+		pm, ok := part.(map[string]any)
+		if !ok || pm["type"] != "image" {
+			continue
+		}
+		source, ok := pm["source"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if sourceType, _ := source["type"].(string); sourceType != "base64" {
+			continue
+		}
+		mediaType, _ := source["media_type"].(string)
+		data, _ := source["data"].(string)
+		if mediaType == "" || data == "" {
+			continue
+		}
+		parts = append(parts, map[string]any{
+			"inlineData": map[string]any{
+				"mimeType": mediaType,
+				"data":     data,
+			},
+		})
+	}
+	return parts
 }
 
 func convertClaudeToolsToGeminiTools(tools any) []any {
