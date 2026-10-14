@@ -18,7 +18,7 @@
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **2026-10-14 第一档14簇已实现；第二档16簇待实施**。第一档在 `0fbcab935` 后的工作区承接40个本轮PR的选定行为，见[验收](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。新能力与支付不引入，VERSION/迁移/依赖未变，未发布部署。依赖audit仍103条，DOMPurify/axios等维护留第二档S16；旧待办见PORTING §5。
+- [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **2026-10-14 第一档14簇已实现；第二档16簇待实施**。第一档在 `7c544c03f` 完成（实施起点 `0fbcab935`），承接40个本轮PR的选定行为，见[验收](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。新能力与支付不引入，VERSION/迁移/依赖未变，未发布部署。依赖audit仍103条，DOMPurify/axios等维护留第二档S16；旧待办见PORTING §5。
 
 - [PORTING-0.2.12.md](./PORTING-0.2.12.md) —— **上一轮评估及实施2026-10-02，第一档3簇/第二档3簇完成于`405246789`**。19条非merge、9PR、1直接提交，冻结四态A0/C108/X42/N10。[第一档验收](../../openspec/changes/port-upstream-0.2.12-tier1/verification.md)：Grok CLI身份、Antigravity脱敏、错误码文案；[第二档验收](../../openspec/changes/port-upstream-0.2.12-tier2/verification.md)：邮箱原子化及用户确认的账号优先级/密钥排序。补齐旧验证码次数继承和优先级异步归属；全量Go unit/build、定向race、SQLite方言/用量去重/排序，前端typecheck/lint/build与1854通过/2既有跳过。支付两PR/TypeSafe/axios当轮排除，VERSION 1.1.15、迁移226不变，未发布/部署。历史遗留见最新§5。
 

@@ -5,9 +5,9 @@
 | 实施信息 | 值 |
 |---|---|
 | 实施起点SHA | `0fbcab935`（包含冻结评估；产品基线为 `128c5f7bf`） |
-| 实现SHA | 尚未提交；[代码/测试SHA256清单](../../../docs/upstream-sync/implementation-0.2.16-tier1/code-sha256.json)固定本次工作区内容 |
+| 实现SHA | `7c544c03ffc0d3372c7668cd07db01950bea0242`；[代码/测试SHA256清单](../../../docs/upstream-sync/implementation-0.2.16-tier1/code-sha256.json)固定该实现提交的代码/测试内容 |
 | 实施日期 | 2026-10-13至2026-10-14；承接历史会话未完成改动 |
-| 分支 | `main` 工作区 |
+| 分支 | `main`；推送目标 `origin/main` |
 | 版本/迁移/依赖 | VERSION 1.1.16、最大迁移226；go.mod/go.sum、package.json、pnpm-lock、pnpm-workspace未改 |
 
 ## 行为与反例
@@ -68,4 +68,4 @@ go test -race -tags=unit ./internal/pkg/apicompat ./internal/pkg/antigravity ./i
 
 ## 发布/部署记录
 
-未提交、未打tag、未推送、未发布或部署；未操作现有数据库/凭据/运行实例。第二档16簇及第三/四档仍待定或排除，支付功能不在范围。浏览器临时入口、开发服务与浏览器会话已清理。
+2026-10-14按用户要求提交实现 `7c544c03f`，并补记本条提交记录；推送目标为 `origin/main`。实施证据中的“未提交/未推送”保留验收时快照。未打tag、未发布或部署；未操作现有数据库/凭据/运行实例。第二档16簇及第三/四档仍待定或排除，支付功能不在范围。浏览器临时入口、开发服务与浏览器会话已清理。
