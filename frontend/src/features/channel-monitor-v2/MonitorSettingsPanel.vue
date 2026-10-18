@@ -46,7 +46,7 @@
       <span class="animate-pulse">{{ t('channelMonitorV2.settings.loading') }}</span>
     </div>
 
-    <template v-else-if="draft">
+    <fieldset v-else-if="draft" :disabled="saving" class="contents">
       <div class="card divide-y divide-gray-100 !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:divide-dark-700 dark:!bg-dark-800 dark:ring-dark-700">
         <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
@@ -89,6 +89,24 @@
           <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
             {{ t('channelMonitorV2.settings.platformsHint') }}
           </p>
+          <div v-if="availablePlatforms.length" class="mt-3 flex flex-wrap items-center gap-2">
+            <Select
+              v-model="selectedPlatform"
+              class="min-w-48"
+              :options="availablePlatforms"
+              :aria-label="t('channelMonitorV2.settings.selectPlatform')"
+              :placeholder="t('channelMonitorV2.settings.selectPlatform')"
+              :disabled="saving"
+            />
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              :disabled="saving || !selectedPlatform"
+              @click="addPlatform"
+            >
+              {{ t('channelMonitorV2.settings.addPlatform') }}
+            </button>
+          </div>
         </div>
         <div class="divide-y divide-gray-100 dark:divide-dark-700">
           <div
@@ -256,13 +274,14 @@
           </ul>
         </div>
       </div>
-    </template>
+    </fieldset>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
@@ -284,6 +303,18 @@ const saving = ref(false)
 const draft = ref<MonitorConfig | null>(null)
 const original = ref('')
 const groups = ref<AdminGroup[]>([])
+const selectedPlatform = ref('')
+const availablePlatforms = computed(() =>
+  ['anthropic', 'gemini', 'openai', 'antigravity', 'grok'].map(value => ({ value, label: platformLabel(value) })).filter(
+    (option) => !draft.value?.platforms.some((platform) => platform.platform === option.value)
+  )
+)
+
+function addPlatform() {
+  if (saving.value || !draft.value || !availablePlatforms.value.some((option) => option.value === selectedPlatform.value)) return
+  draft.value.platforms.push({ platform: selectedPlatform.value, enabled: true, models: [] })
+  selectedPlatform.value = ''
+}
 
 const dirty = computed(() => (draft.value ? JSON.stringify(draft.value) !== original.value : false))
 const namedModelCount = computed(
@@ -333,7 +364,7 @@ function percentModel(key: 'warning_error_rate' | 'critical_error_rate' | 'warni
   return computed({
     get: () => ((draft.value?.health_thresholds?.[key] ?? defaultThresholds[key]) * 100),
     set: (value: number) => {
-      if (!draft.value) return
+      if (saving.value || !draft.value) return
       draft.value.health_thresholds[key] = Math.max(0, Math.min(100, Number(value) || 0)) / 100
     },
   })
@@ -344,6 +375,7 @@ const warningCachePercent = percentModel('warning_cache_rate')
 const criticalCachePercent = percentModel('critical_cache_rate')
 
 function setModels(platform: MonitorConfig['platforms'][number], event: Event) {
+  if (saving.value) return
   platform.models = [
     ...new Set(
       (event.target as HTMLInputElement).value
@@ -355,7 +387,7 @@ function setModels(platform: MonitorConfig['platforms'][number], event: Event) {
 }
 
 function toggleGroup(id: number) {
-  if (!draft.value) return
+  if (saving.value || !draft.value) return
   draft.value.group_ids = draft.value.group_ids.includes(id)
     ? draft.value.group_ids.filter((value) => value !== id)
     : [...draft.value.group_ids, id].sort((a, b) => a - b)
@@ -366,7 +398,7 @@ function isCategoryIgnored(category: string): boolean {
 }
 
 function toggleIgnoredCategory(category: string) {
-  if (!draft.value) return
+  if (saving.value || !draft.value) return
   const current = new Set(draft.value.ignored_error_categories || [])
   if (current.has(category)) current.delete(category)
   else current.add(category)
@@ -420,7 +452,7 @@ async function load() {
 }
 
 async function save() {
-  if (!draft.value) return
+  if (saving.value || !draft.value) return
   saving.value = true
   try {
     const payload = normalizeConfig(draft.value)

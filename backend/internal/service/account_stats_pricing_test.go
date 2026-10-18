@@ -871,7 +871,11 @@ func TestResolveAccountStatsCost_Gemini36FlashTierUsesFallbackPricing(t *testing
 		UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000}, 1, 0, "", true,
 	)
 	require.NotNil(t, result)
-	require.InDelta(t, 9.15, *result, 1e-12)
+	expected := 4.575
+	if !time.Now().Before(geminiFlashPromotionEnd) {
+		expected = 9.15
+	}
+	require.InDelta(t, expected, *result, 1e-12)
 }
 
 func TestResolveAccountStatsCost_AllMiss_ReturnsNil(t *testing.T) {

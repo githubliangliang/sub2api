@@ -342,6 +342,12 @@ const unreadCount = computed(() => announcementStore.unreadCount)
 const isModalOpen = ref(false)
 const detailModalOpen = ref(false)
 const selectedAnnouncement = ref<UserAnnouncement | null>(null)
+let detailVersion = 0
+let alive = true
+
+watch(announcements, (items) => {
+  if (selectedAnnouncement.value && !items.some(item => item.id === selectedAnnouncement.value?.id)) closeDetail()
+}, { flush: 'sync' })
 
 // Methods
 function renderMarkdown(content: string): string {
@@ -359,6 +365,7 @@ function closeModal() {
 }
 
 function openDetail(announcement: UserAnnouncement) {
+  detailVersion++
   selectedAnnouncement.value = announcement
   detailModalOpen.value = true
   if (!announcement.read_at) {
@@ -367,27 +374,36 @@ function openDetail(announcement: UserAnnouncement) {
 }
 
 function closeDetail() {
+  detailVersion++
   detailModalOpen.value = false
   selectedAnnouncement.value = null
 }
 
 async function markAsRead(id: number) {
+  const version = detailVersion
   try {
-    await announcementStore.markAsRead(id)
+    const marked = await announcementStore.markAsRead(id)
+    if (!alive || version !== detailVersion) return false
+    if (!marked) appStore.showError(t('common.unknownError'))
+    return marked
   } catch (err: any) {
+    if (!alive || version !== detailVersion) return false
     appStore.showError(err?.message || t('common.unknownError'))
+    return false
   }
 }
 
 async function markAsReadAndClose(id: number) {
-  await markAsRead(id)
+  const version = detailVersion
+  if (!await markAsRead(id) || version !== detailVersion || selectedAnnouncement.value?.id !== id) return
   appStore.showSuccess(t('announcements.markedAsRead'))
   closeDetail()
 }
 
 async function markAllAsRead() {
   try {
-    await announcementStore.markAllAsRead()
+    const marked = await announcementStore.markAllAsRead()
+    if (!alive || marked === false) return
     appStore.showSuccess(t('announcements.allMarkedAsRead'))
   } catch (err: any) {
     appStore.showError(err?.message || t('common.unknownError'))
@@ -409,6 +425,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  alive = false
+  detailVersion++
   document.removeEventListener('keydown', handleEscape)
   document.body.style.overflow = ''
 })

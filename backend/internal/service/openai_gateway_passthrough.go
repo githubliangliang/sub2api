@@ -203,6 +203,15 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 	}
 
+	historyBody, _, historyErr := normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, account, openAIResponsesCompatibilityOptions{
+		ResponsesLite: isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) || isOpenAIResponsesLiteWebSocketPayload(body),
+		Compact:       isOpenAIResponsesCompactPath(c),
+	})
+	if historyErr != nil {
+		return nil, historyErr
+	}
+	body = historyBody
+
 	// Get access token
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {

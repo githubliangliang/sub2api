@@ -1497,6 +1497,14 @@ func explicitModelMappingClaims(account Account, model string) bool {
 	return ok && strings.TrimSpace(mapped) != ""
 }
 
+// GetCompositeRouteModels returns enabled public aliases for the requested catalog.
+func (s *GatewayService) GetCompositeRouteModels(ctx context.Context, groupID *int64, endpoint string) ([]string, error) {
+	if s == nil || s.compositeResolver == nil || groupID == nil {
+		return nil, nil
+	}
+	return s.compositeResolver.ListExactPublicModels(ctx, *groupID, endpoint)
+}
+
 // GetSchedulablePlatforms returns the concrete platforms that currently have
 // schedulable accounts in the target group.
 func (s *GatewayService) GetSchedulablePlatforms(ctx context.Context, groupID *int64) map[string]struct{} {

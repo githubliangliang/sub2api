@@ -1134,7 +1134,7 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	}
 
 	if platform == service.PlatformComposite {
-		availableModels := h.compositeAvailableModels(c.Request.Context(), groupID)
+		availableModels := h.compositeAvailableModels(c.Request.Context(), groupID, "")
 		if apiKey != nil && apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
 			availableModels = filterModelsByCustomList(availableModels, defaultModelIDsForPlatform(service.PlatformComposite), apiKey.Group.ModelsListConfig.Models)
 			writeCustomModelsList(c, service.PlatformComposite, availableModels)
@@ -1236,7 +1236,7 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 		platform = group.Platform
 	}
 	if platform == service.PlatformComposite {
-		availableModels := h.compositeAvailableModels(ctx, groupID)
+		availableModels := h.compositeAvailableModels(ctx, groupID, service.CompositeRouteEndpointResponses)
 		fallbackModels := defaultCodexModelIDsForPlatform(service.PlatformComposite)
 		if group.CustomModelsListEnabled() {
 			return filterModelsByCustomList(availableModels, fallbackModels, group.ModelsListConfig.Models)
@@ -1262,7 +1262,7 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 	return fallbackModels
 }
 
-func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *int64) []string {
+func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *int64, endpoint string) []string {
 	if h == nil || h.gatewayService == nil {
 		return nil
 	}
@@ -1286,6 +1286,15 @@ func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *
 			}
 			seen[model] = struct{}{}
 			models = append(models, model)
+		}
+	}
+	// Keep the account-derived catalog if route lookup is unavailable.
+	if routeModels, err := h.gatewayService.GetCompositeRouteModels(ctx, groupID, endpoint); err == nil {
+		for _, model := range routeModels {
+			if _, exists := seen[model]; !exists {
+				seen[model] = struct{}{}
+				models = append(models, model)
+			}
 		}
 	}
 	return models

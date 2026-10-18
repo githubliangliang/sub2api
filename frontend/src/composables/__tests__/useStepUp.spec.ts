@@ -1,3 +1,4 @@
+import { effectScope } from 'vue'
 import { describe, it, expect, vi } from 'vitest'
 import {
   useStepUp,
@@ -25,6 +26,27 @@ describe('useStepUp error classification', () => {
   it('surfaces the block reason marker', () => {
     expect(stepUpBlockReason({ reason: 'STEP_UP_ADMIN_API_KEY_FORBIDDEN' })).toBe('STEP_UP_ADMIN_API_KEY_FORBIDDEN')
     expect(stepUpBlockReason({ code: 'OTHER' })).toBe('')
+  })
+})
+
+describe('useStepUp concurrent prompts', () => {
+  it.each([true, false])('settles every waiter when verification resolves to %s', async (verified) => {
+    const stepUp = useStepUp()
+    const firstDone = vi.fn()
+    const secondDone = vi.fn()
+    const first = stepUp.prompt()
+    first.then(firstDone)
+    stepUp.prompt().then(secondDone)
+    if (verified) stepUp.onVerified()
+    else stepUp.onCancel()
+    await Promise.resolve()
+    expect(firstDone).toHaveBeenCalledWith(verified)
+    expect(secondDone).toHaveBeenCalledWith(verified)
+    expect(stepUp.visible.value).toBe(false)
+    const next = stepUp.prompt()
+    expect(next).not.toBe(first)
+    stepUp.onCancel()
+    await expect(next).resolves.toBe(false)
   })
 })
 
@@ -84,4 +106,20 @@ describe('useStepUp.run', () => {
     expect(isStepUpBlocked(cancelled)).toBe(false)
     expect(isStepUpCancelled({ status: 403, code: 'STEP_UP_REQUIRED' })).toBe(false)
   })
+})
+
+
+it('cancels a late step-up request after its component scope is disposed', async () => {
+  const scope = effectScope()
+  const controller = scope.run(() => useStepUp())!
+  let rejectAction!: (error: unknown) => void
+  const action = vi.fn(() => new Promise<never>((_, reject) => { rejectAction = reject }))
+  const result = controller.run(action).catch(error => error)
+  scope.stop()
+  rejectAction({ code: 'STEP_UP_REQUIRED' })
+  await Promise.resolve()
+  await Promise.resolve()
+  expect(controller.visible.value).toBe(false)
+  expect(await result).toBeInstanceOf(StepUpCancelledError)
+  expect(action).toHaveBeenCalledTimes(1)
 })

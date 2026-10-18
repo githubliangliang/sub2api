@@ -62,7 +62,7 @@
           <button
             type="button"
             class="btn btn-primary shrink-0"
-            :disabled="!selectedUser || newRpm == null || newRpm < 0"
+            :disabled="!selectedUser || !isValidValue(newRpm) || loading || saving || clearing"
             @click="handleAddLocal"
           >
             {{ t('common.add') }}
@@ -193,7 +193,7 @@
             v-if="isDirty"
             type="button"
             class="btn btn-primary btn-sm px-4 py-1.5"
-            :disabled="saving"
+            :disabled="saving || loading || clearing"
             @click="handleSave"
           >
             <Icon v-if="saving" name="refresh" size="sm" class="mr-1 animate-spin" />
@@ -206,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -234,6 +234,7 @@ const appStore = useAppStore()
 
 const loading = ref(false)
 const saving = ref(false)
+const clearing = ref(false)
 const serverEntries = ref<GroupRPMOverrideEntry[]>([])
 const localEntries = ref<LocalEntry[]>([])
 const searchQuery = ref('')
@@ -245,6 +246,10 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 
 let searchTimeout: ReturnType<typeof setTimeout>
+let loadVersion = 0
+let searchVersion = 0
+const isCurrent = (version: number) => version === loadVersion && props.show && props.group != null
+const isValidValue = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0
 
 const platformColorClass = computed(() => {
   switch (props.group?.platform) {
@@ -271,17 +276,21 @@ const cloneEntries = (entries: GroupRPMOverrideEntry[]): LocalEntry[] => {
 }
 
 const loadEntries = async () => {
-  if (!props.group) return
+  if (!props.show || !props.group) return
+  const version = loadVersion
   loading.value = true
   try {
-    serverEntries.value = await adminAPI.groups.getGroupRPMOverrides(props.group.id)
+    const entries = await adminAPI.groups.getGroupRPMOverrides(props.group.id)
+    if (!isCurrent(version)) return
+    serverEntries.value = entries
     localEntries.value = cloneEntries(serverEntries.value)
     adjustPage()
   } catch (error) {
+    if (!isCurrent(version)) return
     appStore.showError(t('admin.groups.failedToLoad'))
     console.error('Error loading RPM overrides:', error)
   } finally {
-    loading.value = false
+    if (isCurrent(version)) loading.value = false
   }
 }
 
@@ -290,16 +299,27 @@ const adjustPage = () => {
   if (currentPage.value > totalPages) currentPage.value = totalPages
 }
 
-watch(() => props.show, (val) => {
-  if (val && props.group) {
-    currentPage.value = 1
-    searchQuery.value = ''
-    searchResults.value = []
-    selectedUser.value = null
-    newRpm.value = null
-    loadEntries()
-  }
-})
+const invalidateDialog = () => {
+  loadVersion++
+  searchVersion++
+  clearTimeout(searchTimeout)
+  loading.value = false
+  saving.value = false
+  serverEntries.value = []
+  localEntries.value = []
+  currentPage.value = 1
+  searchQuery.value = ''
+  searchResults.value = []
+  showDropdown.value = false
+  selectedUser.value = null
+  newRpm.value = null
+  clearing.value = false
+}
+
+watch([() => props.show, () => props.group?.id], ([show]) => {
+  invalidateDialog()
+  if (show && props.group) void loadEntries()
+}, { immediate: true, flush: 'sync' })
 
 const handlePageSizeChange = (newSize: number) => {
   pageSize.value = newSize
@@ -308,24 +328,30 @@ const handlePageSizeChange = (newSize: number) => {
 
 const handleSearchUsers = () => {
   clearTimeout(searchTimeout)
+  const version = loadVersion
+  const request = ++searchVersion
+  const query = searchQuery.value.trim()
   selectedUser.value = null
-  if (!searchQuery.value.trim()) {
-    searchResults.value = []
+  searchResults.value = []
+  if (!query || !props.show) {
     showDropdown.value = false
     return
   }
   searchTimeout = setTimeout(async () => {
     try {
-      const res = await adminAPI.users.list(1, 10, { search: searchQuery.value.trim() })
+      const res = await adminAPI.users.list(1, 10, { search: query })
+      if (!isCurrent(version) || request !== searchVersion) return
       searchResults.value = res.items
       showDropdown.value = true
     } catch {
-      searchResults.value = []
+      if (isCurrent(version) && request === searchVersion) searchResults.value = []
     }
   }, 300)
 }
 
 const selectUser = (user: AdminUser) => {
+  searchVersion++
+  clearTimeout(searchTimeout)
   selectedUser.value = user
   searchQuery.value = user.email
   showDropdown.value = false
@@ -333,7 +359,7 @@ const selectUser = (user: AdminUser) => {
 }
 
 const handleAddLocal = () => {
-  if (!selectedUser.value || newRpm.value == null || newRpm.value < 0) return
+  if (!selectedUser.value || !isValidValue(newRpm.value) || loading.value || saving.value || clearing.value) return
   const user = selectedUser.value
   const idx = localEntries.value.findIndex(e => e.user_id === user.id)
   const entry: LocalEntry = {
@@ -356,8 +382,9 @@ const handleAddLocal = () => {
 }
 
 const updateLocalRpm = (userId: number, value: string) => {
-  const num = parseInt(value, 10)
-  if (isNaN(num) || num < 0) return
+  if (!value.trim()) return
+  const num = Number(value)
+  if (!isValidValue(num)) return
   const entry = localEntries.value.find(e => e.user_id === userId)
   if (entry) entry.rpm_override = num
 }
@@ -367,20 +394,22 @@ const removeLocal = (userId: number) => {
   adjustPage()
 }
 
-const clearing = ref(false)
 const clearAllLocal = async () => {
-  if (!props.group || clearing.value) return
+  if (!props.show || !props.group || clearing.value || saving.value || loading.value) return
+  const version = loadVersion
   clearing.value = true
   try {
     await adminAPI.groups.clearGroupRPMOverrides(props.group.id)
+    if (!isCurrent(version)) return
     localEntries.value = []
     serverEntries.value = []
     appStore.showSuccess(t('admin.groups.rpmSaved'))
   } catch (error) {
+    if (!isCurrent(version)) return
     appStore.showError(t('admin.groups.failedToSave'))
     console.error('Error clearing RPM overrides:', error)
   } finally {
-    clearing.value = false
+    if (isCurrent(version)) clearing.value = false
   }
 }
 
@@ -390,7 +419,9 @@ const handleCancel = () => {
 }
 
 const handleSave = async () => {
-  if (!props.group) return
+  if (!props.show || !props.group || saving.value || loading.value || clearing.value) return
+  if (localEntries.value.some(entry => !isValidValue(entry.rpm_override))) return
+  const version = loadVersion
   saving.value = true
   try {
     const entries = localEntries.value.map(e => ({
@@ -398,21 +429,21 @@ const handleSave = async () => {
       rpm_override: e.rpm_override
     }))
     await adminAPI.groups.batchSetGroupRPMOverrides(props.group.id, entries)
+    if (!isCurrent(version)) return
     appStore.showSuccess(t('admin.groups.rpmSaved'))
     emit('success')
     emit('close')
   } catch (error) {
+    if (!isCurrent(version)) return
     appStore.showError(t('admin.groups.failedToSave'))
     console.error('Error saving RPM overrides:', error)
   } finally {
-    saving.value = false
+    if (isCurrent(version)) saving.value = false
   }
 }
 
 const handleClose = () => {
-  if (isDirty.value) {
-    localEntries.value = cloneEntries(serverEntries.value)
-  }
+  invalidateDialog()
   emit('close')
 }
 
@@ -420,6 +451,10 @@ const handleClickOutside = () => { showDropdown.value = false }
 if (typeof document !== 'undefined') {
   document.addEventListener('click', handleClickOutside)
 }
+onBeforeUnmount(() => {
+  invalidateDialog()
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>

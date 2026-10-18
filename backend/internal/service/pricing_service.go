@@ -192,6 +192,8 @@ var (
 // LiteLLMModelPricing LiteLLM价格数据结构
 // 只保留我们需要的字段，使用指针来处理可能缺失的值
 type LiteLLMModelPricing struct {
+	// Marks only the frozen Gemini Flash promotional card, never an operator override.
+	geminiFlashPromotion                bool
 	CacheCreationInputTokenCostExplicit bool    `json:"-"`
 	InputCostPerToken                   float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           float64 `json:"input_cost_per_token_priority"`
@@ -637,6 +639,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 	if err := json.Unmarshal(body, &rawData); err != nil {
 		return nil, fmt.Errorf("parse raw JSON: %w", err)
 	}
+	overrides := s.loadPricingOverrideEntries()
 	rawData = s.applyPricingOverrides(rawData)
 
 	result := make(map[string]*LiteLLMModelPricing)
@@ -715,6 +718,10 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 			pricing.InputCostPerImageToken = *entry.InputCostPerImageToken
 		}
 
+		if _, overridden := overrides[modelName]; !overridden && normalizeModelNameForPricing(strings.ToLower(modelName)) == "gemini-3.6-flash" &&
+			pricing.InputCostPerToken == 0.75e-6 && pricing.OutputCostPerToken == 3.75e-6 && pricing.CacheReadInputTokenCost == 0.075e-6 {
+			pricing.geminiFlashPromotion = true
+		}
 		result[modelName] = pricing
 	}
 
@@ -988,6 +995,14 @@ func (s *PricingService) validatePricingURL(raw string) (string, error) {
 
 // GetModelPricing 获取模型价格（带模糊匹配）
 func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing {
+	return s.getModelPricingAt(modelName, time.Now())
+}
+
+func (s *PricingService) getModelPricingAt(modelName string, at time.Time) *LiteLLMModelPricing {
+	return expireGeminiFlashCatalogPromotion(s.getModelPricingRaw(modelName), at)
+}
+
+func (s *PricingService) getModelPricingRaw(modelName string) *LiteLLMModelPricing {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1062,6 +1077,10 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 // 与 GetModelPricing 的区别：不会退化成按 "opus"/"haiku" 之类子串猜出的系列兜底价。
 // 用于必须区分"这是价格表里已知的模型"和"这只是名字里带某个关键词"的场景。
 func (s *PricingService) GetIdentifiedModelPricing(modelName string) *LiteLLMModelPricing {
+	return expireGeminiFlashCatalogPromotion(s.getIdentifiedModelPricingRaw(modelName), time.Now())
+}
+
+func (s *PricingService) getIdentifiedModelPricingRaw(modelName string) *LiteLLMModelPricing {
 	if s == nil {
 		return nil
 	}

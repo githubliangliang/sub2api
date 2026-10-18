@@ -14,6 +14,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"go.uber.org/zap"
 )
@@ -212,6 +213,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		}
 	}
 	longContextBillingGate := openAILongContextBillingGate(billingAccount)
+	modelLongContextExempt := openAISubscriptionLongContextExempt(billingAccount, result)
 	cost, err = s.calculateOpenAIRecordUsageCost(
 		ctx,
 		result,
@@ -224,6 +226,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		tokens,
 		serviceTier,
 		longContextBillingGate,
+		modelLongContextExempt,
 	)
 	if err != nil {
 		if !isUsagePricingUnavailableError(err) {
@@ -259,7 +262,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			responseModels := usageBillingModelCandidates(responseModel)
 			responseCost, responseErr := s.calculateOpenAIRecordUsageCost(
 				ctx, result, apiKey, responseModels, multiplier, imageMultiplier,
-				videoMultiplier, baseMultiplier, tokens, serviceTier, longContextBillingGate,
+				videoMultiplier, baseMultiplier, tokens, serviceTier, longContextBillingGate, modelLongContextExempt,
 			)
 			// 基线定价源以 baselineBillingModel 为准：它正是 calculateOpenAIRecordUsageCost
 			// 内部做渠道定价判断时使用的模型，且"首候选有渠道价"必然意味着首候选就是实际
@@ -422,7 +425,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if apiKey.GroupID != nil {
 		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
 			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
-			tokens, cost.TotalCost, longContextBillingGate == nil || *longContextBillingGate,
+			tokens, cost.TotalCost, (longContextBillingGate == nil || *longContextBillingGate) && !modelLongContextExempt,
 		)
 	}
 
@@ -495,6 +498,19 @@ func openAILongContextBillingGate(account *Account) *bool {
 	return &enabled
 }
 
+// Use the actual credential account and final upstream model, independently
+// of client aliases or the channel's chosen billing label.
+func openAISubscriptionLongContextExempt(account *Account, result *OpenAIForwardResult) bool {
+	if !account.IsOpenAIOAuthLike() || result == nil {
+		return false
+	}
+	model := strings.TrimSpace(result.UpstreamModel)
+	if model == "" {
+		model = result.Model
+	}
+	return openai.IsGPT61SolModelSpelling(model)
+}
+
 func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 	ctx context.Context,
 	result *OpenAIForwardResult,
@@ -507,6 +523,7 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 	tokens UsageTokens,
 	serviceTier string,
 	longContextBillingGate *bool,
+	modelLongContextExempt bool,
 ) (*CostBreakdown, error) {
 	billingModel := firstUsageBillingModel(billingModels)
 	if result != nil && result.WebSearchCalls > 0 {
@@ -550,6 +567,7 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 				tokens,
 				serviceTier,
 				longContextBillingGate,
+				modelLongContextExempt,
 			)
 			if err == nil {
 				tokenCost = cost
@@ -639,20 +657,22 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 	tokens UsageTokens,
 	serviceTier string,
 	longContextBillingGate *bool,
+	modelLongContextExempt bool,
 ) (*CostBreakdown, error) {
 	if s.resolver != nil && apiKey.Group != nil {
 		gid := apiKey.Group.ID
 		return s.billingService.CalculateCostUnified(CostInput{
-			Ctx:                       ctx,
-			Model:                     billingModel,
-			GroupID:                   &gid,
-			Group:                     apiKey.Group,
-			Tokens:                    tokens,
-			RequestCount:              1,
-			RateMultiplier:            multiplier,
-			ServiceTier:               serviceTier,
-			Resolver:                  s.resolver,
-			LongContextBillingEnabled: longContextBillingGate,
+			Ctx:                            ctx,
+			Model:                          billingModel,
+			GroupID:                        &gid,
+			Group:                          apiKey.Group,
+			Tokens:                         tokens,
+			RequestCount:                   1,
+			RateMultiplier:                 multiplier,
+			ServiceTier:                    serviceTier,
+			Resolver:                       s.resolver,
+			LongContextBillingEnabled:      longContextBillingGate,
+			DisableModelLongContextPricing: modelLongContextExempt,
 		})
 	}
 	return s.billingService.calculateCostWithServiceTierPolicy(
@@ -660,7 +680,7 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 		tokens,
 		multiplier,
 		serviceTier,
-		longContextBillingGate == nil || *longContextBillingGate,
+		(longContextBillingGate == nil || *longContextBillingGate) && !modelLongContextExempt,
 	)
 }
 

@@ -1,13 +1,13 @@
 package setup
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
-	"net/mail"
 	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/admincredentials"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 
 	"github.com/gin-gonic/gin"
@@ -69,22 +69,9 @@ func validateHostname(host string) bool {
 	return validHost.MatchString(host) && len(host) <= 253
 }
 
-// validateEmail checks if email format is valid
-func validateEmail(email string) bool {
-	_, err := mail.ParseAddress(email)
-	return err == nil && len(email) <= 254
-}
-
-// validatePassword checks password strength
-func validatePassword(password string) error {
-	if len(password) < 8 {
-		return fmt.Errorf("password must be at least 8 characters")
-	}
-	if len(password) > 128 {
-		return fmt.Errorf("password must be at most 128 characters")
-	}
-	return nil
-}
+// Use the login endpoint's email rule and bcrypt's byte limit for every bootstrap entry.
+func validateEmail(email string) bool        { return admincredentials.ValidateEmail(email) }
+func validatePassword(password string) error { return admincredentials.ValidatePassword(password) }
 
 // validatePort checks if port is in valid range
 func validatePort(port int) bool {
@@ -248,16 +235,6 @@ func install(c *gin.Context, onInstallComplete func()) {
 		}
 	}
 
-	// Admin validation
-	if !validateEmail(req.Admin.Email) {
-		response.Error(c, http.StatusBadRequest, "Invalid admin email format")
-		return
-	}
-	if err := validatePassword(req.Admin.Password); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
 	// Server validation
 	if req.Server.Port != 0 && !validatePort(req.Server.Port) {
 		response.Error(c, http.StatusBadRequest, "Invalid server port")
@@ -291,6 +268,10 @@ func install(c *gin.Context, onInstallComplete func()) {
 	}
 
 	if err := Install(cfg); err != nil {
+		if errors.Is(err, errInvalidAdminCredentials) {
+			response.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, "Installation failed: "+err.Error())
 		return
 	}

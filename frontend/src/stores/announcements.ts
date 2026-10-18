@@ -15,6 +15,11 @@ export const useAnnouncementStore = defineStore('announcements', () => {
 
   // Session-scoped dedup set — not reactive, used as plain lookup only
   let shownPopupIds = new Set<number>()
+  let stateVersion = 0
+  let fetchVersion = 0
+  let loadingVersion = 0
+  let dismissingId: number | null = null
+  let popupTimer: ReturnType<typeof setTimeout> | undefined
 
   // Getters
   const unreadCount = computed(() =>
@@ -28,20 +33,25 @@ export const useAnnouncementStore = defineStore('announcements', () => {
       return
     }
 
+    const version = stateVersion
+    const request = ++fetchVersion
+    const loadingRequest = ++loadingVersion
     // Set immediately to prevent concurrent duplicate requests
     lastFetchTime.value = now
 
     try {
       loading.value = true
       const all = await announcementsAPI.list(false)
+      if (version !== stateVersion || request !== fetchVersion) return
       announcements.value = all.slice(0, 20)
       enqueueNewPopups()
     } catch (err: any) {
+      if (version !== stateVersion || request !== fetchVersion) return
       // Revert throttle timestamp on failure so retry is allowed
       lastFetchTime.value = 0
       console.error('Failed to fetch announcements:', err)
     } finally {
-      loading.value = false
+      if (version === stateVersion && loadingRequest === loadingVersion) loading.value = false
     }
   }
 
@@ -72,52 +82,71 @@ export const useAnnouncementStore = defineStore('announcements', () => {
   }
 
   async function dismissPopup() {
-    if (!currentPopup.value) return
-    const id = currentPopup.value.id
+    const popup = currentPopup.value
+    if (!popup || dismissingId === popup.id) return
+    const version = stateVersion
+    dismissingId = popup.id
+    const marked = await markAsRead(popup.id)
+    if (version !== stateVersion) return
+    dismissingId = null
+    if (!marked || currentPopup.value?.id !== popup.id) return
     currentPopup.value = null
-
-    // Mark as read (fire-and-forget, UI already updated)
-    markAsRead(id)
-
-    // Show next popup after a short delay
     if (popupQueue.value.length > 0) {
-      setTimeout(() => showNextPopup(), 300)
+      popupTimer = setTimeout(() => {
+        if (version === stateVersion) showNextPopup()
+      }, 300)
     }
   }
 
   async function markAsRead(id: number) {
+    const version = stateVersion
     try {
       await announcementsAPI.markRead(id)
+      if (version !== stateVersion) return false
       const ann = announcements.value.find((a) => a.id === id)
       if (ann) {
         ann.read_at = new Date().toISOString()
       }
+      return true
     } catch (err: any) {
+      if (version !== stateVersion) return false
       console.error('Failed to mark announcement as read:', err)
+      return false
     }
   }
 
   async function markAllAsRead() {
     const unread = announcements.value.filter((a) => !a.read_at)
-    if (unread.length === 0) return
+    if (unread.length === 0) return true
+    const version = stateVersion
+    const loadingRequest = ++loadingVersion
+    const unreadIds = new Set(unread.map(item => item.id))
 
     try {
       loading.value = true
       await Promise.all(unread.map((a) => announcementsAPI.markRead(a.id)))
+      if (version !== stateVersion) return false
       announcements.value.forEach((a) => {
-        if (!a.read_at) {
+        if (unreadIds.has(a.id) && !a.read_at) {
           a.read_at = new Date().toISOString()
         }
       })
+      return true
     } catch (err: any) {
+      if (version !== stateVersion) return false
       console.error('Failed to mark all as read:', err)
       throw err
     } finally {
-      loading.value = false
+      if (version === stateVersion && loadingRequest === loadingVersion) loading.value = false
     }
   }
 
   function reset() {
+    stateVersion++
+    fetchVersion++
+    loadingVersion++
+    clearTimeout(popupTimer)
+    dismissingId = null
     announcements.value = []
     lastFetchTime.value = 0
     shownPopupIds = new Set()

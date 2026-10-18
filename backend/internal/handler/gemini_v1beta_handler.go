@@ -245,11 +245,11 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	// 2) billing eligibility check (after wait)
 	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		reqLog.Info("gemini.billing_eligibility_check_failed", zap.Error(err))
-		status, _, message, retryAfter := billingErrorDetails(err)
+		status, code, message, retryAfter := billingErrorDetails(err)
 		if retryAfter > 0 {
 			c.Header("Retry-After", strconv.Itoa(retryAfter))
 		}
-		googleError(c, status, message)
+		googleErrorWithType(c, status, code, "", message)
 		return
 	}
 
@@ -660,7 +660,7 @@ func (h *GatewayHandler) handleGeminiFailoverExhausted(c *gin.Context, failoverE
 				c.Set(service.OpsSkipPassthroughKey, true)
 			}
 
-			googleError(c, respCode, msg)
+			googleErrorWithType(c, respCode, "", "", msg)
 			return
 		}
 	}
@@ -671,7 +671,7 @@ func (h *GatewayHandler) handleGeminiFailoverExhausted(c *gin.Context, failoverE
 
 	// 使用默认的错误映射
 	status, message := mapGeminiUpstreamError(statusCode)
-	googleError(c, status, message)
+	googleErrorWithType(c, status, "", "", message)
 }
 
 func mapGeminiUpstreamError(statusCode int) (int, string) {
@@ -695,7 +695,16 @@ type pathParseError struct{ msg string }
 
 func (e *pathParseError) Error() string { return e.msg }
 
+// googleError 以 Google 错误格式回写网关产生的错误，并按状态码向 ops 登记错误类型：
+// 4xx 为客户端请求问题，其余状态码不登记（按平台错误统计）。
 func googleError(c *gin.Context, status int, message string) {
+	googleErrorWithType(c, status, googleClientErrorType(status), "", message)
+}
+
+// googleErrorWithType 以 Google 错误格式回写错误，并向 ops 登记错误类型与错误码（Google 错误体没有 type 字段），
+// 与 Claude / OpenAI 格式错误同口径分类；errType 为空时不登记。
+func googleErrorWithType(c *gin.Context, status int, errType, code, message string) {
+	service.SetOpsLocalErrorType(c, errType, code)
 	c.JSON(status, gin.H{
 		"error": gin.H{
 			"code":    status,
@@ -705,11 +714,27 @@ func googleError(c *gin.Context, status int, message string) {
 	})
 }
 
+// googleClientErrorType 返回客户端请求类 4xx 状态码对应的 ops 错误类型；其余状态码返回空串。
+func googleClientErrorType(status int) string {
+	switch status {
+	case http.StatusBadRequest, http.StatusRequestEntityTooLarge:
+		return "invalid_request_error"
+	case http.StatusUnauthorized:
+		return "authentication_error"
+	case http.StatusForbidden:
+		return "permission_error"
+	case http.StatusNotFound:
+		return "not_found_error"
+	default:
+		return ""
+	}
+}
+
 // googleConcurrencyError 以 Google 错误格式回写并发槽获取失败，状态码与文案
 // 沿用 concurrencyErrorResponse 的统一映射（客户端断开为 499）。
 func googleConcurrencyError(c *gin.Context, err error, slotType string) {
-	status, _, message := concurrencyErrorResponse(err, slotType)
-	googleError(c, status, message)
+	status, errType, message := concurrencyErrorResponse(err, slotType)
+	googleErrorWithType(c, status, errType, "", message)
 }
 
 func writeUpstreamResponse(c *gin.Context, res *service.UpstreamHTTPResult) {

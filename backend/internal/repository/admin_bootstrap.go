@@ -3,12 +3,12 @@ package repository
 import (
 	"context"
 	"fmt"
-	"net/mail"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/admincredentials"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
@@ -37,14 +37,21 @@ func ensureConfiguredAdmin(ctx context.Context, client *ent.Client, cfg *config.
 	if email == "" && strings.TrimSpace(password) == "" {
 		return false, nil
 	}
-	if email == "" || strings.TrimSpace(password) == "" {
+	if strings.TrimSpace(password) == "" {
 		return false, fmt.Errorf("default.admin_email and default.admin_password must be provided together")
 	}
-	if _, err := mail.ParseAddress(email); err != nil || len(email) > 254 {
+	if email == "" {
+		email, err = admincredentials.GenerateEmail()
+		if err != nil {
+			return false, err
+		}
+		cfg.Default.AdminEmail = email
+	}
+	if !admincredentials.ValidateEmail(email) {
 		return false, fmt.Errorf("invalid default.admin_email")
 	}
-	if len(password) < 8 || len(password) > 128 {
-		return false, fmt.Errorf("default.admin_password must be between 8 and 128 characters")
+	if err := admincredentials.ValidatePassword(password); err != nil {
+		return false, fmt.Errorf("default.admin_password: %w", err)
 	}
 	switch password {
 	case "admin123", "CHANGE_ME_STRONG_PASSWORD":

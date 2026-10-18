@@ -387,6 +387,11 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		}
 	}
 
+	body, _, err = normalizeOpenAIResponsesWebSocketCompatibilityBody(body, account, isOpenAIResponsesLiteWebSocketPayload(payload))
+	if err != nil {
+		return nil, err
+	}
+
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	var upstreamReq *http.Request
 	if account.Platform == PlatformGrok {

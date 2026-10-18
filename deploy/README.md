@@ -235,8 +235,8 @@ docker compose down -v
 | `JWT_SECRET` | **Recommended** | *(auto-generated)* | JWT secret (fixed for persistent sessions) |
 | `TOTP_ENCRYPTION_KEY` | **Recommended** | *(auto-generated)* | TOTP encryption key (fixed for persistent 2FA) |
 | `SERVER_PORT` | No | `8080` | Server port |
-| `ADMIN_EMAIL` | No | `admin@sub2api.local` | Admin email |
-| `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password |
+| `ADMIN_EMAIL` | No | *(auto-generated)* | Admin login email; see first-install logs |
+| `ADMIN_PASSWORD` | No | *(auto-generated)* | Admin password (8–72 bytes) |
 | `TZ` | No | `Asia/Shanghai` | Timezone |
 | `UPDATE_GITHUB_TOKEN` | No | *(empty)* | Token for `api.github.com` release checks only; asset downloads remain anonymous. |
 | `GEMINI_OAUTH_CLIENT_ID` | No | *(builtin)* | Google OAuth client ID (Gemini OAuth). Leave empty to use the built-in Gemini CLI client. |

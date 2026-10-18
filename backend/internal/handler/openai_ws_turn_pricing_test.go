@@ -15,7 +15,7 @@ import (
 // 建连时的高峰因子——客户端峰前一分钟建连并保活，整条连接就按谷价结算。
 func TestOpenAIWSTurnPricingZeroValue(t *testing.T) {
 	var p openAIWSTurnPricing
-	require.True(t, p.current().IsZero(),
+	require.True(t, p.current(1).IsZero(),
 		"未经 turn 起始回调冻结时必须保持零值，交由 RecordUsage 回退记录时刻")
 }
 
@@ -26,9 +26,10 @@ func TestOpenAIWSTurnPricingFreezePerTurn(t *testing.T) {
 	turn1 := time.Now().Add(-time.Hour)
 	turn2 := time.Now()
 
-	p.freeze(turn1)
-	require.Equal(t, turn1, p.current())
+	p.freeze(1, turn1)
+	require.Equal(t, turn1, p.current(1))
 
-	p.freeze(turn2)
-	require.Equal(t, turn2, p.current(), "后续 turn 必须使用自己的定价时刻")
+	p.freeze(2, turn2)
+	require.Equal(t, turn2, p.current(2), "后续 turn 必须使用自己的定价时刻")
+	require.Equal(t, turn1, p.current(1), "交错提交仍读取上一轮的时刻")
 }

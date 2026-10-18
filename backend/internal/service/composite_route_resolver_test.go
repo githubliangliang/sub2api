@@ -12,6 +12,30 @@ type compositeRouteRepoStub struct {
 	routes []CompositeModelRoute
 }
 
+func TestCompositeRouteResolverListsExactModelsByGroupAndEndpoint(t *testing.T) {
+	r := NewCompositeRouteResolver(compositeRouteRepoStub{routes: []CompositeModelRoute{
+		{GroupID: 7, PublicModel: " public-alias ", MatchType: CompositeRouteMatchExact, Enabled: true},
+		{GroupID: 7, PublicModel: "image-alias", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointImages, Enabled: true},
+		{GroupID: 7, PublicModel: "response-alias", MatchType: CompositeRouteMatchExact, Endpoint: CompositeRouteEndpointResponses, Enabled: true},
+		{GroupID: 7, PublicModel: "prefix-", MatchType: CompositeRouteMatchPrefix, Enabled: true},
+		{GroupID: 7, PublicModel: "disabled", MatchType: CompositeRouteMatchExact},
+		{GroupID: 7, PublicModel: " ", MatchType: CompositeRouteMatchExact, Enabled: true},
+		{GroupID: 8, PublicModel: "other-group", MatchType: CompositeRouteMatchExact, Enabled: true},
+	}})
+	all, err := r.ListExactPublicModels(context.Background(), 7, "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"public-alias", "image-alias", "response-alias"}, all)
+	responses, err := r.ListExactPublicModels(context.Background(), 7, CompositeRouteEndpointResponses)
+	require.NoError(t, err)
+	require.Equal(t, []string{"public-alias", "response-alias"}, responses)
+	other, err := r.ListExactPublicModels(context.Background(), 8, CompositeRouteEndpointResponses)
+	require.NoError(t, err)
+	require.Equal(t, []string{"other-group"}, other)
+	empty, err := r.ListExactPublicModels(context.Background(), 0, "")
+	require.NoError(t, err)
+	require.Empty(t, empty)
+}
+
 func (s compositeRouteRepoStub) ListByGroup(ctx context.Context, groupID int64, includeDisabled bool) ([]CompositeModelRoute, error) {
 	routes := make([]CompositeModelRoute, 0, len(s.routes))
 	for _, route := range s.routes {

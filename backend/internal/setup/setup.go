@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/admincredentials"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/repository"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -404,6 +406,12 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	return bootstrapAdminUser(ctx, db, cfg)
+}
+
+var errInvalidAdminCredentials = errors.New("invalid admin credentials")
+
+func bootstrapAdminUser(ctx context.Context, db *sql.DB, cfg *SetupConfig) (bool, string, error) {
 	var totalUsers int64
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(1) FROM users").Scan(&totalUsers); err != nil {
 		return false, "", err
@@ -417,12 +425,14 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 		return false, decision.reason, nil
 	}
 
-	if strings.TrimSpace(cfg.Admin.Password) == "" {
-		password, genErr := generateSecret(16)
-		if genErr != nil {
-			return false, "", fmt.Errorf("failed to generate admin password: %w", genErr)
-		}
-		cfg.Admin.Password = password
+	emailGenerated, passwordGenerated, err := prepareAdminCredentials(&cfg.Admin)
+	if err != nil {
+		return false, "", fmt.Errorf("%w: %v", errInvalidAdminCredentials, err)
+	}
+	if emailGenerated {
+		fmt.Printf("Generated admin email (login username): %s\n", cfg.Admin.Email)
+	}
+	if passwordGenerated {
 		fmt.Printf("Generated admin password (one-time): %s\n", cfg.Admin.Password)
 		fmt.Println("IMPORTANT: Save this password! It will not be shown again.")
 	}
@@ -462,6 +472,40 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 	}
 	return true, decision.reason, nil
 }
+
+// prepareAdminCredentials fills in missing admin credentials with random values
+// and rejects invalid user-supplied emails and weak passwords. It only runs
+// when an admin is actually about to be created, so existing deployments are
+// never affected. A random email keeps fresh installs off the well-known
+// default username that brute-force scanners target (issue #7850).
+func prepareAdminCredentials(admin *AdminConfig) (emailGenerated, passwordGenerated bool, err error) {
+	admin.Email = strings.TrimSpace(admin.Email)
+	if admin.Email == "" {
+		email, genErr := generateAdminEmail()
+		if genErr != nil {
+			return false, false, genErr
+		}
+		admin.Email = email
+		emailGenerated = true
+	} else if !validateEmail(admin.Email) {
+		return false, false, fmt.Errorf("invalid admin email: %q is not a valid login email", admin.Email)
+	}
+
+	if strings.TrimSpace(admin.Password) == "" {
+		password, genErr := generateSecret(16)
+		if genErr != nil {
+			return false, false, fmt.Errorf("failed to generate admin password: %w", genErr)
+		}
+		admin.Password = password
+		passwordGenerated = true
+	} else if validateErr := validatePassword(admin.Password); validateErr != nil {
+		return false, false, fmt.Errorf("invalid admin password: %w", validateErr)
+	}
+
+	return emailGenerated, passwordGenerated, nil
+}
+
+func generateAdminEmail() (string, error) { return admincredentials.GenerateEmail() }
 
 // normalizeRedisForConfigFile returns the Redis block to persist in config.yaml.
 //
@@ -622,7 +666,7 @@ func AutoSetupFromEnv() error {
 			EnableTLS: getEnvOrDefault("REDIS_ENABLE_TLS", "false") == "true",
 		},
 		Admin: AdminConfig{
-			Email:    getEnvOrDefault("ADMIN_EMAIL", "admin@sub2api.local"),
+			Email:    getEnvOrDefault("ADMIN_EMAIL", ""),
 			Password: getEnvOrDefault("ADMIN_PASSWORD", ""),
 		},
 		Server: ServerConfig{

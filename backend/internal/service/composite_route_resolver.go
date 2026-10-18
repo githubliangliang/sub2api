@@ -22,6 +22,31 @@ func (r *CompositeRouteResolver) SetModelOwnershipResolver(resolver CompositeMod
 	}
 }
 
+// ListExactPublicModels lists concrete aliases without expanding prefix routes.
+func (r *CompositeRouteResolver) ListExactPublicModels(ctx context.Context, groupID int64, endpoint string) ([]string, error) {
+	if r == nil || r.repo == nil || groupID <= 0 {
+		return nil, nil
+	}
+	routes, err := r.repo.ListByGroup(ctx, groupID, false)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(routes))
+	for _, route := range routes {
+		if !route.Enabled || route.MatchType != CompositeRouteMatchExact {
+			continue
+		}
+		routeEndpoint := normalizeCompositeRouteEndpoint(route.Endpoint)
+		if endpoint != "" && routeEndpoint != CompositeRouteEndpointAny && routeEndpoint != endpoint {
+			continue
+		}
+		if model := strings.TrimSpace(route.PublicModel); model != "" {
+			models = append(models, model)
+		}
+	}
+	return models, nil
+}
+
 func (r *CompositeRouteResolver) Resolve(ctx context.Context, groupID int64, model, endpoint string) (CompositeRouteDecision, error) {
 	model = strings.TrimSpace(model)
 	endpoint = normalizeCompositeRouteEndpoint(endpoint)

@@ -22,6 +22,7 @@ type FrameConn interface {
 }
 
 type Usage struct {
+	ImageInputTokens         int
 	InputTokens              int
 	OutputTokens             int
 	CacheCreationInputTokens int
@@ -90,16 +91,17 @@ type RelayTraceEvent struct {
 }
 
 type relayState struct {
-	usage             Usage
-	requestModelMu    sync.RWMutex
-	requestModel      string
-	lastResponseID    string
-	lastResponseModel string
-	responseConflict  bool
-	terminalEventType string
-	firstTokenMs      *int
-	turnTimingByID    map[string]*relayTurnTiming
-	activeTurn        *relayTurnTiming
+	completedResponseIDs map[string]struct{}
+	usage                Usage
+	requestModelMu       sync.RWMutex
+	requestModel         string
+	lastResponseID       string
+	lastResponseModel    string
+	responseConflict     bool
+	terminalEventType    string
+	firstTokenMs         *int
+	turnTimingByID       map[string]*relayTurnTiming
+	activeTurn           *relayTurnTiming
 }
 
 type relayExitSignal struct {
@@ -684,6 +686,15 @@ func observeUpstreamMessage(
 	if responseID == "" && isTerminalEvent(eventType) {
 		responseID = strings.TrimSpace(values[3].String())
 	}
+	if responseID != "" && isTerminalEvent(eventType) {
+		if _, done := state.completedResponseIDs[responseID]; done {
+			return observedUpstreamEvent{}
+		}
+		if state.completedResponseIDs == nil {
+			state.completedResponseIDs = make(map[string]struct{})
+		}
+		state.completedResponseIDs[responseID] = struct{}{}
+	}
 	now := nowFn()
 
 	if state.firstTokenMs == nil && isTokenEvent(eventType) {
@@ -878,7 +889,18 @@ func parseUsageAndAccumulate(
 	}
 	usageResult := gjson.GetBytes(message, "response.usage")
 	if !usageResult.Exists() {
-		return Usage{}
+		usageResult = gjson.GetBytes(message, "usage")
+	}
+	imageGen := gjson.GetBytes(message, "response.tool_usage.image_gen")
+	if !imageGen.Exists() {
+		imageGen = gjson.GetBytes(message, "tool_usage.image_gen")
+	}
+	requireTotals := usageResult.Exists()
+	if !requireTotals {
+		if !imageGen.IsObject() {
+			return Usage{}
+		}
+		usageResult = gjson.Parse(`{}`)
 	}
 	usageRaw := strings.TrimSpace(usageResult.Raw)
 	if usageRaw == "" || !strings.HasPrefix(usageRaw, "{") {
@@ -889,25 +911,36 @@ func parseUsageAndAccumulate(
 		return Usage{}
 	}
 
-	inputResult := gjson.GetBytes(message, "response.usage.input_tokens")
+	inputResult := usageResult.Get("input_tokens")
 	if !inputResult.Exists() {
-		inputResult = gjson.GetBytes(message, "response.usage.prompt_tokens")
+		inputResult = usageResult.Get("prompt_tokens")
 	}
-	outputResult := gjson.GetBytes(message, "response.usage.output_tokens")
+	outputResult := usageResult.Get("output_tokens")
 	if !outputResult.Exists() {
-		outputResult = gjson.GetBytes(message, "response.usage.completion_tokens")
+		outputResult = usageResult.Get("completion_tokens")
 	}
-	cachedResult := gjson.GetBytes(message, "response.usage.input_tokens_details.cached_tokens")
+	cachedResult := usageResult.Get("input_tokens_details.cached_tokens")
 	if !cachedResult.Exists() {
-		cachedResult = gjson.GetBytes(message, "response.usage.prompt_tokens_details.cached_tokens")
+		cachedResult = usageResult.Get("prompt_tokens_details.cached_tokens")
 	}
 	imageTokens := usageResult.Get("output_tokens_details.image_tokens").Int()
 	if imageTokens == 0 {
 		imageTokens = usageResult.Get("completion_tokens_details.image_tokens").Int()
 	}
 
-	inputTokens, inputOK := parseUsageIntField(inputResult, true)
-	outputTokens, outputOK := parseUsageIntField(outputResult, true)
+	imageInputTokens := usageResult.Get("input_tokens_details.image_tokens").Int()
+	if imageInputTokens <= 0 {
+		imageInputTokens = usageResult.Get("prompt_tokens_details.image_tokens").Int()
+	}
+	if imageInputTokens <= 0 {
+		imageInputTokens = max(imageGen.Get("input_tokens_details.image_tokens").Int(), 0)
+	}
+	if imageTokens <= 0 {
+		imageTokens = max(imageGen.Get("output_tokens_details.image_tokens").Int(), 0)
+	}
+
+	inputTokens, inputOK := parseUsageIntField(inputResult, requireTotals)
+	outputTokens, outputOK := parseUsageIntField(outputResult, requireTotals)
 	cachedTokens, cachedOK := parseUsageIntField(cachedResult, false)
 	if !inputOK || !outputOK || !cachedOK {
 		recordUsageParseFailure()
@@ -919,6 +952,7 @@ func parseUsageAndAccumulate(
 	}
 	parsedUsage := Usage{
 		InputTokens:              inputTokens,
+		ImageInputTokens:         int(imageInputTokens),
 		OutputTokens:             outputTokens,
 		CacheCreationInputTokens: openAICacheCreationTokensFromUsage(usageResult),
 		CacheReadInputTokens:     cachedTokens,
@@ -926,6 +960,7 @@ func parseUsageAndAccumulate(
 	}
 
 	state.usage.InputTokens += parsedUsage.InputTokens
+	state.usage.ImageInputTokens += parsedUsage.ImageInputTokens
 	state.usage.OutputTokens += parsedUsage.OutputTokens
 	state.usage.CacheCreationInputTokens += parsedUsage.CacheCreationInputTokens
 	state.usage.CacheReadInputTokens += parsedUsage.CacheReadInputTokens

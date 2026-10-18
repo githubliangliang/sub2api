@@ -403,6 +403,16 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		}
 	}
 
+	failStream := func(code, message string, cause error) (*ForwardResult, error) {
+		MarkResponseCommitted(c)
+		setOpsUpstreamError(c, http.StatusBadGateway, message, "")
+		payload, _ := json.Marshal(gin.H{"error": gin.H{"type": "upstream_error", "code": code, "message": message}})
+		if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", payload); err == nil {
+			c.Writer.Flush()
+		}
+		return resultWithUsage(), fmt.Errorf("anthropic chat stream: %w", cause)
+	}
+
 	writeChunk := func(chunk apicompat.ChatCompletionsChunk) bool {
 		sse, err := apicompat.ChatChunkToSSE(chunk)
 		if err != nil {
@@ -421,10 +431,12 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		if event == nil {
 			return false
 		}
-		// Drop Anthropic keepalive pings before OpenAI conversion:
-		// leaking `event: ping` frames crashes OpenAI-stream clients.
-		// Error events must still forward — they carry upstream failures.
 		if event.Type == "ping" {
+			MarkResponseCommitted(c)
+			if _, err := fmt.Fprint(c.Writer, ": ping\n\n"); err != nil {
+				return true
+			}
+			c.Writer.Flush()
 			return false
 		}
 		if firstChunk {
@@ -481,6 +493,20 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 			continue
 		}
 
+		// The Anthropic→Responses converter handles semantic events only.
+		// Surface failures here before finalization can synthesize a success.
+		if event.Type == "error" {
+			message := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage([]byte(payload)))
+			if message == "" {
+				message = "Upstream stream failed"
+			}
+			code := gjson.Get(payload, "error.type").String()
+			if code == "" {
+				code = "upstream_error"
+			}
+			return failStream(code, message, errors.New(message))
+		}
+
 		// Forward received usage regardless of the client stream_options.
 		// The intermediate Responses converter synthesizes usage even when absent.
 		ccState.IncludeUsage = ccState.IncludeUsage || anthropicChatStreamHasUsage(&event, payload)
@@ -491,12 +517,11 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	}
 
 	if err := scanner.Err(); err != nil {
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.L().Warn("forward_as_cc stream: read error",
-				zap.Error(err),
-				zap.String("request_id", requestID),
-			)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return resultWithUsage(), err
 		}
+		logger.L().Warn("forward_as_cc stream: read error", zap.Error(err), zap.String("request_id", requestID))
+		return failStream("upstream_stream_error", "Upstream stream read failed", err)
 	}
 
 	// Finalize both state machines

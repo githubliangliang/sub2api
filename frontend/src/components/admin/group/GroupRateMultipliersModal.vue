@@ -63,7 +63,7 @@
           <button
             type="button"
             class="btn btn-primary shrink-0"
-            :disabled="!selectedUser || !newRate"
+            :disabled="!selectedUser || !isValidValue(newRate) || loading || saving"
             @click="handleAddLocal"
           >
             {{ t('common.add') }}
@@ -87,7 +87,7 @@
             <button
               type="button"
               class="btn btn-primary btn-sm shrink-0 px-2.5 py-1 text-xs"
-              :disabled="!batchFactor || batchFactor <= 0"
+              :disabled="!isValidValue(batchFactor) || loading || saving"
               @click="applyBatchFactor"
             >
               {{ t('admin.groups.applyMultiplier') }}
@@ -225,7 +225,7 @@
             v-if="isDirty"
             type="button"
             class="btn btn-primary btn-sm px-4 py-1.5"
-            :disabled="saving"
+            :disabled="saving || loading"
             @click="handleSave"
           >
             <Icon v-if="saving" name="refresh" size="sm" class="mr-1 animate-spin" />
@@ -239,7 +239,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -279,6 +279,10 @@ const pageSize = ref(10)
 const batchFactor = ref<number | null>(null)
 
 let searchTimeout: ReturnType<typeof setTimeout>
+let loadVersion = 0
+let searchVersion = 0
+const isCurrent = (version: number) => version === loadVersion && props.show && props.group != null
+const isValidValue = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
 
 const platformColorClass = computed(() => {
   switch (props.group?.platform) {
@@ -318,19 +322,22 @@ const cloneEntries = (entries: GroupRateMultiplierEntry[]): LocalEntry[] => {
 }
 
 const loadEntries = async () => {
-  if (!props.group) return
+  if (!props.show || !props.group) return
+  const version = loadVersion
   loading.value = true
   try {
     const raw = await adminAPI.groups.getGroupRateMultipliers(props.group.id)
+    if (!isCurrent(version)) return
     // 仅显示已设置 rate_multiplier 的条目；rpm_override 在另一个弹窗管理，保留不动
     serverEntries.value = raw.filter(e => e.rate_multiplier != null)
     localEntries.value = cloneEntries(serverEntries.value)
     adjustPage()
   } catch (error) {
+    if (!isCurrent(version)) return
     appStore.showError(t('admin.groups.failedToLoad'))
     console.error('Error loading group rate multipliers:', error)
   } finally {
-    loading.value = false
+    if (isCurrent(version)) loading.value = false
   }
 }
 
@@ -341,17 +348,27 @@ const adjustPage = () => {
   }
 }
 
-watch(() => props.show, (val) => {
-  if (val && props.group) {
-    currentPage.value = 1
-    batchFactor.value = null
-    searchQuery.value = ''
-    searchResults.value = []
-    selectedUser.value = null
-    newRate.value = null
-    loadEntries()
-  }
-})
+const invalidateDialog = () => {
+  loadVersion++
+  searchVersion++
+  clearTimeout(searchTimeout)
+  loading.value = false
+  saving.value = false
+  serverEntries.value = []
+  localEntries.value = []
+  currentPage.value = 1
+  searchQuery.value = ''
+  searchResults.value = []
+  showDropdown.value = false
+  selectedUser.value = null
+  newRate.value = null
+  batchFactor.value = null
+}
+
+watch([() => props.show, () => props.group?.id], ([show]) => {
+  invalidateDialog()
+  if (show && props.group) void loadEntries()
+}, { immediate: true, flush: 'sync' })
 
 const handlePageSizeChange = (newSize: number) => {
   pageSize.value = newSize
@@ -360,24 +377,30 @@ const handlePageSizeChange = (newSize: number) => {
 
 const handleSearchUsers = () => {
   clearTimeout(searchTimeout)
+  const version = loadVersion
+  const request = ++searchVersion
+  const query = searchQuery.value.trim()
   selectedUser.value = null
-  if (!searchQuery.value.trim()) {
-    searchResults.value = []
+  searchResults.value = []
+  if (!query || !props.show) {
     showDropdown.value = false
     return
   }
   searchTimeout = setTimeout(async () => {
     try {
-      const res = await adminAPI.users.list(1, 10, { search: searchQuery.value.trim() })
+      const res = await adminAPI.users.list(1, 10, { search: query })
+      if (!isCurrent(version) || request !== searchVersion) return
       searchResults.value = res.items
       showDropdown.value = true
     } catch {
-      searchResults.value = []
+      if (isCurrent(version) && request === searchVersion) searchResults.value = []
     }
   }, 300)
 }
 
 const selectUser = (user: AdminUser) => {
+  searchVersion++
+  clearTimeout(searchTimeout)
   selectedUser.value = user
   searchQuery.value = user.email
   showDropdown.value = false
@@ -386,7 +409,7 @@ const selectUser = (user: AdminUser) => {
 
 // 本地添加（或覆盖已有用户）
 const handleAddLocal = () => {
-  if (!selectedUser.value || !newRate.value) return
+  if (!selectedUser.value || !isValidValue(newRate.value) || loading.value || saving.value) return
   const user = selectedUser.value
   const idx = localEntries.value.findIndex(e => e.user_id === user.id)
   const entry: LocalEntry = {
@@ -417,8 +440,8 @@ const updateLocalRate = (userId: number, value: string) => {
     entry.rate_multiplier = null
     return
   }
-  const num = parseFloat(value)
-  if (isNaN(num)) return
+  const num = Number(value)
+  if (!isValidValue(num)) return
   entry.rate_multiplier = num
 }
 
@@ -430,12 +453,11 @@ const removeLocal = (userId: number) => {
 
 // 批量乘数应用到本地
 const applyBatchFactor = () => {
-  if (!batchFactor.value || batchFactor.value <= 0) return
-  for (const entry of localEntries.value) {
-    if (entry.rate_multiplier != null) {
-      entry.rate_multiplier = parseFloat((entry.rate_multiplier * batchFactor.value).toFixed(6))
-    }
-  }
+  if (!isValidValue(batchFactor.value) || loading.value || saving.value) return
+  const factor = batchFactor.value
+  const next = localEntries.value.map(entry => entry.rate_multiplier == null ? null : Number((entry.rate_multiplier * factor).toFixed(6)))
+  if (next.some(value => value != null && !isValidValue(value))) return
+  localEntries.value.forEach((entry, index) => { entry.rate_multiplier = next[index] })
   batchFactor.value = null
 }
 
@@ -453,7 +475,9 @@ const handleCancel = () => {
 
 // 保存：一次性提交所有数据（只提交 rate_multiplier；rpm_override 由独立弹窗管理）
 const handleSave = async () => {
-  if (!props.group) return
+  if (!props.show || !props.group || saving.value || loading.value) return
+  if (localEntries.value.some(entry => entry.rate_multiplier != null && !isValidValue(entry.rate_multiplier))) return
+  const version = loadVersion
   saving.value = true
   try {
     const entries = localEntries.value
@@ -463,22 +487,22 @@ const handleSave = async () => {
         rate_multiplier: e.rate_multiplier as number
       }))
     await adminAPI.groups.batchSetGroupRateMultipliers(props.group.id, entries)
+    if (!isCurrent(version)) return
     appStore.showSuccess(t('admin.groups.rateSaved'))
     emit('success')
     emit('close')
   } catch (error) {
+    if (!isCurrent(version)) return
     appStore.showError(t('admin.groups.failedToSave'))
     console.error('Error saving rate multipliers:', error)
   } finally {
-    saving.value = false
+    if (isCurrent(version)) saving.value = false
   }
 }
 
 // 关闭时如果有未保存修改，先恢复
 const handleClose = () => {
-  if (isDirty.value) {
-    localEntries.value = cloneEntries(serverEntries.value)
-  }
+  invalidateDialog()
   emit('close')
 }
 
@@ -490,6 +514,10 @@ const handleClickOutside = () => {
 if (typeof document !== 'undefined') {
   document.addEventListener('click', handleClickOutside)
 }
+onBeforeUnmount(() => {
+  invalidateDialog()
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>

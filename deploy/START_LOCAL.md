@@ -21,7 +21,7 @@ cd sub2api/deploy
 
 # 1. 环境变量
 cp .env.sqlite.example .env.sqlite
-# 建议改 ADMIN_PASSWORD、JWT_SECRET
+# 设置 ADMIN_EMAIL / ADMIN_PASSWORD（8–72 字节），或留空后从首次日志获取；修改 JWT_SECRET
 
 # 2. 数据目录
 mkdir -p data
@@ -35,12 +35,12 @@ docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite logs -f
 
 打开：http://localhost:8080
 
-默认账号（见 `.env.sqlite`）：
+首次账号（见 `.env.sqlite`，仅空库建号时生效）：
 
 | 项 | 默认值 |
 |----|--------|
-| 邮箱 | `admin@sub2api.local` |
-| 密码 | `admin123456` |
+| 邮箱 | 留空时随机生成，见首次安装日志 |
+| 密码 | 留空时随机生成，见首次安装日志 |
 
 登录后侧栏 → **菜单管理**（`/admin/menu`）验证隐藏菜单。
 

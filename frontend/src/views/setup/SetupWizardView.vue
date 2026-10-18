@@ -535,7 +535,8 @@ const canProceed = computed(() => {
     case 2:
       return (
         formData.admin.email &&
-        formData.admin.password.length >= 8 &&
+        new TextEncoder().encode(formData.admin.password).length >= 8 &&
+        new TextEncoder().encode(formData.admin.password).length <= 72 &&
         formData.admin.password === confirmPassword.value
       )
     default:

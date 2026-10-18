@@ -334,14 +334,14 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:     false,
 	}
 
-	// Gemini 3.6 Flash (Google AI pricing: $1.50 input / $7.50 output /
-	// $0.15 cached input per MTok). Antigravity's -high/-low/-medium/-tiered
+	// Gemini 3.6 Flash promotional card through 2026-12-31: $0.75/$3.75/$0.075
+	// per MTok. getModelPricingAt restores standard prices after expiry. Antigravity's -high/-low/-medium/-tiered
 	// aliases are matched below so unavailable remote pricing never records
 	// token-bearing requests at $0.
 	s.fallbackPrices["gemini-3.6-flash"] = &ModelPricing{
-		InputPricePerToken:     1.5e-6,
-		OutputPricePerToken:    7.5e-6,
-		CacheReadPricePerToken: 0.15e-6,
+		InputPricePerToken:     0.75e-6,
+		OutputPricePerToken:    3.75e-6,
+		CacheReadPricePerToken: 0.075e-6,
 		SupportsCacheBreakdown: false,
 	}
 
@@ -1087,12 +1087,16 @@ func (s *BillingService) HasIdentifiedTokenPricing(model string) bool {
 
 // GetModelPricing 获取模型价格配置
 func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
+	return s.getModelPricingAt(model, time.Now())
+}
+
+func (s *BillingService) getModelPricingAt(model string, at time.Time) (*ModelPricing, error) {
 	// 标准化模型名称（转小写）
 	model = strings.ToLower(model)
 
 	// 1. 优先从动态价格服务获取
 	if s.pricingService != nil {
-		litellmPricing := s.pricingService.GetModelPricing(model)
+		litellmPricing := s.pricingService.getModelPricingAt(model, at)
 		// 仅有图片价、无 token 价的条目（如 LiteLLM 的 imagen 类模型）不能用于
 		// token 计费：直接返回会把 token 流量按 $0 计费。跳过后走 fallback，
 		// 无 fallback 则 fail-closed（ErrModelPricingUnavailable）。
@@ -1132,6 +1136,13 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 
 	// 2. 使用硬编码回退价格
 	fallback := s.getFallbackPricing(model)
+	if fallback != nil && fallback == s.fallbackPrices["gemini-3.6-flash"] && !at.Before(geminiFlashPromotionEnd) {
+		standard := *fallback
+		standard.InputPricePerToken *= 2
+		standard.OutputPricePerToken *= 2
+		standard.CacheReadPricePerToken *= 2
+		fallback = &standard
+	}
 	if fallback != nil {
 		// 按模型名去重:每个模型每进程最多打一条 warn,避免热路径每请求刷屏（issue #3394）。
 		// model 在函数入口已 ToLower,故 GLM-5.2 / glm-5.2 视为同一条目。
@@ -1214,6 +1225,8 @@ type CostInput struct {
 	Resolver                  *ModelPricingResolver // 定价解析器
 	Resolved                  *ResolvedPricing      // 可选：预解析的定价结果（避免重复 Resolve 调用）
 	LongContextBillingEnabled *bool
+	// Exempts the model price card only; custom interval prices still apply.
+	DisableModelLongContextPricing bool
 }
 
 // CalculateCostUnified 统一计费入口，支持三种计费模式。
@@ -1231,7 +1244,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 			input.RateMultiplier,
 			input.ServiceTier,
 			nil,
-			applyLongContextBilling,
+			applyLongContextBilling && !input.DisableModelLongContextPricing,
 		)
 	}
 
@@ -1284,7 +1297,7 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 		contextTierPricingEnabled = true
 	}
 	// 长上下文定价仅在无区间定价时应用（区间定价已包含上下文分层）。
-	applyLongCtx := len(resolved.Intervals) == 0 && contextTierPricingEnabled
+	applyLongCtx := len(resolved.Intervals) == 0 && contextTierPricingEnabled && !input.DisableModelLongContextPricing
 
 	return s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier, applyLongCtx), nil
 }

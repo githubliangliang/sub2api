@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -22,6 +22,10 @@ const loading = ref(false)
 const loadingMore = ref(false)
 const events = ref<AlertEvent[]>([])
 const hasMore = ref(true)
+let listRequestId = 0
+let detailRequestId = 0
+let historyRequestId = 0
+onBeforeUnmount(() => { listRequestId++; detailRequestId++; historyRequestId++ })
 
 // Detail modal
 const showDetail = ref(false)
@@ -92,18 +96,22 @@ function buildQuery(overrides: Partial<AlertEventsQuery> = {}): AlertEventsQuery
 }
 
 async function loadFirstPage() {
+  const requestId = ++listRequestId
+  loadingMore.value = false
   loading.value = true
   try {
     const data = await opsAPI.listAlertEvents(buildQuery())
+    if (requestId !== listRequestId) return
     events.value = data
     hasMore.value = data.length === PAGE_SIZE
   } catch (err: any) {
+    if (requestId !== listRequestId) return
     console.error('[OpsAlertEventsCard] Failed to load alert events', err)
     appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.loadFailed'))
     events.value = []
     hasMore.value = false
   } finally {
-    loading.value = false
+    if (requestId === listRequestId) loading.value = false
   }
 }
 
@@ -113,11 +121,13 @@ async function loadMore() {
   const last = events.value[events.value.length - 1]
   if (!last) return
 
+  const requestId = listRequestId
   loadingMore.value = true
   try {
     const data = await opsAPI.listAlertEvents(
       buildQuery({ before_fired_at: last.fired_at || last.created_at, before_id: last.id })
     )
+    if (requestId !== listRequestId) return
     if (!data.length) {
       hasMore.value = false
       return
@@ -125,10 +135,11 @@ async function loadMore() {
     events.value = [...events.value, ...data]
     if (data.length < PAGE_SIZE) hasMore.value = false
   } catch (err: any) {
+    if (requestId !== listRequestId) return
     console.error('[OpsAlertEventsCard] Failed to load more alert events', err)
     hasMore.value = false
   } finally {
-    loadingMore.value = false
+    if (requestId === listRequestId) loadingMore.value = false
   }
 }
 
@@ -193,12 +204,21 @@ function formatDimensionsSummary(event: AlertEvent): string {
 }
 
 function closeDetail() {
+  detailRequestId++
+  historyRequestId++
+  detailLoading.value = false
+  historyLoading.value = false
+  detailActionLoading.value = false
   showDetail.value = false
   selected.value = null
   history.value = []
 }
 
 async function openDetail(row: AlertEvent) {
+  const requestId = ++detailRequestId
+  historyRequestId++
+  history.value = []
+  detailActionLoading.value = false
   showDetail.value = true
   selected.value = row
   detailLoading.value = true
@@ -206,18 +226,22 @@ async function openDetail(row: AlertEvent) {
 
   try {
     const detail = await opsAPI.getAlertEvent(row.id)
+    if (requestId !== detailRequestId) return
     selected.value = detail
   } catch (err: any) {
+    if (requestId !== detailRequestId) return
     console.error('[OpsAlertEventsCard] Failed to load alert detail', err)
     appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.loadFailed'))
   } finally {
-    detailLoading.value = false
+    if (requestId === detailRequestId) detailLoading.value = false
   }
 
-  await loadHistory()
+  if (requestId === detailRequestId) await loadHistory()
 }
 
 async function loadHistory() {
+  const requestId = ++historyRequestId
+  const detailId = detailRequestId
   const ev = selected.value
   if (!ev) {
     history.value = []
@@ -239,6 +263,7 @@ async function loadHistory() {
       status: ''
     })
 
+    if (requestId !== historyRequestId || detailId !== detailRequestId) return
     // Best-effort: narrow to same rule_id + dimensions
     history.value = items.filter((it) => {
       if (it.rule_id !== ev.rule_id) return false
@@ -250,10 +275,11 @@ async function loadHistory() {
       return (g1 ?? null) === (g2 ?? null)
     })
   } catch (err: any) {
+    if (requestId !== historyRequestId || detailId !== detailRequestId) return
     console.error('[OpsAlertEventsCard] Failed to load alert history', err)
     history.value = []
   } finally {
-    historyLoading.value = false
+    if (requestId === historyRequestId && detailId === detailRequestId) historyLoading.value = false
   }
 }
 
@@ -269,6 +295,7 @@ async function silenceAlert() {
   const ev = selected.value
   if (!ev) return
   if (detailActionLoading.value) return
+  const requestId = detailRequestId
   detailActionLoading.value = true
   try {
     const platform = getDimensionString(ev, 'platform')
@@ -285,33 +312,40 @@ async function silenceAlert() {
       reason: `silence from UI (${silenceDuration.value})`
     })
 
+    if (requestId !== detailRequestId) return
     appStore.showSuccess(t('admin.ops.alertEvents.detail.silenceSuccess'))
   } catch (err: any) {
+    if (requestId !== detailRequestId) return
     console.error('[OpsAlertEventsCard] Failed to silence alert', err)
     appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.silenceFailed'))
   } finally {
-    detailActionLoading.value = false
+    if (requestId === detailRequestId) detailActionLoading.value = false
   }
 }
 
 async function manualResolve() {
   if (!selected.value) return
   if (detailActionLoading.value) return
+  const targetId = selected.value.id
+  const requestId = detailRequestId
   detailActionLoading.value = true
   try {
-    await opsAPI.updateAlertEventStatus(selected.value.id, 'manual_resolved')
+    await opsAPI.updateAlertEventStatus(targetId, 'manual_resolved')
+    if (requestId !== detailRequestId) return
     appStore.showSuccess(t('admin.ops.alertEvents.detail.manualResolvedSuccess'))
 
     // Refresh detail + first page to reflect new status
-    const detail = await opsAPI.getAlertEvent(selected.value.id)
+    const detail = await opsAPI.getAlertEvent(targetId)
+    if (requestId !== detailRequestId) return
     selected.value = detail
     await loadFirstPage()
-    await loadHistory()
+    if (requestId === detailRequestId) await loadHistory()
   } catch (err: any) {
+    if (requestId !== detailRequestId) return
     console.error('[OpsAlertEventsCard] Failed to resolve alert', err)
     appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.manualResolvedFailed'))
   } finally {
-    detailActionLoading.value = false
+    if (requestId === detailRequestId) detailActionLoading.value = false
   }
 }
 

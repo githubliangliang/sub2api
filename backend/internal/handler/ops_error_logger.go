@@ -1034,6 +1034,12 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			requestID = c.Writer.Header().Get("x-request-id")
 		}
 
+		if errType, code := service.OpsLocalErrorType(c); errType != "" && (parsed.ErrorType == "" || parsed.ErrorType == "api_error") {
+			parsed.ErrorType = errType
+			if code != "" {
+				parsed.Code = code
+			}
+		}
 		normalizedType := normalizeOpsErrorType(parsed.ErrorType, parsed.Code)
 
 		phase, isBusinessLimited, errorOwner, errorSource := classifyOpsErrorLog(c, normalizedType, parsed.Message, parsed.Code, status)
@@ -1506,6 +1512,7 @@ func isKnownOpsErrorType(t string) bool {
 	switch t {
 	case "invalid_request_error",
 		"authentication_error",
+		"permission_error",
 		"rate_limit_error",
 		"billing_error",
 		"subscription_error",
@@ -1554,7 +1561,7 @@ func classifyOpsPhase(errType, message, code string) string {
 			return "request"
 		}
 		return "upstream"
-	case "invalid_request_error":
+	case "invalid_request_error", "permission_error", "not_found_error":
 		return "request"
 	case "upstream_error", "overloaded_error":
 		return "upstream"
@@ -1570,7 +1577,7 @@ func classifyOpsPhase(errType, message, code string) string {
 
 func classifyOpsSeverity(errType string, status int) string {
 	switch errType {
-	case "invalid_request_error", "authentication_error", "billing_error", "subscription_error":
+	case "invalid_request_error", "authentication_error", "permission_error", "not_found_error", "billing_error", "subscription_error":
 		return "P3"
 	}
 	if status >= 500 {
@@ -1587,6 +1594,11 @@ func classifyOpsSeverity(errType string, status int) string {
 
 func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status int) (phase string, isBusinessLimited bool, errorOwner string, errorSource string) {
 	phase = classifyOpsPhase(errType, message, code)
+	if service.IsOpsRequestScopedError(c) {
+		isBusinessLimited = classifyOpsIsBusinessLimited(errType, phase, code, status, message)
+		return phase, isBusinessLimited, classifyOpsErrorOwner(phase, message), classifyOpsErrorSource(phase, message)
+	}
+
 	routingCapacityLimited := isOpsRoutingCapacityLimited(c)
 	clientBusinessLimited := service.HasOpsClientBusinessLimited(c)
 	// 本地 404 model_not_found：请求没发出去，此前尝试留下的 upstream 标记一律作废。

@@ -275,6 +275,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = litePayload
 		}
+		if next, _, err := normalizeOpenAIResponsesWebSocketCompatibilityBody(normalized, account, isOpenAIResponsesLiteWebSocketPayload(normalized)); err != nil {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+		} else {
+			normalized = next
+		}
 		apiKey := getAPIKeyFromContext(c)
 		imageGenerationAllowed := GroupAllowsImageGeneration(apiKeyGroup(apiKey))
 		codexImageGenerationExplicitToolPolicy := codexImageGenerationExplicitToolPolicyAllow
@@ -288,7 +293,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
 		if codexBridgeEnabled {
 			payloadMap := make(map[string]any)
-			if err := json.Unmarshal(normalized, &payloadMap); err != nil {
+			if err := decodeOpenAIJSONUseNumber(normalized, &payloadMap); err != nil {
 				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", err)
 			}
 			bridgeModified := false

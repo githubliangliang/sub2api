@@ -1266,7 +1266,7 @@ export default {
         modelPassthrough: 'Gemini 直接转发模型',
         modelPassthroughDesc: '所有模型请求将直接转发至 Gemini API，不进行模型限制或映射。',
         baseUrlHint: '留空使用官方 Gemini API',
-        apiKeyHint: '您的 Gemini API Key（以 AIza 开头）',
+        apiKeyHint: 'AI Studio Key 支持 AQ. 或 AIza 前缀；第三方上游填写其提供的 Key',
         tier: {
           label: '账号等级',
           hint: '提示：系统会优先尝试自动识别账号等级；若自动识别不可用或失败，则使用你选择的等级作为回退（本地模拟配额）。',
@@ -1289,8 +1289,8 @@ export default {
         accountType: {
           oauthTitle: 'OAuth 授权（Gemini）',
           oauthDesc: '使用 Google 账号授权，并选择 OAuth 子类型。',
-          apiKeyTitle: 'API 密钥（AI Studio）',
-          apiKeyDesc: '最快接入方式，使用 AIza API Key。',
+          apiKeyTitle: 'API 密钥',
+          apiKeyDesc: 'AI Studio 官方 Key，或兼容 Gemini 协议的第三方上游。',
           apiKeyNote: '适合轻量测试。免费层限流严格，数据可能用于训练。',
           apiKeyLink: '获取 API Key',
           quotaLink: '配额说明'

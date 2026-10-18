@@ -583,6 +583,10 @@ func TestPricingService_Gemini36FlashTierSpecificPricingTakesPrecedence(t *testi
 
 func TestBillingService_Gemini36FlashThinkingTierFallbacksAreBillable(t *testing.T) {
 	svc := NewBillingService(&config.Config{}, nil)
+	factor := 0.5
+	if !time.Now().Before(geminiFlashPromotionEnd) {
+		factor = 1
+	}
 	tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000}
 
 	for _, model := range []string{
@@ -595,10 +599,10 @@ func TestBillingService_Gemini36FlashThinkingTierFallbacksAreBillable(t *testing
 		t.Run(model, func(t *testing.T) {
 			cost, err := svc.CalculateCost(model, tokens, 1)
 			require.NoError(t, err)
-			require.InDelta(t, 1.5, cost.InputCost, 1e-12)
-			require.InDelta(t, 7.5, cost.OutputCost, 1e-12)
-			require.InDelta(t, 0.15, cost.CacheReadCost, 1e-12)
-			require.InDelta(t, 9.15, cost.TotalCost, 1e-12)
+			require.InDelta(t, 1.5*factor, cost.InputCost, 1e-12)
+			require.InDelta(t, 7.5*factor, cost.OutputCost, 1e-12)
+			require.InDelta(t, 0.15*factor, cost.CacheReadCost, 1e-12)
+			require.InDelta(t, 9.15*factor, cost.TotalCost, 1e-12)
 		})
 	}
 }
@@ -615,11 +619,11 @@ func TestDefaultPricingIncludesGemini36FlashRates(t *testing.T) {
 
 	for _, model := range []string{"gemini-3.6-flash", "gemini-3.6-flash-low", "gemini-3.6-flash-high"} {
 		t.Run(model, func(t *testing.T) {
-			pricing, err := billingSvc.GetModelPricing(model)
+			pricing, err := billingSvc.getModelPricingAt(model, geminiFlashPromotionEnd.Add(-time.Second))
 			require.NoError(t, err)
-			require.InDelta(t, 1.5e-6, pricing.InputPricePerToken, 1e-12)
-			require.InDelta(t, 7.5e-6, pricing.OutputPricePerToken, 1e-12)
-			require.InDelta(t, 0.15e-6, pricing.CacheReadPricePerToken, 1e-12)
+			require.InDelta(t, 0.75e-6, pricing.InputPricePerToken, 1e-12)
+			require.InDelta(t, 3.75e-6, pricing.OutputPricePerToken, 1e-12)
+			require.InDelta(t, 0.075e-6, pricing.CacheReadPricePerToken, 1e-12)
 		})
 	}
 }

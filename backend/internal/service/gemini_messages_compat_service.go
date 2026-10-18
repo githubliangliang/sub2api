@@ -1320,6 +1320,14 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			return nil, transportErr
 		}
 
+		// A missing cachedContent belongs to this request, not the account.
+		if missing, rebuilt := s.geminiMissingCacheInLoop(resp); missing {
+			resp = rebuilt
+			break
+		} else {
+			resp = rebuilt
+		}
+
 		// 错误策略优先：匹配则跳过重试直接处理。
 		if matched, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp, mappedModel); matched {
 			resp = rebuilt
@@ -1411,6 +1419,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
+		if isGeminiCachedContentNotFound(resp.StatusCode, respBody) {
+			return nil, s.writeGeminiCachedContentNotFound(c, account, resp.StatusCode, respBody, requestID)
+		}
 		// Best-effort fallback for OAuth tokens missing AI Studio scopes when calling countTokens.
 		// This avoids Gemini SDKs failing hard during preflight token counting.
 		// Checked before error policy so it always works regardless of custom error codes.
@@ -2940,6 +2951,11 @@ func (s *GeminiMessagesCompatService) handleGeminiUpstreamError(ctx context.Cont
 		return
 	}
 
+	if account.IsGeminiThirdPartyAPIKey() {
+		s.handleGeminiThirdParty429(ctx, account, body)
+		return
+	}
+
 	oauthType := account.GeminiOAuthType()
 	tierID := account.GeminiTierID()
 	projectID := strings.TrimSpace(account.GetCredential("project_id"))
@@ -2993,10 +3009,17 @@ func ParseGeminiRateLimitResetTime(body []byte) *int64 {
 		}
 	}
 
+	return parseGeminiRetryDelayResetTime(body)
+}
+
+func parseGeminiRetryDelayResetTime(body []byte) *int64 {
 	// 遍历 error.details 查找 quotaResetDelay
 	var found *int64
 	gjson.GetBytes(body, "error.details").ForEach(func(_, detail gjson.Result) bool {
 		v := detail.Get("metadata.quotaResetDelay").String()
+		if v == "" {
+			v = detail.Get("retryDelay").String()
+		}
 		if v == "" {
 			return true
 		}
@@ -3714,4 +3737,56 @@ func (s *GeminiMessagesCompatService) extractImageInputSize(body []byte) string 
 	}
 
 	return ""
+}
+
+func isGeminiCachedContentNotFound(statusCode int, body []byte) bool {
+	lower := strings.ToLower(string(body))
+	switch statusCode {
+	case http.StatusForbidden:
+		return strings.Contains(lower, "cachedcontent not found")
+	case http.StatusBadRequest:
+		return strings.Contains(lower, "invalid resource state for cache content")
+	case http.StatusNotFound:
+		return strings.Contains(lower, "cached content") && strings.Contains(lower, "not found")
+	default:
+		return false
+	}
+}
+
+func (s *GeminiMessagesCompatService) geminiMissingCacheInLoop(resp *http.Response) (bool, *http.Response) {
+	switch resp.StatusCode {
+	case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound:
+	default:
+		return false, resp
+	}
+	body := s.readUpstreamErrorBody(resp)
+	_ = resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return isGeminiCachedContentNotFound(resp.StatusCode, body), resp
+}
+
+func (s *GeminiMessagesCompatService) writeGeminiCachedContentNotFound(c *gin.Context, account *Account, status int, body []byte, requestID string) error {
+	message := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(body))
+	setOpsUpstreamError(c, status, message, "")
+	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{Platform: account.Platform, AccountID: account.ID, AccountName: account.Name, UpstreamStatusCode: status, UpstreamRequestID: requestID, Kind: "http_error", Message: message})
+	MarkOpsRequestScopedError(c, "permission_error")
+	MarkResponseCommitted(c)
+	c.Data(http.StatusForbidden, "application/json", []byte(GeminiCachedContentNotFoundResponse))
+	return fmt.Errorf("gemini upstream error: %d message=%s", status, message)
+}
+
+// handleGeminiThirdParty429 处理第三方上游的 429：不套用 AI Studio 每日配额语义，
+// 只认响应里显式给出的重试时间，否则走全局 429 兜底冷却。
+func (s *GeminiMessagesCompatService) handleGeminiThirdParty429(ctx context.Context, account *Account, body []byte) {
+	if resetAt := parseGeminiRetryDelayResetTime(body); resetAt != nil {
+		resetTime := time.Unix(*resetAt, 0)
+		_ = s.accountRepo.SetRateLimited(ctx, account.ID, resetTime)
+		logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini 429] Account %d (third-party API Key) rate limited until %v", account.ID, resetTime)
+		return
+	}
+	if s.rateLimitService != nil {
+		s.rateLimitService.apply429FallbackRateLimit(ctx, account, "gemini_third_party_no_reset_time")
+		return
+	}
+	_ = s.accountRepo.SetRateLimited(ctx, account.ID, time.Now().Add(defaultRateLimit429CooldownSeconds*time.Second))
 }

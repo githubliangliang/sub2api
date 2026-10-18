@@ -155,6 +155,9 @@ const cancelConfirmVisible = ref(false)
 const canceling = ref(false)
 const cancelTarget = ref<UsageCleanupTask | null>(null)
 let pollTimer: number | null = null
+let taskRequestId = 0
+let dialogVersion = 0
+let cancelRequestId = 0
 
 const noop = () => {}
 
@@ -183,6 +186,8 @@ const stopPolling = () => {
 }
 
 const handleClose = () => {
+  dialogVersion++
+  taskRequestId++
   stopPolling()
   confirmVisible.value = false
   cancelConfirmVisible.value = false
@@ -237,12 +242,14 @@ const getUserTimezone = () => {
 
 const loadTasks = async () => {
   if (!props.show) return
+  const requestId = ++taskRequestId
   tasksLoading.value = true
   try {
     const res = await adminUsageAPI.listCleanupTasks({
       page: tasksPage.value,
       page_size: tasksPageSize.value
     })
+    if (requestId !== taskRequestId) return
     tasks.value = res.items || []
     tasksTotal.value = res.total || 0
     if (res.page) {
@@ -252,10 +259,11 @@ const loadTasks = async () => {
       tasksPageSize.value = res.page_size
     }
   } catch (error) {
+    if (requestId !== taskRequestId) return
     console.error('Failed to load cleanup tasks:', error)
     appStore.showError(t('admin.usage.cleanup.loadFailed'))
   } finally {
-    tasksLoading.value = false
+    if (requestId === taskRequestId) tasksLoading.value = false
   }
 }
 
@@ -328,6 +336,7 @@ const buildPayload = (): CreateUsageCleanupTaskRequest | null => {
 }
 
 const submitCleanup = async () => {
+  if (!props.show || submitting.value) return
   const payload = buildPayload()
   if (!payload) {
     confirmVisible.value = false
@@ -335,19 +344,24 @@ const submitCleanup = async () => {
   }
   submitting.value = true
   confirmVisible.value = false
+  const version = dialogVersion
   try {
     await adminUsageAPI.createCleanupTask(payload)
+    if (version !== dialogVersion) return
     appStore.showSuccess(t('admin.usage.cleanup.submitSuccess'))
     loadTasks()
   } catch (error) {
+    if (version !== dialogVersion) return
     console.error('Failed to create cleanup task:', error)
     appStore.showError(t('admin.usage.cleanup.submitFailed'))
   } finally {
-    submitting.value = false
+    if (version === dialogVersion) submitting.value = false
   }
 }
 
 const cancelTask = async () => {
+  if (!props.show || canceling.value) return
+  const requestId = ++cancelRequestId
   const task = cancelTarget.value
   if (!task) {
     cancelConfirmVisible.value = false
@@ -355,33 +369,46 @@ const cancelTask = async () => {
   }
   canceling.value = true
   cancelConfirmVisible.value = false
+  const version = dialogVersion
   try {
     await adminUsageAPI.cancelCleanupTask(task.id)
+    if (version !== dialogVersion || requestId !== cancelRequestId) return
     appStore.showSuccess(t('admin.usage.cleanup.cancelSuccess'))
     loadTasks()
   } catch (error) {
+    if (version !== dialogVersion) return
     console.error('Failed to cancel cleanup task:', error)
     appStore.showError(t('admin.usage.cleanup.cancelFailed'))
   } finally {
-    canceling.value = false
-    cancelTarget.value = null
+    if (version === dialogVersion) canceling.value = false
+    if (version === dialogVersion && cancelTarget.value === task) cancelTarget.value = null
   }
 }
 
 watch(
   () => props.show,
   (show) => {
+    dialogVersion++
+    submitting.value = false
+    canceling.value = false
+    cancelTarget.value = null
+    tasks.value = []
+    tasksLoading.value = false
     if (show) {
       resetFilters()
       loadTasks()
       startPolling()
     } else {
+      taskRequestId++
       stopPolling()
     }
-  }
+  },
+  { immediate: true, flush: 'sync' }
 )
 
 onUnmounted(() => {
+  dialogVersion++
+  taskRequestId++
   stopPolling()
 })
 </script>

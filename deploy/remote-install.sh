@@ -87,13 +87,13 @@ else
          -e "s#CHANGE_ME_totp_hex_32#$TOTP_KEY#" \
          -e "s#CHANGE_ME_STRONG_PASSWORD#$ADMIN_PASSWORD#" "$TMP_CONF"
   if [ -n "$ADMIN_EMAIL" ]; then
-    sed -i -e "s#admin@example.com#$ADMIN_EMAIL#" "$TMP_CONF"
+    sed -i -e "s#^  admin_email:.*#  admin_email: \"$ADMIN_EMAIL\"#" "$TMP_CONF"
   fi
   sudo_run install -m 0640 "$TMP_CONF" "$CONF_FILE"
   rm -f "$TMP_CONF"
   NEW_CONFIG=1
   log "已生成 $CONF_FILE（jwt.secret / totp.encryption_key 随机）"
-  log "初始管理员：${ADMIN_EMAIL:-admin@example.com} / $ADMIN_PASSWORD"
+  log "初始管理员：${ADMIN_EMAIL:-随机邮箱，请查看首次启动日志} / $ADMIN_PASSWORD"
 fi
 # ---------- 4. systemd unit：缺失才写，已有的不动（除非 FORCE_UNIT=1）----------
 if [ "$RESTART_MODE" = "systemd" ]; then

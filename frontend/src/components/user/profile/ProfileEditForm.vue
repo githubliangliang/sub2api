@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -58,29 +58,46 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const username = ref(props.initialUsername)
+let savedUsername = props.initialUsername
 const loading = ref(false)
+let requestVersion = 0
+onBeforeUnmount(() => { requestVersion++ })
+watch(() => authStore.user?.id, () => {
+  requestVersion++
+  loading.value = false
+  username.value = props.initialUsername
+  savedUsername = props.initialUsername
+}, { flush: 'sync' })
 
 watch(() => props.initialUsername, (val) => {
-  username.value = val
+  if (username.value === savedUsername) username.value = val
+  savedUsername = val
 })
 
 const handleUpdateProfile = async () => {
+  if (loading.value) return
+  const version = ++requestVersion
   if (!username.value.trim()) {
     appStore.showError(t('profile.usernameRequired'))
     return
   }
 
   loading.value = true
+  const submittedUsername = username.value
   try {
     const updatedUser = await userAPI.updateProfile({
-      username: username.value
+      username: submittedUsername
     })
+    if (version !== requestVersion) return
+    if (username.value === submittedUsername) username.value = updatedUser.username
+    savedUsername = updatedUser.username
     authStore.user = updatedUser
     appStore.showSuccess(t('profile.updateSuccess'))
   } catch (error: unknown) {
+    if (version !== requestVersion) return
     appStore.showError(extractApiErrorMessage(error, t('profile.updateFailed')))
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
 }
 </script>

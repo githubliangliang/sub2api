@@ -129,6 +129,20 @@ describe('SetupWizardView redis step', () => {
     wrapper.unmount()
   })
 
+  it('applies the bcrypt byte limit to admin passwords', async () => {
+    const wrapper = mountWizard()
+    await gotoRedisStep(wrapper)
+    await button(wrapper, 'Next').trigger('click')
+    await wrapper.find('input[type="email"]').setValue('owner@example.com')
+    const passwords = wrapper.findAll('input[type="password"]')
+    for (const [value, valid] of [['密'.repeat(24), true], ['密'.repeat(25), false], ['a'.repeat(73), false], ['short', false], ['12345678', true]] as const) {
+      await passwords[0].setValue(value)
+      await passwords[1].setValue(value)
+      expect(button(wrapper, 'Next').attributes('disabled') === undefined).toBe(valid)
+    }
+    wrapper.unmount()
+  })
+
   it('invalidates an earlier connection test when switching back to embedded redis', async () => {
     const wrapper = mountWizard()
     await gotoRedisStep(wrapper)

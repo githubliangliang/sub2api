@@ -12,7 +12,7 @@
  *   }
  *   // template: <TotpStepUpDialog :controller="stepUp" />
  */
-import { ref } from 'vue'
+import { ref, getCurrentScope, onScopeDispose } from 'vue'
 
 /** Error codes the backend uses to signal step-up state. */
 const STEP_UP_REQUIRED = 'STEP_UP_REQUIRED'
@@ -68,26 +68,35 @@ export function useStepUp() {
   const visible = ref(false)
   const blockedReason = ref<string>('')
   let resolver: ((ok: boolean) => void) | null = null
+  let pendingPrompt: Promise<boolean> | null = null
+  let disposed = false
 
   /** Open the TOTP dialog and resolve true once a grant is obtained. */
   function prompt(): Promise<boolean> {
+    if (disposed) return Promise.resolve(false)
+    if (pendingPrompt) return pendingPrompt
     visible.value = true
-    return new Promise<boolean>((resolve) => {
+    pendingPrompt = new Promise<boolean>((resolve) => {
       resolver = resolve
     })
+    return pendingPrompt
   }
 
   function onVerified() {
     visible.value = false
     resolver?.(true)
     resolver = null
+    pendingPrompt = null
   }
 
   function onCancel() {
     visible.value = false
     resolver?.(false)
     resolver = null
+    pendingPrompt = null
   }
+
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; onCancel() })
 
   /**
    * Run a sensitive action. On STEP_UP_REQUIRED, prompt for a TOTP code and

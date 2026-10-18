@@ -408,11 +408,16 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 }
 
 func (r *groupRepository) Delete(ctx context.Context, id int64) error {
-	_, err := r.client.Group.Delete().Where(group.IDEQ(id)).Exec(ctx)
+	_, err := withRepositoryTransaction(ctx, r.client, func(txCtx context.Context, client *dbent.Client) error {
+		if _, err := client.Group.Delete().Where(group.IDEQ(id)).Exec(txCtx); err != nil {
+			return translatePersistenceError(err, service.ErrGroupNotFound, nil)
+		}
+		return removeContentModerationGroup(txCtx, client, id)
+	})
 	if err != nil {
-		return translatePersistenceError(err, service.ErrGroupNotFound, nil)
+		return err
 	}
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
+	if err := enqueueSchedulerOutbox(ctx, clientFromContext(ctx, r.client), service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group delete failed: group=%d err=%v", id, err)
 	}
 	return nil
@@ -806,108 +811,72 @@ func (r *groupRepository) DeleteAccountGroupsByGroupID(ctx context.Context, grou
 }
 
 func (r *groupRepository) DeleteCascade(ctx context.Context, id int64) ([]int64, error) {
-	g, err := r.client.Group.Query().Where(group.IDEQ(id)).Only(ctx)
-	if err != nil {
-		return nil, translatePersistenceError(err, service.ErrGroupNotFound, nil)
-	}
-	groupSvc := groupEntityToService(g)
-
-	// 使用 ent 事务统一包裹：避免手工基于 *sql.Tx 构造 ent client 带来的驱动断言问题，
-	// 同时保证级联删除的原子性。
-	tx, err := r.client.Tx(ctx)
-	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
-		return nil, err
-	}
-	exec := r.client
-	txClient := r.client
-	if err == nil {
-		defer func() { _ = tx.Rollback() }()
-		exec = tx.Client()
-		txClient = exec
-	}
-	// err 为 dbent.ErrTxStarted 时，复用当前 client 参与同一事务。
-
-	// SQLite serializes writers; this read participates in the surrounding transaction.
-	lockSQL := "SELECT id FROM groups WHERE id = $1 AND deleted_at IS NULL"
-	rows, err := exec.QueryContext(ctx, lockSQL, id)
-	if err != nil {
-		return nil, err
-	}
-	var lockedID int64
-	if rows.Next() {
-		if err := rows.Scan(&lockedID); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if lockedID == 0 {
-		return nil, service.ErrGroupNotFound
-	}
-
 	var affectedUserIDs []int64
-	if groupSvc.IsSubscriptionType() {
-		// 只查询未软删除的订阅，避免通知已取消订阅的用户
-		rows, err := exec.QueryContext(ctx, "SELECT user_id FROM user_subscriptions WHERE group_id = $1 AND deleted_at IS NULL", id)
+	_, err := withRepositoryTransaction(ctx, r.client, func(ctx context.Context, exec *dbent.Client) error {
+		if _, err := exec.ExecContext(ctx, "UPDATE groups SET id = id WHERE id = $1 AND deleted_at IS NULL", id); err != nil {
+			return err
+		}
+		g, err := exec.Group.Query().Where(group.IDEQ(id)).Only(ctx)
 		if err != nil {
-			return nil, err
+			return translatePersistenceError(err, service.ErrGroupNotFound, nil)
 		}
-		for rows.Next() {
-			var userID int64
-			if scanErr := rows.Scan(&userID); scanErr != nil {
-				_ = rows.Close()
-				return nil, scanErr
+		groupSvc := groupEntityToService(g)
+		if groupSvc.IsSubscriptionType() {
+			// 只查询未软删除的订阅，避免通知已取消订阅的用户
+			rows, err := exec.QueryContext(ctx, "SELECT user_id FROM user_subscriptions WHERE group_id = $1 AND deleted_at IS NULL", id)
+			if err != nil {
+				return err
 			}
-			affectedUserIDs = append(affectedUserIDs, userID)
-		}
-		if err := rows.Close(); err != nil {
-			return nil, err
-		}
-		if err := rows.Err(); err != nil {
-			return nil, err
+			for rows.Next() {
+				var userID int64
+				if scanErr := rows.Scan(&userID); scanErr != nil {
+					_ = rows.Close()
+					return scanErr
+				}
+				affectedUserIDs = append(affectedUserIDs, userID)
+			}
+			if err := rows.Close(); err != nil {
+				return err
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+
+			// 软删除订阅：设置 deleted_at 而非硬删除
+			if _, err := exec.ExecContext(ctx, "UPDATE user_subscriptions SET deleted_at = NOW() WHERE group_id = $1 AND deleted_at IS NULL", id); err != nil {
+				return err
+			}
 		}
 
-		// 软删除订阅：设置 deleted_at 而非硬删除
-		if _, err := exec.ExecContext(ctx, "UPDATE user_subscriptions SET deleted_at = NOW() WHERE group_id = $1 AND deleted_at IS NULL", id); err != nil {
-			return nil, err
+		// 2. Remove the group id from user_allowed_groups join table.
+		// Legacy users.allowed_groups 列已弃用，不再同步。
+		if _, err := exec.ExecContext(ctx, "DELETE FROM user_allowed_groups WHERE group_id = $1", id); err != nil {
+			return err
 		}
-	}
 
-	// 2. Remove the group id from user_allowed_groups join table.
-	// Legacy users.allowed_groups 列已弃用，不再同步。
-	if _, err := exec.ExecContext(ctx, "DELETE FROM user_allowed_groups WHERE group_id = $1", id); err != nil {
+		// 3. Delete account_groups join rows.
+		if _, err := exec.ExecContext(ctx, "DELETE FROM account_groups WHERE group_id = $1", id); err != nil {
+			return err
+		}
+
+		// 4. Soft-delete composite model routes owned by this group.
+		if _, err := exec.ExecContext(ctx, "UPDATE composite_model_routes SET deleted_at = NOW() WHERE group_id = $1 AND deleted_at IS NULL", id); err != nil {
+			return err
+		}
+
+		// 5. Soft-delete group itself.
+		if _, err := exec.Group.Delete().Where(group.IDEQ(id)).Exec(ctx); err != nil {
+			return err
+		}
+
+		return removeContentModerationGroup(ctx, exec, id)
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	// 3. Delete account_groups join rows.
-	if _, err := exec.ExecContext(ctx, "DELETE FROM account_groups WHERE group_id = $1", id); err != nil {
-		return nil, err
-	}
-
-	// 4. Soft-delete composite model routes owned by this group.
-	if _, err := exec.ExecContext(ctx, "UPDATE composite_model_routes SET deleted_at = NOW() WHERE group_id = $1 AND deleted_at IS NULL", id); err != nil {
-		return nil, err
-	}
-
-	// 5. Soft-delete group itself.
-	if _, err := txClient.Group.Delete().Where(group.IDEQ(id)).Exec(ctx); err != nil {
-		return nil, err
-	}
-
-	if tx != nil {
-		if err := tx.Commit(); err != nil {
-			return nil, err
-		}
-	}
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
+	if err := enqueueSchedulerOutbox(ctx, clientFromContext(ctx, r.client), service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group cascade delete failed: group=%d err=%v", id, err)
 	}
-
 	return affectedUserIDs, nil
 }
 

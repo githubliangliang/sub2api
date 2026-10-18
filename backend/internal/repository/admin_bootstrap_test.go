@@ -76,7 +76,7 @@ func TestEnsureConfiguredAdminRejectsIncompleteCredentialsOnEmptyDatabase(t *tes
 			AdminPassword: "short",
 		},
 	})
-	require.ErrorContains(t, err, "between 8 and 128")
+	require.ErrorContains(t, err, "between 8 and 72")
 
 	for _, password := range []string{"admin123", "CHANGE_ME_STRONG_PASSWORD"} {
 		_, err = ensureConfiguredAdmin(context.Background(), client, &config.Config{
@@ -115,4 +115,16 @@ func TestInitEntBootstrapsConfiguredAdmin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "configured@example.com", admin.Email)
 	require.True(t, (&service.User{PasswordHash: admin.PasswordHash}).CheckPassword("correct-horse-battery"))
+}
+
+func TestEnsureConfiguredAdminGeneratesMissingEmail(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+	cfg := &config.Config{Default: config.DefaultConfig{AdminPassword: strings.Repeat("密", 24)}}
+	created, err := ensureConfiguredAdmin(context.Background(), client, cfg)
+	require.NoError(t, err)
+	require.True(t, created)
+	admin, err := client.User.Query().Only(context.Background())
+	require.NoError(t, err)
+	require.Regexp(t, `^admin-[0-9a-f]{12}@sub2api\.local$`, admin.Email)
+	require.True(t, (&service.User{PasswordHash: admin.PasswordHash}).CheckPassword(cfg.Default.AdminPassword))
 }

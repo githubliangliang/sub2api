@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"testing"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -16,13 +17,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func newGroupEntRepoSQLite(t *testing.T) (*groupRepository, *dbent.Client) {
+func newGroupEntRepoSQLite(t *testing.T, customDSN ...string) (*groupRepository, *dbent.Client) {
 	t.Helper()
 
 	// Soft-delete cascade SQL uses NOW(); register before opening connections.
 	registerSQLitePGCompatFunctions()
 
-	db, err := sql.Open("sqlite", fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", t.Name()))
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_fk=1", url.PathEscape(t.Name()))
+	if len(customDSN) > 0 {
+		dsn = customDSN[0]
+	}
+	db, err := sql.Open("sqlite", dsn)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	db.SetMaxOpenConns(1)

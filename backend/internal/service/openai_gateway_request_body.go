@@ -1514,7 +1514,7 @@ func isEmptyBase64DataURI(raw string) bool {
 
 func getOpenAIRequestBodyMap(_ *gin.Context, body []byte) (map[string]any, error) {
 	var reqBody map[string]any
-	if err := json.Unmarshal(body, &reqBody); err != nil {
+	if err := decodeOpenAIJSONUseNumber(body, &reqBody); err != nil {
 		return nil, fmt.Errorf("parse request: %w", err)
 	}
 	return reqBody, nil

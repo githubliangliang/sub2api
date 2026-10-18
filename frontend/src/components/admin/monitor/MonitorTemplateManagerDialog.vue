@@ -3,7 +3,7 @@
     :show="show"
     :title="t('admin.channelMonitor.template.managerTitle')"
     width="wide"
-    @close="$emit('close')"
+    @close="closeDialog"
   >
     <!-- provider tabs -->
     <div class="mb-4 border-b border-gray-200 dark:border-dark-700">
@@ -195,7 +195,7 @@
         </div>
         <!-- Right: save or close -->
         <div class="flex gap-2">
-          <button class="btn btn-secondary" @click="$emit('close')">
+          <button class="btn btn-secondary" @click="closeDialog">
             {{ t('common.close') }}
           </button>
           <button v-if="editing" class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
@@ -227,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -274,6 +274,10 @@ const providerTabs = computed<{ value: Provider; label: string }[]>(() => [
 const activeProvider = ref<Provider>(PROVIDER_ANTHROPIC)
 const templates = ref<ChannelMonitorTemplate[]>([])
 const loading = ref(false)
+let listRequestId = 0
+let dialogVersion = 0
+let editVersion = 0
+onBeforeUnmount(() => { listRequestId++; dialogVersion++; editVersion++ })
 
 const templatesForActiveProvider = computed(() =>
   templates.value.filter((t) => t.provider === activeProvider.value),
@@ -331,50 +335,68 @@ function loadForm(tpl: ChannelMonitorTemplate) {
 }
 
 function openCreateForm() {
+  editVersion++
+  submitting.value = false
   Object.assign(form, emptyForm(activeProvider.value))
   editing.value = 'new'
 }
 
 function openEditForm(tpl: ChannelMonitorTemplate) {
+  editVersion++
+  submitting.value = false
   loadForm(tpl)
   editing.value = tpl.id
 }
 
 function backToList() {
+  editVersion++
+  submitting.value = false
   editing.value = null
 }
 
 // --- data fetch ---
 async function fetchTemplates() {
+  const requestId = ++listRequestId
   loading.value = true
   try {
     const { items } = await adminAPI.channelMonitorTemplate.list()
+    if (requestId !== listRequestId) return
     templates.value = items
   } catch (err: unknown) {
+    if (requestId !== listRequestId) return
     appStore.showError(extractApiErrorMessage(err, t('common.error')))
   } finally {
-    loading.value = false
+    if (requestId === listRequestId) loading.value = false
   }
 }
 
 watch(
   () => props.show,
   (show) => {
+    dialogVersion++
+    editVersion++
+    submitting.value = false
+    templates.value = []
     if (show) {
       editing.value = null
       fetchTemplates()
+    } else {
+      listRequestId++
+      loading.value = false
     }
   },
-  { immediate: true },
+  { immediate: true, flush: 'sync' },
 )
 
 // --- submit ---
 async function handleSubmit() {
-  if (submitting.value) return
+  if (!props.show || submitting.value) return
   if (!form.name.trim()) {
     appStore.showError(t('admin.channelMonitor.template.missingName'))
     return
   }
+  const version = dialogVersion
+  const edit = editVersion
   submitting.value = true
   try {
     if (editing.value === 'new') {
@@ -387,6 +409,7 @@ async function handleSubmit() {
         body_override_mode: form.body_override_mode,
         body_override: form.body_override,
       })
+      if (version !== dialogVersion || edit !== editVersion) return
       appStore.showSuccess(t('admin.channelMonitor.template.createSuccess'))
     } else if (typeof editing.value === 'number') {
       await adminAPI.channelMonitorTemplate.update(editing.value, {
@@ -397,15 +420,18 @@ async function handleSubmit() {
         body_override_mode: form.body_override_mode,
         body_override: form.body_override,
       })
+      if (version !== dialogVersion || edit !== editVersion) return
       appStore.showSuccess(t('admin.channelMonitor.template.updateSuccess'))
     }
     await fetchTemplates()
+    if (version !== dialogVersion || edit !== editVersion) return
     emit('updated')
     editing.value = null
   } catch (err: unknown) {
+    if (version !== dialogVersion || edit !== editVersion) return
     appStore.showError(extractApiErrorMessage(err, t('common.error')))
   } finally {
-    submitting.value = false
+    if (version === dialogVersion && edit === editVersion) submitting.value = false
   }
 }
 
@@ -422,7 +448,10 @@ function confirmApply(tpl: ChannelMonitorTemplate) {
 
 // picker 提交后触发：刷新模板列表（拿最新 associated_monitors）+ 通知父组件
 async function onApplied(_affected: number) {
+  if (!props.show) return
+  const version = dialogVersion
   await fetchTemplates()
+  if (version !== dialogVersion) return
   emit('updated')
 }
 
@@ -449,15 +478,28 @@ const confirmDeleteMessage = computed(() => {
 async function doDelete() {
   const tpl = confirmDelete.tpl
   confirmDelete.show = false
-  if (!tpl) return
+  if (!props.show || !tpl) return
+  const version = dialogVersion
   try {
     await adminAPI.channelMonitorTemplate.del(tpl.id)
+    if (version !== dialogVersion) return
     appStore.showSuccess(t('admin.channelMonitor.template.deleteSuccess'))
     await fetchTemplates()
+    if (version !== dialogVersion) return
     emit('updated')
   } catch (err: unknown) {
+    if (version !== dialogVersion) return
     appStore.showError(extractApiErrorMessage(err, t('common.error')))
   }
+}
+
+function closeDialog() {
+  dialogVersion++
+  listRequestId++
+  editVersion++
+  applyPicker.show = false
+  confirmDelete.show = false
+  emit('close')
 }
 
 // --- misc ---
