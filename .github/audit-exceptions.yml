@@ -1,44 +1,5 @@
 version: 1
-exceptions:
-  - package: xlsx
-    advisory: "GHSA-4r6h-8v6p-xvw6"
-    severity: high
-    reason: "Admin export only; switched to dynamic import to reduce exposure (CVE-2023-30533)"
-    mitigation: "Load only on export; restrict export permissions and data scope"
-    expires_on: "2026-10-06"
-    owner: "security@your-domain"
-  - package: xlsx
-    advisory: "GHSA-5pgg-2g8v-p4x9"
-    severity: high
-    reason: "Admin export only; switched to dynamic import to reduce exposure (CVE-2024-22363)"
-    mitigation: "Load only on export; restrict export permissions and data scope"
-    expires_on: "2026-10-06"
-    owner: "security@your-domain"
-  - package: lodash
-    advisory: "GHSA-r5fr-rjxr-66jc"
-    severity: high
-    reason: "Re-verified 2026-08-27: transitive only (frontend/src has no lodash import). GHSA-r5fr-rjxr-66jc is _.template prototype pollution; this SPA never calls _.template. Not reported by pnpm audit --prod --audit-level=high on this date."
-    mitigation: "No application _.template usage; keep out of frontend/src. Revisit at next dependency maintenance."
-    expires_on: "2026-10-06"
-    owner: "lzq"
-  - package: lodash-es
-    advisory: "GHSA-r5fr-rjxr-66jc"
-    severity: high
-    reason: "Re-verified 2026-08-27: transitive only (frontend/src has no lodash-es import). Same GHSA as lodash (_.template); unused here. Not reported by pnpm audit --prod --audit-level=high on this date."
-    mitigation: "No application _.template usage; keep out of frontend/src. Revisit at next dependency maintenance."
-    expires_on: "2026-10-06"
-    owner: "lzq"
-  - package: axios
-    advisory: "GHSA-3p68-rc4w-qgx5"
-    severity: critical
-    reason: "Re-verified 2026-08-27: direct dependency frontend/package.json axios ^1.18.0 (lock 1.18.1). GHSA-3p68-rc4w-qgx5 is a NO_PROXY bypass. apiClient is created with a fixed getAPIBaseURL() and no user-controlled proxy/NO_PROXY; browser calls go to this origin only. Not reported by pnpm audit --prod --audit-level=high on this date."
-    mitigation: "Do not accept user-controlled axios proxy env; upgrade axios when the next planned frontend dependency pass lands."
-    expires_on: "2026-10-06"
-    owner: "lzq"
-  - package: nanoid
-    advisory: "GHSA-2v37-7h3g-55p8"
-    severity: high
-    reason: "Re-verified 2026-08-27: transitive (pnpm-lock nanoid@3.3.17, no frontend/src import). GHSA-2v37-7h3g-55p8 requires a custom nanoid generator with size 0; this app never calls nanoid. Currently the only unmatched prod high in pnpm audit --prod --audit-level=high."
-    mitigation: "No application nanoid usage. Upgrade with the deferred frontend dependency pass; do not call custom generators."
-    expires_on: "2026-10-06"
-    owner: "lzq"
+# The six previous exceptions expired on 2026-10-06. None is renewed.
+# Current findings and follow-up scope are recorded in:
+# docs/upstream-sync/implementation-0.2.16-tier2/dependency-review.md
+exceptions: []
