@@ -1,0 +1,17 @@
+{
+  "backend-unit.txt": "cd backend && go test -tags=unit ./... -count=1",
+  "backend-build.txt": "cd backend && go build -o /tmp/sub2api-tier2-check ./cmd/server",
+  "backend-embed.txt": "cd backend && go test -tags=embed,unit ./internal/web -count=1",
+  "backend-embed-build.txt": "cd backend && go build -tags=embed -o /tmp/sub2api-tier2-embed ./cmd/server",
+  "backend-race.txt": "cd backend && go test -race -tags=unit ./internal/service ./internal/repository ./internal/handler ./internal/service/openai_ws_v2 -run 'TestGroupDeletion|TestModerationSaveAndGroupDelete|TestContentModerationUpdateConfigRejectsGroup|TestOpenAIResponsesWebSocket_(GroupRate|KeyMoved|FailedKeyRefresh)|TestRefreshOpenAIWSTurnBilling|TestOpenAIWSTurn|OAuthWebSearch|HTTPThinkingSignature|StructuredInput|ConvertedResponsesInputString|GPT61Sol.*(LongContext|UsesCredential|Exemption)|ModelLongContextExemption|TestHandleCCStreamingFromAnthropic|CachedContentNotFound|OtherForbidden|QuotaForAccountSkips|ThirdPartyAPIKey429|Google.*(Error|Classified)|RequestScoped|GeminiFlashPromotion|GeminiFlashCatalog|ImageUsage|ParseUsage' -count=1",
+  "backend-sqlite.txt": "cd backend && go test -race -tags=unit ./internal/repository -run 'Test.*(ProductionSQLUsesSQLiteDialect|UsageBillingRepositoryApplySQLite|UsageBillingDeletedKey|UpdateFixedQuotaResetAt)' -count=1",
+  "frontend-tests.txt": "cd frontend && pnpm run test:run",
+  "frontend-build.txt": "cd frontend && pnpm run build",
+  "frontend-lint.txt": "cd frontend && pnpm run lint:check",
+  "frontend-typecheck.txt": "cd frontend && pnpm run typecheck",
+  "dependency-audit.json": "cd frontend && pnpm audit --json (exit 1: remaining findings)",
+  "dependency-audit-prod.json": "cd frontend && pnpm audit --prod --audit-level=high --json (exit 1: xlsx)",
+  "dependency-audit-gate.txt": "python3 tools/check_pnpm_audit_exceptions.py --audit <dependency-audit-prod.json> --exceptions .github/audit-exceptions.yml (exit 1: xlsx)",
+  "pnpm9-lock-validation.txt": "In isolated copy of frontend manifests: pnpm dlx pnpm@9.15.9 install --lockfile-only --frozen-lockfile --ignore-scripts",
+  "flash-alias-race.txt": "cd backend && go test -race -tags=unit ./internal/service -run 'GeminiFlashPromotion|GeminiFlashCatalog|Gemini36Flash' -count=1"
+}

@@ -10,7 +10,7 @@
 - [x] 全部候选分档、最小基座、旧待办与测试首行核对；SQLite/安装/元数据探针和当前依赖audit完成。
 - [x] 第一档14簇/第二档16簇OpenSpec计划，覆盖69个本轮PR选定行为；用户明确暂不增加新功能。
 - [x] 记录基线通过与失败：定向后端/SQLite、前端242项/typecheck通过；embed两处旧logo用例失败、audit103条记录仍待修。
-- [ ] 第一/第二档实施与验收：尚未开始；VERSION 1.1.16、迁移226、产品代码/依赖未变。
+- [x] 第一档14簇在 `7c544c03f` 完成；第二档16簇已在 `847db09e1` + `5ff6e5bf9` 提交并快进合入 main，见[第二档报告](../../openspec/changes/port-upstream-0.2.16-tier2/verification.md)。实施验收使用 VERSION 1.1.17、迁移226，依赖定向维护；当前 VERSION 1.1.18 用于发布，未部署业务实例。
 
 上一轮教训（[0.2.12 §9](./PORTING-0.2.12.md#9-新增通用教训)）：payment-only安全修复仍排除；无关依赖子项独立处理；缓存并发/TTL/旧链接必须验收；保留minimum与preferred pin区别；调整档位与tag/VERSION错位须明确记录。
 
@@ -18,7 +18,7 @@
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **2026-10-14 第一档14簇已实现；第二档16簇待实施**。第一档在 `7c544c03f` 完成（实施起点 `0fbcab935`），承接40个本轮PR的选定行为，见[验收](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。新能力与支付不引入，VERSION/迁移/依赖未变，未发布部署。依赖audit仍103条，DOMPurify/axios等维护留第二档S16；旧待办见PORTING §5。
+- [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **第一档14簇已实现；2026-10-18 第二档16簇已提交并合入 main**。第一档在 `7c544c03f` 完成（实施起点 `0fbcab935`），承接40个本轮PR的选定行为，见[验收](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。第一档实施时 VERSION/迁移/依赖未变。第二档提交为 `847db09e1` + `5ff6e5bf9`，实施验收使用 VERSION 1.1.17/迁移226；发布 VERSION 为 1.1.18，不引入新能力与支付，未部署业务实例。第二档 S16 已定向修复 DOMPurify/axios/Vue/source-map-js，审计103→70，生产high剩xlsx两条；[剩余项](./implementation-0.2.16-tier2/dependency-review.md)和旧待办见PORTING §5。
 
 - [PORTING-0.2.12.md](./PORTING-0.2.12.md) —— **上一轮评估及实施2026-10-02，第一档3簇/第二档3簇完成于`405246789`**。19条非merge、9PR、1直接提交，冻结四态A0/C108/X42/N10。[第一档验收](../../openspec/changes/port-upstream-0.2.12-tier1/verification.md)：Grok CLI身份、Antigravity脱敏、错误码文案；[第二档验收](../../openspec/changes/port-upstream-0.2.12-tier2/verification.md)：邮箱原子化及用户确认的账号优先级/密钥排序。补齐旧验证码次数继承和优先级异步归属；全量Go unit/build、定向race、SQLite方言/用量去重/排序，前端typecheck/lint/build与1854通过/2既有跳过。支付两PR/TypeSafe/axios当轮排除，VERSION 1.1.15、迁移226不变，未发布/部署。历史遗留见最新§5。
 

@@ -1,0 +1,34 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/composables/__tests__/useStepUp.spec.ts (12 tests | 1 failed) 139ms
+   × cancels a late step-up request after its component scope is disposed 19ms
+     → expected true to be false // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/composables/__tests__/useStepUp.spec.ts > cancels a late step-up request after its component scope is disposed
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/composables/__tests__/useStepUp.spec.ts:122:36
+    120|   await Promise.resolve()
+    121|   await Promise.resolve()
+    122|   expect(controller.visible.value).toBe(false)
+       |                                    ^
+    123|   expect(await result).toBeInstanceOf(StepUpCancelledError)
+    124|   expect(action).toHaveBeenCalledTimes(1)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 passed (12)
+   Start at  00:17:49
+   Duration  1.19s (transform 59ms, setup 94ms, collect 32ms, tests 139ms, environment 309ms, prepare 73ms)
+
