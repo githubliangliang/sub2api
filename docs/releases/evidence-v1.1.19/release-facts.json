@@ -1,0 +1,93 @@
+{
+  "captured_utc": "2026-10-23T17:01:52.629631+00:00",
+  "implementation_commit": "2b79ac32078e4ac01e037c7ae1fa432d0d3ce1e0",
+  "version": "1.1.19",
+  "implementation_verification_version": "1.1.18",
+  "release_checks": [
+    {
+      "name": "s07-release-script-tests",
+      "cwd": ".",
+      "command": [
+        "python3",
+        "-c",
+        "import subprocess\nfor command in [[\"bash\",\"-n\",\"deploy/resolve-release-tag.sh\",\"deploy/tests/release-tag-preflight-test.sh\",\"deploy/tests/release-publish-config-test.sh\",\"backend/scripts/resolve-version.sh\"],[\"bash\",\"deploy/tests/release-tag-preflight-test.sh\"],[\"bash\",\"deploy/tests/release-publish-config-test.sh\"]]:\n print(\"$\",*command,flush=True)\n result=subprocess.run([\"rtk\",\"proxy\",*command])\n print(\"exit_code=\"+str(result.returncode),flush=True)\n assert result.returncode==0\n"
+      ],
+      "started": "2026-10-23T16:56:14.256482+00:00",
+      "exit_code": 0,
+      "seconds": 0.155,
+      "ended": "2026-10-23T16:56:14.411736+00:00"
+    },
+    {
+      "name": "s07-toolchain",
+      "cwd": ".",
+      "command": [
+        "python3",
+        "-c",
+        "import pathlib,subprocess,json\nroot=pathlib.Path.cwd()\nfor cwd,cmd in [(root,[\"node\",\"--version\"]),(root,[\"pnpm\",\"--version\"]),(root/\"backend\",[\"go\",\"version\"]),(root,[\"docker\",\"version\",\"--format\",\"{{.Client.Version}} / {{.Server.Version}}\"]),(root,[\"docker\",\"image\",\"inspect\",\"node:20-alpine\",\"--format\",\"{{.Id}}\"])]:\n print(\"$\",str(cwd),*cmd,flush=True)\n r=subprocess.run([\"rtk\",\"proxy\",*cmd],cwd=cwd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)\n print(r.stdout,end=\"\",flush=True)\n print(\"exit_code=\"+str(r.returncode),flush=True)\n assert r.returncode==0 or cmd[:3]==[\"docker\",\"image\",\"inspect\"]\nfor name in [\"Dockerfile\",\"deploy/Dockerfile\"]:\n body=(root/name).read_text()\n assert \"ARG GOLANG_IMAGE=golang:1.27.3-alpine\" in body\n assert \"ARG NODE_IMAGE=node:24-alpine\" in body\n assert \"pnpm@9\" in body\n assert \"-tags embed\" in body\n print(name+\": Go 1.27.3 / Node 24 / pnpm 9 / embed\")\nassert (root/\"backend/go.mod\").read_text().splitlines()[2]==\"go 1.27.3\"\nfor name in [\".github/workflows/backend-ci.yml\",\".github/workflows/release.yml\",\".github/workflows/security-scan.yml\"]:\n body=(root/name).read_text()\n assert \"go1.27.3\" in body\n print(name+\": Go 1.27.3 check present\")\nprint(\"VERSION=\"+(root/\"backend/cmd/server/VERSION\").read_text().strip())\nprint(\"lockfile=\"+(root/\"frontend/pnpm-lock.yaml\").read_text().splitlines()[0])\nprint(\"frontend_dist=\"+str((root/\"backend/internal/web/dist/index.html\").is_file()))\n"
+      ],
+      "started": "2026-10-23T16:56:14.255586+00:00",
+      "exit_code": 0,
+      "seconds": 0.712,
+      "ended": "2026-10-23T16:56:14.968015+00:00"
+    },
+    {
+      "name": "s07-integration",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=integration",
+        "./..."
+      ],
+      "started": "2026-10-23T16:56:14.263159+00:00",
+      "exit_code": 0,
+      "seconds": 141.135,
+      "ended": "2026-10-23T16:58:35.398287+00:00"
+    },
+    {
+      "name": "s07-node20-pnpm9-build",
+      "cwd": ".",
+      "command": [
+        "python3",
+        "/tmp/sub2api-release-1.1.19/s07-node20-build.py"
+      ],
+      "started": "2026-10-23T16:57:54.985103+00:00",
+      "exit_code": 0,
+      "seconds": 153.15,
+      "ended": "2026-10-23T17:00:28.135195+00:00"
+    },
+    {
+      "name": "s07-embed-version",
+      "cwd": "backend",
+      "command": [
+        "python3",
+        "/tmp/sub2api-release-1.1.19/s07-embed-version.py"
+      ],
+      "started": "2026-10-23T16:57:54.994624+00:00",
+      "exit_code": 0,
+      "seconds": 60.369,
+      "ended": "2026-10-23T16:58:55.363274+00:00"
+    },
+    {
+      "name": "s07-version-resolver",
+      "cwd": ".",
+      "command": [
+        "python3",
+        "-c",
+        "import pathlib,subprocess,tempfile,shutil\nroot=pathlib.Path.cwd()\nwork=pathlib.Path(tempfile.mkdtemp(prefix=\"sub2api-release-119-resolver-\"))\nscript=work/\"backend/scripts/resolve-version.sh\"\nscript.parent.mkdir(parents=True)\nshutil.copy2(root/\"backend/scripts/resolve-version.sh\",script)\nversion=work/\"backend/cmd/server/VERSION\"\nversion.parent.mkdir(parents=True)\nversion.write_text(\"1.1.19\\n\")\ndef run(*args):\n return subprocess.check_output([\"rtk\",\"proxy\",*args],cwd=work,text=True).strip()\ndef check(label,expected):\n actual=run(\"sh\",str(script)); print(label+\": \"+actual,flush=True); assert actual==expected\ncheck(\"no git repository uses VERSION\",\"1.1.19\")\nfor args in [(\"init\",\"-q\"),(\"config\",\"user.name\",\"Release Version Fixture\"),(\"config\",\"user.email\",\"release-fixture@example.com\"),(\"commit\",\"--allow-empty\",\"-q\",\"-m\",\"fixture\")]:\n run(\"git\",*args)\ncheck(\"untagged HEAD uses VERSION\",\"1.1.19\")\nrun(\"git\",\"tag\",\"-a\",\"v9.9.8\",\"-m\",\"fixture tag precedence\")\ncheck(\"exact annotated v-tag takes precedence\",\"9.9.8\")\nrun(\"git\",\"commit\",\"--allow-empty\",\"-q\",\"-m\",\"next fixture\")\ncheck(\"after tagged commit uses VERSION\",\"1.1.19\")\nrun(\"git\",\"tag\",\"-a\",\"v1.1.19\",\"-m\",\"release fixture\")\ncheck(\"target annotated tag resolves 1.1.19\",\"1.1.19\")\nprint(\"workspace tags and HEAD untouched\",flush=True)\nshutil.rmtree(work)\n"
+      ],
+      "started": "2026-10-23T17:00:00.664506+00:00",
+      "exit_code": 0,
+      "seconds": 0.164,
+      "ended": "2026-10-23T17:00:00.828291+00:00"
+    }
+  ],
+  "implementation_manifest_expected_differences": [
+    "backend/cmd/server/VERSION"
+  ],
+  "version_file_sha256": "95e54737b8ae6c1fca5a07bf0abd75d0d9ba08c164eaa6721341c08a93fb62c4",
+  "tag_notes_sha256": "08ad5d7c3bd359788f0693d99707345d41cd01c98bc5110cd31f3c4a65d7b6a5",
+  "max_migration": 226,
+  "deployment_performed": false,
+  "prior_version_evidence_unchanged": true
+}

@@ -1,0 +1,13 @@
+{
+  "name": "s07-toolchain",
+  "cwd": ".",
+  "command": [
+    "python3",
+    "-c",
+    "import pathlib,subprocess,json\nroot=pathlib.Path.cwd()\nfor cwd,cmd in [(root,[\"node\",\"--version\"]),(root,[\"pnpm\",\"--version\"]),(root/\"backend\",[\"go\",\"version\"]),(root,[\"docker\",\"version\",\"--format\",\"{{.Client.Version}} / {{.Server.Version}}\"]),(root,[\"docker\",\"image\",\"inspect\",\"node:20-alpine\",\"--format\",\"{{.Id}}\"])]:\n print(\"$\",str(cwd),*cmd,flush=True)\n r=subprocess.run([\"rtk\",\"proxy\",*cmd],cwd=cwd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)\n print(r.stdout,end=\"\",flush=True)\n print(\"exit_code=\"+str(r.returncode),flush=True)\n assert r.returncode==0 or cmd[:3]==[\"docker\",\"image\",\"inspect\"]\nfor name in [\"Dockerfile\",\"deploy/Dockerfile\"]:\n body=(root/name).read_text()\n assert \"ARG GOLANG_IMAGE=golang:1.27.3-alpine\" in body\n assert \"ARG NODE_IMAGE=node:24-alpine\" in body\n assert \"pnpm@9\" in body\n assert \"-tags embed\" in body\n print(name+\": Go 1.27.3 / Node 24 / pnpm 9 / embed\")\nassert (root/\"backend/go.mod\").read_text().splitlines()[2]==\"go 1.27.3\"\nfor name in [\".github/workflows/backend-ci.yml\",\".github/workflows/release.yml\",\".github/workflows/security-scan.yml\"]:\n body=(root/name).read_text()\n assert \"go1.27.3\" in body\n print(name+\": Go 1.27.3 check present\")\nprint(\"VERSION=\"+(root/\"backend/cmd/server/VERSION\").read_text().strip())\nprint(\"lockfile=\"+(root/\"frontend/pnpm-lock.yaml\").read_text().splitlines()[0])\nprint(\"frontend_dist=\"+str((root/\"backend/internal/web/dist/index.html\").is_file()))\n"
+  ],
+  "started": "2026-10-23T16:56:14.255586+00:00",
+  "exit_code": 0,
+  "seconds": 0.712,
+  "ended": "2026-10-23T16:56:14.968015+00:00"
+}

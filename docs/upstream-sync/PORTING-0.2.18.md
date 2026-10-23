@@ -1,6 +1,6 @@
 # 上游 v0.2.18 移植评估（v0.2.16 → v0.2.18）
 
-> 当前实施状态（2026-10-24）：第一档6簇与第二档10簇已实现；见[第一档验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)、[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)及§10–§11的实施记录。以下§1–§9保留评估时快照。
+> 当前实施状态（2026-10-24）：第一档6簇与第二档10簇已实现；见[第一档验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)、[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)及§10–§11的实施记录。两档实现已提交`2b79ac320`，v1.1.19发布准备见§12；以下§1–§9保留评估时快照。
 
 评估日期：2026-10-23。**仅评估，未实施：第一档6簇、第二档10簇，共覆盖18个PR及1个直接测试提交的选定行为。** 用户本轮明确选择“现有功能修复优先，新增能力暂缓”。支付始终第四档，不作为可选功能携带。
 
@@ -369,3 +369,11 @@ backend/go.mod、.github/workflows/{backend-ci,release,security-scan}.yml、Dock
 - S10：go.mod、三份workflow、根及deploy Dockerfile同步Go1.27.3；两份pnpm override与九行lockfile定向更新follow-redirects1.16.1。Go1.27.3实测暴露Ent loader的export V5不兼容，经版本矩阵测定x/tools0.50.0为最小可用前置，只取MVS强制传递依赖、无tidy。详见[依赖复核](./implementation-0.2.18-tier2/dependency-review.md)，不把该必要前置冒充上游评估时已有结论。门禁额外修稳既有gemini_sse_comment_compat_test的固定时长关闭夹具及openai_responses_tool_schema_test的进程全局分配计数：前者等待实际心跳，后者隔离进程保留原阈值并通过线性退化负对照；没有修改对应生产逻辑。
 
 范围仍为SQLite/miniredis/simple mode、VERSION1.1.18和迁移226。未新增schema、支付、新平台或模型目录；旧按需/架构不适用项继续见§5。前端全量测试2027通过/2既有跳过，lint/typecheck/build通过；目标follow-redirects两条告警消失，生产high仍为xlsx两条；Go包级扫描stdlib为0但仍有13个不同OSV。真实上游账号权限、Google凭据及远端代理DNS没有被本地桩证明。未发布或部署，最终提交状态见verification。
+
+## 12. v1.1.19 提交与发布准备（2026-10-24）
+
+用户明确要求commit、push main，再创建详细中文annotated tag v1.1.19并push tag。两档现有功能修复、定向依赖维护及实施证据共同提交为`2b79ac32078e4ac01e037c7ae1fa432d0d3ce1e0`，承接评估文档提交`498432759`；相对上一个tag v1.1.18（`873962ce7`）新增F01–F06和S01–S10，选择18个PR和1个直接fixture提交的行为。
+
+VERSION在独立发布准备提交中从1.1.18改为1.1.19，必须先commit并push main再创建annotated tag。两份source-baseline、§1–§11、评估证据和原始实施验收所记录的VERSION1.1.18保持历史原值，不把发布准备冒充移植时基线。SQLite/miniredis/simple mode、迁移226和固定窗口保留，未部署运行中的业务实例。
+
+详细中文tag正文见[发布说明](../releases/v1.1.19.md)，发布流程前置及当前检查见[readiness](../releases/evidence-v1.1.19/readiness.md)。完整GitHub Actions及上传结果以tag触发的实际运行记录为准，不能以本地检查代替。

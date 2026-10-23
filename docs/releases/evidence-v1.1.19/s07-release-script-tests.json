@@ -1,0 +1,13 @@
+{
+  "name": "s07-release-script-tests",
+  "cwd": ".",
+  "command": [
+    "python3",
+    "-c",
+    "import subprocess\nfor command in [[\"bash\",\"-n\",\"deploy/resolve-release-tag.sh\",\"deploy/tests/release-tag-preflight-test.sh\",\"deploy/tests/release-publish-config-test.sh\",\"backend/scripts/resolve-version.sh\"],[\"bash\",\"deploy/tests/release-tag-preflight-test.sh\"],[\"bash\",\"deploy/tests/release-publish-config-test.sh\"]]:\n print(\"$\",*command,flush=True)\n result=subprocess.run([\"rtk\",\"proxy\",*command])\n print(\"exit_code=\"+str(result.returncode),flush=True)\n assert result.returncode==0\n"
+  ],
+  "started": "2026-10-23T16:56:14.256482+00:00",
+  "exit_code": 0,
+  "seconds": 0.155,
+  "ended": "2026-10-23T16:56:14.411736+00:00"
+}

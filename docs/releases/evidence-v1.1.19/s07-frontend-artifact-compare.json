@@ -1,0 +1,13 @@
+{
+  "name": "s07-frontend-artifact-compare",
+  "cwd": ".",
+  "command": [
+    "python3",
+    "-c",
+    "import pathlib,hashlib,json\nroot=pathlib.Path.cwd()\nevidence=root/\"docs/releases/evidence-v1.1.19\"\nrecord=(evidence/\"s07-node20-pnpm9-build.txt\").read_text()\nwork=pathlib.Path(next(line.split(\"=\",1)[1] for line in record.splitlines() if line.startswith(\"isolated_work=\")))\ndef manifest(base):\n return {str(p.relative_to(base)):hashlib.sha256(p.read_bytes()).hexdigest() for p in base.rglob(\"*\") if p.is_file()}\nlocal=manifest(root/\"backend/internal/web/dist\")\nci=manifest(work/\"backend/internal/web/dist\")\ndifferent=sorted(name for name in set(local)|set(ci) if local.get(name)!=ci.get(name))\nprint(json.dumps({\"local_file_count\":len(local),\"node20_file_count\":len(ci),\"different_paths\":different,\"artifacts_equal\":not different},indent=2))\nassert not different\n"
+  ],
+  "started": "2026-10-23T17:01:26.671732+00:00",
+  "exit_code": 0,
+  "seconds": 0.077,
+  "ended": "2026-10-23T17:01:26.748666+00:00"
+}

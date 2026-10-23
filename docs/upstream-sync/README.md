@@ -12,7 +12,7 @@
 - [x] 43候选全量分档、关键调用/缺前置量测、旧遗留重述和integration build tag核查。
 - [x] 第一档6簇/第二档10簇OpenSpec提案，覆盖18PR及1直接测试提交；用户明确新能力暂缓，支付排除。
 - [x] Go测试目录、定向协议/网关/认证/SQLite、前端11项和overlay缺陷探针完成；当前pnpm audit及Go package漏洞扫描单独记录。
-- [x] 第一档6簇已实现并填写[验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)，实施起点`498432759`，当前工作树未提交。
+- [x] 第一档6簇已实现并填写[验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)，实施起点`498432759`，两档实现已共同提交为`2b79ac320`。
 - [x] 第一档全量unit/build、定向race、真实SQLite结算/dedup/固定窗口通过；前端/依赖未改，无对应pnpm/audit门禁；未发布/部署。
 - [x] 第二档S01–S10实现，三agent协作；[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)记录最终组合门禁及缺陷/夹具失败；第三/四档保持暂缓/排除。
 
@@ -32,7 +32,7 @@ v0.2.16历史检查清单：
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.18.md](./PORTING-0.2.18.md) —— **第一档6簇、第二档10簇已实现**。v0.2.17–v0.2.18，冻结评估为56非merge / 35PR / 8直接提交。第一档验收见[报告](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)及[证据](./implementation-0.2.18-tier1/)。第二档含凭据隔离、Responses字段、Codex退休/容量/身份、Anthropic/Gemini断流结算、既有Antigravity/Vertex、图片下载及工具链安全维护，见[验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)与[证据](./implementation-0.2.18-tier2/)。第二档Go1.27.3需最小x/tools编译前置及强制传递依赖；follow-redirects精确1.16.1，[剩余依赖风险](./implementation-0.2.18-tier2/dependency-review.md)单列。新增能力暂缓，支付排除；最大迁移226、VERSION1.1.18；未提交/发布/部署，旧未合项见§5。
+- [PORTING-0.2.18.md](./PORTING-0.2.18.md) —— **第一档6簇、第二档10簇已实现**。v0.2.17–v0.2.18，冻结评估为56非merge / 35PR / 8直接提交。第一档验收见[报告](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)及[证据](./implementation-0.2.18-tier1/)。第二档含凭据隔离、Responses字段、Codex退休/容量/身份、Anthropic/Gemini断流结算、既有Antigravity/Vertex、图片下载及工具链安全维护，见[验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)与[证据](./implementation-0.2.18-tier2/)。第二档Go1.27.3需最小x/tools编译前置及强制传递依赖；follow-redirects精确1.16.1，[剩余依赖风险](./implementation-0.2.18-tier2/dependency-review.md)单列。新增能力暂缓，支付排除；最大迁移226；实施验收VERSION1.1.18保持历史值，发布文件已升1.1.19，见[发布说明](../releases/v1.1.19.md)。实现已提交`2b79ac320`，未部署业务实例；旧未合项见§5。
 
 - [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **第一档14簇已实现；2026-10-18 第二档16簇已提交并合入 main**。第一档在 `7c544c03f` 完成（实施起点 `0fbcab935`），承接40个本轮PR的选定行为，见[验收](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。第一档实施时 VERSION/迁移/依赖未变。第二档提交为 `847db09e1` + `5ff6e5bf9`，实施验收使用 VERSION 1.1.17/迁移226；发布 VERSION 为 1.1.18，不引入新能力与支付，未部署业务实例。第二档 S16 已定向修复 DOMPurify/axios/Vue/source-map-js，审计103→70，生产high剩xlsx两条；[剩余项](./implementation-0.2.16-tier2/dependency-review.md)和旧待办见PORTING §5。
 

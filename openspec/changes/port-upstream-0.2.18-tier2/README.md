@@ -12,3 +12,5 @@
 - [完整评估及patch sites](../../../docs/upstream-sync/PORTING-0.2.18.md)
 
 SQLite/miniredis/simple mode及固定quota窗口修复保留。10簇均已完成；unit/build/race/真实SQLite及前端检查通过，依赖遗留风险单列。当前未提交、未发布、未部署；详见verification。
+
+后续实现提交：`2b79ac320`（两档共同提交）。发布文件VERSION已升1.1.19；[发布说明](../../../docs/releases/v1.1.19.md)。原验收中的1.1.18及未提交状态描述保留为验收时快照。

@@ -1,0 +1,13 @@
+{
+  "name": "s07-version-resolver",
+  "cwd": ".",
+  "command": [
+    "python3",
+    "-c",
+    "import pathlib,subprocess,tempfile,shutil\nroot=pathlib.Path.cwd()\nwork=pathlib.Path(tempfile.mkdtemp(prefix=\"sub2api-release-119-resolver-\"))\nscript=work/\"backend/scripts/resolve-version.sh\"\nscript.parent.mkdir(parents=True)\nshutil.copy2(root/\"backend/scripts/resolve-version.sh\",script)\nversion=work/\"backend/cmd/server/VERSION\"\nversion.parent.mkdir(parents=True)\nversion.write_text(\"1.1.19\\n\")\ndef run(*args):\n return subprocess.check_output([\"rtk\",\"proxy\",*args],cwd=work,text=True).strip()\ndef check(label,expected):\n actual=run(\"sh\",str(script)); print(label+\": \"+actual,flush=True); assert actual==expected\ncheck(\"no git repository uses VERSION\",\"1.1.19\")\nfor args in [(\"init\",\"-q\"),(\"config\",\"user.name\",\"Release Version Fixture\"),(\"config\",\"user.email\",\"release-fixture@example.com\"),(\"commit\",\"--allow-empty\",\"-q\",\"-m\",\"fixture\")]:\n run(\"git\",*args)\ncheck(\"untagged HEAD uses VERSION\",\"1.1.19\")\nrun(\"git\",\"tag\",\"-a\",\"v9.9.8\",\"-m\",\"fixture tag precedence\")\ncheck(\"exact annotated v-tag takes precedence\",\"9.9.8\")\nrun(\"git\",\"commit\",\"--allow-empty\",\"-q\",\"-m\",\"next fixture\")\ncheck(\"after tagged commit uses VERSION\",\"1.1.19\")\nrun(\"git\",\"tag\",\"-a\",\"v1.1.19\",\"-m\",\"release fixture\")\ncheck(\"target annotated tag resolves 1.1.19\",\"1.1.19\")\nprint(\"workspace tags and HEAD untouched\",flush=True)\nshutil.rmtree(work)\n"
+  ],
+  "started": "2026-10-23T17:00:00.664506+00:00",
+  "exit_code": 0,
+  "seconds": 0.164,
+  "ended": "2026-10-23T17:00:00.828291+00:00"
+}
