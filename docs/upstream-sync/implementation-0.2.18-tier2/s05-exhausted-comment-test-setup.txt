@@ -1,0 +1,40 @@
+=== RUN   TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill
+=== RUN   TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill/chat/completions
+2026/10/23 23:36:39 INFO sticky.hash_source source=message_content_fallback hash=1z6hytkzrpzte content_len=21
+2026/10/23 23:36:39 INFO sticky.scheduler_entry group_id=9300 session_hash=1z6hytkz sticky_account_id=0 sticky_source="" model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+--- FAIL: TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill (0.00s)
+    --- FAIL: TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill/chat/completions (0.00s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x60 pc=0x2638f9d]
+
+goroutine 51 [running]:
+testing.tRunner.func1.2({0x5e121c0, 0x6329dd0})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2125 +0x232
+testing.tRunner.func1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2128 +0x329
+panic({0x5e121c0?, 0x6329dd0?})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/panic.go:859 +0x125
+github.com/Wei-Shaw/sub2api/internal/service.(*RateLimitService).handle529(0x0, {0x61aa570, 0x299101dfeed0}, 0x299101a0bb08)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_service.go:1899 +0x3d
+github.com/Wei-Shaw/sub2api/internal/service.(*RateLimitService).HandleUpstreamError(0x0, {0x61aa570?, 0x299101c9a1b0?}, 0x299101a0bb08, 0x211, 0x299101dfee70, {0x299101d21a00, 0x4b, 0x200}, {0x299101f481f8, ...})
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_service.go:516 +0x1425
+github.com/Wei-Shaw/sub2api/internal/service.(*GatewayService).handleFailoverSideEffects(0x299101da49c0, {0x61aa570, 0x299101c9a1b0}, 0x299101f48470, 0x299101a0bb08, {0x299101f48540, 0x1, 0x0?})
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_upstream_response.go:538 +0xed
+github.com/Wei-Shaw/sub2api/internal/service.(*GatewayService).sseStreamErrorEventFailover(0x299101da49c0, {0x61aa570, 0x299101c9a1b0}, 0x2991018a3500, 0x299101a0bb08, 0x2991019eaf30, {0x299101a284e6, 0x4b}, {0x299101d8cee8, 0x11}, ...)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_forward_compat_stream.go:403 +0xa2d
+github.com/Wei-Shaw/sub2api/internal/service.(*GatewayService).ForwardAsChatCompletions(0x299101da49c0, {0x61aa570, 0x299101c9a1b0}, 0x2991018a3500, 0x299101a0bb08, {0x299101a28480, 0x5a, 0x5b}, 0xd?)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_forward_as_chat_completions.go:200 +0x1672
+github.com/Wei-Shaw/sub2api/internal/handler.(*GatewayHandler).ChatCompletions(0x2991019eafc0, 0x2991018a3500)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_handler_chat_completions.go:293 +0x233b
+github.com/Wei-Shaw/sub2api/internal/handler.runCompatStreamUsageHandlerWithLedger(0x299101a0b8c8, {0x2f79d6c, 0x10}, {0x2991019ce840, 0x14c}, 0x1, {0x0, 0x0}, 0x0)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_compat_stream_usage_test.go:148 +0x10ef
+github.com/Wei-Shaw/sub2api/internal/handler.runCompatStreamUsageHandler(...)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_compat_stream_usage_test.go:84
+github.com/Wei-Shaw/sub2api/internal/handler.TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill.func1(0x299101a0b8c8)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_compat_stream_usage_test.go:263 +0x85
+testing.tRunner(0x299101a0b8c8, 0x299101d72680)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195 +0xea
+created by testing.(*T).Run in goroutine 50
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x4d4
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler	0.018s
+FAIL

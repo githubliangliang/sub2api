@@ -1,6 +1,6 @@
 # 设计与边界
 
-按本地既有调用链手工移植；完整PR用于理解意图，不整文件覆盖。本次不修改生产代码。
+按本地既有调用链手工移植；完整PR用于理解意图，不整文件覆盖。本批仅实现S01–S10，冻结source-baseline和评估证据保持不变。
 
 ## S01 混合分组 OAuth 凭据协议隔离
 
@@ -81,3 +81,10 @@ Go升级目标1.27.3并同步go.mod/CI/Docker版本断言；只升级follow-redi
 边界：不复制上游PG Docker阶段、支付依赖或完整lockfile；不把audit变绿作为无条件目标，不延长旧例外；其它现存advisory单列风险。
 
 验收：核验所有Go版本字串、后端build/unit/SQLite，前端typecheck/lint/build/关键vitest；重新跑audit及govulncheck，目标advisory消失且无无关依赖漂移。
+
+
+## 实施量测补充
+
+Go1.27.3目标执行后，Ent加载器的Go导出格式不兼容被完整unit实测触发。采用首个支持该格式的x/tools v0.50.0及其MVS强制传递版本，是完成S10的最小编译前置；不是一般依赖升级授权。前端依赖仍只更新follow-redirects，两份override与锁文件同行，未复制完整上游锁文件。版本矩阵、选择图及剩余告警见[依赖报告](../../../docs/upstream-sync/implementation-0.2.18-tier2/dependency-review.md)。冻结的source-baseline与评估证据不作回写。
+
+S08三协议的已观察用量使用不可静默丢弃的已有队列能力，且在入队前快照请求归属字段；排队期间请求上下文被回收也不改变账本元数据。SQLite测试验证真实余额/账号quota/dedup账本，usage日志接口沿用桩，不声称验证日志表插入。

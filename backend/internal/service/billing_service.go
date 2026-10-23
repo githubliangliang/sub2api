@@ -267,6 +267,19 @@ func (s *BillingService) initFallbackPricing() {
 		LongContextOutputMultiplier:   2,
 	}
 
+	// Grok 4.7 Fast: $4/$1/$12 per MTok (input/cache/output),
+	// rising to $6/$1.50/$18 at 200k prompt tokens.
+	s.fallbackPrices["grok-4.7-fast"] = &ModelPricing{
+		InputPricePerToken:            4e-6,
+		OutputPricePerToken:           12e-6,
+		CacheReadPricePerToken:        1e-6,
+		SupportsCacheBreakdown:        false,
+		LongContextInputThreshold:     200000,
+		LongContextThresholdInclusive: true,
+		LongContextInputMultiplier:    1.5,
+		LongContextOutputMultiplier:   1.5,
+	}
+
 	s.fallbackPrices["claude-3-opus"] = &ModelPricing{
 		InputPricePerToken:         15e-6,    // $15 per MTok
 		OutputPricePerToken:        75e-6,    // $75 per MTok
@@ -786,7 +799,7 @@ func (s *BillingService) initFallbackPricing() {
 
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
-	modelLower := strings.ToLower(model)
+	modelLower := normalizeAntigravityClaudeTierAlias(strings.ToLower(model))
 
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "fable-5-1") || strings.Contains(modelLower, "fable-5.1") ||
@@ -989,6 +1002,9 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		}
 	}
 
+	if isGrok47FastPricingModel(modelLower) {
+		return s.fallbackPrices["grok-4.7-fast"]
+	}
 	switch modelLower {
 	case "grok", "grok-latest", "grok-4.6", "grok-4.6-latest":
 		return s.fallbackPrices["grok-4.6"]
@@ -1019,6 +1035,15 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 
 	return nil
+}
+
+func isGrok47FastPricingModel(model string) bool {
+	switch strings.ToLower(xai.StripGrokProviderPrefix(model)) {
+	case "grok-4.7-fast", "grok-4.7-build-fast":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *BillingService) grokUnknownTextFamilyFallback(model string) *ModelPricing {
@@ -1081,6 +1106,9 @@ func (s *BillingService) HasIdentifiedTokenPricing(model string) bool {
 			return true
 		}
 	}
+	if isGrok47FastPricingModel(model) {
+		model = "grok-4.7-fast"
+	}
 	pricing, ok := s.fallbackPrices[model]
 	return ok && pricing != nil
 }
@@ -1126,6 +1154,7 @@ func (s *BillingService) getModelPricingAt(model string, at time.Time) (*ModelPr
 				CacheCreation1hPrice:               price1h,
 				SupportsCacheBreakdown:             enableBreakdown,
 				LongContextInputThreshold:          litellmPricing.LongContextInputTokenThreshold,
+				LongContextThresholdInclusive:      isGrok47FastPricingModel(model),
 				LongContextInputMultiplier:         litellmPricing.LongContextInputCostMultiplier,
 				LongContextOutputMultiplier:        litellmPricing.LongContextOutputCostMultiplier,
 				ImageInputPricePerToken:            litellmPricing.InputCostPerImageToken,

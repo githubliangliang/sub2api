@@ -1264,14 +1264,18 @@ func ChatCompletionsResponseToResponses(resp *ChatCompletionsResponse, model str
 	}
 
 	out := &ResponsesResponse{
-		ID:     id,
-		Object: "response",
-		Model:  model,
-		Status: "completed",
+		ID:        id,
+		Object:    "response",
+		CreatedAt: time.Now().Unix(),
+		Model:     model,
+		Status:    "completed",
 	}
 	if resp == nil {
 		out.Output = []ResponsesOutput{emptyResponsesMessageOutput()}
 		return out
+	}
+	if resp.Created > 0 {
+		out.CreatedAt = resp.Created
 	}
 	if out.Model == "" {
 		out.Model = resp.Model
@@ -1556,6 +1560,9 @@ func ChatCompletionsChunkToResponsesEvents(
 	if chunk == nil || state == nil {
 		return nil
 	}
+	if !state.CreatedSent && chunk.Created > 0 {
+		state.Created = chunk.Created
+	}
 	if chunk.ID != "" {
 		state.ResponseID = chunk.ID
 	}
@@ -1719,6 +1726,7 @@ func FinalizeChatCompletionsResponsesStream(state *ChatCompletionsToResponsesStr
 		Response: &ResponsesResponse{
 			ID:                state.ResponseID,
 			Object:            "response",
+			CreatedAt:         state.Created,
 			Model:             state.Model,
 			Status:            status,
 			Output:            state.chatOutput(),
@@ -1739,6 +1747,7 @@ func ensureChatToResponsesCreated(state *ChatCompletionsToResponsesStreamState) 
 		Response: &ResponsesResponse{
 			ID:          state.ResponseID,
 			Object:      "response",
+			CreatedAt:   state.Created,
 			Model:       state.Model,
 			Status:      "in_progress",
 			Output:      []ResponsesOutput{},

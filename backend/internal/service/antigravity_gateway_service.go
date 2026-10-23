@@ -377,7 +377,7 @@ func (s *AntigravityGatewayService) TestConnection(ctx context.Context, account 
 
 	// 构建请求体
 	var requestBody []byte
-	if strings.HasPrefix(modelID, "gemini-") {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(mappedModel)), "gemini-") {
 		requestBody, err = s.buildGeminiTestRequest(projectID, mappedModel)
 	} else {
 		requestBody, err = s.buildClaudeTestRequest(projectID, mappedModel)

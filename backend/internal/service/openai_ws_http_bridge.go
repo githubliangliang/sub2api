@@ -555,6 +555,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	scanner.Buffer(scanBuf[:0], maxLineSize)
 	defer putSSEScannerBuf64K(scanBuf)
 
+	var createdAtStamper responsesCreatedAtStamper
 	bareErrors := openAIBareErrorStream{enabled: account.IsOpenAIOAuthLike()}
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -609,6 +610,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
 				upstreamMessage = corrected
 			}
+		}
+		if stamped, changed := createdAtStamper.Stamp(upstreamMessage, eventType); changed {
+			upstreamMessage = stamped
 		}
 		replayCollector.AddEvent(eventType, upstreamMessage)
 
@@ -768,7 +772,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		s.handleOpenAIAccountUpstreamError(ctx, account, openAIStreamFailureStatus(bareErrors.pending, message), resp.Header, bareErrors.pending, canonicalOpenAIAccountSchedulingModel(account, originalModel))
 		upstreamTerminalEvent = "response.failed"
 		if !clientDisconnected {
-			frame := buildOpenAIResponseFailedSSE(responseID, originalModel, bareErrors.pending, message)
+			frame := buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message)
 			for _, line := range strings.Split(frame, "\n") {
 				if data, ok := extractOpenAISSEDataLine(line); ok {
 					_ = writeClientMessage([]byte(data))

@@ -82,10 +82,14 @@ func TestHandleCCStreamingFromAnthropic_PingFlushesImmediately(t *testing.T) {
 		}
 	}
 	var body string
-	send := func(eventType, payload string) {
+	sendOnly := func(eventType, payload string) {
 		t.Helper()
 		_, err := io.WriteString(upstream, "event: "+eventType+"\ndata: "+payload+"\n\n")
 		require.NoError(t, err)
+	}
+	send := func(eventType, payload string) {
+		t.Helper()
+		sendOnly(eventType, payload)
 		body = awaitFlush()
 	}
 	ping := func() {
@@ -97,8 +101,8 @@ func TestHandleCCStreamingFromAnthropic_PingFlushesImmediately(t *testing.T) {
 
 	ping()
 	ping()
-	send("message_start", `{"type":"message_start","message":{"id":"msg_ping","role":"assistant","content":[],"usage":{"input_tokens":10}}}`)
-	send("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`)
+	sendOnly("message_start", `{"type":"message_start","message":{"id":"msg_ping","role":"assistant","content":[],"usage":{"input_tokens":10}}}`)
+	sendOnly("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`)
 	send("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`)
 	require.Contains(t, body, `"content":"hello"`)
 	ping()
@@ -164,9 +168,11 @@ func TestHandleCCStreamingFromAnthropic_PingDoesNotSetFirstToken(t *testing.T) {
 		&http.Response{Body: io.NopCloser(strings.NewReader("event: ping\ndata: {\"type\":\"ping\"}\n\n"))},
 		context, "gpt-5", "claude-sonnet-4.5", nil, time.Now(),
 	)
-	require.NoError(t, err)
-	require.Nil(t, result.FirstTokenMs)
+	require.ErrorContains(t, err, "missing terminal event")
+	require.Nil(t, result, "transport pings must not create observed usage or a first-token result")
 	require.True(t, strings.HasPrefix(writer.Body.String(), ": ping\n\n"))
+	require.Contains(t, writer.Body.String(), "stream_incomplete")
+	require.NotContains(t, writer.Body.String(), "[DONE]")
 }
 
 func TestHandleCCStreamingFromAnthropic_PingWriteFailureStopsDownstream(t *testing.T) {
@@ -191,15 +197,16 @@ func TestHandleCCStreamingFromAnthropic_PingWriteFailureStopsDownstream(t *testi
 			)
 			require.NoError(t, err)
 			require.True(t, writer.failed)
+			require.True(t, result.ClientDisconnect)
 			require.Zero(t, writer.writesAfterError)
 			require.Zero(t, writer.flushesAfterError)
 			require.NotContains(t, writer.Body.String(), "[DONE]")
-			require.Zero(t, result.Usage.OutputTokens)
+			require.Equal(t, 7, result.Usage.OutputTokens)
+			require.NotNil(t, result.FirstTokenMs)
 			if withUsage {
 				require.Equal(t, 10, result.Usage.InputTokens)
 			} else {
 				require.Zero(t, result.Usage.InputTokens)
-				require.Nil(t, result.FirstTokenMs)
 			}
 		})
 	}
@@ -219,9 +226,16 @@ func TestHandleCCStreamingFromAnthropic_ErrorAfterPing(t *testing.T) {
 			c, _ := gin.CreateTestContext(writer)
 			result, err := (&GatewayService{}).handleCCStreamingFromAnthropic(&http.Response{Body: io.NopCloser(reader)}, c, "client-model", "upstream-model", nil, time.Now())
 			require.Error(t, err)
-			require.NotNil(t, result)
+			require.Nil(t, result, "no usage was observed")
 			var failover *UpstreamFailoverError
 			require.False(t, errors.As(err, &failover))
+			if !readFailure {
+				var sseErr *sseStreamErrorEventError
+				require.ErrorAs(t, err, &sseErr)
+				require.False(t, IsResponseCommitted(c), "ping does not block a pre-output retry")
+				require.Equal(t, ": ping\n\n", writer.Body.String())
+				return
+			}
 			require.True(t, IsResponseCommitted(c))
 			require.True(t, strings.HasPrefix(writer.Body.String(), ": ping\n\n"))
 			require.Equal(t, 1, strings.Count(writer.Body.String(), `"error":`))

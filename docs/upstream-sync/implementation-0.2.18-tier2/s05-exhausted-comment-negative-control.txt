@@ -1,0 +1,28 @@
+=== RUN   TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill
+=== RUN   TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill/chat/completions
+2026/10/23 23:39:33 INFO sticky.hash_source source=message_content_fallback hash=1z6hytkzrpzte content_len=21
+2026/10/23 23:39:33 INFO sticky.scheduler_entry group_id=9300 session_hash=1z6hytkz sticky_account_id=0 sticky_source="" model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/23 23:39:33 INFO account_overloaded account_id=9301 until=2026-10-23T23:49:33.972+08:00
+2026/10/23 23:39:33 [Forward] SSE error event in stream: Account=9301() RequestID=compat-stream-usage Body={"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+2026/10/23 23:39:33 INFO sticky.scheduler_entry group_id=9300 session_hash=1z6hytkz sticky_account_id=0 sticky_source="" model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=1
+2026/10/23 23:39:33 [SelectAccountDetailed] group_id=9300 model=claude-sonnet-4.5 platform=anthropic session=1z6hytkz total=1 eligible=0 excluded=1 unschedulable=0 platform_filtered=0 model_unsupported=0 model_rate_limited=0 profit_threshold=0 profit_invalid_account_rate=0 sample_platform_filtered=[] sample_model_unsupported=[] sample_model_rate_limited=[]
+    gateway_compat_stream_usage_test.go:277: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_compat_stream_usage_test.go:277
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 0
+        	Test:       	TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill/chat/completions
+        	Messages:   	exhaustion after a transport comment must finish with a Chat SSE error
+=== RUN   TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill/responses
+2026/10/23 23:39:33 INFO sticky.hash_source source=message_content_fallback hash=1z6hytkzrpzte content_len=21
+2026/10/23 23:39:33 INFO sticky.scheduler_entry group_id=9300 session_hash=1z6hytkz sticky_account_id=0 sticky_source="" model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/23 23:39:33 INFO account_overloaded account_id=9301 until=2026-10-23T23:49:33.972+08:00
+2026/10/23 23:39:33 [Forward] SSE error event in stream: Account=9301() RequestID=compat-stream-usage Body={"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+2026/10/23 23:39:33 INFO sticky.scheduler_entry group_id=9300 session_hash=1z6hytkz sticky_account_id=0 sticky_source="" model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=1
+2026/10/23 23:39:33 [SelectAccountDetailed] group_id=9300 model=claude-sonnet-4.5 platform=anthropic session=1z6hytkz total=1 eligible=0 excluded=1 unschedulable=0 platform_filtered=0 model_unsupported=0 model_rate_limited=0 profit_threshold=0 profit_invalid_account_rate=0 sample_platform_filtered=[] sample_model_unsupported=[] sample_model_rate_limited=[]
+--- FAIL: TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill (0.00s)
+    --- FAIL: TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill/chat/completions (0.00s)
+    --- PASS: TestGatewayCompatibilityHandlers_PreOutputOverloadDoesNotBill/responses (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler	0.015s
+FAIL

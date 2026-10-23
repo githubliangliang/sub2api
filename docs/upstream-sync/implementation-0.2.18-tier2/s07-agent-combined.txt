@@ -1,0 +1,680 @@
+2026/10/23 16:17:11 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestVertexProvider_SupportsOnlyGeminiServiceAccount
+--- PASS: TestVertexProvider_SupportsOnlyGeminiServiceAccount (0.00s)
+=== RUN   TestVertexProvider_MissingServiceAccountRejected
+--- PASS: TestVertexProvider_MissingServiceAccountRejected (0.00s)
+=== RUN   TestVertexProvider_MissingManagedGCSBucketRejected
+--- PASS: TestVertexProvider_MissingManagedGCSBucketRejected (0.00s)
+=== RUN   TestVertexProvider_SubmitUploadsJSONLAndCreatesBatchPredictionJob
+--- PASS: TestVertexProvider_SubmitUploadsJSONLAndCreatesBatchPredictionJob (0.00s)
+=== RUN   TestVertexProvider_GetMapsStates
+=== RUN   TestVertexProvider_GetMapsStates/pending
+=== RUN   TestVertexProvider_GetMapsStates/queued
+=== RUN   TestVertexProvider_GetMapsStates/running
+=== RUN   TestVertexProvider_GetMapsStates/succeeded
+=== RUN   TestVertexProvider_GetMapsStates/failed
+=== RUN   TestVertexProvider_GetMapsStates/cancelled
+--- PASS: TestVertexProvider_GetMapsStates (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/pending (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/queued (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/running (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/succeeded (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/failed (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/cancelled (0.00s)
+=== RUN   TestVertexProvider_OpenResultReturnsCombinedJSONLStream
+--- PASS: TestVertexProvider_OpenResultReturnsCombinedJSONLStream (0.00s)
+=== RUN   TestVertexProvider_OpenResultMissingObjectsReturnsTypedError
+--- PASS: TestVertexProvider_OpenResultMissingObjectsReturnsTypedError (0.00s)
+=== RUN   TestVertexProvider_CancelCallsClient
+--- PASS: TestVertexProvider_CancelCallsClient (0.00s)
+=== RUN   TestVertexProvider_CleanupDeletesOnlyManagedPaths
+--- PASS: TestVertexProvider_CleanupDeletesOnlyManagedPaths (0.00s)
+=== RUN   TestVertexProvider_CleanupRejectsUnsafePath
+--- PASS: TestVertexProvider_CleanupRejectsUnsafePath (0.00s)
+=== RUN   TestVertexProvider_ErrorsDoNotExposeServiceAccountSecrets
+--- PASS: TestVertexProvider_ErrorsDoNotExposeServiceAccountSecrets (0.00s)
+=== RUN   TestVertexProvider_MetadataDoesNotStoreImageBytesOrBase64
+--- PASS: TestVertexProvider_MetadataDoesNotStoreImageBytesOrBase64 (0.00s)
+=== RUN   TestVertexBetaFilter_StripsUnsupportedClaudeCodeTokens
+--- PASS: TestVertexBetaFilter_StripsUnsupportedClaudeCodeTokens (0.00s)
+=== RUN   TestVertexBetaFilter_DropsHeaderWhenAllUnsupported
+--- PASS: TestVertexBetaFilter_DropsHeaderWhenAllUnsupported (0.00s)
+=== RUN   TestVertexBetaFilter_BodySanitizeKeysOnFinalBeta
+--- PASS: TestVertexBetaFilter_BodySanitizeKeysOnFinalBeta (0.00s)
+=== RUN   TestVertexBetaFilter_BlocksViaBetaPolicy
+--- PASS: TestVertexBetaFilter_BlocksViaBetaPolicy (0.00s)
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_invalid_resource_state
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/stream_invalid_resource_state
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_not_found
+--- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden (0.00s)
+    --- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_invalid_resource_state (0.00s)
+    --- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/stream_invalid_resource_state (0.00s)
+    --- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_not_found (0.00s)
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules/native
+2026/10/23 16:17:11 INFO account_temp_unschedulable account_id=830 until=2026-10-23T16:47:11.608Z rule_index=0 status_code=401
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules/claude_compat
+2026/10/23 16:17:11 INFO account_temp_unschedulable account_id=830 until=2026-10-23T16:47:11.608Z rule_index=0 status_code=401
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules/chat_completions_compat
+2026/10/23 16:17:11 INFO account_temp_unschedulable account_id=830 until=2026-10-23T16:47:11.609Z rule_index=0 status_code=401
+--- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules (0.00s)
+    --- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules/native (0.00s)
+    --- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules/claude_compat (0.00s)
+    --- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules/chat_completions_compat (0.00s)
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError/native
+2026/10/23 16:17:11 INFO 401_escalated_to_error account_id=830 reason="previous temp-unschedulable was also 401"
+2026/10/23 16:17:11 WARN account_disabled_auth_error account_id=830 error="Authentication failed (401): API key expired. Please renew the API key."
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError/claude_compat
+2026/10/23 16:17:11 INFO 401_escalated_to_error account_id=830 reason="previous temp-unschedulable was also 401"
+2026/10/23 16:17:11 WARN account_disabled_auth_error account_id=830 error="Authentication failed (401): API key expired. Please renew the API key."
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError/chat_completions_compat
+2026/10/23 16:17:11 INFO 401_escalated_to_error account_id=830 reason="previous temp-unschedulable was also 401"
+2026/10/23 16:17:11 WARN account_disabled_auth_error account_id=830 error="Authentication failed (401): API key expired. Please renew the API key."
+--- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError (0.00s)
+    --- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError/native (0.00s)
+    --- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError/claude_compat (0.00s)
+    --- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError/chat_completions_compat (0.00s)
+=== RUN   TestGeminiForward_UncheckedFinalResponseIsCheckedAfterLoop
+2026/10/23 16:17:11 Gemini account 830: upstream status 503, retry 1/5
+2026/10/23 16:17:12 INFO account_model_temp_unschedulable account_id=830 model=gemini-2.5-flash until=2026-10-23T16:47:12.700Z rule_index=0 status_code=400
+--- PASS: TestGeminiForward_UncheckedFinalResponseIsCheckedAfterLoop (1.09s)
+=== RUN   TestExchangeVertexServiceAccountToken_AccountNotFoundIsRecognized
+--- PASS: TestExchangeVertexServiceAccountToken_AccountNotFoundIsRecognized (0.02s)
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_invalid_grant
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/not_400
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_code
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/server_error
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/plain_error
+--- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_invalid_grant (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/not_400 (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_code (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/server_error (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/plain_error (0.00s)
+=== RUN   TestGeminiForwardNative_VertexServiceAccountNotFoundDisablesAndFailsOver
+2026/10/23 16:17:12 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found"
+--- PASS: TestGeminiForwardNative_VertexServiceAccountNotFoundDisablesAndFailsOver (0.05s)
+=== RUN   TestGeminiForward_VertexServiceAccountNotFoundDisablesAndFailsOver
+2026/10/23 16:17:12 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found"
+--- PASS: TestGeminiForward_VertexServiceAccountNotFoundDisablesAndFailsOver (0.05s)
+=== RUN   TestGeminiForwardAsChatCompletions_VertexServiceAccountNotFoundDisablesAndFailsOver
+2026/10/23 16:17:12 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found"
+--- PASS: TestGeminiForwardAsChatCompletions_VertexServiceAccountNotFoundDisablesAndFailsOver (0.05s)
+=== RUN   TestGeminiForwardNative_OtherVertexTokenErrorKeepsAccountState
+--- PASS: TestGeminiForwardNative_OtherVertexTokenErrorKeepsAccountState (0.05s)
+=== RUN   TestGeminiVertexAccountNotFoundSanitizesCredentialQueryValues
+2026/10/23 16:17:12 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found at https://example.test/token?key=***&access_token=***"
+--- PASS: TestGeminiVertexAccountNotFoundSanitizesCredentialQueryValues (0.05s)
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/absent
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/null
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/empty_array
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/quota_failure
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/retry_info
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/unknown_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/object_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/empty_object_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/string_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/boolean_details
+--- PASS: TestVertexSharedCapacity429ClassificationBoundaries (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/absent (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/null (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/empty_array (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/quota_failure (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/retry_info (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/unknown_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/object_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/empty_object_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/string_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/boolean_details (0.00s)
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/native
+2026/10/23 16:17:12 [Gemini 429] Vertex account 820 shared capacity exhausted; account stays schedulable
+2026/10/23 16:17:12 Gemini account 820: upstream status 429, retry 1/5
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/claude_compat
+2026/10/23 16:17:14 [Gemini 429] Vertex account 820 shared capacity exhausted; account stays schedulable
+2026/10/23 16:17:14 Gemini account 820: upstream status 429, retry 1/5
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/chat_completions_compat
+2026/10/23 16:17:15 [Gemini 429] Vertex account 820 shared capacity exhausted; account stays schedulable
+2026/10/23 16:17:15 Gemini account 820: upstream status 429, retry 1/5
+--- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty (3.06s)
+    --- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/native (1.02s)
+    --- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/claude_compat (1.15s)
+    --- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/chat_completions_compat (0.90s)
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/native
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/claude_compat
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/chat_completions_compat
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/native
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/claude_compat
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/chat_completions_compat
+--- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint (0.41s)
+    --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request (0.20s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/native (0.04s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/claude_compat (0.02s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/chat_completions_compat (0.14s)
+    --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable (0.22s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/native (0.02s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/claude_compat (0.03s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/chat_completions_compat (0.16s)
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/native
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/messages
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/chat
+--- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount (0.14s)
+    --- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/native (0.03s)
+    --- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/messages (0.04s)
+    --- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/chat (0.08s)
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/native
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/messages
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/chat
+2026/10/23 16:17:21 httptest.Server blocked in Close after 5 seconds, waiting for connections:
+  *net.TCPConn 0x18d8bd982020 127.0.0.1:36428 in state active
+  *net.TCPConn 0x18d8bd982028 127.0.0.1:36436 in state active
+  *net.TCPConn 0x18d8bd982030 127.0.0.1:36442 in state active
+SIGQUIT: quit
+PC=0x49d1c1 m=0 sigcode=0
+
+goroutine 0 gp=0x7937680 m=0 mp=0x7939d60 [idle]:
+runtime.futex(0x7939eb8, 0x80, 0x0, 0x0, 0x0, 0x0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/sys_linux_amd64.s:575 +0x21 fp=0x7ffe21b36ff8 sp=0x7ffe21b36ff0 pc=0x49d1c1
+runtime.futexsleep(0x7939d60?, 0x21b37070?, 0x466748?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/os_linux.go:73 +0x30 fp=0x7ffe21b37048 sp=0x7ffe21b36ff8 pc=0x4527d0
+runtime.notesleep(0x7939eb8)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/lock_futex.go:47 +0x87 fp=0x7ffe21b37080 sp=0x7ffe21b37048 pc=0x424c27
+runtime.mPark(...)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:1985
+runtime.stopm()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:3023 +0x8c fp=0x7ffe21b370b0 sp=0x7ffe21b37080 pc=0x45d5cc
+runtime.findRunnable()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:3811 +0xeb7 fp=0x7ffe21b37280 sp=0x7ffe21b370b0 pc=0x45f157
+runtime.schedule()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:4179 +0xb1 fp=0x7ffe21b372c0 sp=0x7ffe21b37280 pc=0x460271
+runtime.park_m(0x18d8bd84d2c0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:4319 +0x279 fp=0x7ffe21b37320 sp=0x7ffe21b372c0 pc=0x4606f9
+runtime.mcall()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:463 +0x53 fp=0x7ffe21b37338 sp=0x7ffe21b37320 pc=0x499b13
+
+goroutine 1 gp=0x18d8bd84c1e0 m=nil [chan receive, 2 minutes]:
+runtime.gopark(0x76bde40?, 0x7a77a46d2a08?, 0x68?, 0x74?, 0x72067a8?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd8b9908 sp=0x18d8bd8b98e8 pc=0x49396a
+runtime.chanrecv(0x18d8bd8ad700, 0x18d8be3479ef, 0x1)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:667 +0x4ae fp=0x18d8bd8b9980 sp=0x18d8bd8b9908 pc=0x41f0ce
+runtime.chanrecv1(0x18?, 0x743bfb8?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:509 +0x12 fp=0x18d8bd8b99a8 sp=0x18d8bd8b9980 pc=0x41ebf2
+testing.(*T).Run(0x18d8bda89208, {0x3bda5bb?, 0x18d8be0e1aa0?}, 0x7705de0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2268 +0x4f2 fp=0x18d8bd8b9a80 sp=0x18d8bd8b99a8 pc=0x56c492
+testing.runTests.func1(0x18d8bda89208)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2744 +0x37 fp=0x18d8bd8b9ac0 sp=0x18d8bd8b9a80 pc=0x5722f7
+testing.tRunner(0x18d8bda89208, 0x18d8be0e1bc8)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195 +0xea fp=0x18d8bd8b9b10 sp=0x18d8bd8b9ac0 pc=0x56bf2a
+testing.runTests({0x3aca446, 0x1b}, {0x3b4abee, 0x2c}, 0x18d8bd85b560, {0x7904fa0, 0x1a87, 0x1a87}, {0xc2af0097e40af05d, 0x8bb40a01ad, ...})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2742 +0x510 fp=0x18d8bd8b9bf8 sp=0x18d8bd8b9b10 pc=0x56e4f0
+testing.(*M).Run(0x18d8bd9b4960)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2602 +0x6af fp=0x18d8bd8b9e38 sp=0x18d8bd8b9bf8 pc=0x56d0af
+main.main()
+	_testmain.go:13726 +0x9b fp=0x18d8bd8b9eb8 sp=0x18d8bd8b9e38 pc=0x386bf5b
+runtime.main()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:302 +0x427 fp=0x18d8bd8b9fe0 sp=0x18d8bd8b9eb8 pc=0x458b47
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd8b9fe8 sp=0x18d8bd8b9fe0 pc=0x49b661
+
+goroutine 2 gp=0x18d8bd84cd20 m=nil [force gc (idle), 2 minutes]:
+runtime.gopark(0x22a4d875e31a5?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd914fa8 sp=0x18d8bd914f88 pc=0x49396a
+runtime.goparkunlock(...)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:480
+runtime.forcegchelper()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:387 +0xb3 fp=0x18d8bd914fe0 sp=0x18d8bd914fa8 pc=0x458e13
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd914fe8 sp=0x18d8bd914fe0 pc=0x49b661
+created by runtime.init.7 in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:375 +0x1a
+
+goroutine 3 gp=0x18d8bd84d2c0 m=nil [GC sweep wait]:
+runtime.gopark(0x1?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd915788 sp=0x18d8bd915768 pc=0x49396a
+runtime.goparkunlock(...)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:480
+runtime.bgsweep(0x18d8bd8ac380)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgcsweep.go:324 +0x151 fp=0x18d8bd9157c8 sp=0x18d8bd915788 pc=0x441831
+runtime.gcenable.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:214 +0x17 fp=0x18d8bd9157e0 sp=0x18d8bd9157c8 pc=0x4889d7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9157e8 sp=0x18d8bd9157e0 pc=0x49b661
+created by runtime.gcenable in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:214 +0x66
+
+goroutine 4 gp=0x18d8bd84d4a0 m=nil [GC scavenge wait, 2 minutes]:
+runtime.gopark(0x10000?, 0x3d6b460?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd915f78 sp=0x18d8bd915f58 pc=0x49396a
+runtime.goparkunlock(...)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:480
+runtime.(*scavengerState).park(0x7936a80)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgcscavenge.go:425 +0x49 fp=0x18d8bd915fa8 sp=0x18d8bd915f78 pc=0x43f329
+runtime.bgscavenge(0x18d8bd8ac380)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgcscavenge.go:658 +0x59 fp=0x18d8bd915fc8 sp=0x18d8bd915fa8 pc=0x43f899
+runtime.gcenable.gowrap2()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:215 +0x17 fp=0x18d8bd915fe0 sp=0x18d8bd915fc8 pc=0x488997
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd915fe8 sp=0x18d8bd915fe0 pc=0x49b661
+created by runtime.gcenable in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:215 +0xa5
+
+goroutine 18 gp=0x18d8bda02000 m=nil [GOMAXPROCS updater (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd910788 sp=0x18d8bd910768 pc=0x49396a
+runtime.goparkunlock(...)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:480
+runtime.updateMaxProcsGoroutine()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:7146 +0xe7 fp=0x18d8bd9107e0 sp=0x18d8bd910788 pc=0x466407
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9107e8 sp=0x18d8bd9107e0 pc=0x49b661
+created by runtime.defaultGOMAXPROCSUpdateEnable in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:7134 +0x37
+
+goroutine 19 gp=0x18d8bda025a0 m=nil [finalizer wait, 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd910e20 sp=0x18d8bd910e00 pc=0x49396a
+runtime.runFinalizers()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mfinal.go:210 +0x107 fp=0x18d8bd910fe0 sp=0x18d8bd910e20 pc=0x432887
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd910fe8 sp=0x18d8bd910fe0 pc=0x49b661
+created by runtime.createfing in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mfinal.go:172 +0x3d
+
+goroutine 20 gp=0x18d8bda03860 m=nil [cleanup wait, 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd911768 sp=0x18d8bd911748 pc=0x49396a
+runtime.goparkunlock(...)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:480
+runtime.(*cleanupQueue).dequeue(0x79370c0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mcleanup.go:522 +0xd3 fp=0x18d8bd9117a0 sp=0x18d8bd911768 pc=0x42f5b3
+runtime.runCleanups()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mcleanup.go:718 +0x45 fp=0x18d8bd9117e0 sp=0x18d8bd9117a0 pc=0x42fc25
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9117e8 sp=0x18d8bd9117e0 pc=0x49b661
+created by runtime.(*cleanupQueue).createGs in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mcleanup.go:672 +0xa5
+
+goroutine 21 gp=0x18d8bda03a40 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd911f40 sp=0x18d8bd911f20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd911fc8 sp=0x18d8bd911f40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd911fe0 sp=0x18d8bd911fc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd911fe8 sp=0x18d8bd911fe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 5 gp=0x18d8bd84da40 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x48ae20?, 0xde?, 0x46?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd914740 sp=0x18d8bd914720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd9147c8 sp=0x18d8bd914740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd9147e0 sp=0x18d8bd9147c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9147e8 sp=0x18d8bd9147e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 6 gp=0x18d8bd84dc20 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd916740 sp=0x18d8bd916720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd9167c8 sp=0x18d8bd916740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd9167e0 sp=0x18d8bd9167c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9167e8 sp=0x18d8bd9167e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 7 gp=0x18d8bd94c000 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd916f40 sp=0x18d8bd916f20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd916fc8 sp=0x18d8bd916f40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd916fe0 sp=0x18d8bd916fc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd916fe8 sp=0x18d8bd916fe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 8 gp=0x18d8bd94c1e0 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd917740 sp=0x18d8bd917720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd9177c8 sp=0x18d8bd917740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd9177e0 sp=0x18d8bd9177c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9177e8 sp=0x18d8bd9177e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 34 gp=0x18d8bd9843c0 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd99a740 sp=0x18d8bd99a720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd99a7c8 sp=0x18d8bd99a740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd99a7e0 sp=0x18d8bd99a7c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd99a7e8 sp=0x18d8bd99a7e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 35 gp=0x18d8bd9845a0 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd99af40 sp=0x18d8bd99af20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd99afc8 sp=0x18d8bd99af40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd99afe0 sp=0x18d8bd99afc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd99afe8 sp=0x18d8bd99afe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 36 gp=0x18d8bd984780 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd99b740 sp=0x18d8bd99b720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd99b7c8 sp=0x18d8bd99b740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd99b7e0 sp=0x18d8bd99b7c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd99b7e8 sp=0x18d8bd99b7e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 37 gp=0x18d8bd984960 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd99bf40 sp=0x18d8bd99bf20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd99bfc8 sp=0x18d8bd99bf40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd99bfe0 sp=0x18d8bd99bfc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd99bfe8 sp=0x18d8bd99bfe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 38 gp=0x18d8bd984b40 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd99c740 sp=0x18d8bd99c720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd99c7c8 sp=0x18d8bd99c740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd99c7e0 sp=0x18d8bd99c7c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd99c7e8 sp=0x18d8bd99c7e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 39 gp=0x18d8bd984d20 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x22a304114566a?, 0x1?, 0xf4?, 0x67?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd99cf40 sp=0x18d8bd99cf20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd99cfc8 sp=0x18d8bd99cf40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd99cfe0 sp=0x18d8bd99cfc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd99cfe8 sp=0x18d8bd99cfe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 40 gp=0x18d8bd984f00 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x79605a0?, 0x1?, 0x8a?, 0xc7?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd99d740 sp=0x18d8bd99d720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd99d7c8 sp=0x18d8bd99d740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd99d7e0 sp=0x18d8bd99d7c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd99d7e8 sp=0x18d8bd99d7e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 22 gp=0x18d8bda03c20 m=nil [GC worker (idle)]:
+runtime.gopark(0x79605a0?, 0x1?, 0xe7?, 0xfb?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd912740 sp=0x18d8bd912720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd9127c8 sp=0x18d8bd912740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd9127e0 sp=0x18d8bd9127c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9127e8 sp=0x18d8bd9127e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 23 gp=0x18d8bdd10000 m=nil [GC worker (idle)]:
+runtime.gopark(0x22a4d878b9949?, 0x1?, 0x29?, 0x27?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd912f40 sp=0x18d8bd912f20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd912fc8 sp=0x18d8bd912f40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd912fe0 sp=0x18d8bd912fc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd912fe8 sp=0x18d8bd912fe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 24 gp=0x18d8bdd101e0 m=nil [GC worker (idle)]:
+runtime.gopark(0x79605a0?, 0x1?, 0xd2?, 0x7?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd913740 sp=0x18d8bd913720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd9137c8 sp=0x18d8bd913740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd9137e0 sp=0x18d8bd9137c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9137e8 sp=0x18d8bd9137e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 25 gp=0x18d8bdd103c0 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x22a3041145480?, 0x3?, 0xed?, 0x9?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd913f40 sp=0x18d8bd913f20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd913fc8 sp=0x18d8bd913f40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd913fe0 sp=0x18d8bd913fc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd913fe8 sp=0x18d8bd913fe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 26 gp=0x18d8bdd105a0 m=nil [GC worker (idle)]:
+runtime.gopark(0x22a4d878c2bd5?, 0x1?, 0xf1?, 0xc0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd996740 sp=0x18d8bd996720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd9967c8 sp=0x18d8bd996740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd9967e0 sp=0x18d8bd9967c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9967e8 sp=0x18d8bd9967e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 27 gp=0x18d8bdd10780 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x22a3041144f37?, 0x1?, 0xe3?, 0xc5?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd996f40 sp=0x18d8bd996f20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd996fc8 sp=0x18d8bd996f40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd996fe0 sp=0x18d8bd996fc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd996fe8 sp=0x18d8bd996fe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 28 gp=0x18d8bdd10960 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x79605a0?, 0x1?, 0xc8?, 0x9e?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd997740 sp=0x18d8bd997720 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd9977c8 sp=0x18d8bd997740 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd9977e0 sp=0x18d8bd9977c8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd9977e8 sp=0x18d8bd9977e0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 9 gp=0x18d8bd94c3c0 m=nil [GC worker (idle), 2 minutes]:
+runtime.gopark(0x22a305de42823?, 0x1?, 0x50?, 0xe3?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd917f40 sp=0x18d8bd917f20 pc=0x49396a
+runtime.gcBgMarkWorker(0x18d8bda050a0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1807 +0xeb fp=0x18d8bd917fc8 sp=0x18d8bd917f40 pc=0x435ccb
+runtime.gcBgMarkStartWorkers.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0x17 fp=0x18d8bd917fe0 sp=0x18d8bd917fc8 pc=0x488ed7
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd917fe8 sp=0x18d8bd917fe0 pc=0x49b661
+created by runtime.gcBgMarkStartWorkers in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/mgc.go:1711 +0xfc
+
+goroutine 222 gp=0x18d8bd94d680 m=nil [sync.WaitGroup.Wait, 2 minutes]:
+runtime.gopark(0x7942040?, 0x0?, 0x30?, 0x49?, 0x7467bd8?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8be29ecb8 sp=0x18d8be29ec98 pc=0x49396a
+runtime.goparkunlock(...)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:480
+runtime.semacquire1(0x18d8bdba6438, 0x0, 0x1, 0x0, 0x19)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/sema.go:192 +0x232 fp=0x18d8be29ed20 sp=0x18d8be29ecb8 pc=0x46bf32
+sync.runtime_SemacquireWaitGroup(0x0?, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/sema.go:114 +0x2e fp=0x18d8be29ed58 sp=0x18d8be29ed20 pc=0x4955ae
+sync.(*WaitGroup).Wait(0x18d8bdba6430)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/sync/waitgroup.go:206 +0x85 fp=0x18d8be29ed80 sp=0x18d8be29ed58 pc=0x4a62c5
+net/http/httptest.(*Server).Close(0x18d8bdba63c0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/httptest/server.go:524 +0x28f fp=0x18d8be29ee48 sp=0x18d8be29ed80 pc=0xefcc2f
+net/http/httptest.(*Server).Close-fm()
+	<autogenerated>:1 +0x17 fp=0x18d8be29ee60 sp=0x18d8be29ee48 pc=0x36c9ed7
+testing.(*common).Cleanup.func1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:1462 +0x109 fp=0x18d8be29eed0 sp=0x18d8be29ee60 pc=0x571029
+testing.(*common).runCleanup(0x18d8bdb96248, 0x0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:1822 +0xea fp=0x18d8be29ef50 sp=0x18d8be29eed0 pc=0x56b4ea
+testing.tRunner.func2()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2189 +0x25 fp=0x18d8be29ef70 sp=0x18d8be29ef50 pc=0x571585
+testing.tRunner(0x18d8bdb96248, 0x7705de0)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2201 +0x114 fp=0x18d8be29efc0 sp=0x18d8be29ef70 pc=0x56bf54
+testing.(*T).Run.gowrap1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x1b fp=0x18d8be29efe0 sp=0x18d8be29efc0 pc=0x57203b
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8be29efe8 sp=0x18d8be29efe0 pc=0x49b661
+created by testing.(*T).Run in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x4d4
+
+goroutine 112 gp=0x18d8bd985c20 m=nil [chan receive, 2 minutes]:
+runtime.gopark(0x409d71?, 0x7044528?, 0x0?, 0x0?, 0x18d8bd923a90?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd923a00 sp=0x18d8bd9239e0 pc=0x49396a
+runtime.chanrecv(0x18d8bd8a44d0, 0x0, 0x1)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:667 +0x4ae fp=0x18d8bd923a78 sp=0x18d8bd923a00 pc=0x41f0ce
+runtime.chanrecv1(0x18d8be326140?, 0x428369?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:509 +0x12 fp=0x18d8bd923aa0 sp=0x18d8bd923a78 pc=0x41ebf2
+github.com/Wei-Shaw/sub2api/internal/service.TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount.func1({0x18d8bdba6440?, 0x18d8bd923b08?}, 0x18d8bd974280)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/vertex_s07_boundaries_test.go:140 +0x5a fp=0x18d8bd923ac0 sp=0x18d8bd923aa0 pc=0x34d6ffa
+net/http.HandlerFunc.ServeHTTP(0x885460?, {0x76d4688?, 0x18d8bdf945a0?}, 0x18d8bd923ae8?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:2358 +0x29 fp=0x18d8bd923ae8 sp=0x18d8bd923ac0 pc=0x864de9
+net/http.serverHandler.ServeHTTP({0x10?}, {0x76d4688?, 0x18d8bdf945a0?}, 0x1?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3436 +0x8e fp=0x18d8bd923b18 sp=0x18d8bd923ae8 pc=0x887c8e
+net/http.(*conn).serve(0x18d8bda5e510, {0x76d7c18, 0x18d8be0fb3b0})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:2157 +0x6dc fp=0x18d8bd923fb8 sp=0x18d8bd923b18 pc=0x86311c
+net/http.(*Server).Serve.gowrap3()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3604 +0x1f fp=0x18d8bd923fe0 sp=0x18d8bd923fb8 pc=0x884b9f
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd923fe8 sp=0x18d8bd923fe0 pc=0x49b661
+created by net/http.(*Server).Serve in goroutine 223
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3604 +0x4fd
+
+goroutine 322 gp=0x18d8bda032c0 m=nil [chan receive, 2 minutes]:
+runtime.gopark(0x409d71?, 0x7044528?, 0x0?, 0x0?, 0x18d8bd924a90?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8bd924a00 sp=0x18d8bd9249e0 pc=0x49396a
+runtime.chanrecv(0x18d8bd8a4690, 0x0, 0x1)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:667 +0x4ae fp=0x18d8bd924a78 sp=0x18d8bd924a00 pc=0x41f0ce
+runtime.chanrecv1(0x18d8be3262d0?, 0x428369?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:509 +0x12 fp=0x18d8bd924aa0 sp=0x18d8bd924a78 pc=0x41ebf2
+github.com/Wei-Shaw/sub2api/internal/service.TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount.func1({0x18d8bdba6440?, 0x18d8bd924b08?}, 0x18d8bd974500)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/vertex_s07_boundaries_test.go:140 +0x5a fp=0x18d8bd924ac0 sp=0x18d8bd924aa0 pc=0x34d6ffa
+net/http.HandlerFunc.ServeHTTP(0x885460?, {0x76d4688?, 0x18d8bdf94690?}, 0x18d8bd924ae8?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:2358 +0x29 fp=0x18d8bd924ae8 sp=0x18d8bd924ac0 pc=0x864de9
+net/http.serverHandler.ServeHTTP({0x10?}, {0x76d4688?, 0x18d8bdf94690?}, 0x1?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3436 +0x8e fp=0x18d8bd924b18 sp=0x18d8bd924ae8 pc=0x887c8e
+net/http.(*conn).serve(0x18d8bda5ee10, {0x76d7c18, 0x18d8be0fb3b0})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:2157 +0x6dc fp=0x18d8bd924fb8 sp=0x18d8bd924b18 pc=0x86311c
+net/http.(*Server).Serve.gowrap3()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3604 +0x1f fp=0x18d8bd924fe0 sp=0x18d8bd924fb8 pc=0x884b9f
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8bd924fe8 sp=0x18d8bd924fe0 pc=0x49b661
+created by net/http.(*Server).Serve in goroutine 223
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3604 +0x4fd
+
+goroutine 113 gp=0x18d8be49e1e0 m=nil [chan receive, 2 minutes]:
+runtime.gopark(0x409d71?, 0x7044528?, 0x0?, 0x0?, 0x18d8be29aa90?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/proc.go:474 +0xca fp=0x18d8be29aa00 sp=0x18d8be29a9e0 pc=0x49396a
+runtime.chanrecv(0x18d8bde003f0, 0x0, 0x1)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:667 +0x4ae fp=0x18d8be29aa78 sp=0x18d8be29aa00 pc=0x41f0ce
+runtime.chanrecv1(0x18d8bd8781e0?, 0x428369?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/chan.go:509 +0x12 fp=0x18d8be29aaa0 sp=0x18d8be29aa78 pc=0x41ebf2
+github.com/Wei-Shaw/sub2api/internal/service.TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount.func1({0x18d8bdba6440?, 0x18d8be29ab08?}, 0x18d8bd964c80)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/vertex_s07_boundaries_test.go:140 +0x5a fp=0x18d8be29aac0 sp=0x18d8be29aaa0 pc=0x34d6ffa
+net/http.HandlerFunc.ServeHTTP(0x885460?, {0x76d4688?, 0x18d8be3b2000?}, 0x18d8be29aae8?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:2358 +0x29 fp=0x18d8be29aae8 sp=0x18d8be29aac0 pc=0x864de9
+net/http.serverHandler.ServeHTTP({0x10?}, {0x76d4688?, 0x18d8be3b2000?}, 0x1?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3436 +0x8e fp=0x18d8be29ab18 sp=0x18d8be29aae8 pc=0x887c8e
+net/http.(*conn).serve(0x18d8bda5e6c0, {0x76d7c18, 0x18d8be0fb3b0})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:2157 +0x6dc fp=0x18d8be29afb8 sp=0x18d8be29ab18 pc=0x86311c
+net/http.(*Server).Serve.gowrap3()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3604 +0x1f fp=0x18d8be29afe0 sp=0x18d8be29afb8 pc=0x884b9f
+runtime.goexit({})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x18d8be29afe8 sp=0x18d8be29afe0 pc=0x49b661
+created by net/http.(*Server).Serve in goroutine 223
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/net/http/server.go:3604 +0x4fd
+
+rax    0xca
+rbx    0x0
+rcx    0x49d1c3
+rdx    0x0
+rdi    0x7939eb8
+rsi    0x80
+rbp    0x7ffe21b37038
+rsp    0x7ffe21b36ff0
+r8     0x0
+r9     0x0
+r10    0x0
+r11    0x286
+r12    0x3
+r13    0x13
+r14    0x7937680
+r15    0x0
+rip    0x49d1c1
+rflags 0x286
+cs     0x33
+fs     0x0
+gs     0x0
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	163.248s
+=== RUN   TestGatewayChatCredentialStopDoesNotSelectAnotherAccountAndReturnsSafe503
+--- PASS: TestGatewayChatCredentialStopDoesNotSelectAnotherAccountAndReturnsSafe503 (0.00s)
+=== RUN   TestGatewayChatAntigravityCredentialFailureReturnsActionableMessage
+--- PASS: TestGatewayChatAntigravityCredentialFailureReturnsActionableMessage (0.00s)
+=== RUN   TestCredentialFailoverExhaustionReturnsFixedSafe503
+--- PASS: TestCredentialFailoverExhaustionReturnsFixedSafe503 (0.00s)
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/native
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/messages
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/chat_completions
+--- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse (0.00s)
+    --- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/native (0.00s)
+    --- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/messages (0.00s)
+    --- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/chat_completions (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	0.021s
+FAIL

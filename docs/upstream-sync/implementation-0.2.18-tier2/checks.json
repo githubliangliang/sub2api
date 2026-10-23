@@ -1,0 +1,441 @@
+{
+  "captured_utc": "2026-10-23T16:51:26.174338+00:00",
+  "status": "implementation_complete_uncommitted",
+  "accepted_checks": [
+    {
+      "name": "backend-unit-complete",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./..."
+      ],
+      "started": "2026-10-23T16:46:18.981972+00:00",
+      "exit_code": 0,
+      "seconds": 202.889,
+      "log": "backend-unit-complete.txt"
+    },
+    {
+      "name": "backend-build-accepted",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "build",
+        "-o",
+        "/tmp/sub2api-0218-tier2/server-accepted",
+        "./cmd/server"
+      ],
+      "started": "2026-10-23T16:40:11.659089+00:00",
+      "exit_code": 0,
+      "seconds": 5.194,
+      "log": "backend-build-accepted.txt"
+    },
+    {
+      "name": "backend-default-compile-complete",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "./...",
+        "-run",
+        "^$"
+      ],
+      "started": "2026-10-23T16:46:11.566537+00:00",
+      "exit_code": 0,
+      "seconds": 10.613,
+      "log": "backend-default-compile-complete.txt"
+    },
+    {
+      "name": "backend-race-final",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-tags=unit",
+        "./internal/service",
+        "./internal/handler",
+        "./internal/handler/admin",
+        "./internal/pkg/apicompat",
+        "./internal/pkg/openai",
+        "./internal/pkg/antigravity",
+        "./internal/server/routes",
+        "./internal/repository",
+        "-run",
+        "Test(Audit|GPT55|GeminiAbort|Gemini.*(ClientDisconnect|ClientAbort|WriteFailure|ErrorPolicy|Shared|Vertex)|AnthropicCompat|Compat|GatewayCompat|Codex|OpenAICodex|OpenAICapacity|OpenAIRetry|ResponsesCreatedAt|OpenAI.*CreatedAt|.*Credential|.*Composite|ImageStorage|GeminiImage|Antigravity.*(Existing|SelfMapping|BufferedGemini|ExplicitTier|ConnectionTest|ForwardGemini)|.*ToolResultMedia|UsageBillingDeletedKeySQLite|UsageBillingRepositoryApplySQLiteQuotaWindows|.*Fixed.*Window)",
+        "-count=1"
+      ],
+      "started": "2026-10-23T16:31:28.195748+00:00",
+      "exit_code": 0,
+      "seconds": 147.865,
+      "log": "backend-race-final.txt"
+    },
+    {
+      "name": "protocol-race-final",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "./internal/pkg/apicompat",
+        "./internal/pkg/antigravity",
+        "./internal/pkg/openai",
+        "-count=1"
+      ],
+      "started": "2026-10-23T16:35:38.237875+00:00",
+      "exit_code": 0,
+      "seconds": 2.31,
+      "log": "protocol-race-final.txt"
+    },
+    {
+      "name": "sqlite-final",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/repository",
+        "./internal/service",
+        "./internal/handler",
+        "-run",
+        "TestUsageBillingDeletedKeySQLite|TestUsageBillingRepositoryApplySQLiteQuotaWindows|TestCompatibilityPartialUsageSettlesDeletedKeyOnceSQLite|TestFixedQuotaWindow",
+        "-count=1",
+        "-v"
+      ],
+      "started": "2026-10-23T16:32:58.084072+00:00",
+      "exit_code": 0,
+      "seconds": 30.042,
+      "log": "sqlite-final.txt"
+    },
+    {
+      "name": "s08-queue-after",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/handler",
+        "-run",
+        "TestGeminiStreamAbort",
+        "-count=1",
+        "-timeout=90s",
+        "-v"
+      ],
+      "started": "2026-10-23T16:39:50.263558+00:00",
+      "exit_code": 0,
+      "seconds": 4.436,
+      "log": "s08-queue-after.txt"
+    },
+    {
+      "name": "s08-queue-race",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-tags=unit",
+        "./internal/handler",
+        "-run",
+        "TestGeminiStreamAbort",
+        "-count=1",
+        "-timeout=90s"
+      ],
+      "started": "2026-10-23T16:39:50.261968+00:00",
+      "exit_code": 0,
+      "seconds": 11.097,
+      "log": "s08-queue-race.txt"
+    },
+    {
+      "name": "s07-agent-combined-final",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/service",
+        "./internal/handler",
+        "-run",
+        "Test(GeminiForward_(First401|Repeated401|UncheckedFinal)|Vertex|ExchangeVertexServiceAccountToken|ParseVertexServiceAccountKey|GeminiForward.*Vertex|GeminiVertex|GeminiSharedCapacity|GeminiNonVertex|GatewayChat.*Credential|CredentialFailoverExhaustion)",
+        "-count=1",
+        "-timeout=90s",
+        "-v"
+      ],
+      "started": "2026-10-23T16:20:25.616559+00:00",
+      "exit_code": 0,
+      "seconds": 50.15,
+      "log": "s07-agent-combined-final.txt"
+    },
+    {
+      "name": "s07-agent-race-final",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-tags=unit",
+        "./internal/service",
+        "./internal/handler",
+        "-run",
+        "Test(GeminiForward_(First401|Repeated401|UncheckedFinal)|Vertex|ExchangeVertexServiceAccountToken|ParseVertexServiceAccountKey|GeminiForward.*Vertex|GeminiVertex|GeminiSharedCapacity|GeminiNonVertex|GatewayChat.*Credential|CredentialFailoverExhaustion)",
+        "-count=1",
+        "-timeout=90s"
+      ],
+      "started": "2026-10-23T16:20:25.614654+00:00",
+      "exit_code": 0,
+      "seconds": 109.932,
+      "log": "s07-agent-race-final.txt"
+    },
+    {
+      "name": "s05-empty-eof-after",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/service",
+        "./internal/handler",
+        "./internal/pkg/apicompat",
+        "-run",
+        "Test(AnthropicCompat|ForwardAsCompat|HandleCCStreamingFromAnthropic|HandleResponsesStreamingResponse|GatewayCompatibilityHandlers|CompatibilityPartialUsageSettlesDeletedKeyOnceSQLite|CompatibilityExhaustionAfterComment|ResponsesConvertersSerializeCreatedAt|SubmitMandatoryUsageRecordTask)",
+        "-count=1",
+        "-timeout=120s",
+        "-v"
+      ],
+      "started": "2026-10-23T16:22:48.216373+00:00",
+      "exit_code": 0,
+      "seconds": 53.654,
+      "log": "s05-empty-eof-after.txt"
+    },
+    {
+      "name": "s05-empty-eof-race",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-tags=unit",
+        "./internal/service",
+        "./internal/handler",
+        "./internal/pkg/apicompat",
+        "-run",
+        "Test(AnthropicCompat|ForwardAsCompat|HandleCCStreamingFromAnthropic|HandleResponsesStreamingResponse|GatewayCompatibilityHandlers|CompatibilityPartialUsageSettlesDeletedKeyOnceSQLite|CompatibilityExhaustionAfterComment|ResponsesConvertersSerializeCreatedAt|SubmitMandatoryUsageRecordTask)",
+        "-count=1",
+        "-timeout=120s"
+      ],
+      "started": "2026-10-23T16:24:18.412622+00:00",
+      "exit_code": 0,
+      "seconds": 122.662,
+      "log": "s05-empty-eof-race.txt"
+    },
+    {
+      "name": "audit-fixture-after",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/service",
+        "-run",
+        "^Test(SanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits|AntigravityGeminiStreamKeepsCommentKeepaliveForOrdinaryClients|AntigravityGeminiStreamSkipsCommentKeepaliveForGoGenai)$",
+        "-count=8",
+        "-v"
+      ],
+      "started": "2026-10-23T16:43:43.613849+00:00",
+      "exit_code": 0,
+      "seconds": 61.075,
+      "log": "audit-fixture-after.txt"
+    },
+    {
+      "name": "audit-fixture-race",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-tags=unit",
+        "./internal/service",
+        "-run",
+        "^Test(SanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits|AntigravityGeminiStreamKeepsCommentKeepaliveForOrdinaryClients|AntigravityGeminiStreamSkipsCommentKeepaliveForGoGenai)$",
+        "-count=3",
+        "-v"
+      ],
+      "started": "2026-10-23T16:44:21.989287+00:00",
+      "exit_code": 0,
+      "seconds": 95.648,
+      "log": "audit-fixture-race.txt"
+    },
+    {
+      "name": "audit-fixture-default-compile",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "./internal/service",
+        "-run",
+        "^$"
+      ],
+      "started": "2026-10-23T16:45:52.383076+00:00",
+      "exit_code": 0,
+      "seconds": 25.594,
+      "log": "audit-fixture-default-compile.txt"
+    },
+    {
+      "name": "audit-tier1-preservation",
+      "cwd": "backend",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/handler/admin",
+        "./internal/service",
+        "./internal/pkg/antigravity",
+        "./internal/repository",
+        "-run",
+        "Test(Codex|ImportCodex|NormalizeCodex|Grok47Fast|GetModelPricing_.*Grok|CalculateCost_.*Grok|GetModelPricingWithChannel|OpenAIStream|OpenAIFirstOutput|OpenAINativeFirstOutput|ProxyOpenAIWSHTTPBridgeTurn|OpenAIStreamingPassthrough|OpenAIResponseFlush|HandleUpstreamError_.*403|HandleUpstreamError_Cloudflare|HandleUpstreamError_NonCloudflare|ExtractGeminiUsage|CleanToolSchema|ConvertClaudeToolsToGeminiTools|GeminiUsageMapping|UsageBillingDeletedKeySQLite|UsageBillingRepositoryApplySQLite|UpdateFixedQuotaResetAt|ProductionSQLUsesSQLiteDialect|SplitSQLStatements|NormalizeFixedQuotaWindows)",
+        "-count=1"
+      ],
+      "started": "2026-10-23T16:30:39.842506+00:00",
+      "exit_code": 0,
+      "seconds": 107.333,
+      "log": "audit-tier1-preservation.txt"
+    },
+    {
+      "name": "frontend-lint",
+      "cwd": "frontend",
+      "command": [
+        "pnpm",
+        "run",
+        "lint:check"
+      ],
+      "started": "2026-10-23T15:07:17.758985+00:00",
+      "exit_code": 0,
+      "seconds": 15.125,
+      "log": "frontend-lint.txt"
+    },
+    {
+      "name": "frontend-typecheck",
+      "cwd": "frontend",
+      "command": [
+        "pnpm",
+        "run",
+        "typecheck"
+      ],
+      "started": "2026-10-23T15:07:32.938784+00:00",
+      "exit_code": 0,
+      "seconds": 17.815,
+      "log": "frontend-typecheck.txt"
+    },
+    {
+      "name": "frontend-tests",
+      "cwd": "frontend",
+      "command": [
+        "pnpm",
+        "run",
+        "test:run"
+      ],
+      "started": "2026-10-23T15:13:55.566507+00:00",
+      "exit_code": 0,
+      "seconds": 23.371,
+      "log": "frontend-tests.txt"
+    },
+    {
+      "name": "frontend-build",
+      "cwd": "frontend",
+      "command": [
+        "pnpm",
+        "run",
+        "build"
+      ],
+      "started": "2026-10-23T15:14:18.982024+00:00",
+      "exit_code": 0,
+      "seconds": 37.882,
+      "log": "frontend-build.txt"
+    },
+    {
+      "name": "s10-install-final",
+      "cwd": "frontend",
+      "command": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "started": "2026-10-23T15:06:39.691056+00:00",
+      "exit_code": 0,
+      "seconds": 9.144,
+      "log": "s10-install-final.txt"
+    },
+    {
+      "name": "openspec-strict-complete",
+      "cwd": ".",
+      "command": [
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec",
+        "validate",
+        "port-upstream-0.2.18-tier2",
+        "--strict"
+      ],
+      "started": "2026-10-23T16:50:49.150827+00:00",
+      "exit_code": 0,
+      "seconds": 2.217,
+      "log": "openspec-strict-complete.txt"
+    },
+    {
+      "name": "audit-scope-complete",
+      "cwd": ".",
+      "command": [
+        "python3",
+        "/tmp/sub2api-0218-tier2/final-scope-review.py"
+      ],
+      "started": "2026-10-23T16:49:18.212847+00:00",
+      "exit_code": 0,
+      "seconds": 0.18,
+      "log": "audit-scope-complete.txt"
+    }
+  ],
+  "backend_unit_passed_packages": 54,
+  "frontend_tests": {
+    "passed": 2027,
+    "skipped_existing": 2,
+    "files": 281
+  },
+  "code_manifest": {
+    "file": "code-sha256.json",
+    "file_count": 135,
+    "mismatches": [],
+    "sha256": "a244af17068cb6bacd64e1713deaa13980079b236589269431aa17bdeb2eb896"
+  },
+  "scope": "scope-facts-final.json",
+  "dependency_results": {
+    "report": "dependency-review.md",
+    "facts": "dependency-facts.json",
+    "pnpm_total_records": 75,
+    "pnpm_production_records": 17,
+    "pnpm_production_high": 2,
+    "production_high_package": "xlsx",
+    "go_package_findings": 18,
+    "go_unique_osv": 13,
+    "go_stdlib_findings": 0,
+    "target_follow_redirects_findings": 0,
+    "full_security_gate_green": false
+  },
+  "known_failing_security_checks": [
+    "audit-frontend-final",
+    "audit-frontend-prod-final",
+    "audit-exception-gate-final"
+  ],
+  "version": "1.1.18",
+  "max_migration": 226,
+  "frozen_source_and_intake_unchanged": true,
+  "committed": false,
+  "pushed": false,
+  "released": false,
+  "deployed": false,
+  "limitations": [
+    "No real upstream account permissions or Google/Vertex credentials tested",
+    "Proxy checks only local DNS",
+    "SQLite tests use real billing ledger; usage log repository remains a stub",
+    "Postgres-only integration tests excluded"
+  ]
+}

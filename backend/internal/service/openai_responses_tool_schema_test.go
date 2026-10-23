@@ -2,6 +2,8 @@ package service
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -223,6 +225,21 @@ func buildToolSchemaNullTypeBody(t *testing.T, hits int) []byte {
 // 构造请求可以塞进百万级命中，会被放大成 TB 级 memcpy。这里用分配次数锁死该行为：
 // 命中数放大 500 倍，分配次数不得随之增长。
 func TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits(t *testing.T) {
+	// AllocsPerRun reads process-wide MemStats. Other service tests can leave
+	// background workers active, so measure the original guard in a fresh
+	// process rather than count those workers' allocations as sanitizer work.
+	const childEnv = "SUB2API_TEST_TOOL_SCHEMA_ALLOCS_CHILD"
+	if os.Getenv(childEnv) != "1" {
+		cmd := exec.Command(os.Args[0],
+			"-test.run=^TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits$",
+			"-test.count=1", "-test.timeout=30s", "-test.v")
+		cmd.Env = append(os.Environ(), childEnv+"=1")
+		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, "isolated allocation guard failed:\n%s", output)
+		t.Logf("isolated allocation guard:\n%s", output)
+		return
+	}
+
 	small := buildToolSchemaNullTypeBody(t, 4)
 	large := buildToolSchemaNullTypeBody(t, 2000)
 
@@ -232,6 +249,7 @@ func TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits
 	largeAllocs := testing.AllocsPerRun(2, func() {
 		_, _, _ = sanitizeOpenAIResponsesToolParameterTypes(large)
 	})
+	t.Logf("sanitizer allocations: small=%v large=%v", smallAllocs, largeAllocs)
 
 	// 命中切片扩容是对数级，留出充裕余量；线性写法在这里会是 2000 量级。
 	require.Less(t, largeAllocs, smallAllocs+40,

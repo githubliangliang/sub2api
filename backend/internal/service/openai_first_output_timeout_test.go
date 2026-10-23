@@ -164,6 +164,45 @@ func TestOpenAIFirstOutputTimeoutForReasoningEffort(t *testing.T) {
 	require.Equal(t, 300*time.Second, svc.openAIFirstOutputTimeout("max"))
 }
 
+func TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+	body := &firstOutputCloseTrackingBody{ReadCloser: pr, closed: make(chan struct{})}
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		defer pw.Close()
+		_, _ = io.WriteString(pw, "data: {\"type\":\"response.queued\"}\n\ndata: {\"type\":\"response.metadata\",\"metadata\":{}}\n\n")
+		select {
+		case <-body.closed:
+		case <-ctx.Done():
+		}
+	}()
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{
+		OpenAIFirstOutputTimeoutSeconds: 1,
+		MaxLineSize:                     defaultMaxLineSize,
+	}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: body}
+	_, err := svc.handleStreamingResponse(ctx, resp, c, &Account{ID: 1, Platform: PlatformOpenAI}, time.Now(), "model", "model")
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusGatewayTimeout, failoverErr.StatusCode)
+	require.Contains(t, string(failoverErr.ResponseBody), "first_output_timeout")
+	require.Empty(t, rec.Body.String())
+	select {
+	case <-writerDone:
+	case <-time.After(time.Second):
+		t.Fatal("metadata timeout did not stop the upstream writer")
+	}
+}
+
 func TestOpenAIFirstOutputStageDefaultLimitIsIndependentFromScannerLimit(t *testing.T) {
 	stage := newDefaultOpenAIFirstOutputStage()
 	defer func() { require.NoError(t, stage.Close()) }()

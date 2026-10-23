@@ -60,6 +60,27 @@ func TestSameAccountRetryDelayFor(t *testing.T) {
 	})
 }
 
+func TestCapacityRetryHintOverridesBackoffAndRemainsCancelable(t *testing.T) {
+	for _, retryCount := range []int{1, 5, 100} {
+		require.Equal(t, 1250*time.Millisecond, sameAccountRetryDelayFor(&service.UpstreamFailoverError{
+			RequestScopedTransient: true, SameAccountRetryDelay: 1250 * time.Millisecond,
+		}, retryCount))
+		require.Equal(t, 8*time.Second, sameAccountRetryDelayFor(&service.UpstreamFailoverError{
+			RequestScopedTransient: true, SameAccountRetryDelay: time.Hour,
+		}, retryCount))
+	}
+	require.Equal(t, sameAccountRetryDelay, sameAccountRetryDelayFor(&service.UpstreamFailoverError{SameAccountRetryDelay: time.Second}, 10), "non-capacity errors retain their existing delay")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	state := NewFailoverState(3, false)
+	started := time.Now()
+	action := state.HandleFailoverError(ctx, &mockTempUnscheduler{}, 1, service.PlatformOpenAI, 3, &service.UpstreamFailoverError{
+		RetryableOnSameAccount: true, RequestScopedTransient: true, SameAccountRetryDelay: 8 * time.Second,
+	})
+	require.Equal(t, FailoverCanceled, action)
+	require.Less(t, time.Since(started), time.Second)
+}
+
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------

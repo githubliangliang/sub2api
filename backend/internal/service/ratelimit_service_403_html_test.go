@@ -102,6 +102,63 @@ func TestHandleUpstreamError_OpenAIHTML403RepeatedNeverEscalates(t *testing.T) {
 	h.requireNoAccountPenalty(t)
 }
 
+func TestHandleUpstreamError_Cloudflare1010DoesNotPenalizeAccount(t *testing.T) {
+	for _, platform := range []string{PlatformOpenAI, PlatformAnthropic, PlatformGrok, PlatformGemini, PlatformAntigravity} {
+		t.Run(platform, func(t *testing.T) {
+			for _, body := range []string{
+				"<!DOCTYPE HTML><html><body>Cloudflare Error code: 1010</body></html>",
+				"Cloudflare error code: 1010",
+				`{"cloudflare_error":true,"code":1010}`,
+				`{"errors":[{"cloudflare_error":true,"error_code":" 1010 "}]}`,
+				`{"error_name":"browser_signature_banned"}`,
+				`{"error":{"CLOUDFLARE_ERROR":true,"CODE":1010}}`,
+			} {
+				t.Run(body, func(t *testing.T) {
+					h := newOpenAI403TestHarness(t, 601, int64(openAI403DisableThreshold))
+					h.account.Platform = platform
+					for i := 0; i < openAI403DisableThreshold+1; i++ {
+						require.False(t, h.handle(body))
+					}
+					h.requireNoAccountPenalty(t)
+				})
+			}
+		})
+	}
+}
+
+func TestHandleUpstreamError_NonCloudflare403StillPenalizes(t *testing.T) {
+	for _, platform := range []string{PlatformOpenAI, PlatformAnthropic, PlatformGrok, PlatformGemini, PlatformAntigravity} {
+		t.Run(platform, func(t *testing.T) {
+			for _, body := range []string{
+				`{"error":{"type":"permission_error","message":"invalid API key"}}`,
+				`{"error":{"code":1010,"message":"account banned"}}`,
+				`{"cloudflare_error":false,"code":1010}`,
+				`{"cloudflare_error":true,"code":1011}`,
+				`{"message":"error code: 1010"}`,
+				`{"cloudflare_error":true,"error":{"code":1010}}`,
+				`{"code":1010`,
+				"1010",
+				"business error code: 1010",
+				"Cloudflare error code: 10101",
+				"error code: 10101",
+			} {
+				t.Run(body, func(t *testing.T) {
+					h := newOpenAI403TestHarness(t, 602, int64(openAI403DisableThreshold))
+					h.account.Platform = platform
+					h.account.Type = AccountTypeAPIKey
+					require.True(t, h.handle(body))
+					require.Equal(t, 1, h.repo.setErrorCalls)
+					if platform == PlatformOpenAI {
+						require.Equal(t, 1, h.counter.increments)
+					} else {
+						require.Zero(t, h.counter.increments)
+					}
+				})
+			}
+		})
+	}
+}
+
 // 对照不变式：真正的结构化 JSON 403 是账号级证据，处罚链路必须原样保留。
 // 缺了这组断言，上面的跳过逻辑一旦写宽就会把真实的封号 403 也放过去。
 func TestHandleUpstreamError_OpenAIStructured403StillPenalizes(t *testing.T) {

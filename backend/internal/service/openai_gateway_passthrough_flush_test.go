@@ -68,6 +68,16 @@ func runPassthroughFlushTest(
 	failAfterWrites int,
 	setups ...func(*gin.Context),
 ) (*openaiStreamingResultPassthrough, *httptest.ResponseRecorder, *passthroughFlushTestWriter, error) {
+	return runPassthroughFlushTestWithAccount(t, body, failAfterWrites, &Account{ID: 1, Platform: PlatformOpenAI, Name: "flush-test"}, setups...)
+}
+
+func runPassthroughFlushTestWithAccount(
+	t *testing.T,
+	body io.ReadCloser,
+	failAfterWrites int,
+	account *Account,
+	setups ...func(*gin.Context),
+) (*openaiStreamingResultPassthrough, *httptest.ResponseRecorder, *passthroughFlushTestWriter, error) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -96,7 +106,7 @@ func runPassthroughFlushTest(
 		context.Background(),
 		resp,
 		c,
-		&Account{ID: 1, Platform: PlatformOpenAI, Name: "flush-test"},
+		account,
 		time.Now(),
 		"",
 		"",

@@ -194,6 +194,18 @@ func (s *GatewayService) ForwardAsChatCompletions(
 	var handleErr error
 	if clientStream {
 		result, handleErr = s.handleCCStreamingFromAnthropic(resp, c, originalModel, mappedModel, reasoningEffort, startTime)
+		var sseErr *sseStreamErrorEventError
+		switch {
+		case errors.As(handleErr, &sseErr):
+			failover := s.sseStreamErrorEventFailover(ctx, c, account, resp, sseErr.RawData, mappedModel, sseErr.afterSemanticOutput)
+			if sseErr.afterSemanticOutput {
+				return result, handleErr
+			}
+			failover.SafeToFailoverAfterWrite = sseErr.safeToFailoverAfterWrite
+			return nil, failover
+		case errors.Is(handleErr, errAnthropicNativeStreamIdle) && s.rateLimitService != nil:
+			s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
+		}
 	} else {
 		result, handleErr = s.handleCCBufferedFromAnthropic(resp, c, originalModel, mappedModel, reasoningEffort, startTime)
 	}
@@ -383,34 +395,21 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	var firstTokenMs *int
 	firstChunk := true
 
-	scanner := bufio.NewScanner(resp.Body)
-	maxLineSize := defaultMaxLineSize
-	if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
-		maxLineSize = s.cfg.Gateway.MaxLineSize
-	}
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	stream := newAnthropicCompatStream(s.cfg, c, resp, "forward_as_cc", requestID)
+	defer stream.stop()
 
 	resultWithUsage := func() *ForwardResult {
 		return &ForwardResult{
-			RequestID:       requestID,
-			Usage:           usage,
-			Model:           originalModel,
-			UpstreamModel:   mappedModel,
-			ReasoningEffort: reasoningEffort,
-			Stream:          true,
-			Duration:        time.Since(startTime),
-			FirstTokenMs:    firstTokenMs,
+			RequestID:        requestID,
+			Usage:            usage,
+			Model:            originalModel,
+			UpstreamModel:    mappedModel,
+			ReasoningEffort:  reasoningEffort,
+			Stream:           true,
+			Duration:         time.Since(startTime),
+			FirstTokenMs:     firstTokenMs,
+			ClientDisconnect: stream.clientDisconnected,
 		}
-	}
-
-	failStream := func(code, message string, cause error) (*ForwardResult, error) {
-		MarkResponseCommitted(c)
-		setOpsUpstreamError(c, http.StatusBadGateway, message, "")
-		payload, _ := json.Marshal(gin.H{"error": gin.H{"type": "upstream_error", "code": code, "message": message}})
-		if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", payload); err == nil {
-			c.Writer.Flush()
-		}
-		return resultWithUsage(), fmt.Errorf("anthropic chat stream: %w", cause)
 	}
 
 	writeChunk := func(chunk apicompat.ChatCompletionsChunk) bool {
@@ -421,23 +420,26 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		// Reverse tool name mapping: fake → real, per-chunk bytes.Replace.
 		// c 可能持有请求侧注入的 ToolNameRewrite；无则仅做静态前缀还原。
 		out := string(reverseToolNamesIfPresent(c, []byte(sse)))
-		if _, err := fmt.Fprint(c.Writer, out); err != nil {
-			return true // client disconnected
+		if !stream.writeFrame(c, out, anthropicCompatChatChunkStartsOutput(chunk)) {
+			return true
 		}
 		return false
 	}
 
-	processAnthropicEvent := func(event *apicompat.AnthropicStreamEvent) bool {
+	processAnthropicEvent := func(event *apicompat.AnthropicStreamEvent) {
 		if event == nil {
-			return false
+			return
 		}
 		if event.Type == "ping" {
-			MarkResponseCommitted(c)
+			if stream.clientDisconnected {
+				return
+			}
 			if _, err := fmt.Fprint(c.Writer, ": ping\n\n"); err != nil {
-				return true
+				stream.markClientDisconnected()
+				return
 			}
 			c.Writer.Flush()
-			return false
+			return
 		}
 		if firstChunk {
 			firstChunk = false
@@ -453,6 +455,9 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		if event.Type == "message_start" && event.Message != nil {
 			mergeAnthropicUsage(&usage, event.Message.Usage)
 		}
+		if stream.clientDisconnected {
+			return
+		}
 
 		// Keep the outward Responses/Chat usage on the same normalized buckets used
 		// for billing, including converter handlers that consume event usage.
@@ -465,25 +470,28 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 			ccChunks := apicompat.ResponsesEventToChatChunks(&resEvt, ccState)
 			for _, chunk := range ccChunks {
 				if disconnected := writeChunk(chunk); disconnected {
-					return true
+					return
 				}
 			}
 		}
-		c.Writer.Flush()
-		return false
+		stream.flush(c)
 	}
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for {
+		line, ok := stream.nextLine()
+		if !ok {
+			break
+		}
 		// 与缓冲路径一致：接受 SSE 紧凑格式（冒号后无空格，#4653 同根因）。
 		if _, ok := extractOpenAISSEEventLine(line); !ok {
 			continue
 		}
 
-		if !scanner.Scan() {
+		dataLine, ok := stream.nextLine()
+		if !ok {
 			break
 		}
-		payload, ok := extractOpenAISSEDataLine(scanner.Text())
+		payload, ok := extractOpenAISSEDataLine(dataLine)
 		if !ok {
 			continue
 		}
@@ -493,35 +501,24 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 			continue
 		}
 
-		// The Anthropic→Responses converter handles semantic events only.
-		// Surface failures here before finalization can synthesize a success.
-		if event.Type == "error" {
-			message := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage([]byte(payload)))
-			if message == "" {
-				message = "Upstream stream failed"
-			}
-			code := gjson.Get(payload, "error.type").String()
-			if code == "" {
-				code = "upstream_error"
-			}
-			return failStream(code, message, errors.New(message))
-		}
-
 		// Forward received usage regardless of the client stream_options.
 		// The intermediate Responses converter synthesizes usage even when absent.
 		ccState.IncludeUsage = ccState.IncludeUsage || anthropicChatStreamHasUsage(&event, payload)
 
-		if processAnthropicEvent(&event) {
-			return resultWithUsage(), nil
+		stream.observe(&event, payload)
+		if stream.upstreamErrType != "" {
+			break
 		}
+		processAnthropicEvent(&event)
 	}
 
-	if err := scanner.Err(); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return resultWithUsage(), err
-		}
-		logger.L().Warn("forward_as_cc stream: read error", zap.Error(err), zap.String("request_id", requestID))
-		return failStream("upstream_stream_error", "Upstream stream read failed", err)
+	if failure := stream.failure(); failure != nil {
+		return finishAnthropicCompatStreamFailure(c, stream, failure, resultWithUsage(), func() error {
+			return writeAnthropicCompatCCStreamFailure(c, failure)
+		})
+	}
+	if stream.clientDisconnected {
+		return resultWithUsage(), nil
 	}
 
 	// Finalize both state machines
@@ -538,8 +535,8 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	}
 
 	// Write [DONE] marker
-	fmt.Fprint(c.Writer, "data: [DONE]\n\n") //nolint:errcheck
-	c.Writer.Flush()
+	stream.writeFrame(c, "data: [DONE]\n\n", true)
+	stream.flush(c)
 
 	return resultWithUsage(), nil
 }

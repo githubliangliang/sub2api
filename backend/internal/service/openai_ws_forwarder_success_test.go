@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -910,9 +911,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthHonorsAccountUserAgent(t *testin
 	result, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, "codex-tui", captureDialer.lastHeaders.Get("originator"))
+	require.Equal(t, openai.CodexCLIOriginator, captureDialer.lastHeaders.Get("originator"))
 	require.Equal(t,
-		"codex-tui/"+codexCLIVersion+" (Mac OS X 15.1.0; arm64) iTerm.app",
+		"codex_cli_rs/"+codexCLIVersion+" (Mac OS X 15.1.0; arm64) iTerm.app",
 		captureDialer.lastHeaders.Get("user-agent"),
 	)
 	require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))

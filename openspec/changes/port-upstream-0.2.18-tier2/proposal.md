@@ -23,4 +23,4 @@
 
 ## Non-goals
 
-不新增平台、Argon、Gemini思考能力、Web Search模拟、Vertex额度功能、生图开关适用范围或共享调度缓存；不引入任何支付代码。评估不是实施授权，历史source-baseline不改。
+不新增平台、Argon、Gemini思考能力、Web Search模拟、Vertex额度功能、生图开关适用范围或共享调度缓存；不引入任何支付代码。用户已另行授权本批实施；历史source-baseline不改。

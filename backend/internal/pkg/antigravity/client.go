@@ -239,6 +239,9 @@ func TierIDToPlanType(tierID string) string {
 		if tierID == "" {
 			return "Free"
 		}
+		if plan := paidPlanFromTierID(tierID); plan != "" {
+			return plan
+		}
 		return tierID
 	}
 }
@@ -906,4 +909,27 @@ func (c *Client) FetchUserInfo(ctx context.Context, accessToken, projectID strin
 	}
 
 	return &result, nil
+}
+
+func paidPlanFromTierID(tierID string) string {
+	id := strings.ToLower(strings.TrimSpace(tierID))
+	if !strings.HasSuffix(id, "-tier") {
+		return ""
+	}
+	switch {
+	case strings.HasPrefix(id, "g1-ultra-"):
+		return "Ultra"
+	case strings.HasPrefix(id, "g1-pro-"):
+		return "Pro"
+	default:
+		return ""
+	}
+}
+
+func IsPaidPlanType(planType string) bool {
+	switch strings.ToLower(strings.TrimSpace(planType)) {
+	case "pro", "ultra":
+		return true
+	}
+	return paidPlanFromTierID(planType) != ""
 }

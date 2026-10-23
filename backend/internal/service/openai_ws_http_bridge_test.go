@@ -339,6 +339,10 @@ func TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataBeforeCapacityFailover(t *test
 	body := strings.Join([]string{
 		`data: {"type":"response.created","response":{"id":"resp_shed"}}`,
 		"",
+		`data: {"type":"response.queued","response":{"id":"resp_shed","status":"queued"}}`,
+		"",
+		`data: {"type":"response.metadata","response_id":"resp_shed","metadata":{"openai_chatgpt_moderation_metadata":{"prompt":{}}}}`,
+		"",
 		`data: {"type":"response.in_progress","response":{"id":"resp_shed"}}`,
 		"",
 		`data: {"type":"response.failed","response":{"id":"resp_shed","status":"failed","error":{"message":"Our servers are currently overloaded. Please try again later."}}}`,
@@ -1521,6 +1525,10 @@ func TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapaci
 	gin.SetMode(gin.TestMode)
 	preamble := strings.Join([]string{
 		`data: {"type":"response.created","response":{"id":"resp_shed"}}`,
+		"",
+		`data: {"type":"response.queued","response":{"id":"resp_shed","status":"queued"}}`,
+		"",
+		`data: {"type":"response.metadata","response_id":"resp_shed","metadata":{"openai_chatgpt_moderation_metadata":{"prompt":{}}}}`,
 		"",
 		`data: {"type":"response.in_progress","response":{"id":"resp_shed"}}`,
 		"",

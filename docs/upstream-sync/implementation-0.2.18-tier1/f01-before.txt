@@ -1,0 +1,58 @@
+=== RUN   TestImportCodexSessionsKeepsAgentIdentityTeamsSeparate
+--- PASS: TestImportCodexSessionsKeepsAgentIdentityTeamsSeparate (0.00s)
+=== RUN   TestImportCodexSessionsMergesAgentIdentityRuntimesForSameTeam
+--- PASS: TestImportCodexSessionsMergesAgentIdentityRuntimesForSameTeam (0.00s)
+=== RUN   TestImportCodexSessionsCreatesAgentIdentityWithoutOAuthExpiry
+--- PASS: TestImportCodexSessionsCreatesAgentIdentityWithoutOAuthExpiry (0.00s)
+=== RUN   TestCodexIdentityKeysPreferStrongIdentifiers
+    account_codex_import_test.go:307: workspace-scoped user key should have highest priority when refresh token exists: [user:user-1 access:3c469e9d6c5875d37a43f353d4f88e61fcf812c66eee3457465a40b0da4153e0 account:acct-1]
+--- FAIL: TestCodexIdentityKeysPreferStrongIdentifiers (0.00s)
+=== RUN   TestCodexAccountIndexDoesNotMatchDifferentUsersInSameChatGPTAccount
+--- PASS: TestCodexAccountIndexDoesNotMatchDifferentUsersInSameChatGPTAccount (0.00s)
+=== RUN   TestCodexAccountIndexFallsBackToAccountKeyWhenRefreshTokenExistsAndUserIDMissing
+--- PASS: TestCodexAccountIndexFallsBackToAccountKeyWhenRefreshTokenExistsAndUserIDMissing (0.00s)
+=== RUN   TestCodexAccountIndexAccessTokenOnlyUsesTokenFingerprint
+--- PASS: TestCodexAccountIndexAccessTokenOnlyUsesTokenFingerprint (0.00s)
+=== RUN   TestCodexAccountIndexKeepsAllCandidatesForSharedAccountKey
+    account_codex_import_test.go:469: matched key = "user:user-2", want account_user:6:team-16:user-2
+--- FAIL: TestCodexAccountIndexKeepsAllCandidatesForSharedAccountKey (0.00s)
+=== RUN   TestImportCodexSessionsSameUserDifferentWorkspacesCreatesSeparateAccounts
+    account_codex_import_test.go:488: result = {Total:2 Created:1 Updated:0 Skipped:1 Failed:0 Items:[{Index:1 Name:workspace-1 Action:created AccountID:100 Message:} {Index:2 Name:workspace-2 Action:skipped AccountID:0 Message:与第 1 条导入项重复，已跳过}] Warnings:[{Index:2 Name:workspace-2 Message:与第 1 条导入项重复，已跳过}] Errors:[]}, want two created accounts
+--- FAIL: TestImportCodexSessionsSameUserDifferentWorkspacesCreatesSeparateAccounts (0.00s)
+=== RUN   TestCodexStoredIdentityKeysIncompleteIdentity
+=== RUN   TestCodexStoredIdentityKeysIncompleteIdentity/user_only
+=== RUN   TestCodexStoredIdentityKeysIncompleteIdentity/account_only
+=== RUN   TestCodexStoredIdentityKeysIncompleteIdentity/email_only
+--- PASS: TestCodexStoredIdentityKeysIncompleteIdentity (0.00s)
+    --- PASS: TestCodexStoredIdentityKeysIncompleteIdentity/user_only (0.00s)
+    --- PASS: TestCodexStoredIdentityKeysIncompleteIdentity/account_only (0.00s)
+    --- PASS: TestCodexStoredIdentityKeysIncompleteIdentity/email_only (0.00s)
+=== RUN   TestCodexImportIdentityKeySeparatesDelimiterValues
+--- PASS: TestCodexImportIdentityKeySeparatesDelimiterValues (0.00s)
+=== RUN   TestImportCodexSessionsSameWorkspaceAccountUpdatesAndDifferentUserIsolated
+--- PASS: TestImportCodexSessionsSameWorkspaceAccountUpdatesAndDifferentUserIsolated (0.00s)
+=== RUN   TestCodexAccountIndexUpsertReplacesSameAccount
+--- PASS: TestCodexAccountIndexUpsertReplacesSameAccount (0.00s)
+=== RUN   TestCodexAccountIndexUpdateRemovesAllPreviousKeys
+--- PASS: TestCodexAccountIndexUpdateRemovesAllPreviousKeys (0.00s)
+=== RUN   TestCodexAccountIndexUpdatePreservesSharedKeyCandidateOrder
+--- PASS: TestCodexAccountIndexUpdatePreservesSharedKeyCandidateOrder (0.00s)
+=== RUN   TestCodexIdentitySeenDistinguishesTeamMembers
+--- PASS: TestCodexIdentitySeenDistinguishesTeamMembers (0.00s)
+=== RUN   TestImportCodexSessionsAccessTokenOnlySameWorkspaceDifferentUsersCreatesTwoAccounts
+--- PASS: TestImportCodexSessionsAccessTokenOnlySameWorkspaceDifferentUsersCreatesTwoAccounts (0.00s)
+=== RUN   TestImportCodexSessionsAccessTokenOnlySameWorkspaceAndUserDifferentTokensCreatesTwoAccounts
+--- PASS: TestImportCodexSessionsAccessTokenOnlySameWorkspaceAndUserDifferentTokensCreatesTwoAccounts (0.00s)
+=== RUN   TestImportCodexSessionsAccessTokenOnlySameUserUpdatesExisting
+--- PASS: TestImportCodexSessionsAccessTokenOnlySameUserUpdatesExisting (0.00s)
+=== RUN   TestImportCodexSessionsUpgradesAccessTokenOnlyAccountWithRefreshToken
+--- PASS: TestImportCodexSessionsUpgradesAccessTokenOnlyAccountWithRefreshToken (0.00s)
+=== RUN   TestImportCodexSessionsAccessTokenOnlyPreservesExistingRefreshToken
+--- PASS: TestImportCodexSessionsAccessTokenOnlyPreservesExistingRefreshToken (0.00s)
+=== RUN   TestImportCodexSessionsBatchOldAccessTokenDoesNotRollbackRefreshToken
+--- PASS: TestImportCodexSessionsBatchOldAccessTokenDoesNotRollbackRefreshToken (0.00s)
+=== RUN   TestImportCodexSessionsWithRefreshTokenKeepsExistingDedup
+--- PASS: TestImportCodexSessionsWithRefreshTokenKeepsExistingDedup (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler/admin	0.020s
+FAIL

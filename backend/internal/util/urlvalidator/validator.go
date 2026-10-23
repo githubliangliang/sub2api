@@ -162,6 +162,11 @@ func isAllowedHost(host string, allowlist []string) bool {
 	return false
 }
 
+// IsBlockedHost applies the shared hostname/IP policy without resolving DNS.
+func IsBlockedHost(host string) bool {
+	return isBlockedHost(strings.ToLower(strings.TrimSpace(host)))
+}
+
 func isBlockedHost(host string) bool {
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
 		return true

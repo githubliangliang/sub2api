@@ -1,0 +1,97 @@
+2026/10/23 13:52:55 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestCleanToolSchema_NormalizesGeminiUnsupportedSchemaFields
+--- PASS: TestCleanToolSchema_NormalizesGeminiUnsupportedSchemaFields (0.00s)
+=== RUN   TestCleanToolSchema_ConvertsNestedIntegerExclusiveMinimum
+--- PASS: TestCleanToolSchema_ConvertsNestedIntegerExclusiveMinimum (0.00s)
+=== RUN   TestCleanToolSchema_DropsAmbiguousExclusiveMinimumWithoutConversion
+=== RUN   TestCleanToolSchema_DropsAmbiguousExclusiveMinimumWithoutConversion/fractional_integer_bound
+=== RUN   TestCleanToolSchema_DropsAmbiguousExclusiveMinimumWithoutConversion/number_schema
+--- PASS: TestCleanToolSchema_DropsAmbiguousExclusiveMinimumWithoutConversion (0.00s)
+    --- PASS: TestCleanToolSchema_DropsAmbiguousExclusiveMinimumWithoutConversion/fractional_integer_bound (0.00s)
+    --- PASS: TestCleanToolSchema_DropsAmbiguousExclusiveMinimumWithoutConversion/number_schema (0.00s)
+=== RUN   TestCleanToolSchema_RemovesNestedDeprecatedAndNormalizesMixedScalarEnum
+--- PASS: TestCleanToolSchema_RemovesNestedDeprecatedAndNormalizesMixedScalarEnum (0.00s)
+=== RUN   TestCleanToolSchema_DropsEnumWithNonScalarValue
+--- PASS: TestCleanToolSchema_DropsEnumWithNonScalarValue (0.00s)
+=== RUN   TestCleanToolSchema_PreservesSchemaKeywordNamedProperties
+    gemini_messages_compat_service_test.go:536: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:536
+        	Error:      	map[string]interface {}{"examples":[]interface {}{"root example"}, "properties":map[string]interface {}{"const":map[string]interface {}{"const":"property const", "type":"STRING"}, "enum":map[string]interface {}{"const":"property enum", "type":"STRING"}, "examples":map[string]interface {}{"type":"STRING"}, "type":map[string]interface {}{"type":"STRING"}}, "type":"OBJECT"} should not contain "examples"
+        	Test:       	TestCleanToolSchema_PreservesSchemaKeywordNamedProperties
+--- FAIL: TestCleanToolSchema_PreservesSchemaKeywordNamedProperties (0.00s)
+=== RUN   TestCleanToolSchema_NormalizesConstAndExamplesAtNestedSchemaNodes
+    gemini_messages_compat_service_test.go:580: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:580
+        	Error:      	map[string]interface {}{"anyOf":[]interface {}{map[string]interface {}{"const":"a", "type":"STRING"}, map[string]interface {}{"examples":[]interface {}{"branch example"}, "type":"STRING"}}, "examples":[]interface {}{"item example"}, "type":"STRING"} should not contain "examples"
+        	Test:       	TestCleanToolSchema_NormalizesConstAndExamplesAtNestedSchemaNodes
+--- FAIL: TestCleanToolSchema_NormalizesConstAndExamplesAtNestedSchemaNodes (0.00s)
+=== RUN   TestCleanToolSchema_TraversesRetainedSchemaValuedKeywords
+    gemini_messages_compat_service_test.go:630: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:630
+        	Error:      	Not equal: 
+        	            	expected: []interface {}([]interface {}{"additional"})
+        	            	actual  : <nil>(<nil>)
+        	Test:       	TestCleanToolSchema_TraversesRetainedSchemaValuedKeywords
+--- FAIL: TestCleanToolSchema_TraversesRetainedSchemaValuedKeywords (0.00s)
+=== RUN   TestCleanToolSchema_IntersectsStringConstWithEnum
+=== RUN   TestCleanToolSchema_IntersectsStringConstWithEnum/matching
+    gemini_messages_compat_service_test.go:667: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:667
+        	Error:      	map[string]interface {}{"const":"browser", "enum":[]interface {}{"browser", "shell"}, "type":"STRING"} should not contain "const"
+        	Test:       	TestCleanToolSchema_IntersectsStringConstWithEnum/matching
+=== RUN   TestCleanToolSchema_IntersectsStringConstWithEnum/contradictory
+    gemini_messages_compat_service_test.go:667: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:667
+        	Error:      	map[string]interface {}{"const":"browser", "enum":[]interface {}{"shell"}, "type":"STRING"} should not contain "const"
+        	Test:       	TestCleanToolSchema_IntersectsStringConstWithEnum/contradictory
+=== RUN   TestCleanToolSchema_IntersectsStringConstWithEnum/numeric_string_collision
+    gemini_messages_compat_service_test.go:667: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:667
+        	Error:      	map[string]interface {}{"const":"7", "enum":[]interface {}{"7"}, "type":"STRING"} should not contain "const"
+        	Test:       	TestCleanToolSchema_IntersectsStringConstWithEnum/numeric_string_collision
+=== RUN   TestCleanToolSchema_IntersectsStringConstWithEnum/empty_string
+    gemini_messages_compat_service_test.go:667: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:667
+        	Error:      	map[string]interface {}{"const":"", "enum":[]interface {}{"", "shell"}, "type":"STRING"} should not contain "const"
+        	Test:       	TestCleanToolSchema_IntersectsStringConstWithEnum/empty_string
+=== NAME  TestCleanToolSchema_IntersectsStringConstWithEnum
+    gemini_messages_compat_service_test.go:674: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:674
+        	Error:      	Not equal: 
+        	            	expected: string("STRING")
+        	            	actual  : <nil>(<nil>)
+        	Test:       	TestCleanToolSchema_IntersectsStringConstWithEnum
+--- FAIL: TestCleanToolSchema_IntersectsStringConstWithEnum (0.00s)
+    --- FAIL: TestCleanToolSchema_IntersectsStringConstWithEnum/matching (0.00s)
+    --- FAIL: TestCleanToolSchema_IntersectsStringConstWithEnum/contradictory (0.00s)
+    --- FAIL: TestCleanToolSchema_IntersectsStringConstWithEnum/numeric_string_collision (0.00s)
+    --- FAIL: TestCleanToolSchema_IntersectsStringConstWithEnum/empty_string (0.00s)
+=== RUN   TestCleanToolSchema_DropsNonStringConstWithoutInferringType
+    gemini_messages_compat_service_test.go:682: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:682
+        	Error:      	map[string]interface {}{"const":true} should not contain "const"
+        	Test:       	TestCleanToolSchema_DropsNonStringConstWithoutInferringType
+--- FAIL: TestCleanToolSchema_DropsNonStringConstWithoutInferringType (0.00s)
+=== RUN   TestCleanToolSchema_DropsNonStringConstAndRetainsExistingTypeAndEnum
+    gemini_messages_compat_service_test.go:697: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:697
+        	Error:      	map[string]interface {}{"const":7, "enum":[]interface {}{"8"}, "type":"INTEGER"} should not contain "const"
+        	Test:       	TestCleanToolSchema_DropsNonStringConstAndRetainsExistingTypeAndEnum
+--- FAIL: TestCleanToolSchema_DropsNonStringConstAndRetainsExistingTypeAndEnum (0.00s)
+=== RUN   TestCleanToolSchema_PreservesNestedOneOfCombinator
+    gemini_messages_compat_service_test.go:728: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:728
+        	Error:      	Not equal: 
+        	            	expected: []interface {}([]interface {}{"a"})
+        	            	actual  : <nil>(<nil>)
+        	Test:       	TestCleanToolSchema_PreservesNestedOneOfCombinator
+--- FAIL: TestCleanToolSchema_PreservesNestedOneOfCombinator (0.00s)
+=== RUN   TestCleanToolSchema_PreservesPropertyNamesAndDataWithoutMutation
+    gemini_messages_compat_service_test.go:754: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:754
+        	Error:      	map[string]interface {}{"anyOf":[]interface {}{map[string]interface {}{"const":"a"}, map[string]interface {}{"const":1, "minimum":1, "type":"INTEGER"}}, "customAnnotation":map[string]interface {}{"const":"data", "enum":[]interface {}{"1", "2"}}, "default":map[string]interface {}{"const":"data", "examples":[]interface {}{map[string]interface {}{"type":"LOWERCASE"}}, "type":"OBJECT"}, "dependentSchemas":map[string]interface {}{"const":map[string]interface {}{"const":"dependency"}}, "examples":[]interface {}{map[string]interface {}{"const":"annotation"}}, "properties":map[string]interface {}{"const":map[string]interface {}{"const":"value"}, "examples":map[string]interface {}{"minimum":1, "type":"INTEGER"}}, "type":"OBJECT"} should not contain "examples"
+        	Test:       	TestCleanToolSchema_PreservesPropertyNamesAndDataWithoutMutation
+--- FAIL: TestCleanToolSchema_PreservesPropertyNamesAndDataWithoutMutation (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.016s
+FAIL

@@ -10,10 +10,20 @@ import (
 
 type compositeOwnershipAccountRepo struct {
 	AccountRepository
-	accounts []Account
+	accounts            []Account
+	schedulableAccounts []Account
+	availabilityCalls   int
 }
 
 func (r *compositeOwnershipAccountRepo) ListSchedulableByGroupID(context.Context, int64) ([]Account, error) {
+	if r.schedulableAccounts != nil {
+		return r.schedulableAccounts, nil
+	}
+	return r.accounts, nil
+}
+
+func (r *compositeOwnershipAccountRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
+	r.availabilityCalls++
 	return r.accounts, nil
 }
 

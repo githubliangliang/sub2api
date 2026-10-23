@@ -224,3 +224,17 @@ func TestClassifyNoAccountError_FromGin_NilContextStillSafe(t *testing.T) {
 	require.False(t, service.HasOpsClientBusinessLimited(nil))
 	require.Empty(t, service.OpsClientBusinessLimitedReason(nil))
 }
+
+func TestClassifyNoAccountError_GPT55Retirement(t *testing.T) {
+	groupID := int64(1)
+	apiKey := &service.APIKey{GroupID: &groupID}
+	fd := &fakeDiagnoser{resp: service.ModelAvailabilityDiagnosis{HasAccountsInPool: true, HasRetiredSubscriptionModel: true}}
+	cls := classifyNoAccountError(context.Background(), fd, apiKey, "gpt-5.5", "legacy", service.PlatformOpenAI)
+	require.Equal(t, http.StatusNotFound, cls.Status)
+	require.Equal(t, "model_not_found", cls.ErrType)
+	require.Contains(t, cls.Message, "retired")
+	require.Contains(t, cls.Message, "API-key")
+	fd.resp.HasModelSupport = true
+	cls = classifyNoAccountError(context.Background(), fd, apiKey, "gpt-5.5", "legacy", service.PlatformOpenAI)
+	require.Equal(t, http.StatusServiceUnavailable, cls.Status, "a temporarily unavailable API pool is not a retirement error")
+}

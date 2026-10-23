@@ -252,6 +252,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	responsesSemanticOutputSeen := false
 	capacityFailoverSuppressedLogged := false
 	failedMessage := ""
+	var createdAtStamper responsesCreatedAtStamper
 	bareErrors := openAIBareErrorStream{enabled: account != nil && account.IsOpenAIOAuthLike()}
 	clientOutputStarted := false
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
@@ -373,7 +374,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			s.handleOpenAIAccountUpstreamError(ctx, account, openAIStreamFailureStatus(bareErrors.pending, message), resp.Header, bareErrors.pending, canonicalOpenAIAccountSchedulingModel(account, originalModel))
 			if !clientDisconnected {
 				applyAttemptResponseHeaders()
-				if _, err := writePendingString(buildOpenAIResponseFailedSSE(responseID, originalModel, bareErrors.pending, message)); err != nil {
+				if _, err := writePendingString(buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message)); err != nil {
 					handlePendingWriteError(err)
 				}
 				flushPending("Client disconnected during error terminal flush")
@@ -630,6 +631,11 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			); sanitized {
 				dataBytes = sanitizedData
 				data = string(sanitizedData)
+				line = "data: " + data
+			}
+			if stampedData, stamped := createdAtStamper.Stamp(dataBytes, eventType); stamped {
+				dataBytes = stampedData
+				data = string(stampedData)
 				line = "data: " + data
 			}
 			// Replace model in response if needed.
@@ -1459,6 +1465,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if err != nil {
 		return nil, fmt.Errorf("restore OpenAI namespace response: %w", err)
 	}
+	body = ensureOpenAIResponseObjectCreatedAt(body)
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	// Codex 协议要求 /responses/compact JSON 响应携带 x-codex-turn-state
 	// （codex-api/src/endpoint/compact.rs 从响应头捕获），显式回传。
@@ -1541,7 +1548,11 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		if restoreErr != nil {
 			return nil, fmt.Errorf("restore OpenAI namespace response: %w", restoreErr)
 		}
-		body = restoredBody
+		var stamper responsesCreatedAtStamper
+		forEachOpenAISSEFrame(bodyText, func(eventType string, data []byte) {
+			stamper.Observe(data, eventType)
+		})
+		body = stamper.ensureResponseObjectCreatedAt(restoredBody)
 	} else {
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 		// 裸 `error` 帧与 `response.failed` 同属终止失败事件，都不该按 200 收尾

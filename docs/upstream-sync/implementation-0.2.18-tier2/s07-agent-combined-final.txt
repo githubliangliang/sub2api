@@ -1,0 +1,224 @@
+2026/10/23 16:21:10 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestVertexProvider_SupportsOnlyGeminiServiceAccount
+--- PASS: TestVertexProvider_SupportsOnlyGeminiServiceAccount (0.00s)
+=== RUN   TestVertexProvider_MissingServiceAccountRejected
+--- PASS: TestVertexProvider_MissingServiceAccountRejected (0.00s)
+=== RUN   TestVertexProvider_MissingManagedGCSBucketRejected
+--- PASS: TestVertexProvider_MissingManagedGCSBucketRejected (0.00s)
+=== RUN   TestVertexProvider_SubmitUploadsJSONLAndCreatesBatchPredictionJob
+--- PASS: TestVertexProvider_SubmitUploadsJSONLAndCreatesBatchPredictionJob (0.00s)
+=== RUN   TestVertexProvider_GetMapsStates
+=== RUN   TestVertexProvider_GetMapsStates/pending
+=== RUN   TestVertexProvider_GetMapsStates/queued
+=== RUN   TestVertexProvider_GetMapsStates/running
+=== RUN   TestVertexProvider_GetMapsStates/succeeded
+=== RUN   TestVertexProvider_GetMapsStates/failed
+=== RUN   TestVertexProvider_GetMapsStates/cancelled
+--- PASS: TestVertexProvider_GetMapsStates (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/pending (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/queued (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/running (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/succeeded (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/failed (0.00s)
+    --- PASS: TestVertexProvider_GetMapsStates/cancelled (0.00s)
+=== RUN   TestVertexProvider_OpenResultReturnsCombinedJSONLStream
+--- PASS: TestVertexProvider_OpenResultReturnsCombinedJSONLStream (0.00s)
+=== RUN   TestVertexProvider_OpenResultMissingObjectsReturnsTypedError
+--- PASS: TestVertexProvider_OpenResultMissingObjectsReturnsTypedError (0.00s)
+=== RUN   TestVertexProvider_CancelCallsClient
+--- PASS: TestVertexProvider_CancelCallsClient (0.00s)
+=== RUN   TestVertexProvider_CleanupDeletesOnlyManagedPaths
+--- PASS: TestVertexProvider_CleanupDeletesOnlyManagedPaths (0.00s)
+=== RUN   TestVertexProvider_CleanupRejectsUnsafePath
+--- PASS: TestVertexProvider_CleanupRejectsUnsafePath (0.00s)
+=== RUN   TestVertexProvider_ErrorsDoNotExposeServiceAccountSecrets
+--- PASS: TestVertexProvider_ErrorsDoNotExposeServiceAccountSecrets (0.00s)
+=== RUN   TestVertexProvider_MetadataDoesNotStoreImageBytesOrBase64
+--- PASS: TestVertexProvider_MetadataDoesNotStoreImageBytesOrBase64 (0.00s)
+=== RUN   TestVertexBetaFilter_StripsUnsupportedClaudeCodeTokens
+--- PASS: TestVertexBetaFilter_StripsUnsupportedClaudeCodeTokens (0.00s)
+=== RUN   TestVertexBetaFilter_DropsHeaderWhenAllUnsupported
+--- PASS: TestVertexBetaFilter_DropsHeaderWhenAllUnsupported (0.00s)
+=== RUN   TestVertexBetaFilter_BodySanitizeKeysOnFinalBeta
+--- PASS: TestVertexBetaFilter_BodySanitizeKeysOnFinalBeta (0.00s)
+=== RUN   TestVertexBetaFilter_BlocksViaBetaPolicy
+--- PASS: TestVertexBetaFilter_BlocksViaBetaPolicy (0.00s)
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_invalid_resource_state
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/stream_invalid_resource_state
+=== RUN   TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_not_found
+--- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden (0.00s)
+    --- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_invalid_resource_state (0.00s)
+    --- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/stream_invalid_resource_state (0.00s)
+    --- PASS: TestGeminiForwardNative_VertexCachedContentNotFoundReturnsStandardForbidden/generate_not_found (0.00s)
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules/native
+2026/10/23 16:21:10 INFO account_temp_unschedulable account_id=830 until=2026-10-23T16:51:10.552Z rule_index=0 status_code=401
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules/claude_compat
+2026/10/23 16:21:10 INFO account_temp_unschedulable account_id=830 until=2026-10-23T16:51:10.552Z rule_index=0 status_code=401
+=== RUN   TestGeminiForward_First401RuleHitOnlyTempUnschedules/chat_completions_compat
+2026/10/23 16:21:10 INFO account_temp_unschedulable account_id=830 until=2026-10-23T16:51:10.553Z rule_index=0 status_code=401
+--- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules (0.00s)
+    --- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules/native (0.00s)
+    --- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules/claude_compat (0.00s)
+    --- PASS: TestGeminiForward_First401RuleHitOnlyTempUnschedules/chat_completions_compat (0.00s)
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError/native
+2026/10/23 16:21:10 INFO 401_escalated_to_error account_id=830 reason="previous temp-unschedulable was also 401"
+2026/10/23 16:21:10 WARN account_disabled_auth_error account_id=830 error="Authentication failed (401): API key expired. Please renew the API key."
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError/claude_compat
+2026/10/23 16:21:10 INFO 401_escalated_to_error account_id=830 reason="previous temp-unschedulable was also 401"
+2026/10/23 16:21:10 WARN account_disabled_auth_error account_id=830 error="Authentication failed (401): API key expired. Please renew the API key."
+=== RUN   TestGeminiForward_Repeated401RuleHitEscalatesToError/chat_completions_compat
+2026/10/23 16:21:10 INFO 401_escalated_to_error account_id=830 reason="previous temp-unschedulable was also 401"
+2026/10/23 16:21:10 WARN account_disabled_auth_error account_id=830 error="Authentication failed (401): API key expired. Please renew the API key."
+--- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError (0.00s)
+    --- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError/native (0.00s)
+    --- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError/claude_compat (0.00s)
+    --- PASS: TestGeminiForward_Repeated401RuleHitEscalatesToError/chat_completions_compat (0.00s)
+=== RUN   TestGeminiForward_UncheckedFinalResponseIsCheckedAfterLoop
+2026/10/23 16:21:10 Gemini account 830: upstream status 503, retry 1/5
+2026/10/23 16:21:11 INFO account_model_temp_unschedulable account_id=830 model=gemini-2.5-flash until=2026-10-23T16:51:11.566Z rule_index=0 status_code=400
+--- PASS: TestGeminiForward_UncheckedFinalResponseIsCheckedAfterLoop (1.01s)
+=== RUN   TestExchangeVertexServiceAccountToken_AccountNotFoundIsRecognized
+--- PASS: TestExchangeVertexServiceAccountToken_AccountNotFoundIsRecognized (0.18s)
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_invalid_grant
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/not_400
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_code
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/server_error
+=== RUN   TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/plain_error
+--- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_invalid_grant (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/not_400 (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/other_code (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/server_error (0.00s)
+    --- PASS: TestVertexServiceAccountNotFoundError_OnlyMatchesAccountNotFound/plain_error (0.00s)
+=== RUN   TestGeminiForwardNative_VertexServiceAccountNotFoundDisablesAndFailsOver
+2026/10/23 16:21:11 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found"
+--- PASS: TestGeminiForwardNative_VertexServiceAccountNotFoundDisablesAndFailsOver (0.10s)
+=== RUN   TestGeminiForward_VertexServiceAccountNotFoundDisablesAndFailsOver
+2026/10/23 16:21:11 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found"
+--- PASS: TestGeminiForward_VertexServiceAccountNotFoundDisablesAndFailsOver (0.01s)
+=== RUN   TestGeminiForwardAsChatCompletions_VertexServiceAccountNotFoundDisablesAndFailsOver
+2026/10/23 16:21:11 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found"
+--- PASS: TestGeminiForwardAsChatCompletions_VertexServiceAccountNotFoundDisablesAndFailsOver (0.02s)
+=== RUN   TestGeminiForwardNative_OtherVertexTokenErrorKeepsAccountState
+--- PASS: TestGeminiForwardNative_OtherVertexTokenErrorKeepsAccountState (0.02s)
+=== RUN   TestGeminiVertexAccountNotFoundSanitizesCredentialQueryValues
+2026/10/23 16:21:11 WARN account_disabled_auth_error account_id=820 error="Service account token rejected (400): Invalid grant: account not found at https://example.test/token?key=***&access_token=***"
+--- PASS: TestGeminiVertexAccountNotFoundSanitizesCredentialQueryValues (0.06s)
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/absent
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/null
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/empty_array
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/quota_failure
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/retry_info
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/unknown_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/object_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/empty_object_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/string_details
+=== RUN   TestVertexSharedCapacity429ClassificationBoundaries/boolean_details
+--- PASS: TestVertexSharedCapacity429ClassificationBoundaries (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/absent (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/null (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/empty_array (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/quota_failure (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/retry_info (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/unknown_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/object_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/empty_object_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/string_details (0.00s)
+    --- PASS: TestVertexSharedCapacity429ClassificationBoundaries/boolean_details (0.00s)
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/native
+2026/10/23 16:21:12 [Gemini 429] Vertex account 820 shared capacity exhausted; account stays schedulable
+2026/10/23 16:21:12 Gemini account 820: upstream status 429, retry 1/5
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/claude_compat
+2026/10/23 16:21:12 [Gemini 429] Vertex account 820 shared capacity exhausted; account stays schedulable
+2026/10/23 16:21:12 Gemini account 820: upstream status 429, retry 1/5
+=== RUN   TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/chat_completions_compat
+2026/10/23 16:21:13 [Gemini 429] Vertex account 820 shared capacity exhausted; account stays schedulable
+2026/10/23 16:21:13 Gemini account 820: upstream status 429, retry 1/5
+--- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty (2.99s)
+    --- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/native (0.96s)
+    --- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/claude_compat (1.00s)
+    --- PASS: TestGeminiSharedCapacityRetriesWithinRequestWithoutAccountPenalty/chat_completions_compat (1.03s)
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/native
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/claude_compat
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/chat_completions_compat
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/native
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/claude_compat
+=== RUN   TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/chat_completions_compat
+--- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint (0.42s)
+    --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request (0.22s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/native (0.05s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/claude_compat (0.09s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Bad_Request/chat_completions_compat (0.08s)
+    --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable (0.20s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/native (0.04s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/claude_compat (0.11s)
+        --- PASS: TestGeminiVertexTransientTokenErrorsDoNotDisableAnyEntryPoint/Service_Unavailable/chat_completions_compat (0.05s)
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/native
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/messages
+=== RUN   TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/chat
+--- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount (0.07s)
+    --- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/native (0.01s)
+    --- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/messages (0.04s)
+    --- PASS: TestGeminiVertexCanceledTokenFetchNeverDisablesAccount/chat (0.02s)
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/native
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/messages
+=== RUN   TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/chat
+--- PASS: TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount (0.16s)
+    --- PASS: TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/native (0.06s)
+    --- PASS: TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/messages (0.05s)
+    --- PASS: TestGeminiVertexCancellationDuringTokenFetchNeverDisablesAccount/chat (0.05s)
+=== RUN   TestVertexTokenURIRejectsCredentialOverride
+--- PASS: TestVertexTokenURIRejectsCredentialOverride (0.00s)
+=== RUN   TestVertexAccountQuotaAndRetryInfoPreserveCooldown
+=== RUN   TestVertexAccountQuotaAndRetryInfoPreserveCooldown/retry_info
+2026/10/23 16:21:15 [Gemini 429] Account 606 rate limited until 2026-10-23 16:22:25 +0000 UTC (oauth_type=, tier=)
+=== RUN   TestVertexAccountQuotaAndRetryInfoPreserveCooldown/project_quota_reset
+2026/10/23 16:21:15 [Gemini 429] Account 606 rate limited until 2026-10-23 16:23:15 +0000 UTC (oauth_type=, tier=)
+--- PASS: TestVertexAccountQuotaAndRetryInfoPreserveCooldown (0.00s)
+    --- PASS: TestVertexAccountQuotaAndRetryInfoPreserveCooldown/retry_info (0.00s)
+    --- PASS: TestVertexAccountQuotaAndRetryInfoPreserveCooldown/project_quota_reset (0.00s)
+=== RUN   TestGeminiNonVertexSharedCapacityStillAppliesAccountCooldown
+2026/10/23 16:21:15 [Gemini 429] Account 607 (API Key/AI Studio, type=apikey) rate limited, reset at PST midnight (2026-10-24 07:00:00 +0000 UTC)
+--- PASS: TestGeminiNonVertexSharedCapacityStillAppliesAccountCooldown (0.00s)
+=== RUN   TestParseVertexServiceAccountKey
+--- PASS: TestParseVertexServiceAccountKey (0.00s)
+=== RUN   TestVertexServiceAccountProxyURL
+--- PASS: TestVertexServiceAccountProxyURL (0.00s)
+=== RUN   TestVertexServiceAccountHTTPClientRecordsDependency
+--- PASS: TestVertexServiceAccountHTTPClientRecordsDependency (0.00s)
+=== RUN   TestExchangeVertexServiceAccountTokenUsesProxy
+--- PASS: TestExchangeVertexServiceAccountTokenUsesProxy (0.05s)
+=== RUN   TestVertexSharedCapacityKeepsAccountSchedulable
+2026/10/23 16:21:15 [Gemini 429] Vertex account 604 shared capacity exhausted; account stays schedulable
+--- PASS: TestVertexSharedCapacityKeepsAccountSchedulable (0.00s)
+=== RUN   TestVertexAccountQuotaKeepsShortCooldown
+--- PASS: TestVertexAccountQuotaKeepsShortCooldown (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	5.124s
+=== RUN   TestGatewayChatCredentialStopDoesNotSelectAnotherAccountAndReturnsSafe503
+--- PASS: TestGatewayChatCredentialStopDoesNotSelectAnotherAccountAndReturnsSafe503 (0.00s)
+=== RUN   TestGatewayChatAntigravityCredentialFailureReturnsActionableMessage
+--- PASS: TestGatewayChatAntigravityCredentialFailureReturnsActionableMessage (0.00s)
+=== RUN   TestCredentialFailoverExhaustionReturnsFixedSafe503
+--- PASS: TestCredentialFailoverExhaustionReturnsFixedSafe503 (0.00s)
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/native
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/messages
+=== RUN   TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/chat_completions
+--- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse (0.00s)
+    --- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/native (0.00s)
+    --- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/messages (0.00s)
+    --- PASS: TestVertexCredentialFailoverExhaustedUsesAuthenticationResponse/chat_completions (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	0.026s

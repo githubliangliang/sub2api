@@ -1,5 +1,7 @@
 # 上游 v0.2.18 移植评估（v0.2.16 → v0.2.18）
 
+> 当前实施状态（2026-10-24）：第一档6簇与第二档10簇已实现；见[第一档验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)、[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)及§10–§11的实施记录。以下§1–§9保留评估时快照。
+
 评估日期：2026-10-23。**仅评估，未实施：第一档6簇、第二档10簇，共覆盖18个PR及1个直接测试提交的选定行为。** 用户本轮明确选择“现有功能修复优先，新增能力暂缓”。支付始终第四档，不作为可选功能携带。
 
 优先处理混合分组凭据误路由、Anthropic兼容流中断结算、Codex恢复/Responses字段与Grok成本；图片下载边界和依赖安全维护同样需要尽早处理。没有修改业务源码、VERSION、迁移或lockfile，没有提交/发布/部署。
@@ -336,3 +338,34 @@ backend/go.mod、.github/workflows/{backend-ci,release,security-scan}.yml、Dock
 - 流生命周期必须同时验证终态、用量和资源释放；返回部分result不代表handler会记录，缺stop不能补成功终态。
 - 审计数字是当前快照，已修DOMPurify不能抵消后来出现的follow-redirects/工具链记录；package命中也不能写成已证实可利用漏洞。
 - 探针假设被否定应记录并收窄结论；不能修改生产代码来让“基线验证”通过。
+
+## 10. 第一档实施补记（2026-10-23）
+
+以上§1–§9为冻结的评估记录。用户随后授权实施第一档；从`498432759`干净工作树手工移植F01–F06，实际状态及门禁见[第一档验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)和[实施证据](./implementation-0.2.18-tier1/)。第二档未实施；新增能力、支付和其它第三/四档不扩围。VERSION 1.1.18、迁移226、依赖保持不变。
+
+实施量测补充的patch sites：
+
+- F03：billing_service.go的HasIdentifiedTokenPricing和动态ModelPricing转换需要同时识别Fast/build-fast及provider前缀，否则离线别名可能失去确定性价格身份；pricing_service.go的buildModelLookupCandidates保留显式条目优先，再回退共用Fast卡。LiteLLMRawEntry/parsePricingData需把来源input/output_cost_per_token_above_200k_tokens换算为本地threshold/multiplier，**仅适配Fast**并保留显式本地字段。来源资源不添加本地扩展字段，避免用改写fixture掩盖来源格式不兼容；普通Grok策略不变。
+- F04：ratelimit_service.go补完整JSON递归helper并在handle403接线；HTML/文本同时要求Cloudflare标记和完整1010代码，JSON要求明确cloudflare_error与同节点code/error_code或browser_signature_banned。比来源的纯文本子串判断更严格，实测业务1010和10101仍处罚；保留本地OpenAI通用HTML豁免。
+- F02：openAIStreamEventIsMetadata是三条流路径的共享分类点。首输出超时验收针对本地已存在守卫的native SSE路径；透传/WS-HTTP桥验证queued/metadata后的容量重试和真实输出后不重试，不引入此前不存在的计时守卫。
+
+回归先失败再修复，未把评估probe或初始测试脚手架编译错误当作修复证据。没有改source-baseline、评估证据、SQL/schema或支付代码；未提交、发布、部署。
+
+## 11. 第二档实施补记（2026-10-24）
+
+用户随后授权第二档实施，并指定三个agent协作；S01–S10已实现并完成定向验收，最终组合结果以[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)和[实施证据](./implementation-0.2.18-tier2/)为准。实施起点HEAD仍为`498432759`，叠加本会话第一档未提交实现；[start.json](./implementation-0.2.18-tier2/start.json)冻结其52个既有文件。没有使用git merge上游，没有扩大第三/四档，历史§1–§9及两份source-baseline保持冻结。
+
+本地量测补充的patch sites（来源站点仍见§4）：
+
+- S01：composite_route_resolver/gateway routes和OpenAI WS入口读取配置候选归属，OAuth歧义只在兜底实际落到OpenAI/Grok族时拒绝。gateway_upstream_request的Anthropic构造器只接本地五平台守卫；gateway_count_tokens在取外平台OAuth token前返回404，独立Gemini/Antigravity提前分流保留。
+- S02：openai_responses_created_at共用stamper接原生JSON/SSE/WS与SSE转JSON；透传仅Observe。本地合成失败helper仍在openai_bare_error_stream，不整文件覆盖来源。apicompat/types原缺CreatedAt，anthropic_to_responses_response与chatcompletions_responses_bridge必须同时补字段及共享时间；真实Chat创建时间优先，失败帧也使用该状态时间。
+- S03：openai_model_retirement接account.IsModelSupported、三种实际调度/previous_response_id和目录过滤。本地缺来源全局compact fallback，只用compact_model_mapping与最新DB复检。目录解析最小17行基座随真实消费者摘取；remote/file合并后的空目录保留权威性并最终重算ETag。配置候选决定永久退休结论，不能因全OAuth冷却而重新退回默认退休目录；冷却API Key仍影响永久可用性结论。
+- S04：pkg/openai与openai_codex_identity共用TUI身份归一，设置文案同步。openai_first_output metadata分类覆盖空text/refusal/done；UpstreamFailoverError只增SameAccountRetryDelay，不引入新deadline。openai_gateway_upstream_errors解析秒/ms/date，验证有限值并在Duration转换前封顶；failover_loop保留无提示指数退避及可取消等待。
+- S05：openai_gateway_anthropic_native_pump和gateway_forward_compat_stream接本地Chat/Responses转换器；沿用既有bounded first-output spool保留签名及语义前重试，排水同时限制idle与total，停止关闭body。native Messages旧403规则未改。Chat handler补失败部分result结算，Responses原已有；二者使用mandatory队列并提前快照Gin归属字段。gateway_compat_stream_failure处理仅注释后换号耗尽；严格终态校验还覆盖空流/仅ping EOF。真实SQLite夹具调用实际handler→RecordUsage→Apply，保留已删除Key、取消及去重结算。
+- S06：antigravity/request_transformer仅追加tool_result base64媒体；antigravity_gateway_gemini与collectGeminiSSE保留函数调用/签名并接回放。Gemini handler只放行已解析到Antigravity的既有Gemini路由。pricing/billing按既有Claude5.5基准归一，显式条目优先；变体选择保留不同目标映射，只对自映射选精确已有变体。账号TestConnection按映射目标选既有协议，admin候选跳过通配符。antigravity/client只摘上游套餐细分ID及已有端点判断，未取新目录/Argon/3.8低档。
+- S07：Gemini三个入口复用每个响应一次的ErrorPolicyResult，重试下一响应重置。gemini_messages_compat_service的handleGeminiUpstreamError/isVertexSharedCapacity429只对现有SA的无配额明细共享429免冷却；本地缺短冷却前置，补1分钟fallback而不引入账户/请求新scope枚举。vertex_service_account保留typed HTTP错误和固定可信Google端点；gemini_vertex_token_error只识别确切400 invalid_grant/account-not-found，SetError后换号。Ops沿用既有Stage/Scope/Reason，不新增代理字段；credentialFailoverClientResponse为Chat补Vertex认证reason，native/messages沿用401映射，三协议均验证耗尽安全提示，敏感查询值在账号错误及日志均脱敏。
+- S08：gemini_stream_client_abort为三协议共用原请求取消、首个写错误和实际图片观察；Gemini兼容两文件在解析残行前判读错，ClientDisconnect及finishReason状态保留，写错后不再写/flush、不读取未来usage。gemini_image_output_accounting另存断流实际inline/file计数，正常完成旧fallback保留；断流即使已finish也不估图。Messages/native成功结果结算路径与Chat对齐mandatory及Gin快照，覆盖队列drop策略和请求复用。
+- S09：image_storage共享默认连接池，逐跳URL和直连socket IP双层校验，代理分支只证明本地DNS；urlvalidator仅补私有既有函数的五行导出包装。组播/广播补强仅限图片下载，不顺带改变monitor策略。内容类型/嗅探拒绝JSON与HTML，保留base64、大小限制和body关闭。
+- S10：go.mod、三份workflow、根及deploy Dockerfile同步Go1.27.3；两份pnpm override与九行lockfile定向更新follow-redirects1.16.1。Go1.27.3实测暴露Ent loader的export V5不兼容，经版本矩阵测定x/tools0.50.0为最小可用前置，只取MVS强制传递依赖、无tidy。详见[依赖复核](./implementation-0.2.18-tier2/dependency-review.md)，不把该必要前置冒充上游评估时已有结论。门禁额外修稳既有gemini_sse_comment_compat_test的固定时长关闭夹具及openai_responses_tool_schema_test的进程全局分配计数：前者等待实际心跳，后者隔离进程保留原阈值并通过线性退化负对照；没有修改对应生产逻辑。
+
+范围仍为SQLite/miniredis/simple mode、VERSION1.1.18和迁移226。未新增schema、支付、新平台或模型目录；旧按需/架构不适用项继续见§5。前端全量测试2027通过/2既有跳过，lint/typecheck/build通过；目标follow-redirects两条告警消失，生产high仍为xlsx两条；Go包级扫描stdlib为0但仍有13个不同OSV。真实上游账号权限、Google凭据及远端代理DNS没有被本地桩证明。未发布或部署，最终提交状态见verification。

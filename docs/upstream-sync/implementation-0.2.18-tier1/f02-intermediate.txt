@@ -1,0 +1,348 @@
+2026/10/23 13:46:42 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestOpenAIStreamErrorFrameDoesNotStartClientOutput
+--- PASS: TestOpenAIStreamErrorFrameDoesNotStartClientOutput (0.00s)
+=== RUN   TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver
+=== RUN   TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/native
+=== RUN   TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/passthrough
+--- PASS: TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver (0.00s)
+    --- PASS: TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/native (0.00s)
+    --- PASS: TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/passthrough (0.00s)
+=== RUN   TestOpenAIStreamCapacityShedErrorFramePrecedingFailedStillFailsOver
+--- PASS: TestOpenAIStreamCapacityShedErrorFramePrecedingFailedStillFailsOver (0.00s)
+=== RUN   TestOpenAIStreamCapacityShedAfterOutputRewritesCodeForClient
+--- PASS: TestOpenAIStreamCapacityShedAfterOutputRewritesCodeForClient (0.00s)
+=== RUN   TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken
+=== RUN   TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken/native
+=== RUN   TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken/passthrough
+--- PASS: TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken (0.00s)
+    --- PASS: TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken/native (0.00s)
+    --- PASS: TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken/passthrough (0.00s)
+=== RUN   TestOpenAIStreamClientOutputStarted_IgnoresCompactKeepaliveBytes
+--- PASS: TestOpenAIStreamClientOutputStarted_IgnoresCompactKeepaliveBytes (0.20s)
+=== RUN   TestOpenAINativeFirstOutputTimeoutDisabledPreservesSynchronousStream
+--- PASS: TestOpenAINativeFirstOutputTimeoutDisabledPreservesSynchronousStream (0.00s)
+=== RUN   TestOpenAINativeFirstOutputTimeoutIgnoresPreambleAndCleansReader
+2026/10/23 13:46:42 OpenAI first output timeout: account=1 model=model effort= phase=semantic_output elapsed=2.000094977s limit=1s
+--- PASS: TestOpenAINativeFirstOutputTimeoutIgnoresPreambleAndCleansReader (0.20s)
+=== RUN   TestOpenAIFirstOutputTimeoutForReasoningEffort
+--- PASS: TestOpenAIFirstOutputTimeoutForReasoningEffort (0.00s)
+=== RUN   TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata
+=== RUN   TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata/native
+2026/10/23 13:46:44 OpenAI first output timeout: account=1 model=model effort= phase=semantic_output elapsed=1.000945221s limit=1s
+=== RUN   TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata/passthrough
+    openai_first_output_timeout_test.go:207: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_first_output_timeout_test.go:207
+        	Error:      	An error is expected but got nil.
+        	            	expected: *service.UpstreamFailoverError
+        	Test:       	TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata/passthrough
+--- FAIL: TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata (4.00s)
+    --- PASS: TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata/native (1.00s)
+    --- FAIL: TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata/passthrough (3.00s)
+=== RUN   TestOpenAIFirstOutputStageDefaultLimitIsIndependentFromScannerLimit
+--- PASS: TestOpenAIFirstOutputStageDefaultLimitIsIndependentFromScannerLimit (0.00s)
+=== RUN   TestOpenAIFirstOutputEventQueueSizeBackpressuresGuardedStreams
+--- PASS: TestOpenAIFirstOutputEventQueueSizeBackpressuresGuardedStreams (0.00s)
+=== RUN   TestOpenAIFirstOutputDynamicScannerLimitsOnlyWhileGuardIsActive
+--- PASS: TestOpenAIFirstOutputDynamicScannerLimitsOnlyWhileGuardIsActive (0.01s)
+=== RUN   TestOpenAIFirstOutputStageOverflowIsAtomicAndCleanupRemovesSpool
+--- PASS: TestOpenAIFirstOutputStageOverflowIsAtomicAndCleanupRemovesSpool (0.00s)
+=== RUN   TestOpenAIFirstOutputStageCommitCopiesSpoolAndRemovesTemp
+--- PASS: TestOpenAIFirstOutputStageCommitCopiesSpoolAndRemovesTemp (0.00s)
+=== RUN   TestOpenAIFirstOutputStageUnlinkFailurePermanentlyFallsBackToMemoryAndRetriesCleanup
+--- PASS: TestOpenAIFirstOutputStageUnlinkFailurePermanentlyFallsBackToMemoryAndRetriesCleanup (0.00s)
+=== RUN   TestOpenAINativeFirstOutputTimeoutDisarmsAfterSemanticOutput
+--- PASS: TestOpenAINativeFirstOutputTimeoutDisarmsAfterSemanticOutput (1.10s)
+=== RUN   TestOpenAINativeFirstOutputTimeoutWaitsForCompleteSemanticEvent
+2026/10/23 13:46:49 OpenAI first output timeout: account=1 model=model effort= phase=semantic_output elapsed=1.000143325s limit=1s
+--- PASS: TestOpenAINativeFirstOutputTimeoutWaitsForCompleteSemanticEvent (1.00s)
+=== RUN   TestOpenAINativeFirstOutputTimeoutDoesNotLeakLargePreambleEvent
+2026/10/23 13:46:50 OpenAI first output timeout: account=1 model=model effort= phase=semantic_output elapsed=1.000453912s limit=1s
+--- PASS: TestOpenAINativeFirstOutputTimeoutDoesNotLeakLargePreambleEvent (1.00s)
+=== RUN   TestOpenAINativeFirstOutputEOFDispatchesTerminalEventWithoutBlankLine
+--- PASS: TestOpenAINativeFirstOutputEOFDispatchesTerminalEventWithoutBlankLine (0.00s)
+=== RUN   TestOpenAINativeFirstOutputStageOverflowFailsOverWithoutAttemptBytes
+2026/10/23 13:46:50 OpenAI first-output staging limit exceeded: account=1 model=model error=openai first-output staging limit exceeded: buffered=8386568 incoming=1048320 limit=8388608
+--- PASS: TestOpenAINativeFirstOutputStageOverflowFailsOverWithoutAttemptBytes (0.21s)
+=== RUN   TestOpenAINativeFirstOutputScannerRejectsOversizedLineWithoutLeak
+2026/10/23 13:46:50 SSE token exceeded guarded first-output limit: account=1 limit=8388672 error=openai pre-output scanner token limit exceeded
+--- PASS: TestOpenAINativeFirstOutputScannerRejectsOversizedLineWithoutLeak (0.03s)
+=== RUN   TestOpenAINativeFirstOutputScannerAllowsLargeEventAfterSemanticBoundary
+--- PASS: TestOpenAINativeFirstOutputScannerAllowsLargeEventAfterSemanticBoundary (0.30s)
+=== RUN   TestOpenAINativeFirstOutputTimeoutDisabledKeepsPreamblePrivateAcrossKeepalive
+--- PASS: TestOpenAINativeFirstOutputTimeoutDisabledKeepsPreamblePrivateAcrossKeepalive (2.10s)
+=== RUN   TestOpenAINativeFirstOutputFailoverKeepsAttemptHeadersPrivateAfterKeepaliveCommit
+2026/10/23 13:46:54 OpenAI first output timeout: account=1 model=model effort= phase=semantic_output elapsed=2.000214478s limit=2s
+--- PASS: TestOpenAINativeFirstOutputFailoverKeepsAttemptHeadersPrivateAfterKeepaliveCommit (2.00s)
+=== RUN   TestOpenAIStreamingPassthroughFlushesAtCompleteEventBoundaries
+--- PASS: TestOpenAIStreamingPassthroughFlushesAtCompleteEventBoundaries (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughKeepsPreamblePendingUntilFirstOutputBoundary
+--- PASS: TestOpenAIStreamingPassthroughKeepsPreamblePendingUntilFirstOutputBoundary (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughFlushesTerminalEventAtEOFWithoutBlankLine
+--- PASS: TestOpenAIStreamingPassthroughFlushesTerminalEventAtEOFWithoutBlankLine (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughFailedBeforeOutputCanStillFailOverWithoutFlush
+--- PASS: TestOpenAIStreamingPassthroughFailedBeforeOutputCanStillFailOverWithoutFlush (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughNonRetryableFailedBeforeOutputFlushesAtBoundary
+--- PASS: TestOpenAIStreamingPassthroughNonRetryableFailedBeforeOutputFlushesAtBoundary (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughFailedAfterOutputFlushesAtBoundaryAndKeepsUsage
+--- PASS: TestOpenAIStreamingPassthroughFailedAfterOutputFlushesAtBoundaryAndKeepsUsage (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughClientDisconnectStillDrainsTerminalUsage
+2026/10/23 13:46:54 [OpenAI passthrough] Client disconnected during streaming, continue draining upstream for usage: account=1
+--- PASS: TestOpenAIStreamingPassthroughClientDisconnectStillDrainsTerminalUsage (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughScannerErrorFlushesWrittenResidual
+2026/10/23 13:46:54 [OpenAI passthrough] 流读取异常中断: account=1 request_id= err=upstream read failed
+--- PASS: TestOpenAIStreamingPassthroughScannerErrorFlushesWrittenResidual (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughNamespaceRestoreErrorFlushesWrittenResidualOnce
+--- PASS: TestOpenAIStreamingPassthroughNamespaceRestoreErrorFlushesWrittenResidualOnce (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughBlankWriteFailureDoesNotFlushAndStillDrainsUsage
+2026/10/23 13:46:54 [OpenAI passthrough] Client disconnected during streaming, continue draining upstream for usage: account=1
+--- PASS: TestOpenAIStreamingPassthroughBlankWriteFailureDoesNotFlushAndStillDrainsUsage (0.00s)
+=== RUN   TestOpenAIResponseFlush_SlowEventsFlushOnceAtBoundaries
+--- PASS: TestOpenAIResponseFlush_SlowEventsFlushOnceAtBoundaries (0.00s)
+=== RUN   TestOpenAIResponseFlush_DataQueuedButBlankDrainsFlushesOnce
+--- PASS: TestOpenAIResponseFlush_DataQueuedButBlankDrainsFlushesOnce (0.00s)
+=== RUN   TestOpenAIResponseFlush_BurstDoesNotIncreaseFlushes
+--- PASS: TestOpenAIResponseFlush_BurstDoesNotIncreaseFlushes (0.00s)
+=== RUN   TestOpenAIResponseFlush_CommentAndEOFOnlyFlushCompleteResidual
+--- PASS: TestOpenAIResponseFlush_CommentAndEOFOnlyFlushCompleteResidual (0.00s)
+=== RUN   TestOpenAIResponseFlush_TerminalReadErrorFlushesResidual
+2026/10/23 13:46:54 Upstream scan ended after terminal event: unexpected EOF
+--- PASS: TestOpenAIResponseFlush_TerminalReadErrorFlushesResidual (0.00s)
+=== RUN   TestOpenAIResponseFlush_OutputWithoutTerminalFlushesResidualWithoutFailover
+--- PASS: TestOpenAIResponseFlush_OutputWithoutTerminalFlushesResidualWithoutFailover (0.00s)
+=== RUN   TestOpenAIResponseFlush_PreambleWithoutTerminalRemainsBufferedForFailover
+--- PASS: TestOpenAIResponseFlush_PreambleWithoutTerminalRemainsBufferedForFailover (0.00s)
+=== RUN   TestOpenAIResponseFlush_CanceledAfterOutputFlushesResidualWithoutErrorEvent
+--- PASS: TestOpenAIResponseFlush_CanceledAfterOutputFlushesResidualWithoutErrorEvent (0.00s)
+=== RUN   TestOpenAIResponseFlush_KeepaliveFlushesImmediately
+--- PASS: TestOpenAIResponseFlush_KeepaliveFlushesImmediately (1.00s)
+=== RUN   TestOpenAIResponseFlush_KeepaliveDoesNotSplitOpenEvent
+--- PASS: TestOpenAIResponseFlush_KeepaliveDoesNotSplitOpenEvent (1.25s)
+=== RUN   TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries
+=== RUN   TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries/failed_at_EOF
+=== RUN   TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries/retryable_error_event_buffered_until_terminal
+=== RUN   TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries/non-retryable_error_event_flushes_at_boundary
+--- PASS: TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries (0.00s)
+    --- PASS: TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries/failed_at_EOF (0.00s)
+    --- PASS: TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries/retryable_error_event_buffered_until_terminal (0.00s)
+    --- PASS: TestOpenAIResponseFlush_FailedAndErrorEventsFlushAtBoundaries/non-retryable_error_event_flushes_at_boundary (0.00s)
+=== RUN   TestOpenAIResponseFlush_ReusedTypeKeepsSSEBytesAndTerminalSemantics
+=== RUN   TestOpenAIResponseFlush_ReusedTypeKeepsSSEBytesAndTerminalSemantics/whitespace_around_done
+=== RUN   TestOpenAIResponseFlush_ReusedTypeKeepsSSEBytesAndTerminalSemantics/invalid_JSON_before_done
+--- PASS: TestOpenAIResponseFlush_ReusedTypeKeepsSSEBytesAndTerminalSemantics (0.00s)
+    --- PASS: TestOpenAIResponseFlush_ReusedTypeKeepsSSEBytesAndTerminalSemantics/whitespace_around_done (0.00s)
+    --- PASS: TestOpenAIResponseFlush_ReusedTypeKeepsSSEBytesAndTerminalSemantics/invalid_JSON_before_done (0.00s)
+=== RUN   TestOpenAIResponseFlush_ClientDisconnectStillDrainsUsage
+2026/10/23 13:46:57 Client disconnected during streaming flush, continuing to drain upstream for billing
+--- PASS: TestOpenAIResponseFlush_ClientDisconnectStillDrainsUsage (0.00s)
+=== RUN   TestOpenAIResponseFlush_TerminalEventEndsStreamWithoutEOF
+--- PASS: TestOpenAIResponseFlush_TerminalEventEndsStreamWithoutEOF (0.00s)
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/empty
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/whitespace
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/done
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/JSON_outer_whitespace
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/completed
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/response_done
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/failed
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/incomplete
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/cancelled
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/canceled
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/delta
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/invalid_JSON
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/terminal_with_trailing_garbage
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/nonterminal_with_trailing_garbage
+=== RUN   TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/type_whitespace_remains_nonterminal
+--- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/empty (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/whitespace (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/done (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/JSON_outer_whitespace (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/completed (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/response_done (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/failed (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/incomplete (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/cancelled (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/canceled (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/delta (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/invalid_JSON (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/terminal_with_trailing_garbage (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/nonterminal_with_trailing_garbage (0.00s)
+    --- PASS: TestOpenAIStreamEventIsTerminalWithTypeMatchesExistingSemantics/type_whitespace_remains_nonterminal (0.00s)
+=== RUN   TestOpenAIStreamingTimeout
+2026/10/23 13:46:58 Stream data interval timeout: account=1 model=model interval=1s
+--- PASS: TestOpenAIStreamingTimeout (1.00s)
+=== RUN   TestOpenAIStreamingContextCanceledReturnsIncompleteErrorWithoutInjectingErrorEvent
+--- PASS: TestOpenAIStreamingContextCanceledReturnsIncompleteErrorWithoutInjectingErrorEvent (0.00s)
+=== RUN   TestOpenAIStreamingReadErrorBeforeOutputReturnsFailover
+--- PASS: TestOpenAIStreamingReadErrorBeforeOutputReturnsFailover (0.00s)
+=== RUN   TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema
+=== RUN   TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema/reset
+=== RUN   TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema/http2
+--- PASS: TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema (0.00s)
+    --- PASS: TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema/reset (0.00s)
+    --- PASS: TestOpenAIStreamingReadErrorAfterOutputUsesResponsesErrorSchema/http2 (0.00s)
+=== RUN   TestOpenAIStreamingPostOutputDisconnectQuarantinesSharedProxyWithoutSameStreamFailover
+--- PASS: TestOpenAIStreamingPostOutputDisconnectQuarantinesSharedProxyWithoutSameStreamFailover (0.00s)
+=== RUN   TestOpenAIStreamingTerminalAndClientCancellationDoNotQuarantineProxy
+2026/10/23 13:46:58 Upstream scan ended after terminal event: unexpected EOF
+--- PASS: TestOpenAIStreamingTerminalAndClientCancellationDoNotQuarantineProxy (0.00s)
+=== RUN   TestOpenAIStreamingResponseFailedBeforeOutputReturnsFailover
+--- PASS: TestOpenAIStreamingResponseFailedBeforeOutputReturnsFailover (0.00s)
+=== RUN   TestOpenAIStreamingResponseFailedBeforeOutputCapacityErrorReturnsFailover
+--- PASS: TestOpenAIStreamingResponseFailedBeforeOutputCapacityErrorReturnsFailover (0.00s)
+=== RUN   TestOpenAIStreamingResponseFailedBeforeOutputServerOverloadedCodeReturnsFailover
+--- PASS: TestOpenAIStreamingResponseFailedBeforeOutputServerOverloadedCodeReturnsFailover (0.00s)
+=== RUN   TestOpenAIStreamingResponseFailedBeforeOutputRateLimitUsesPoolRetryPolicy
+--- PASS: TestOpenAIStreamingResponseFailedBeforeOutputRateLimitUsesPoolRetryPolicy (0.00s)
+=== RUN   TestOpenAIStreamingResponseFailedRateLimitDoesNotBlockAccountScheduling
+--- PASS: TestOpenAIStreamingResponseFailedRateLimitDoesNotBlockAccountScheduling (0.00s)
+=== RUN   TestOpenAIStreamingResponseFailedAfterOutputSanitizesVerboseResponseForClient
+--- PASS: TestOpenAIStreamingResponseFailedAfterOutputSanitizesVerboseResponseForClient (0.00s)
+=== RUN   TestOpenAIStreamingContextWindowResponseFailedBeforeOutputPassesThrough
+--- PASS: TestOpenAIStreamingContextWindowResponseFailedBeforeOutputPassesThrough (0.00s)
+=== RUN   TestOpenAIStreamingContextWindowResponseFailedBeforeOutputAppliesPassthroughRule
+--- PASS: TestOpenAIStreamingContextWindowResponseFailedBeforeOutputAppliesPassthroughRule (0.00s)
+=== RUN   TestOpenAIStreamingPreambleOnlyMissingTerminalReturnsFailover
+--- PASS: TestOpenAIStreamingPreambleOnlyMissingTerminalReturnsFailover (0.00s)
+=== RUN   TestOpenAIStreamingPreambleKeepaliveUsesDownstreamIdle
+--- PASS: TestOpenAIStreamingPreambleKeepaliveUsesDownstreamIdle (1.35s)
+=== RUN   TestOpenAIStreamingNormalizesTerminalOutputFromDeltas
+--- PASS: TestOpenAIStreamingNormalizesTerminalOutputFromDeltas (0.00s)
+=== RUN   TestOpenAIStreamingNormalizesTerminalOutputToEmptyArray
+--- PASS: TestOpenAIStreamingNormalizesTerminalOutputToEmptyArray (0.00s)
+=== RUN   TestOpenAIStreamingPolicyResponseFailedBeforeOutputPassesThrough
+--- PASS: TestOpenAIStreamingPolicyResponseFailedBeforeOutputPassesThrough (0.00s)
+=== RUN   TestOpenAIStreamingClientDisconnectDrainsUpstreamUsage
+2026/10/23 13:46:59 Client disconnected during streaming flush, continuing to drain upstream for billing
+--- PASS: TestOpenAIStreamingClientDisconnectDrainsUpstreamUsage (0.00s)
+=== RUN   TestOpenAIStreamingMissingTerminalEventReturnsIncompleteError
+--- PASS: TestOpenAIStreamingMissingTerminalEventReturnsIncompleteError (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughMissingTerminalEventReturnsIncompleteError
+--- PASS: TestOpenAIStreamingPassthroughMissingTerminalEventReturnsIncompleteError (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughPostOutputDisconnectQuarantinesSharedProxy
+2026/10/23 13:46:59 [OpenAI passthrough] 流读取异常中断: account=469804 request_id=rid-passthrough-proxy-disconnect err=unexpected EOF
+2026/10/23 13:46:59 [OpenAI passthrough] 流读取异常中断: account=469804 request_id=rid-passthrough-proxy-disconnect err=http2: client connection lost
+--- PASS: TestOpenAIStreamingPassthroughPostOutputDisconnectQuarantinesSharedProxy (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughResponseFailedBeforeOutputReturnsFailover
+--- PASS: TestOpenAIStreamingPassthroughResponseFailedBeforeOutputReturnsFailover (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughContextWindowResponseFailedBeforeOutputAppliesPassthroughRule
+--- PASS: TestOpenAIStreamingPassthroughContextWindowResponseFailedBeforeOutputAppliesPassthroughRule (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughContextWindowResponseFailedBeforeOutputWithoutRulePassesThrough
+--- PASS: TestOpenAIStreamingPassthroughContextWindowResponseFailedBeforeOutputWithoutRulePassesThrough (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughResponseFailedAfterOutputSanitizesVerboseResponseForClient
+--- PASS: TestOpenAIStreamingPassthroughResponseFailedAfterOutputSanitizesVerboseResponseForClient (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughResponseDoneWithoutDoneMarkerStillSucceeds
+--- PASS: TestOpenAIStreamingPassthroughResponseDoneWithoutDoneMarkerStillSucceeds (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucceeds
+--- PASS: TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucceeds (0.00s)
+=== RUN   TestOpenAIStreamingTooLong
+2026/10/23 13:46:59 SSE line too long: account=2 max_size=65536 error=bufio.Scanner: token too long
+--- PASS: TestOpenAIStreamingTooLong (0.00s)
+=== RUN   TestOpenAIStreamingHeadersOverride
+--- PASS: TestOpenAIStreamingHeadersOverride (0.00s)
+=== RUN   TestOpenAIStreamingReuseScannerBufferAndStillWorks
+--- PASS: TestOpenAIStreamingReuseScannerBufferAndStillWorks (0.00s)
+=== RUN   TestOpenAIStreamingRepairsConcatenatedJSONDocumentsInSingleDataLine
+--- PASS: TestOpenAIStreamingRepairsConcatenatedJSONDocumentsInSingleDataLine (0.01s)
+=== RUN   TestOpenAIStreamingAsyncScannerRepairsConcatenatedJSONDocumentsInSingleDataLine
+--- PASS: TestOpenAIStreamingAsyncScannerRepairsConcatenatedJSONDocumentsInSingleDataLine (0.00s)
+=== RUN   TestOpenAIStreamingPassthroughRepairsConcatenatedJSONDocumentsInSingleDataLine
+--- PASS: TestOpenAIStreamingPassthroughRepairsConcatenatedJSONDocumentsInSingleDataLine (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnLaterTurn429FailsOverBeforeClientWrite
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnLaterTurn429FailsOverBeforeClientWrite (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnLaterTurnDoesNotFailOverAfterDownstreamOutput
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnLaterTurnDoesNotFailOverAfterDownstreamOutput (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnTransportErrorFailoverSafety
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnTransportErrorFailoverSafety/first_turn_fails_over_before_downstream_event
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnTransportErrorFailoverSafety/later_turn_does_not_replay_completed_turns
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnTransportErrorFailoverSafety (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnTransportErrorFailoverSafety/first_turn_fails_over_before_downstream_event (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnTransportErrorFailoverSafety/later_turn_does_not_replay_completed_turns (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/first_turn_401
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/first_turn_429
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/first_turn_500
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/later_turn_500_does_not_replay
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/first_turn_401 (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/first_turn_429 (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/first_turn_500 (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnHTTPStatusFailoverSafety/later_turn_500_does_not_replay (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnSSEErrorFailoverSafety
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnSSEErrorFailoverSafety/turn_1
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnSSEErrorFailoverSafety/turn_2
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnSSEErrorFailoverSafety (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnSSEErrorFailoverSafety/turn_1 (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnSSEErrorFailoverSafety/turn_2 (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnRewritesCapacityShedCodeForClient
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnRewritesCapacityShedCodeForClient/turn2_error_frame
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnRewritesCapacityShedCodeForClient/turn2_bare_response_failed
+2026/10/23 13:46:59 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_turn_completed account_id=11 turn=2 response_id=resp_shed payload_bytes=55 duration_ms=0 events=1 token_events=0 terminal_events=1 first_event=response.fail last_event=response.fail first_token_ms=-1 client_disconnected=false
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnRewritesCapacityShedCodeForClient (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnRewritesCapacityShedCodeForClient/turn2_error_frame (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnRewritesCapacityShedCodeForClient/turn2_bare_response_failed (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataBeforeCapacityFailover
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataBeforeCapacityFailover (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnDoesNotReplayCapacityAfterSemanticOutput
+{"level":"DEBUG","time":"2026-10-23T13:46:59.496Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":13,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+{"level":"WARN","time":"2026-10-23T13:46:59.496Z","msg":"gateway.failover_suppressed_after_semantic_output","service":"sub2api","env":"test","path":"ws_http_bridge","event_type":"response.failed","upstream_request_id":"rid-ws-bridge-post-output","account_id":13,"platform":"openai"}
+{"level":"INFO","time":"2026-10-23T13:46:59.496Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_turn_completed account_id=13 turn=1 response_id=resp_partial payload_bytes=55 duration_ms=0 events=3 token_events=1 terminal_events=1 first_event=response.created last_event=response.fail first_token_ms=0 client_disconnected=false","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnDoesNotReplayCapacityAfterSemanticOutput (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnRequiresTerminalEvent
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnRequiresTerminalEvent/done_without_events_fails_over
+{"level":"DEBUG","time":"2026-10-23T13:46:59.496Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":11,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":false,"ws_affinity_decision":"not_applicable"}
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnRequiresTerminalEvent/created_then_done_fails_over_before_semantic_output
+{"level":"DEBUG","time":"2026-10-23T13:46:59.496Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":11,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":false,"ws_affinity_decision":"not_applicable"}
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnRequiresTerminalEvent (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnRequiresTerminalEvent/done_without_events_fails_over (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnRequiresTerminalEvent/created_then_done_fails_over_before_semantic_output (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnForGrokDefaultsEmptyModelTo45
+{"level":"INFO","time":"2026-10-23T13:46:59.496Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_turn_completed account_id=72 turn=1 response_id=resp_grok_default payload_bytes=69 duration_ms=0 events=2 token_events=0 terminal_events=1 first_event=response.created last_event=response.completed first_token_ms=-1 client_disconnected=false","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnForGrokDefaultsEmptyModelTo45 (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnPromotesCodexAdditionalToolsForMixedCache
+{"level":"INFO","time":"2026-10-23T13:46:59.496Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_turn_completed account_id=73 turn=1 response_id=resp_grok_codex_lite payload_bytes=484 duration_ms=0 events=2 token_events=0 terminal_events=1 first_event=response.created last_event=response.completed first_token_ms=-1 client_disconnected=false","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnPromotesCodexAdditionalToolsForMixedCache (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapacityFailover
+{"level":"DEBUG","time":"2026-10-23T13:46:59.497Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":12,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapacityFailover (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure/write_error
+{"level":"DEBUG","time":"2026-10-23T13:46:59.497Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":14,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure/client_disconnect
+{"level":"DEBUG","time":"2026-10-23T13:46:59.497Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":14,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+{"level":"INFO","time":"2026-10-23T13:46:59.497Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_client_disconnected_drain account_id=14 turn=1 close_status=- close_reason=-","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+{"level":"INFO","time":"2026-10-23T13:46:59.497Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_turn_completed account_id=14 turn=1 response_id=resp_disconnect payload_bytes=55 duration_ms=0 events=3 token_events=0 terminal_events=1 first_event=response.created last_event=response.completed first_token_ms=-1 client_disconnected=true","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure/write_error (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnKeepaliveWriteFailure/client_disconnect (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/overload_followed_by_failed_usage
+{"level":"DEBUG","time":"2026-10-23T13:46:59.497Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":15,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+{"level":"INFO","time":"2026-10-23T13:46:59.497Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_client_disconnected_drain account_id=15 turn=1 close_status=- close_reason=-","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/upstream_read_failure
+{"level":"DEBUG","time":"2026-10-23T13:46:59.497Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":15,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+{"level":"INFO","time":"2026-10-23T13:46:59.497Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_client_disconnected_drain account_id=15 turn=1 close_status=- close_reason=-","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/upstream_EOF_without_terminal
+{"level":"DEBUG","time":"2026-10-23T13:46:59.497Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":15,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+{"level":"INFO","time":"2026-10-23T13:46:59.497Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_client_disconnected_drain account_id=15 turn=1 close_status=- close_reason=-","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/done_without_terminal
+{"level":"DEBUG","time":"2026-10-23T13:46:59.497Z","msg":"openai routing decision","service":"sub2api","env":"test","component":"service.openai_routing","transport":"http_passthrough","account_id":15,"final_model":"gpt-5","final_service_tier":"","routing_hint_generated":true,"ws_affinity_decision":"not_applicable"}
+{"level":"INFO","time":"2026-10-23T13:46:59.497Z","msg":"[OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_client_disconnected_drain account_id=15 turn=1 close_status=- close_reason=-","service":"sub2api","env":"test","component":"service.openai_gateway","legacy_printf":true}
+--- PASS: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/overload_followed_by_failed_usage (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/upstream_read_failure (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/upstream_EOF_without_terminal (0.00s)
+    --- PASS: TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver/done_without_terminal (0.00s)
+=== RUN   TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias
+=== RUN   TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/response.error.status_unauthorized
+=== RUN   TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/error.status_rate_limited
+=== RUN   TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/error.status_overloaded
+=== RUN   TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/response.error.status_forbidden_without_account_signal
+--- PASS: TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias (0.00s)
+    --- PASS: TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/response.error.status_unauthorized (0.00s)
+    --- PASS: TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/error.status_rate_limited (0.00s)
+    --- PASS: TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/error.status_overloaded (0.00s)
+    --- PASS: TestOpenAIStreamSemanticStatusHonorsErrorStatusAlias/response.error.status_forbidden_without_account_signal (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	16.866s
+FAIL

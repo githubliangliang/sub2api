@@ -938,10 +938,14 @@ func buildForbiddenErrorMessage(prefix string, upstreamMsg string, responseBody 
 	return prefix + fallback
 }
 
-// handle403 处理 403 Forbidden 错误
-// Antigravity 平台区分 validation/violation/generic 三种类型，均 SetError 永久禁用；
-// 其他平台保持原有 SetError 行为。
+// handle403 处理 403 Forbidden 错误。Cloudflare 1010 是请求/边缘级拦截，
+// 不应将其视为账号级故障；其他真实 403 继续按平台策略处理。
 func (s *RateLimitService) handle403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
+	if isCloudflareBotBlockResponse(responseBody) {
+		slog.Warn("403_cloudflare_bot_block_skips_account_penalty",
+			"account_id", account.ID, "platform", account.Platform, "upstream_message", upstreamMsg)
+		return false
+	}
 	if account.Platform == PlatformAntigravity {
 		return s.handleAntigravity403(ctx, account, upstreamMsg, responseBody)
 	}
@@ -1024,6 +1028,62 @@ func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account
 		"threshold", openAI403DisableThreshold,
 	)
 	return true
+}
+
+var cloudflareBotBlockCodePattern = regexp.MustCompile(`(?i)\berror code:\s*1010\b`)
+
+// Cloudflare's HTML/text 1010 and explicitly identified JSON errors describe
+// a request/edge block, not invalid account credentials. A bare JSON code or
+// message mentioning 1010 is insufficient evidence.
+func isCloudflareBotBlockResponse(body []byte) bool {
+	var payload any
+	if json.Unmarshal(body, &payload) == nil {
+		return containsCloudflareBotBlockCode(payload)
+	}
+	return bytes.Contains(bytes.ToLower(body), []byte("cloudflare")) && cloudflareBotBlockCodePattern.Match(body)
+}
+
+func containsCloudflareBotBlockCode(value any) bool {
+	switch node := value.(type) {
+	case map[string]any:
+		cloudflareError := false
+		for key, child := range node {
+			if strings.EqualFold(key, "cloudflare_error") {
+				if is, ok := child.(bool); ok && is {
+					cloudflareError = true
+				}
+			}
+		}
+		for key, child := range node {
+			if strings.EqualFold(key, "error_name") {
+				if name, ok := child.(string); ok && strings.EqualFold(strings.TrimSpace(name), "browser_signature_banned") {
+					return true
+				}
+			}
+			if cloudflareError && (strings.EqualFold(key, "code") || strings.EqualFold(key, "error_code")) {
+				switch code := child.(type) {
+				case float64:
+					if code == 1010 {
+						return true
+					}
+				case string:
+					if strings.TrimSpace(code) == "1010" {
+						return true
+					}
+				}
+			}
+			if containsCloudflareBotBlockCode(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range node {
+			if containsCloudflareBotBlockCode(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // handleAntigravity403 处理 Antigravity 平台的 403 错误

@@ -91,6 +91,22 @@ func TestOpenAIResponsesWebSocket_CompositeRouteRejections(t *testing.T) {
 	}
 }
 
+func TestOpenAIResponsesWebSocket_CompositeRejectsOAuthAmbiguity(t *testing.T) {
+	for _, mode := range []string{service.OpenAIWSIngressModePassthrough, service.OpenAIWSIngressModeDedicated} {
+		t.Run(mode, func(t *testing.T) {
+			resolver := service.NewCompositeRouteResolver(nil)
+			resolver.SetModelOwnershipResolver(func(context.Context, int64, string) (service.CompositeModelOwnership, error) {
+				return service.CompositeModelOwnership{Ambiguous: true, OpenAIGatewayOAuthClaimed: true}, nil
+			})
+			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+				firstPayload: `{"type":"response.create","model":"gpt-6-astra"}`,
+				group:        compositeWSGroup(), ingressMode: mode, compositeResolver: resolver,
+				firstFrameCloseExpected: true, closeReason: "explicit composite route", closeStatus: coderws.StatusPolicyViolation,
+			})
+		})
+	}
+}
+
 func TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect(t *testing.T) {
 	for _, mode := range []string{service.OpenAIWSIngressModePassthrough, service.OpenAIWSIngressModeDedicated} {
 		for _, model := range []string{"gpt-5.4", "grok-4.3", "unknown-alias"} {

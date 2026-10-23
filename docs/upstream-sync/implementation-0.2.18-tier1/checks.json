@@ -1,0 +1,82 @@
+[
+  {
+    "name": "backend-unit",
+    "cwd": "backend",
+    "argv": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./...",
+      "-count=1"
+    ],
+    "exit_code": 0,
+    "log": "backend-unit.txt",
+    "passed_packages": 54
+  },
+  {
+    "name": "backend-build",
+    "cwd": "backend",
+    "argv": [
+      "go",
+      "build",
+      "-o",
+      "/tmp/sub2api-0218-tier1/server",
+      "./cmd/server"
+    ],
+    "exit_code": 0,
+    "log": "backend-build.txt"
+  },
+  {
+    "name": "backend-race",
+    "cwd": "backend",
+    "argv": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "./internal/handler/admin",
+      "./internal/service",
+      "./internal/pkg/antigravity",
+      "./internal/repository",
+      "-run",
+      "Test(Codex|ImportCodex|NormalizeCodex|Grok47Fast|GetModelPricing_.*Grok|CalculateCost_.*Grok|GetModelPricingWithChannel|OpenAIStream|OpenAIFirstOutput|OpenAINativeFirstOutput|ProxyOpenAIWSHTTPBridgeTurn|OpenAIStreamingPassthrough|OpenAIResponseFlush|HandleUpstreamError_.*403|HandleUpstreamError_Cloudflare|HandleUpstreamError_NonCloudflare|ExtractGeminiUsage|CleanToolSchema|ConvertClaudeToolsToGeminiTools|GeminiUsageMapping|UsageBillingDeletedKeySQLite|UsageBillingRepositoryApplySQLite|UpdateFixedQuotaResetAt|ProductionSQLUsesSQLiteDialect|SplitSQLStatements|NormalizeFixedQuotaWindows)",
+      "-count=1"
+    ],
+    "exit_code": 0,
+    "log": "backend-race.txt",
+    "passed_packages": 4
+  },
+  {
+    "name": "backend-sqlite",
+    "cwd": "backend",
+    "argv": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/repository",
+      "./internal/service",
+      "-run",
+      "Test(UsageBillingDeletedKeySQLite|UsageBillingRepositoryApplySQLite|UpdateFixedQuotaResetAt|ProductionSQLUsesSQLiteDialect|SplitSQLStatements|NormalizeFixedQuotaWindows)",
+      "-count=1",
+      "-v"
+    ],
+    "exit_code": 0,
+    "log": "backend-sqlite.txt"
+  },
+  {
+    "name": "f03-source-and-offline",
+    "cwd": "backend",
+    "argv": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "TestGrok47FastPricing",
+      "-count=1",
+      "-v"
+    ],
+    "exit_code": 0,
+    "log": "f03-final.txt"
+  }
+]

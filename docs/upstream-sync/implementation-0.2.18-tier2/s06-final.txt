@@ -1,0 +1,1053 @@
+=== RUN   TestTransformClaudeToGemini_ToolResultImagesReachUpstream
+--- PASS: TestTransformClaudeToGemini_ToolResultImagesReachUpstream (0.00s)
+=== RUN   TestToolResultPreservesImagesAndDocumentsInOrder
+--- PASS: TestToolResultPreservesImagesAndDocumentsInOrder (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/antigravity	0.005s
+2026/10/23 15:53:45 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAntigravityConnectionTestModel
+=== PAUSE TestAntigravityConnectionTestModel
+=== RUN   TestAccountGetModelMapping_AntigravityNormalizesGemini31ProAliases
+=== PAUSE TestAccountGetModelMapping_AntigravityNormalizesGemini31ProAliases
+=== RUN   TestAccountGetModelMapping_AntigravityPreservesGemini31ProOverrides
+=== PAUSE TestAccountGetModelMapping_AntigravityPreservesGemini31ProOverrides
+=== RUN   TestAccountGetModelMapping_AntigravityGemini31ProAliasesRespectWildcard
+=== PAUSE TestAccountGetModelMapping_AntigravityGemini31ProAliasesRespectWildcard
+=== RUN   TestAccountGetModelMapping_AntigravityEnsuresGeminiDefaultPassthroughs
+--- PASS: TestAccountGetModelMapping_AntigravityEnsuresGeminiDefaultPassthroughs (0.00s)
+=== RUN   TestAccountGetModelMapping_AntigravityRespectsWildcardOverride
+--- PASS: TestAccountGetModelMapping_AntigravityRespectsWildcardOverride (0.00s)
+=== RUN   TestAdminService_CreateGroup_InvalidRequestFallbackAllowsAntigravity
+--- PASS: TestAdminService_CreateGroup_InvalidRequestFallbackAllowsAntigravity (0.00s)
+=== RUN   TestAdminService_UpdateGroup_InvalidRequestFallbackAllowsAntigravity
+--- PASS: TestAdminService_UpdateGroup_InvalidRequestFallbackAllowsAntigravity (0.00s)
+=== RUN   TestClassifyAntigravity429
+=== RUN   TestClassifyAntigravity429/明确配额耗尽
+=== RUN   TestClassifyAntigravity429/结构化限流
+=== RUN   TestClassifyAntigravity429/未知429
+--- PASS: TestClassifyAntigravity429 (0.00s)
+    --- PASS: TestClassifyAntigravity429/明确配额耗尽 (0.00s)
+    --- PASS: TestClassifyAntigravity429/结构化限流 (0.00s)
+    --- PASS: TestClassifyAntigravity429/未知429 (0.00s)
+=== RUN   TestAntigravityRetryLoop_ModelRateLimited_InjectsCredits
+2026/10/23 15:53:45 [test] pre_check: model_rate_limited_credits_inject model=claude-sonnet-4-5 account=103 (injecting enabledCreditTypes)
+2026/10/23 15:53:45 [test] pre_check: credits_injected_ignore_rate_limit remaining=29m59.591s model=claude-sonnet-4-5 account=103
+--- PASS: TestAntigravityRetryLoop_ModelRateLimited_InjectsCredits (0.00s)
+=== RUN   TestAntigravityRetryLoop_CreditsExhausted_DoesNotInject
+2026/10/23 15:53:45 [test] pre_check: rate_limit_switch remaining=29m59.591s model=claude-sonnet-4-5 account=104
+--- PASS: TestAntigravityRetryLoop_CreditsExhausted_DoesNotInject (0.00s)
+=== RUN   TestAntigravityRetryLoop_CreditErrorMarksExhausted
+2026/10/23 15:53:45 [test] pre_check: model_rate_limited_credits_inject model=claude-sonnet-4-5 account=105 (injecting enabledCreditTypes)
+2026/10/23 15:53:45 [test] pre_check: credits_injected_ignore_rate_limit remaining=29m59.591s model=claude-sonnet-4-5 account=105
+2026/10/23 15:53:45 credits_exhausted_marked account=105 reset_at=2026-10-23T20:53:45Z
+2026/10/23 15:53:45 [test] credit_overages_failed model=claude-sonnet-4-5 account=105 marked_exhausted=true status=403 body={"error":{"message":"Insufficient GOOGLE_ONE_AI credits"}}
+--- PASS: TestAntigravityRetryLoop_CreditErrorMarksExhausted (0.00s)
+=== RUN   TestAntigravityExistingClaudeTierPrices
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-opus-5-5
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-opus-5-5-high
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: anthropic/claude-opus-5-5-high
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-opus-5-5-medium
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: anthropic/claude-opus-5-5-medium
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-opus-5-5-low
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: anthropic/claude-opus-5-5-low
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-sonnet-5-5
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-sonnet-5-5-high
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: anthropic/claude-sonnet-5-5-high
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-sonnet-5-5-medium
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: anthropic/claude-sonnet-5-5-medium
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: claude-sonnet-5-5-low
+2026/10/23 15:53:45 [Billing] Using fallback pricing for model: anthropic/claude-sonnet-5-5-low
+--- PASS: TestAntigravityExistingClaudeTierPrices (0.00s)
+=== RUN   TestAntigravityBufferedGeminiPreservesFunctionCallAndSignatures
+--- PASS: TestAntigravityBufferedGeminiPreservesFunctionCallAndSignatures (0.00s)
+=== RUN   TestAntigravitySelfMappingSelectsExistingExactVariant
+--- PASS: TestAntigravitySelfMappingSelectsExistingExactVariant (0.00s)
+=== RUN   TestAntigravityExistingSubscriptionTierSubIDs
+--- PASS: TestAntigravityExistingSubscriptionTierSubIDs (0.00s)
+=== RUN   TestAntigravityExplicitTierPriceKeepsPriority
+--- PASS: TestAntigravityExplicitTierPriceKeepsPriority (0.00s)
+=== RUN   TestAntigravitySelfMappingDoesNotInventWildcardVariant
+--- PASS: TestAntigravitySelfMappingDoesNotInventWildcardVariant (0.00s)
+=== RUN   TestAntigravityConnectionTestUsesMappedProtocol
+=== RUN   TestAntigravityConnectionTestUsesMappedProtocol/public-alias
+=== RUN   TestAntigravityConnectionTestUsesMappedProtocol/gemini-3.6-flash-high
+--- PASS: TestAntigravityConnectionTestUsesMappedProtocol (0.00s)
+    --- PASS: TestAntigravityConnectionTestUsesMappedProtocol/public-alias (0.00s)
+    --- PASS: TestAntigravityConnectionTestUsesMappedProtocol/gemini-3.6-flash-high (0.00s)
+=== RUN   TestAntigravityForwardGeminiReplaysFunctionCallSignatures
+2026/10/23 15:53:45 [antigravity-Forward] account= mapped Gemini model gemini-3.6-flash to gemini-3.6-flash-high
+2026/10/23 15:53:45 [Antigravity] Cleaned request schema in forwarded request for account
+--- PASS: TestAntigravityForwardGeminiReplaysFunctionCallSignatures (0.00s)
+=== RUN   TestAntigravityCompatOAuthUsesNativeTokenAndRoute
+=== RUN   TestAntigravityCompatOAuthUsesNativeTokenAndRoute/chat_completions
+=== RUN   TestAntigravityCompatOAuthUsesNativeTokenAndRoute/responses
+--- PASS: TestAntigravityCompatOAuthUsesNativeTokenAndRoute (0.00s)
+    --- PASS: TestAntigravityCompatOAuthUsesNativeTokenAndRoute/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatOAuthUsesNativeTokenAndRoute/responses (0.00s)
+=== RUN   TestAntigravityCompatRejectsUnsupportedAccountType
+=== RUN   TestAntigravityCompatRejectsUnsupportedAccountType/chat_completions_upstream
+=== RUN   TestAntigravityCompatRejectsUnsupportedAccountType/responses_setup_token
+--- PASS: TestAntigravityCompatRejectsUnsupportedAccountType (0.00s)
+    --- PASS: TestAntigravityCompatRejectsUnsupportedAccountType/chat_completions_upstream (0.00s)
+    --- PASS: TestAntigravityCompatRejectsUnsupportedAccountType/responses_setup_token (0.00s)
+=== RUN   TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations
+=== RUN   TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations/mixed_server_and_client_tools_prefer_client_tools
+=== RUN   TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations/client_tools_only
+=== RUN   TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations/server_tools_only
+--- PASS: TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations (0.00s)
+    --- PASS: TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations/mixed_server_and_client_tools_prefer_client_tools (0.00s)
+    --- PASS: TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations/client_tools_only (0.00s)
+    --- PASS: TestBuildAntigravityCompatGeminiBody_ConfiguresMixedToolInvocations/server_tools_only (0.00s)
+=== RUN   TestAntigravityCompatChatMixedBuiltInToolsPreferClientFunctions
+2026/10/23 15:53:45 [antigravity] dropping built-in tools (web_search/code_execution) because client function tools are present; Antigravity v1internal rejects the mix
+--- PASS: TestAntigravityCompatChatMixedBuiltInToolsPreferClientFunctions (0.00s)
+=== RUN   TestAntigravityCompatResponsesCodexWebSearchMixedWithFunctionsDropsBuiltins
+2026/10/23 15:53:45 [antigravity] dropping built-in tools (web_search/code_execution) because client function tools are present; Antigravity v1internal rejects the mix
+--- PASS: TestAntigravityCompatResponsesCodexWebSearchMixedWithFunctionsDropsBuiltins (0.00s)
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/legacy_max_tokens_below_bridge_floor
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/max_completion_tokens_takes_precedence
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/max_tokens_at_safe_ceiling_is_preserved
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/max_tokens_above_safe_ceiling_is_clamped
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/precedence_applies_before_clamping
+--- PASS: TestAntigravityCompatPreservesChatTokenLimit (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/legacy_max_tokens_below_bridge_floor (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/max_completion_tokens_takes_precedence (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/max_tokens_at_safe_ceiling_is_preserved (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/max_tokens_above_safe_ceiling_is_clamped (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/precedence_applies_before_clamping (0.00s)
+=== RUN   TestAntigravityCompatRoutesByMappedModelFamily
+=== RUN   TestAntigravityCompatRoutesByMappedModelFamily/gemini-3.1-pro-high
+=== RUN   TestAntigravityCompatRoutesByMappedModelFamily/claude-sonnet-4-5
+--- PASS: TestAntigravityCompatRoutesByMappedModelFamily (0.00s)
+    --- PASS: TestAntigravityCompatRoutesByMappedModelFamily/gemini-3.1-pro-high (0.00s)
+    --- PASS: TestAntigravityCompatRoutesByMappedModelFamily/claude-sonnet-4-5 (0.00s)
+=== RUN   TestAntigravityCompatUnauthorizedIsCredentialFailure
+--- PASS: TestAntigravityCompatUnauthorizedIsCredentialFailure (0.00s)
+=== RUN   TestAntigravityCompatEmptyStreamTriggersFailover
+=== RUN   TestAntigravityCompatEmptyStreamTriggersFailover/chat_completions
+2026/10/23 15:53:45 Empty Antigravity compatibility stream, triggering failover
+=== RUN   TestAntigravityCompatEmptyStreamTriggersFailover/responses
+2026/10/23 15:53:45 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatEmptyStreamTriggersFailover (0.00s)
+    --- PASS: TestAntigravityCompatEmptyStreamTriggersFailover/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatEmptyStreamTriggersFailover/responses (0.00s)
+=== RUN   TestAntigravityCompatUsageOnlyStreamTriggersFailover
+=== RUN   TestAntigravityCompatUsageOnlyStreamTriggersFailover/chat_completions
+2026/10/23 15:53:45 Empty Antigravity compatibility stream, triggering failover
+=== RUN   TestAntigravityCompatUsageOnlyStreamTriggersFailover/responses
+2026/10/23 15:53:45 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatUsageOnlyStreamTriggersFailover (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyStreamTriggersFailover/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyStreamTriggersFailover/responses (0.00s)
+=== RUN   TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover
+=== RUN   TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/chat_completions
+2026/10/23 15:53:45 [antigravity-Forward] warning: empty stream response (claude non-stream), triggering failover
+=== RUN   TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/responses
+2026/10/23 15:53:45 [antigravity-Forward] warning: empty stream response (claude non-stream), triggering failover
+--- PASS: TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/responses (0.00s)
+=== RUN   TestAntigravityCompatChatStreamMapsToolCallAndUsage
+--- PASS: TestAntigravityCompatChatStreamMapsToolCallAndUsage (0.00s)
+=== RUN   TestAntigravityCompatFirstEventTimeoutTriggersFailover
+2026/10/23 15:53:46 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatFirstEventTimeoutTriggersFailover (1.00s)
+=== RUN   TestAntigravityCompatClientDisconnectDrainsUsage
+2026/10/23 15:53:46 Client disconnected during streaming (antigravity chat completions stream), continuing to drain upstream for billing
+--- PASS: TestAntigravityCompatClientDisconnectDrainsUsage (0.00s)
+=== RUN   TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame
+--- PASS: TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame (0.00s)
+=== RUN   TestAntigravityCompatKeepaliveAfterFirstEvent
+--- PASS: TestAntigravityCompatKeepaliveAfterFirstEvent (1.20s)
+=== RUN   TestAntigravityCompatHandlerPreContentKeepalive
+=== RUN   TestAntigravityCompatHandlerPreContentKeepalive/silent_chat
+=== RUN   TestAntigravityCompatHandlerPreContentKeepalive/signature-only_responses
+--- PASS: TestAntigravityCompatHandlerPreContentKeepalive (0.40s)
+    --- PASS: TestAntigravityCompatHandlerPreContentKeepalive/silent_chat (0.20s)
+    --- PASS: TestAntigravityCompatHandlerPreContentKeepalive/signature-only_responses (0.20s)
+=== RUN   TestAntigravityCompatPreContentKeepalive
+=== RUN   TestAntigravityCompatPreContentKeepalive/chat_completions
+=== RUN   TestAntigravityCompatPreContentKeepalive/responses
+--- PASS: TestAntigravityCompatPreContentKeepalive (0.00s)
+    --- PASS: TestAntigravityCompatPreContentKeepalive/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatPreContentKeepalive/responses (0.00s)
+=== RUN   TestAntigravityCompatHandlerRepeatsPreContentKeepalive
+--- PASS: TestAntigravityCompatHandlerRepeatsPreContentKeepalive (0.06s)
+=== RUN   TestAntigravityCompatHandlerPreContentDeadlineWithCommentOnlyStream
+--- PASS: TestAntigravityCompatHandlerPreContentDeadlineWithCommentOnlyStream (0.10s)
+=== RUN   TestAntigravityCompatExpiredPreContentDeadlineDoesNotCommit
+2026/10/23 15:53:48 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatExpiredPreContentDeadlineDoesNotCommit (0.00s)
+=== RUN   TestAntigravityCompatHandlerErrorsAfterPreContentPing
+=== RUN   TestAntigravityCompatHandlerErrorsAfterPreContentPing/read_error
+=== RUN   TestAntigravityCompatHandlerErrorsAfterPreContentPing/timeout
+--- PASS: TestAntigravityCompatHandlerErrorsAfterPreContentPing (0.02s)
+    --- PASS: TestAntigravityCompatHandlerErrorsAfterPreContentPing/read_error (0.02s)
+    --- PASS: TestAntigravityCompatHandlerErrorsAfterPreContentPing/timeout (0.01s)
+=== RUN   TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError
+=== RUN   TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/chat_completions
+=== RUN   TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/responses
+--- PASS: TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError (0.00s)
+    --- PASS: TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/responses (0.00s)
+=== RUN   TestAntigravityUpstreamErrorBodyReadLimit_RespectsDiagnosticLimit
+--- PASS: TestAntigravityUpstreamErrorBodyReadLimit_RespectsDiagnosticLimit (0.00s)
+=== RUN   TestResolveAntigravityProjectID
+=== RUN   TestResolveAntigravityProjectID/uses_onboard_project_id_first
+=== RUN   TestResolveAntigravityProjectID/uses_configured_credentials_fallback
+=== RUN   TestResolveAntigravityProjectID/uses_configured_extra_fallback
+=== RUN   TestResolveAntigravityProjectID/missing_project
+--- PASS: TestResolveAntigravityProjectID (0.00s)
+    --- PASS: TestResolveAntigravityProjectID/uses_onboard_project_id_first (0.00s)
+    --- PASS: TestResolveAntigravityProjectID/uses_configured_credentials_fallback (0.00s)
+    --- PASS: TestResolveAntigravityProjectID/uses_configured_extra_fallback (0.00s)
+    --- PASS: TestResolveAntigravityProjectID/missing_project (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_UsesConfiguredProjectFallback
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-configured-project
+--- PASS: TestAntigravityGatewayService_ForwardGemini_UsesConfiguredProjectFallback (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_ImageUsesDefaultMappingAndOAuth
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account antigravity-image
+--- PASS: TestAntigravityGatewayService_ForwardGemini_ImageUsesDefaultMappingAndOAuth (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_StripsBuiltinsWhenClientFunctionsPresent
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account native-gemini
+--- PASS: TestAntigravityGatewayService_ForwardGemini_StripsBuiltinsWhenClientFunctionsPresent (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_MissingProjectReturnsLocalError
+--- PASS: TestAntigravityGatewayService_ForwardGemini_MissingProjectReturnsLocalError (0.00s)
+=== RUN   TestAntigravityGatewayService_Forward_PromptTooLong
+--- PASS: TestAntigravityGatewayService_Forward_PromptTooLong (0.00s)
+=== RUN   TestAntigravityGatewayService_Forward_ModelRateLimitTriggersFailover
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-rate-limited pre_check: rate_limit_switch remaining=29.796s model=claude-opus-4-6 account=1
+--- PASS: TestAntigravityGatewayService_Forward_ModelRateLimitTriggersFailover (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_ModelRateLimitTriggersFailover
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-rate-limited
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-rate-limited pre_check: rate_limit_switch remaining=29.796s model=gemini-2.5-flash account=2
+--- PASS: TestAntigravityGatewayService_ForwardGemini_ModelRateLimitTriggersFailover (0.00s)
+=== RUN   TestAntigravityGatewayService_Forward_StickySessionForceCacheBilling
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-sticky-rate-limited pre_check: rate_limit_switch remaining=29.796s model=claude-opus-4-6 account=3
+--- PASS: TestAntigravityGatewayService_Forward_StickySessionForceCacheBilling (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_StickySessionForceCacheBilling
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-sticky-rate-limited
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-sticky-rate-limited pre_check: rate_limit_switch remaining=29.795s model=gemini-2.5-flash account=4
+--- PASS: TestAntigravityGatewayService_ForwardGemini_StickySessionForceCacheBilling (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_ClearsStickySessionOnGeminiRateLimit
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-runtime-rate-limited mapped Gemini model gemini-3-flash-preview to gemini-3-flash
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-runtime-rate-limited
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-runtime-rate-limited status=429 oauth_long_delay model=gemini-3-flash account=44 upstream_retry_delay=15s body={\n "error": {\n "status": "RESOURCE_EXHAUSTED",\n "details": [\n {"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-flash"}, "reason": "RATE_LIMIT_EXCEEDED"},\n (model rate limit, switch account)
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-runtime-rate-limited status=429 model_rate_limited model=gemini-3-flash account=44 reset_in=14s
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-runtime-rate-limited status=429 model_rate_limited model=antigravity:gemini account=44 reset_in=14s
+--- PASS: TestAntigravityGatewayService_ForwardGemini_ClearsStickySessionOnGeminiRateLimit (0.00s)
+=== RUN   TestAntigravityGatewayService_Forward_BillsWithMappedModel
+--- PASS: TestAntigravityGatewayService_Forward_BillsWithMappedModel (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_BillsWithMappedModel
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-billing mapped Gemini model gemini-2.5-flash to gemini-3-pro-high
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-billing
+--- PASS: TestAntigravityGatewayService_ForwardGemini_BillsWithMappedModel (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_FallbackReportsActualUpstreamModel
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-fallback mapped Gemini model gemini-primary to gemini-primary-upstream
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-fallback
+2026/10/23 15:53:48 [Antigravity] Model not found (gemini-primary-upstream), retrying with fallback model gemini-fallback-upstream (account: acc-gemini-fallback)
+--- PASS: TestAntigravityGatewayService_ForwardGemini_FallbackReportsActualUpstreamModel (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_RetriesCorruptedThoughtSignature
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-signature mapped Gemini model gemini-3.1-pro-preview to gemini-3.1-pro-high
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-signature
+2026/10/23 15:53:48 Antigravity Gemini account 7: detected signature-related 400, retrying with cleaned thought signatures
+--- PASS: TestAntigravityGatewayService_ForwardGemini_RetriesCorruptedThoughtSignature (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_SignatureRetryPropagatesFailover
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-signature-failover mapped Gemini model gemini-3.1-pro-preview to gemini-3.1-pro-high
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account acc-gemini-signature-failover
+2026/10/23 15:53:48 Antigravity Gemini account 8: detected signature-related 400, retrying with cleaned thought signatures
+2026/10/23 15:53:48 [antigravity-Forward] account=acc-gemini-signature-failover pre_check: rate_limit_switch remaining=29.794s model=gemini-3.1-pro-preview account=8
+--- PASS: TestAntigravityGatewayService_ForwardGemini_SignatureRetryPropagatesFailover (0.00s)
+=== RUN   TestAntigravityClientWriter
+=== RUN   TestAntigravityClientWriter/normal_write_succeeds
+=== RUN   TestAntigravityClientWriter/write_failure_marks_disconnected
+2026/10/23 15:53:48 Client disconnected during streaming (test), continuing to drain upstream for billing
+=== RUN   TestAntigravityClientWriter/subsequent_writes_are_no-op
+2026/10/23 15:53:48 Client disconnected during streaming (test), continuing to drain upstream for billing
+--- PASS: TestAntigravityClientWriter (0.00s)
+    --- PASS: TestAntigravityClientWriter/normal_write_succeeds (0.00s)
+    --- PASS: TestAntigravityClientWriter/write_failure_marks_disconnected (0.00s)
+    --- PASS: TestAntigravityClientWriter/subsequent_writes_are_no-op (0.00s)
+=== RUN   TestAntigravityGatewayService_ForwardGemini_SanitizesClientError
+=== RUN   TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com_https://example.com/?key=secret-key","details":[{"project":"private-project"}]}}
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account
+2026/10/23 15:53:48 [antigravity-Forward] upstream error status=400 body={"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Invalid input projects/123456789 sa@pool.iam.gserviceaccount.com https://example.com/?key=secret-key","details":[{"project":"private-project"}]}}
+=== RUN   TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account
+2026/10/23 15:53:48 [antigravity-Forward] upstream error status=400 body=Invalid input projects/123456789 sa@pool.iam.gserviceaccount.com
+=== RUN   TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/#00
+2026/10/23 15:53:48 [Antigravity] Cleaned request schema in forwarded request for account
+2026/10/23 15:53:48 [antigravity-Forward] upstream error status=400 body=
+--- PASS: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError (0.00s)
+    --- PASS: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/{"error":{"code":400,"status":"INVALID_ARGUMENT","message":"Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com_https://example.com/?key=secret-key","details":[{"project":"private-project"}]}} (0.00s)
+    --- PASS: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/Invalid_input_projects/123456789_sa@pool.iam.gserviceaccount.com (0.00s)
+    --- PASS: TestAntigravityGatewayService_ForwardGemini_SanitizesClientError/#00 (0.00s)
+=== RUN   TestResolveGeminiThinkingVariant
+=== RUN   TestResolveGeminiThinkingVariant/agy_high_(-1)_->_-high
+=== RUN   TestResolveGeminiThinkingVariant/agy_medium_(4000)_->_-medium
+=== RUN   TestResolveGeminiThinkingVariant/agy_low_(1000)_->_-low
+=== RUN   TestResolveGeminiThinkingVariant/models/_prefix_stripped
+=== RUN   TestResolveGeminiThinkingVariant/no_thinkingConfig_->_-high
+=== RUN   TestResolveGeminiThinkingVariant/only_-high_exists:_low_request_degrades_to_high
+=== RUN   TestResolveGeminiThinkingVariant/injected_default_variants_are_usable
+=== RUN   TestResolveGeminiThinkingVariant/already_suffixed:_untouched
+=== RUN   TestResolveGeminiThinkingVariant/bare_name_explicitly_mapped:_untouched
+=== RUN   TestResolveGeminiThinkingVariant/no_variants_in_mapping:_untouched
+=== RUN   TestResolveGeminiThinkingVariant/non-gemini_model:_untouched
+=== RUN   TestResolveGeminiThinkingVariant/explicit_bare_alias_wins_over_variants
+=== RUN   TestResolveGeminiThinkingVariant/variant_value_is_itself_a_mapping_target
+=== RUN   TestResolveGeminiThinkingVariant/persisted_self_mapping_selects_the_existing_exact_tier
+=== RUN   TestResolveGeminiThinkingVariant/runtime-injected_bare_passthrough_(not_in_credentials):_still_resolved
+=== RUN   TestResolveGeminiThinkingVariant/empty_mapping_falls_back_to_default_catalog
+=== RUN   TestResolveGeminiThinkingVariant/nil_account
+--- PASS: TestResolveGeminiThinkingVariant (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/agy_high_(-1)_->_-high (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/agy_medium_(4000)_->_-medium (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/agy_low_(1000)_->_-low (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/models/_prefix_stripped (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/no_thinkingConfig_->_-high (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/only_-high_exists:_low_request_degrades_to_high (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/injected_default_variants_are_usable (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/already_suffixed:_untouched (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/bare_name_explicitly_mapped:_untouched (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/no_variants_in_mapping:_untouched (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/non-gemini_model:_untouched (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/explicit_bare_alias_wins_over_variants (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/variant_value_is_itself_a_mapping_target (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/persisted_self_mapping_selects_the_existing_exact_tier (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/runtime-injected_bare_passthrough_(not_in_credentials):_still_resolved (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/empty_mapping_falls_back_to_default_catalog (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariant/nil_account (0.00s)
+=== RUN   TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel
+=== RUN   TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level=low
+=== RUN   TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level=medium
+=== RUN   TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level=high
+=== RUN   TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level=
+=== RUN   TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/already_suffixed_model_is_untouched
+--- PASS: TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level=low (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level=medium (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level=high (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/level= (0.00s)
+    --- PASS: TestResolveGeminiThinkingVariantForLevel_CompatPathResolvesBareModel/already_suffixed_model_is_untouched (0.00s)
+=== RUN   TestIsAntigravityInternalServerError
+=== RUN   TestIsAntigravityInternalServerError/匹配完整的_INTERNAL_500_body
+=== RUN   TestIsAntigravityInternalServerError/statusCode_不是_500
+=== RUN   TestIsAntigravityInternalServerError/body_中_message_不匹配
+=== RUN   TestIsAntigravityInternalServerError/body_中_status_不匹配
+=== RUN   TestIsAntigravityInternalServerError/body_中_code_不匹配
+=== RUN   TestIsAntigravityInternalServerError/空_body
+=== RUN   TestIsAntigravityInternalServerError/其他_500_错误格式（纯文本）
+=== RUN   TestIsAntigravityInternalServerError/其他_500_错误格式（不同_JSON_结构）
+--- PASS: TestIsAntigravityInternalServerError (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/匹配完整的_INTERNAL_500_body (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/statusCode_不是_500 (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/body_中_message_不匹配 (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/body_中_status_不匹配 (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/body_中_code_不匹配 (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/空_body (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/其他_500_错误格式（纯文本） (0.00s)
+    --- PASS: TestIsAntigravityInternalServerError/其他_500_错误格式（不同_JSON_结构） (0.00s)
+=== RUN   TestAntigravityGatewayService_GetMappedModel
+=== RUN   TestAntigravityGatewayService_GetMappedModel/账户映射优先
+=== RUN   TestAntigravityGatewayService_GetMappedModel/账户映射_-_可覆盖默认映射的模型
+=== RUN   TestAntigravityGatewayService_GetMappedModel/账户映射_-_可覆盖未知模型
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-opus-4-6_→_claude-opus-4-6-thinking
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-opus-4-5-20251101_→_claude-opus-4-6-thinking
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-opus-4-5-thinking_→_claude-opus-4-6-thinking
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-haiku-4-5_→_claude-sonnet-4-6
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-haiku-4-5-20251001_→_claude-sonnet-4-6
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-sonnet-4-5-20250929_→_claude-sonnet-4-6
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-fable-5-1
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-fable-5
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-sonnet-4-6
+=== RUN   TestAntigravityGatewayService_GetMappedModel/显式_canonical_选择_-_claude-sonnet-4-5_透传
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-opus-4-8
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-opus-4-7
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-opus-4-6-thinking
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-sonnet-4-5-thinking_→_claude-sonnet-4-6
+=== RUN   TestAntigravityGatewayService_GetMappedModel/账户显式目标只映射一步_-_custom-sonnet_→_claude-sonnet-4-5
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_gemini-2.5-flash
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_gemini-2.5-pro
+=== RUN   TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_gemini-3-flash
+=== RUN   TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-unknown_返回空
+=== RUN   TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-3-5-sonnet-20241022_返回空（未在默认映射）
+=== RUN   TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-3-opus-20240229_返回空
+=== RUN   TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-opus-4_返回空
+=== RUN   TestAntigravityGatewayService_GetMappedModel/未知模型_-_gemini-future-model_返回空
+--- PASS: TestAntigravityGatewayService_GetMappedModel (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/账户映射优先 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/账户映射_-_可覆盖默认映射的模型 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/账户映射_-_可覆盖未知模型 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-opus-4-6_→_claude-opus-4-6-thinking (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-opus-4-5-20251101_→_claude-opus-4-6-thinking (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-opus-4-5-thinking_→_claude-opus-4-6-thinking (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-haiku-4-5_→_claude-sonnet-4-6 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-haiku-4-5-20251001_→_claude-sonnet-4-6 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-sonnet-4-5-20250929_→_claude-sonnet-4-6 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-fable-5-1 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-fable-5 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-sonnet-4-6 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/显式_canonical_选择_-_claude-sonnet-4-5_透传 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-opus-4-8 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-opus-4-7 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_claude-opus-4-6-thinking (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射_-_claude-sonnet-4-5-thinking_→_claude-sonnet-4-6 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/账户显式目标只映射一步_-_custom-sonnet_→_claude-sonnet-4-5 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_gemini-2.5-flash (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_gemini-2.5-pro (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/默认映射透传_-_gemini-3-flash (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-unknown_返回空 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-3-5-sonnet-20241022_返回空（未在默认映射） (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-3-opus-20240229_返回空 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/未知模型_-_claude-opus-4_返回空 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel/未知模型_-_gemini-future-model_返回空 (0.00s)
+=== RUN   TestAntigravityGatewayService_GetMappedModel_EdgeCases
+=== RUN   TestAntigravityGatewayService_GetMappedModel_EdgeCases/空字符串
+=== RUN   TestAntigravityGatewayService_GetMappedModel_EdgeCases/非claude/gemini前缀_-_gpt
+=== RUN   TestAntigravityGatewayService_GetMappedModel_EdgeCases/非claude/gemini前缀_-_llama
+--- PASS: TestAntigravityGatewayService_GetMappedModel_EdgeCases (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel_EdgeCases/空字符串 (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel_EdgeCases/非claude/gemini前缀_-_gpt (0.00s)
+    --- PASS: TestAntigravityGatewayService_GetMappedModel_EdgeCases/非claude/gemini前缀_-_llama (0.00s)
+=== RUN   TestAntigravityGatewayService_IsModelSupported
+=== RUN   TestAntigravityGatewayService_IsModelSupported/直接支持_-_claude-fable-5-1
+=== RUN   TestAntigravityGatewayService_IsModelSupported/直接支持_-_claude-fable-5
+=== RUN   TestAntigravityGatewayService_IsModelSupported/直接支持_-_claude-sonnet-4-5
+=== RUN   TestAntigravityGatewayService_IsModelSupported/直接支持_-_gemini-3-flash
+=== RUN   TestAntigravityGatewayService_IsModelSupported/可映射_-_claude-opus-4-8
+=== RUN   TestAntigravityGatewayService_IsModelSupported/可映射_-_claude-opus-4-6
+=== RUN   TestAntigravityGatewayService_IsModelSupported/Gemini前缀
+=== RUN   TestAntigravityGatewayService_IsModelSupported/Claude前缀
+=== RUN   TestAntigravityGatewayService_IsModelSupported/不支持_-_gpt-4
+=== RUN   TestAntigravityGatewayService_IsModelSupported/不支持_-_空字符串
+--- PASS: TestAntigravityGatewayService_IsModelSupported (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/直接支持_-_claude-fable-5-1 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/直接支持_-_claude-fable-5 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/直接支持_-_claude-sonnet-4-5 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/直接支持_-_gemini-3-flash (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/可映射_-_claude-opus-4-8 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/可映射_-_claude-opus-4-6 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/Gemini前缀 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/Claude前缀 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/不支持_-_gpt-4 (0.00s)
+    --- PASS: TestAntigravityGatewayService_IsModelSupported/不支持_-_空字符串 (0.00s)
+=== RUN   TestMapAntigravityModel_WildcardTargetEqualsRequest
+=== RUN   TestMapAntigravityModel_WildcardTargetEqualsRequest/wildcard_target_equals_request_model
+=== RUN   TestMapAntigravityModel_WildcardTargetEqualsRequest/wildcard_target_differs_from_request_model
+=== RUN   TestMapAntigravityModel_WildcardTargetEqualsRequest/wildcard_no_match
+=== RUN   TestMapAntigravityModel_WildcardTargetEqualsRequest/explicit_passthrough_same_name
+=== RUN   TestMapAntigravityModel_WildcardTargetEqualsRequest/multiple_wildcards_target_equals_one_request
+=== RUN   TestMapAntigravityModel_WildcardTargetEqualsRequest/customtools_alias_falls_back_to_normalized_preview_mapping
+--- PASS: TestMapAntigravityModel_WildcardTargetEqualsRequest (0.00s)
+    --- PASS: TestMapAntigravityModel_WildcardTargetEqualsRequest/wildcard_target_equals_request_model (0.00s)
+    --- PASS: TestMapAntigravityModel_WildcardTargetEqualsRequest/wildcard_target_differs_from_request_model (0.00s)
+    --- PASS: TestMapAntigravityModel_WildcardTargetEqualsRequest/wildcard_no_match (0.00s)
+    --- PASS: TestMapAntigravityModel_WildcardTargetEqualsRequest/explicit_passthrough_same_name (0.00s)
+    --- PASS: TestMapAntigravityModel_WildcardTargetEqualsRequest/multiple_wildcards_target_equals_one_request (0.00s)
+    --- PASS: TestMapAntigravityModel_WildcardTargetEqualsRequest/customtools_alias_falls_back_to_normalized_preview_mapping (0.00s)
+=== RUN   TestAntigravityTokenInfoPreservesPlanTypeJSON
+=== RUN   TestAntigravityTokenInfoPreservesPlanTypeJSON/pro
+=== RUN   TestAntigravityTokenInfoPreservesPlanTypeJSON/ultra
+=== RUN   TestAntigravityTokenInfoPreservesPlanTypeJSON/free
+=== RUN   TestAntigravityTokenInfoPreservesPlanTypeJSON/#00
+--- PASS: TestAntigravityTokenInfoPreservesPlanTypeJSON (0.00s)
+    --- PASS: TestAntigravityTokenInfoPreservesPlanTypeJSON/pro (0.00s)
+    --- PASS: TestAntigravityTokenInfoPreservesPlanTypeJSON/ultra (0.00s)
+    --- PASS: TestAntigravityTokenInfoPreservesPlanTypeJSON/free (0.00s)
+    --- PASS: TestAntigravityTokenInfoPreservesPlanTypeJSON/#00 (0.00s)
+=== RUN   TestApplyAntigravityPrivacyMode_SetsInMemoryExtra
+--- PASS: TestApplyAntigravityPrivacyMode_SetsInMemoryExtra (0.00s)
+=== RUN   TestApplyAntigravityPrivacyMode_PreservedBySubscriptionResult
+--- PASS: TestApplyAntigravityPrivacyMode_PreservedBySubscriptionResult (0.00s)
+=== RUN   TestAntigravityRetryLoop_NoURLFallback_UsesConfiguredBaseURL
+2026/10/23 15:53:48 [test] status=429 retry=1/3 body={"error":{"message":"Resource has been exhausted"}}
+2026/10/23 15:53:49 [test] status=429 retry=2/3 body={"error":{"message":"Resource has been exhausted"}}
+2026/10/23 15:53:51 [test] status=429 rate_limited base_url=https://ag-1.test body={"error":{"message":"Resource has been exhausted"}}
+--- PASS: TestAntigravityRetryLoop_NoURLFallback_UsesConfiguredBaseURL (3.44s)
+=== RUN   TestAccountIsSchedulableForModel_AntigravityRateLimits
+--- PASS: TestAccountIsSchedulableForModel_AntigravityRateLimits (0.00s)
+=== RUN   TestParseAntigravitySmartRetryInfo
+=== RUN   TestParseAntigravitySmartRetryInfo/valid_complete_response_with_RATE_LIMIT_EXCEEDED
+=== RUN   TestParseAntigravitySmartRetryInfo/429_RESOURCE_EXHAUSTED_without_RATE_LIMIT_EXCEEDED_-_should_return_nil
+=== RUN   TestParseAntigravitySmartRetryInfo/503_UNAVAILABLE_with_MODEL_CAPACITY_EXHAUSTED_-_long_delay
+=== RUN   TestParseAntigravitySmartRetryInfo/503_UNAVAILABLE_without_MODEL_CAPACITY_EXHAUSTED_-_should_return_nil
+=== RUN   TestParseAntigravitySmartRetryInfo/wrong_status_-_should_return_nil
+=== RUN   TestParseAntigravitySmartRetryInfo/missing_status_-_should_return_nil
+=== RUN   TestParseAntigravitySmartRetryInfo/milliseconds_format_is_now_supported
+=== RUN   TestParseAntigravitySmartRetryInfo/minutes_format_is_supported
+=== RUN   TestParseAntigravitySmartRetryInfo/missing_model_name_-_should_return_nil
+=== RUN   TestParseAntigravitySmartRetryInfo/invalid_JSON
+--- PASS: TestParseAntigravitySmartRetryInfo (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/valid_complete_response_with_RATE_LIMIT_EXCEEDED (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/429_RESOURCE_EXHAUSTED_without_RATE_LIMIT_EXCEEDED_-_should_return_nil (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/503_UNAVAILABLE_with_MODEL_CAPACITY_EXHAUSTED_-_long_delay (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/503_UNAVAILABLE_without_MODEL_CAPACITY_EXHAUSTED_-_should_return_nil (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/wrong_status_-_should_return_nil (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/missing_status_-_should_return_nil (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/milliseconds_format_is_now_supported (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/minutes_format_is_supported (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/missing_model_name_-_should_return_nil (0.00s)
+    --- PASS: TestParseAntigravitySmartRetryInfo/invalid_JSON (0.00s)
+=== RUN   TestShouldTriggerAntigravitySmartRetry
+=== RUN   TestShouldTriggerAntigravitySmartRetry/OAuth_account_with_short_delay_(<_7s)_-_smart_retry
+=== RUN   TestShouldTriggerAntigravitySmartRetry/SetupToken_account_with_short_delay_-_smart_retry
+=== RUN   TestShouldTriggerAntigravitySmartRetry/OAuth_account_with_long_delay_(>=_7s)_-_direct_rate_limit
+=== RUN   TestShouldTriggerAntigravitySmartRetry/Upstream_account_with_short_delay_-_smart_retry
+=== RUN   TestShouldTriggerAntigravitySmartRetry/API_Key_account_-_should_not_trigger
+=== RUN   TestShouldTriggerAntigravitySmartRetry/OAuth_account_with_exactly_7s_delay_-_direct_rate_limit
+=== RUN   TestShouldTriggerAntigravitySmartRetry/503_UNAVAILABLE_with_MODEL_CAPACITY_EXHAUSTED_-_long_delay
+=== RUN   TestShouldTriggerAntigravitySmartRetry/503_UNAVAILABLE_with_MODEL_CAPACITY_EXHAUSTED_-_no_retryDelay_-_use_fixed_wait
+=== RUN   TestShouldTriggerAntigravitySmartRetry/429_RESOURCE_EXHAUSTED_with_RATE_LIMIT_EXCEEDED_-_no_retryDelay_-_use_default_rate_limit
+--- PASS: TestShouldTriggerAntigravitySmartRetry (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/OAuth_account_with_short_delay_(<_7s)_-_smart_retry (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/SetupToken_account_with_short_delay_-_smart_retry (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/OAuth_account_with_long_delay_(>=_7s)_-_direct_rate_limit (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/Upstream_account_with_short_delay_-_smart_retry (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/API_Key_account_-_should_not_trigger (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/OAuth_account_with_exactly_7s_delay_-_direct_rate_limit (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/503_UNAVAILABLE_with_MODEL_CAPACITY_EXHAUSTED_-_long_delay (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/503_UNAVAILABLE_with_MODEL_CAPACITY_EXHAUSTED_-_no_retryDelay_-_use_fixed_wait (0.00s)
+    --- PASS: TestShouldTriggerAntigravitySmartRetry/429_RESOURCE_EXHAUSTED_with_RATE_LIMIT_EXCEEDED_-_no_retryDelay_-_use_default_rate_limit (0.00s)
+=== RUN   TestSetAntigravityModelRateLimits_GeminiWritesFamilyScope
+2026/10/23 15:53:51 [test] status=429 model_rate_limited model=gemini-3-pro account=789 reset_in=29s
+2026/10/23 15:53:51 [test] status=429 model_rate_limited model=antigravity:gemini account=789 reset_in=29s
+--- PASS: TestSetAntigravityModelRateLimits_GeminiWritesFamilyScope (0.00s)
+=== RUN   TestSetAntigravityModelRateLimits_ClaudeDoesNotWriteGeminiScope
+2026/10/23 15:53:51 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=790 reset_in=29s
+--- PASS: TestSetAntigravityModelRateLimits_ClaudeDoesNotWriteGeminiScope (0.00s)
+=== RUN   TestSetAntigravityModelRateLimits_DoesNotDoubleMapCustomChain
+2026/10/23 15:53:51 [test] status=429 model_rate_limited model=claude-sonnet-4-5 account=790 reset_in=29s
+--- PASS: TestSetAntigravityModelRateLimits_DoesNotDoubleMapCustomChain (0.00s)
+=== RUN   TestAntigravityRetryLoop_PreCheck_SwitchesWhenRateLimited
+2026/10/23 15:53:51 [test] pre_check: rate_limit_switch remaining=1.351s model=claude-sonnet-4-5 account=1
+--- PASS: TestAntigravityRetryLoop_PreCheck_SwitchesWhenRateLimited (0.00s)
+=== RUN   TestAntigravityRetryLoop_PreCheck_SwitchesWhenRemainingLong
+2026/10/23 15:53:51 [test] pre_check: rate_limit_switch remaining=10.351s model=claude-sonnet-4-5 account=2
+--- PASS: TestAntigravityRetryLoop_PreCheck_SwitchesWhenRemainingLong (0.00s)
+=== RUN   TestIsAntigravityAccountSwitchError
+=== RUN   TestIsAntigravityAccountSwitchError/nil_error
+=== RUN   TestIsAntigravityAccountSwitchError/generic_error
+=== RUN   TestIsAntigravityAccountSwitchError/account_switch_error
+=== RUN   TestIsAntigravityAccountSwitchError/wrapped_account_switch_error
+--- PASS: TestIsAntigravityAccountSwitchError (0.00s)
+    --- PASS: TestIsAntigravityAccountSwitchError/nil_error (0.00s)
+    --- PASS: TestIsAntigravityAccountSwitchError/generic_error (0.00s)
+    --- PASS: TestIsAntigravityAccountSwitchError/account_switch_error (0.00s)
+    --- PASS: TestIsAntigravityAccountSwitchError/wrapped_account_switch_error (0.00s)
+=== RUN   TestResolveAntigravityForwardBaseURL
+=== RUN   TestResolveAntigravityForwardBaseURL/pro_defaults_to_daily
+=== RUN   TestResolveAntigravityForwardBaseURL/ultra_defaults_to_daily
+=== RUN   TestResolveAntigravityForwardBaseURL/free_defaults_to_prod
+=== RUN   TestResolveAntigravityForwardBaseURL/abnormal_defaults_to_prod
+=== RUN   TestResolveAntigravityForwardBaseURL/unknown_defaults_to_prod
+=== RUN   TestResolveAntigravityForwardBaseURL/malformed_defaults_to_prod
+=== RUN   TestResolveAntigravityForwardBaseURL/missing_defaults_to_prod
+=== RUN   TestResolveAntigravityForwardBaseURL/nil_account_defaults_to_prod
+=== RUN   TestResolveAntigravityForwardBaseURL/daily_override_wins_for_free_tier
+=== RUN   TestResolveAntigravityForwardBaseURL/prod_override_wins_for_paid_tier
+--- PASS: TestResolveAntigravityForwardBaseURL (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/pro_defaults_to_daily (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/ultra_defaults_to_daily (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/free_defaults_to_prod (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/abnormal_defaults_to_prod (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/unknown_defaults_to_prod (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/malformed_defaults_to_prod (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/missing_defaults_to_prod (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/nil_account_defaults_to_prod (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/daily_override_wins_for_free_tier (0.00s)
+    --- PASS: TestResolveAntigravityForwardBaseURL/prod_override_wins_for_paid_tier (0.00s)
+=== RUN   TestResolveAntigravityForwardBaseURL_PaidUsesOfficialDailyHost
+--- PASS: TestResolveAntigravityForwardBaseURL_PaidUsesOfficialDailyHost (0.00s)
+=== RUN   TestAntigravityAccountSwitchError_Error
+--- PASS: TestAntigravityAccountSwitchError_Error (0.00s)
+=== RUN   TestNormalizeAntigravityModelName
+=== RUN   TestNormalizeAntigravityModelName/plain_model_name
+=== RUN   TestNormalizeAntigravityModelName/models/_prefix
+=== RUN   TestNormalizeAntigravityModelName/publishers/google/models/_prefix
+=== RUN   TestNormalizeAntigravityModelName/projects/.../publishers/google/models/_path
+=== RUN   TestNormalizeAntigravityModelName/publishers/anthropic/models/_prefix
+=== RUN   TestNormalizeAntigravityModelName/projects/.../publishers/anthropic/models/_path
+=== RUN   TestNormalizeAntigravityModelName/mixed_case_and_spaces
+--- PASS: TestNormalizeAntigravityModelName (0.00s)
+    --- PASS: TestNormalizeAntigravityModelName/plain_model_name (0.00s)
+    --- PASS: TestNormalizeAntigravityModelName/models/_prefix (0.00s)
+    --- PASS: TestNormalizeAntigravityModelName/publishers/google/models/_prefix (0.00s)
+    --- PASS: TestNormalizeAntigravityModelName/projects/.../publishers/google/models/_path (0.00s)
+    --- PASS: TestNormalizeAntigravityModelName/publishers/anthropic/models/_prefix (0.00s)
+    --- PASS: TestNormalizeAntigravityModelName/projects/.../publishers/anthropic/models/_path (0.00s)
+    --- PASS: TestNormalizeAntigravityModelName/mixed_case_and_spaces (0.00s)
+=== RUN   TestSetAntigravityImageRateLimitDoesNotBlockTextFamily
+2026/10/23 15:53:51 [test] status=429 model_rate_limited model=gemini-3.1-flash-image account=789 reset_in=29s
+--- PASS: TestSetAntigravityImageRateLimitDoesNotBlockTextFamily (0.00s)
+=== RUN   TestAntigravityRetryLoop_PreCheck_SingleAccountRetry_SkipsRateLimit
+2026/10/23 15:53:51 [test] pre_check: single_account_retry skipping rate_limit remaining=29.35s model=claude-sonnet-4-5 account=20 (will retry in-place if 503)
+--- PASS: TestAntigravityRetryLoop_PreCheck_SingleAccountRetry_SkipsRateLimit (0.00s)
+=== RUN   TestAntigravityRetryLoop_PreCheck_NoSingleAccountRetry_SwitchesOnRateLimit
+2026/10/23 15:53:51 [test] pre_check: rate_limit_switch remaining=29.35s model=claude-sonnet-4-5 account=21
+--- PASS: TestAntigravityRetryLoop_PreCheck_NoSingleAccountRetry_SwitchesOnRateLimit (0.00s)
+=== RUN   TestAntigravityRetryLoop_503_SingleAccount_InPlaceRetryUsed_E2E
+2026/10/23 15:53:51 [test] status=503 oauth_smart_retry attempt=1/60 delay=1s model=gemini-3-pro account=31
+2026/10/23 15:53:52 [test] status=200 smart_retry_success attempt=1/60
+--- PASS: TestAntigravityRetryLoop_503_SingleAccount_InPlaceRetryUsed_E2E (1.00s)
+=== RUN   TestHandleSmartRetry_NonAntigravityAccount_ContinuesDefaultLogic
+--- PASS: TestHandleSmartRetry_NonAntigravityAccount_ContinuesDefaultLogic (0.00s)
+=== RUN   TestAntigravityRetryLoop_HandleSmartRetry_SwitchError_Propagates
+2026/10/23 15:53:52 [test] status=429 oauth_long_delay model=claude-opus-4-6 account=7 upstream_retry_delay=30s body={\n "error": {\n "status": "RESOURCE_EXHAUSTED",\n "details": [\n {"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "claude-opus-4-6"}, "reason": "RATE_LIMIT_EXCEEDED"},\n (model rate limit, switch account)
+2026/10/23 15:53:52 [test] status=429 model_rate_limited model=claude-opus-4-6 account=7 reset_in=29s
+--- PASS: TestAntigravityRetryLoop_HandleSmartRetry_SwitchError_Propagates (0.00s)
+=== RUN   TestAntigravityRetryLoop_SmartRetryFailed_StickySession_SwitchErrorPropagates
+2026/10/23 15:53:52 [test] status=429 oauth_smart_retry attempt=1/1 delay=1s model=claude-opus-4-6 account=17
+2026/10/23 15:53:53 [test] status=429 smart_retry_exhausted attempts=1 model=claude-opus-4-6 account=17 upstream_retry_delay=1s body={\n		"error": {\n			"status": "RESOURCE_EXHAUSTED",\n			"details": [\n				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "claude-opus-4-6"}, "reason": "RATE_LIMIT_EXCEEDED"},\n (switch account)
+2026/10/23 15:53:53 [test] status=429 model_rate_limited_after_smart_retry model=claude-opus-4-6 account=17 reset_in=0s
+--- PASS: TestAntigravityRetryLoop_SmartRetryFailed_StickySession_SwitchErrorPropagates (1.00s)
+=== RUN   TestNormalizeAntigravitySubscription_PaidTierWithIneligible
+--- PASS: TestNormalizeAntigravitySubscription_PaidTierWithIneligible (0.00s)
+=== RUN   TestNormalizeAntigravitySubscription_FreeTierWithIneligible
+--- PASS: TestNormalizeAntigravitySubscription_FreeTierWithIneligible (0.00s)
+=== RUN   TestNormalizeAntigravitySubscription_NoIneligible
+--- PASS: TestNormalizeAntigravitySubscription_NoIneligible (0.00s)
+=== RUN   TestNormalizeAntigravitySubscription_NilResponse
+--- PASS: TestNormalizeAntigravitySubscription_NilResponse (0.00s)
+=== RUN   TestNormalizeAntigravitySubscription_NoTierWithIneligible
+--- PASS: TestNormalizeAntigravitySubscription_NoTierWithIneligible (0.00s)
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Upstream
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_with_valid_api_key
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_missing_api_key
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_with_empty_api_key
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_with_nil_credentials
+--- PASS: TestAntigravityTokenProvider_GetAccessToken_Upstream (0.00s)
+    --- PASS: TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_with_valid_api_key (0.00s)
+    --- PASS: TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_missing_api_key (0.00s)
+    --- PASS: TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_with_empty_api_key (0.00s)
+    --- PASS: TestAntigravityTokenProvider_GetAccessToken_Upstream/upstream_account_with_nil_credentials (0.00s)
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Guards
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Guards/nil_account
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Guards/non-antigravity_platform
+=== RUN   TestAntigravityTokenProvider_GetAccessToken_Guards/unsupported_account_type
+--- PASS: TestAntigravityTokenProvider_GetAccessToken_Guards (0.00s)
+    --- PASS: TestAntigravityTokenProvider_GetAccessToken_Guards/nil_account (0.00s)
+    --- PASS: TestAntigravityTokenProvider_GetAccessToken_Guards/non-antigravity_platform (0.00s)
+    --- PASS: TestAntigravityTokenProvider_GetAccessToken_Guards/unsupported_account_type (0.00s)
+=== RUN   TestBuildAntigravityClientErrorBody_ScrubsPoolIdentity
+--- PASS: TestBuildAntigravityClientErrorBody_ScrubsPoolIdentity (0.00s)
+=== RUN   TestBuildAntigravityClientErrorBody_NonJSONBody
+--- PASS: TestBuildAntigravityClientErrorBody_NonJSONBody (0.00s)
+=== RUN   TestGetChannelModelPricing_AntigravityDoesNotSeeCrossPlatformPricing
+--- PASS: TestGetChannelModelPricing_AntigravityDoesNotSeeCrossPlatformPricing (0.00s)
+=== RUN   TestGetChannelModelPricing_AnthropicCannotSeeAntigravityPricing
+--- PASS: TestGetChannelModelPricing_AnthropicCannotSeeAntigravityPricing (0.00s)
+=== RUN   TestResolveChannelMapping_AntigravityDoesNotSeeCrossPlatformMapping
+--- PASS: TestResolveChannelMapping_AntigravityDoesNotSeeCrossPlatformMapping (0.00s)
+=== RUN   TestGetChannelModelPricing_AntigravityDoesNotSeeSameModelFromOtherPlatforms
+--- PASS: TestGetChannelModelPricing_AntigravityDoesNotSeeSameModelFromOtherPlatforms (0.00s)
+=== RUN   TestGetChannelModelPricing_AntigravityDoesNotSeeGeminiOnlyPricing
+--- PASS: TestGetChannelModelPricing_AntigravityDoesNotSeeGeminiOnlyPricing (0.00s)
+=== RUN   TestGetChannelModelPricing_AntigravityDoesNotSeeWildcardFromOtherPlatforms
+--- PASS: TestGetChannelModelPricing_AntigravityDoesNotSeeWildcardFromOtherPlatforms (0.00s)
+=== RUN   TestResolveChannelMapping_AntigravityDoesNotSeeMappingFromOtherPlatforms
+--- PASS: TestResolveChannelMapping_AntigravityDoesNotSeeMappingFromOtherPlatforms (0.00s)
+=== RUN   TestCheckRestricted_AntigravityDoesNotSeeModelsFromOtherPlatforms
+--- PASS: TestCheckRestricted_AntigravityDoesNotSeeModelsFromOtherPlatforms (0.00s)
+=== RUN   TestGetChannelModelPricing_AntigravityOwnPricingWorks
+--- PASS: TestGetChannelModelPricing_AntigravityOwnPricingWorks (0.00s)
+=== RUN   TestGetChannelModelPricing_NonAntigravityUnaffected
+--- PASS: TestGetChannelModelPricing_NonAntigravityUnaffected (0.00s)
+=== RUN   TestResolveChannelMapping_AntigravityDoesNotSeeWildcardMappingFromOtherPlatforms
+--- PASS: TestResolveChannelMapping_AntigravityDoesNotSeeWildcardMappingFromOtherPlatforms (0.00s)
+=== RUN   TestAntigravityCompatTransportError_ClientDisconnectWrites499
+--- PASS: TestAntigravityCompatTransportError_ClientDisconnectWrites499 (0.00s)
+=== RUN   TestAntigravityWriteGoogleError_ClientClosedStatus
+--- PASS: TestAntigravityWriteGoogleError_ClientClosedStatus (0.00s)
+=== RUN   TestResolveAccountUpstreamModel_Antigravity
+=== PAUSE TestResolveAccountUpstreamModel_Antigravity
+=== RUN   TestResolveAccountUpstreamModel_Antigravity_Unsupported
+=== PAUSE TestResolveAccountUpstreamModel_Antigravity_Unsupported
+=== RUN   TestResolveAccountUpstreamModel_NonAntigravity
+=== PAUSE TestResolveAccountUpstreamModel_NonAntigravity
+=== RUN   TestGatewayService_SelectAccountForModelWithPlatform_Antigravity
+--- PASS: TestGatewayService_SelectAccountForModelWithPlatform_Antigravity (0.00s)
+=== RUN   TestGatewayService_isModelSupportedByAccount_AntigravityModelMapping
+--- PASS: TestGatewayService_isModelSupportedByAccount_AntigravityModelMapping (0.00s)
+=== RUN   TestGatewayService_isModelSupportedByAccount_AntigravityNoMapping
+--- PASS: TestGatewayService_isModelSupportedByAccount_AntigravityNoMapping (0.00s)
+=== RUN   TestGeminiMessagesCompatService_SelectAccountForModelWithExclusions_AntigravityGroup
+--- PASS: TestGeminiMessagesCompatService_SelectAccountForModelWithExclusions_AntigravityGroup (0.00s)
+=== RUN   TestAntigravityGeminiStreamKeepsCommentKeepaliveForOrdinaryClients
+--- PASS: TestAntigravityGeminiStreamKeepsCommentKeepaliveForOrdinaryClients (1.20s)
+=== RUN   TestAntigravityGeminiStreamSkipsCommentKeepaliveForGoGenai
+--- PASS: TestAntigravityGeminiStreamSkipsCommentKeepaliveForGoGenai (1.20s)
+=== RUN   TestGrok47FastPricingResourceAndFallback
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast
+2026/10/23 15:53:56 [Billing] Using fallback pricing for model: grok-4.7-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast
+2026/10/23 15:53:56 [Billing] Using fallback pricing for model: grok-4.7-build-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast
+2026/10/23 15:53:56 [Billing] Using fallback pricing for model: xai/grok-4.7-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast
+2026/10/23 15:53:56 [Billing] Using fallback pricing for model: x-ai/grok-4.7-build-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast
+2026/10/23 15:53:56 [Billing] Using fallback pricing for model: grok/grok-4.7-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast/cached_only
+2026/10/23 15:53:56 [Billing] Using fallback pricing for model: grok-4.7
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast/cached_only
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast/199999
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast/200000
+=== RUN   TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast/cached_only
+--- PASS: TestGrok47FastPricingResourceAndFallback (0.01s)
+    --- PASS: TestGrok47FastPricingResourceAndFallback/offline (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok-4.7-build-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/GROK-4.7-FAST/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/xai/grok-4.7-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/x-ai/grok-4.7-build-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/offline/grok/grok-4.7-fast/cached_only (0.00s)
+    --- PASS: TestGrok47FastPricingResourceAndFallback/resource (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok-4.7-build-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/GROK-4.7-FAST/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/xai/grok-4.7-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/x-ai/grok-4.7-build-fast/cached_only (0.00s)
+        --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast/199999 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast/200000 (0.00s)
+            --- PASS: TestGrok47FastPricingResourceAndFallback/resource/grok/grok-4.7-fast/cached_only (0.00s)
+=== RUN   TestGrok47FastPricingSourceLongContextFields
+--- PASS: TestGrok47FastPricingSourceLongContextFields (0.00s)
+=== RUN   TestAntigravityModelNotFoundKeepsBare404Fallback
+--- PASS: TestAntigravityModelNotFoundKeepsBare404Fallback (0.00s)
+=== RUN   TestIsModelRateLimited_AntigravityImageDoesNotInheritGeminiFamilyLimit
+--- PASS: TestIsModelRateLimited_AntigravityImageDoesNotInheritGeminiFamilyLimit (0.00s)
+=== RUN   TestIsModelRateLimited_Antigravity_ThinkingAffectsModelKey
+--- PASS: TestIsModelRateLimited_Antigravity_ThinkingAffectsModelKey (0.00s)
+=== RUN   TestAntigravityProviderRefreshPolicy
+--- PASS: TestAntigravityProviderRefreshPolicy (0.00s)
+=== RUN   TestRateLimitService_ClearRateLimit_ClearAntigravityFailed
+--- PASS: TestRateLimitService_ClearRateLimit_ClearAntigravityFailed (0.00s)
+=== RUN   TestSchedulerBulkAccountEventConservativelyExpandsAntigravityPlatforms
+--- PASS: TestSchedulerBulkAccountEventConservativelyExpandsAntigravityPlatforms (0.00s)
+=== RUN   TestGatewaySelectAccountWithLoadAwareness_SkipsAntigravityGeminiFamilyRateLimitedSnapshot
+2026/10/23 15:53:56 INFO sticky.scheduler_entry group_id=22 session_hash="" sticky_account_id=0 sticky_source="" model=gemini-3-flash-preview load_batch=true has_concurrency_svc=true excluded_count=0
+--- PASS: TestGatewaySelectAccountWithLoadAwareness_SkipsAntigravityGeminiFamilyRateLimitedSnapshot (0.00s)
+=== RUN   TestSettingService_UpdateSettings_AntigravityUserAgentVersion
+--- PASS: TestSettingService_UpdateSettings_AntigravityUserAgentVersion (0.00s)
+=== RUN   TestSettingService_GetAntigravityUserAgentVersion_Precedence
+=== RUN   TestSettingService_GetAntigravityUserAgentVersion_Precedence/后台设置优先
+=== RUN   TestSettingService_GetAntigravityUserAgentVersion_Precedence/空值回退配置默认值
+=== RUN   TestSettingService_GetAntigravityUserAgentVersion_Precedence/缺失回退配置默认值
+--- PASS: TestSettingService_GetAntigravityUserAgentVersion_Precedence (0.00s)
+    --- PASS: TestSettingService_GetAntigravityUserAgentVersion_Precedence/后台设置优先 (0.00s)
+    --- PASS: TestSettingService_GetAntigravityUserAgentVersion_Precedence/空值回退配置默认值 (0.00s)
+    --- PASS: TestSettingService_GetAntigravityUserAgentVersion_Precedence/缺失回退配置默认值 (0.00s)
+=== RUN   TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent
+=== RUN   TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/malformed-empty
+2026/10/23 15:53:56 [Antigravity] MALFORMED_FUNCTION_CALL detected in stream for model gemini-3.8-flash
+2026/10/23 15:53:56 [Antigravity] Malformed content: {"role":"model","parts":[]}
+2026/10/23 15:53:56 Empty Antigravity compatibility stream, triggering failover
+=== RUN   TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/signature-only
+2026/10/23 15:53:56 [Antigravity] MALFORMED_FUNCTION_CALL detected in stream for model gemini-3.8-flash
+2026/10/23 15:53:56 [Antigravity] Malformed content: {"role":"model","parts":[{"thought":true,"thoughtSignature":"signature"}]}
+2026/10/23 15:53:56 Empty Antigravity compatibility stream, triggering failover
+=== RUN   TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/text
+2026/10/23 15:53:56 [Antigravity] MALFORMED_FUNCTION_CALL detected in stream for model gemini-3.8-flash
+2026/10/23 15:53:56 [Antigravity] Malformed content: {"role":"model","parts":[{"text":"answer"}]}
+=== RUN   TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/tool
+2026/10/23 15:53:56 [Antigravity] MALFORMED_FUNCTION_CALL detected in stream for model gemini-3.8-flash
+2026/10/23 15:53:56 [Antigravity] Malformed content: {"role":"model","parts":[{"functionCall":{"name":"lookup","args":{"q":"test"}}}]}
+--- PASS: TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent (0.00s)
+    --- PASS: TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/malformed-empty (0.00s)
+    --- PASS: TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/signature-only (0.00s)
+    --- PASS: TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/text (0.00s)
+    --- PASS: TestTier2AntigravityMalformedStreamOnlyRetriesWithoutContent/tool (0.00s)
+=== RUN   TestTier2AntigravityBareModelFallback
+--- PASS: TestTier2AntigravityBareModelFallback (0.00s)
+=== RUN   TestTier2AntigravityControlEventsAreNotContent
+--- PASS: TestTier2AntigravityControlEventsAreNotContent (0.00s)
+=== RUN   TestCompositeTokenCacheInvalidator_Antigravity
+--- PASS: TestCompositeTokenCacheInvalidator_Antigravity (0.00s)
+=== RUN   TestCompositeTokenCacheInvalidator_AntigravityWithoutProjectID
+--- PASS: TestCompositeTokenCacheInvalidator_AntigravityWithoutProjectID (0.00s)
+=== RUN   TestAntigravityTokenCacheKey
+=== RUN   TestAntigravityTokenCacheKey/basic_account
+=== RUN   TestAntigravityTokenCacheKey/account_with_project_id_still_uses_account_id
+=== RUN   TestAntigravityTokenCacheKey/account_with_credentials
+=== RUN   TestAntigravityTokenCacheKey/account_id_zero
+=== RUN   TestAntigravityTokenCacheKey/large_account_id
+--- PASS: TestAntigravityTokenCacheKey (0.00s)
+    --- PASS: TestAntigravityTokenCacheKey/basic_account (0.00s)
+    --- PASS: TestAntigravityTokenCacheKey/account_with_project_id_still_uses_account_id (0.00s)
+    --- PASS: TestAntigravityTokenCacheKey/account_with_credentials (0.00s)
+    --- PASS: TestAntigravityTokenCacheKey/account_id_zero (0.00s)
+    --- PASS: TestAntigravityTokenCacheKey/large_account_id (0.00s)
+=== RUN   TestTokenRefreshService_RefreshWithRetry_Antigravity
+2026/10/23 15:53:56 WARN antigravity_privacy_set_failed error="setUserSettings 失败 (HTTP 401): {\n  \"error\": {\n    \"code\": 401,\n    \"message\": \"Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.\",\n    \"status\": \"UNAUTHENTICATED\"\n  }\n}\n"
+2026/10/23 15:53:56 INFO token_refresh.antigravity_privacy_mode_set account_id=8 privacy_mode=privacy_set_failed
+--- PASS: TestTokenRefreshService_RefreshWithRetry_Antigravity (0.41s)
+=== RUN   TestAntigravityTokenRefresher_NeedsRefresh_ForceRefreshMarker
+--- PASS: TestAntigravityTokenRefresher_NeedsRefresh_ForceRefreshMarker (0.00s)
+=== RUN   TestAntigravityTokenRefresher_NeedsRefresh_NormalExpiryRulesUnchanged
+=== RUN   TestAntigravityTokenRefresher_NeedsRefresh_NormalExpiryRulesUnchanged/normal_unexpired_without_marker_does_not_refresh
+=== RUN   TestAntigravityTokenRefresher_NeedsRefresh_NormalExpiryRulesUnchanged/normal_expiring_refreshes
+[AntigravityTokenRefresher] Account 3708 needs refresh: expires_at=2026-10-23 15:58:56, time_until_expiry=4m59.513828449s, window=15m0s
+--- PASS: TestAntigravityTokenRefresher_NeedsRefresh_NormalExpiryRulesUnchanged (0.00s)
+    --- PASS: TestAntigravityTokenRefresher_NeedsRefresh_NormalExpiryRulesUnchanged/normal_unexpired_without_marker_does_not_refresh (0.00s)
+    --- PASS: TestAntigravityTokenRefresher_NeedsRefresh_NormalExpiryRulesUnchanged/normal_expiring_refreshes (0.00s)
+=== RUN   TestTokenRefreshService_RefreshWithRetry_AntigravityClearsForceRefreshOnSuccess
+2026/10/23 15:53:56 INFO token_refresh.cleared_antigravity_force_refresh account_id=3709 outcome=success
+2026/10/23 15:53:56 INFO token_refresh.cleared_temp_unschedulable account_id=3709
+--- PASS: TestTokenRefreshService_RefreshWithRetry_AntigravityClearsForceRefreshOnSuccess (0.00s)
+=== RUN   TestTokenRefreshService_RefreshWithRetry_AntigravityForceRefreshInvalidGrantSetsError
+2026/10/23 15:53:56 INFO token_refresh.cleared_antigravity_force_refresh account_id=3710 outcome=non_retryable
+--- PASS: TestTokenRefreshService_RefreshWithRetry_AntigravityForceRefreshInvalidGrantSetsError (0.00s)
+=== RUN   TestTokenRefreshService_RefreshWithRetry_AntigravityRefreshFailed
+2026/10/23 15:53:56 WARN token_refresh.retry_attempt_failed account_id=13 attempt=1 max_retries=1 error="network error"
+2026/10/23 15:53:56 WARN token_refresh.retry_exhausted account_id=13 platform=antigravity max_retries=1 error="network error"
+2026/10/23 15:53:56 INFO token_refresh.temp_unschedulable_set account_id=13 until=2026-10-23T16:03:56Z
+--- PASS: TestTokenRefreshService_RefreshWithRetry_AntigravityRefreshFailed (0.00s)
+=== RUN   TestTokenRefreshService_RefreshWithRetry_AntigravityNonRetryableError
+--- PASS: TestTokenRefreshService_RefreshWithRetry_AntigravityNonRetryableError (0.00s)
+=== RUN   TestBuildAntigravityAPIKeyModelsRequestRejectsOfficialCloudCodeBase
+=== PAUSE TestBuildAntigravityAPIKeyModelsRequestRejectsOfficialCloudCodeBase
+=== RUN   TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap
+=== RUN   TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/top-level_sibling
+=== RUN   TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/single_wrapper
+=== RUN   TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/nested_response_after_one_wrapper
+=== RUN   TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/outer_declaration_takes_precedence
+--- PASS: TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap (0.00s)
+    --- PASS: TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/top-level_sibling (0.00s)
+    --- PASS: TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/single_wrapper (0.00s)
+    --- PASS: TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/nested_response_after_one_wrapper (0.00s)
+    --- PASS: TestObserveAntigravityGeminiSSELineReadsWrapperModelWithoutUnwrap/outer_declaration_takes_precedence (0.00s)
+=== CONT  TestAntigravityConnectionTestModel
+--- PASS: TestAntigravityConnectionTestModel (0.00s)
+=== CONT  TestAccountGetModelMapping_AntigravityGemini31ProAliasesRespectWildcard
+=== CONT  TestResolveAccountUpstreamModel_Antigravity
+=== CONT  TestBuildAntigravityAPIKeyModelsRequestRejectsOfficialCloudCodeBase
+--- PASS: TestAccountGetModelMapping_AntigravityGemini31ProAliasesRespectWildcard (0.00s)
+--- PASS: TestResolveAccountUpstreamModel_Antigravity (0.00s)
+--- PASS: TestBuildAntigravityAPIKeyModelsRequestRejectsOfficialCloudCodeBase (0.00s)
+=== CONT  TestAccountGetModelMapping_AntigravityPreservesGemini31ProOverrides
+--- PASS: TestAccountGetModelMapping_AntigravityPreservesGemini31ProOverrides (0.00s)
+=== CONT  TestAccountGetModelMapping_AntigravityNormalizesGemini31ProAliases
+--- PASS: TestAccountGetModelMapping_AntigravityNormalizesGemini31ProAliases (0.00s)
+=== CONT  TestResolveAccountUpstreamModel_NonAntigravity
+--- PASS: TestResolveAccountUpstreamModel_NonAntigravity (0.00s)
+=== CONT  TestResolveAccountUpstreamModel_Antigravity_Unsupported
+--- PASS: TestResolveAccountUpstreamModel_Antigravity_Unsupported (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	11.110s
+=== RUN   TestShouldUseAntigravityCompat
+=== RUN   TestShouldUseAntigravityCompat/oauth
+=== RUN   TestShouldUseAntigravityCompat/setup_token
+=== RUN   TestShouldUseAntigravityCompat/upstream
+=== RUN   TestShouldUseAntigravityCompat/api_key
+=== RUN   TestShouldUseAntigravityCompat/anthropic_oauth
+=== RUN   TestShouldUseAntigravityCompat/nil
+--- PASS: TestShouldUseAntigravityCompat (0.00s)
+    --- PASS: TestShouldUseAntigravityCompat/oauth (0.00s)
+    --- PASS: TestShouldUseAntigravityCompat/setup_token (0.00s)
+    --- PASS: TestShouldUseAntigravityCompat/upstream (0.00s)
+    --- PASS: TestShouldUseAntigravityCompat/api_key (0.00s)
+    --- PASS: TestShouldUseAntigravityCompat/anthropic_oauth (0.00s)
+    --- PASS: TestShouldUseAntigravityCompat/nil (0.00s)
+=== RUN   TestGatewayHandlerMessages_InterceptWarmup_AntigravityAccount_MixedSchedulingV1
+2026/10/23 23:53:45 INFO sticky.hash_source source=message_content_fallback hash=20b9cb5fb1wid content_len=22
+2026/10/23 23:53:45 INFO sticky.scheduler_entry group_id=2001 session_hash=20b9cb5f sticky_account_id=0 sticky_source="" model=claude-sonnet-4-5 load_batch=true has_concurrency_svc=false excluded_count=0
+--- PASS: TestGatewayHandlerMessages_InterceptWarmup_AntigravityAccount_MixedSchedulingV1 (0.00s)
+=== RUN   TestGatewayHandlerMessages_InterceptWarmup_AntigravityAccount_ForcePlatform
+2026/10/23 23:53:45 INFO sticky.hash_source source=message_content_fallback hash=20kfzocrcc378 content_len=22
+2026/10/23 23:53:45 INFO sticky.scheduler_entry group_id=2002 session_hash=20kfzocr sticky_account_id=0 sticky_source="" model=claude-sonnet-4-5 load_batch=true has_concurrency_svc=false excluded_count=0
+--- PASS: TestGatewayHandlerMessages_InterceptWarmup_AntigravityAccount_ForcePlatform (0.00s)
+=== RUN   TestDefaultModelIDsForCompositeIncludesAntigravityDefaults
+--- PASS: TestDefaultModelIDsForCompositeIncludesAntigravityDefaults (0.00s)
+=== RUN   TestDefaultModelIDsForAnthropicExcludeAntigravityGemini
+--- PASS: TestDefaultModelIDsForAnthropicExcludeAntigravityGemini (0.00s)
+=== RUN   TestGatewayCodexModels_CompositeAnthropicDoesNotAdvertiseAntigravityDefaults
+--- PASS: TestGatewayCodexModels_CompositeAnthropicDoesNotAdvertiseAntigravityDefaults (0.01s)
+=== RUN   TestGatewayModels_CompositeAntigravityAdvertisesAntigravityDefaults
+--- PASS: TestGatewayModels_CompositeAntigravityAdvertisesAntigravityDefaults (0.00s)
+=== RUN   TestGeminiV1BetaModels_ClientCancelBeforeUpstreamResponseMarks499
+2026-10-23T23:53:45.416+0800	INFO	slog	logger/slog_handler.go:59	sticky.hash_source	{"service": "sub2api", "env": "production", "source": "message_content_fallback", "hash": "1khgmi8pr5cn8", "content_len": 18}
+2026-10-23T23:53:45.417+0800	INFO	slog	logger/slog_handler.go:59	sticky.scheduler_entry	{"service": "sub2api", "env": "production", "group_id": 9200, "session_hash": "gemini:1", "sticky_account_id": 0, "sticky_source": "", "model": "gemini-2.5-flash", "load_batch": true, "has_concurrency_svc": false, "excluded_count": 0}
+2026-10-23T23:53:45.417+0800	ERROR	handler/gemini_v1beta_handler.go:564	gemini.forward_failed	{"service": "sub2api", "env": "production", "component": "handler.gemini_v1beta.models", "user_id": 9203, "api_key_id": 9202, "group_id": 9200, "model": "gemini-2.5-flash", "action": "streamGenerateContent", "stream": true, "account_id": 9201, "error": "Post \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse\": context canceled"}
+github.com/Wei-Shaw/sub2api/internal/handler.(*GatewayHandler).GeminiV1BetaModels
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gemini_v1beta_handler.go:564
+github.com/Wei-Shaw/sub2api/internal/handler.(*geminiClientCancelFixture).serve.func1
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gemini_client_cancel_test.go:85
+github.com/gin-gonic/gin.(*Context).Next
+	/home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/context.go:174
+github.com/Wei-Shaw/sub2api/internal/handler.OpsErrorLoggerMiddleware.func1
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/ops_error_logger.go:694
+github.com/gin-gonic/gin.(*Context).Next
+	/home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/context.go:174
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/gin.go:620
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/gin.go:576
+github.com/Wei-Shaw/sub2api/internal/handler.(*geminiClientCancelFixture).serve
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gemini_client_cancel_test.go:92
+github.com/Wei-Shaw/sub2api/internal/handler.TestGeminiV1BetaModels_ClientCancelBeforeUpstreamResponseMarks499
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gemini_client_cancel_test.go:101
+testing.tRunner
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195
+--- PASS: TestGeminiV1BetaModels_ClientCancelBeforeUpstreamResponseMarks499 (0.00s)
+=== RUN   TestGeminiV1BetaHandler_PlatformRoutingInvariant
+=== RUN   TestGeminiV1BetaHandler_PlatformRoutingInvariant/Gemini平台使用ForwardNative
+=== RUN   TestGeminiV1BetaHandler_PlatformRoutingInvariant/Antigravity平台使用ForwardGemini
+--- PASS: TestGeminiV1BetaHandler_PlatformRoutingInvariant (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_PlatformRoutingInvariant/Gemini平台使用ForwardNative (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_PlatformRoutingInvariant/Antigravity平台使用ForwardGemini (0.00s)
+=== RUN   TestGeminiV1BetaHandler_ListModelsAntigravityFallback
+=== RUN   TestGeminiV1BetaHandler_ListModelsAntigravityFallback/有Gemini账户-调用ForwardAIStudioGET
+=== RUN   TestGeminiV1BetaHandler_ListModelsAntigravityFallback/无Gemini有Antigravity-返回静态列表
+=== RUN   TestGeminiV1BetaHandler_ListModelsAntigravityFallback/无任何账户-返回503
+--- PASS: TestGeminiV1BetaHandler_ListModelsAntigravityFallback (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_ListModelsAntigravityFallback/有Gemini账户-调用ForwardAIStudioGET (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_ListModelsAntigravityFallback/无Gemini有Antigravity-返回静态列表 (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_ListModelsAntigravityFallback/无任何账户-返回503 (0.00s)
+=== RUN   TestGeminiV1BetaHandler_GetModelAntigravityFallback
+=== RUN   TestGeminiV1BetaHandler_GetModelAntigravityFallback/有Gemini账户-调用ForwardAIStudioGET
+=== RUN   TestGeminiV1BetaHandler_GetModelAntigravityFallback/无Gemini有Antigravity-返回静态模型信息
+=== RUN   TestGeminiV1BetaHandler_GetModelAntigravityFallback/无任何账户-返回503
+--- PASS: TestGeminiV1BetaHandler_GetModelAntigravityFallback (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_GetModelAntigravityFallback/有Gemini账户-调用ForwardAIStudioGET (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_GetModelAntigravityFallback/无Gemini有Antigravity-返回静态模型信息 (0.00s)
+    --- PASS: TestGeminiV1BetaHandler_GetModelAntigravityFallback/无任何账户-返回503 (0.00s)
+=== RUN   TestGeminiV1BetaGetModel_CompositeAntigravityRoute
+=== RUN   TestGeminiV1BetaGetModel_CompositeAntigravityRoute/composite_route_to_antigravity_gemini_model_succeeds
+=== RUN   TestGeminiV1BetaGetModel_CompositeAntigravityRoute/composite_route_to_antigravity_claude_model_is_rejected_on_v1beta
+=== RUN   TestGeminiV1BetaGetModel_CompositeAntigravityRoute/composite_route_to_antigravity_claude_model_is_rejected_on_generateContent
+--- PASS: TestGeminiV1BetaGetModel_CompositeAntigravityRoute (0.00s)
+    --- PASS: TestGeminiV1BetaGetModel_CompositeAntigravityRoute/composite_route_to_antigravity_gemini_model_succeeds (0.00s)
+    --- PASS: TestGeminiV1BetaGetModel_CompositeAntigravityRoute/composite_route_to_antigravity_claude_model_is_rejected_on_v1beta (0.00s)
+    --- PASS: TestGeminiV1BetaGetModel_CompositeAntigravityRoute/composite_route_to_antigravity_claude_model_is_rejected_on_generateContent (0.00s)
+=== RUN   TestGatewayChatAntigravityCredentialFailureReturnsActionableMessage
+--- PASS: TestGatewayChatAntigravityCredentialFailureReturnsActionableMessage (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	0.043s
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/nil_credentials
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/nil_credentials/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/nil_credentials/apikey
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/missing_mapping
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/missing_mapping/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/missing_mapping/apikey
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/empty_JSON_mapping
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/empty_JSON_mapping/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/empty_JSON_mapping/apikey
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/empty_string_mapping
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/empty_string_mapping/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/empty_string_mapping/apikey
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/blank_key
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/blank_key/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/blank_key/apikey
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/wildcard_only_falls_back_to_defaults
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/wildcard_only_falls_back_to_defaults/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/wildcard_only_falls_back_to_defaults/apikey
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/JSON_mapping_keys_and_metadata_skips_wildcards
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/JSON_mapping_keys_and_metadata_skips_wildcards/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/JSON_mapping_keys_and_metadata_skips_wildcards/apikey
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/string_mapping_keys_and_metadata_skips_wildcards
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/string_mapping_keys_and_metadata_skips_wildcards/oauth
+=== RUN   TestAccountHandlerGetAvailableModels_Antigravity/string_mapping_keys_and_metadata_skips_wildcards/apikey
+--- PASS: TestAccountHandlerGetAvailableModels_Antigravity (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/nil_credentials (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/nil_credentials/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/nil_credentials/apikey (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/missing_mapping (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/missing_mapping/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/missing_mapping/apikey (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/empty_JSON_mapping (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/empty_JSON_mapping/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/empty_JSON_mapping/apikey (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/empty_string_mapping (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/empty_string_mapping/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/empty_string_mapping/apikey (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/blank_key (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/blank_key/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/blank_key/apikey (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/wildcard_only_falls_back_to_defaults (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/wildcard_only_falls_back_to_defaults/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/wildcard_only_falls_back_to_defaults/apikey (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/JSON_mapping_keys_and_metadata_skips_wildcards (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/JSON_mapping_keys_and_metadata_skips_wildcards/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/JSON_mapping_keys_and_metadata_skips_wildcards/apikey (0.00s)
+    --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/string_mapping_keys_and_metadata_skips_wildcards (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/string_mapping_keys_and_metadata_skips_wildcards/oauth (0.00s)
+        --- PASS: TestAccountHandlerGetAvailableModels_Antigravity/string_mapping_keys_and_metadata_skips_wildcards/apikey (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler/admin	0.025s

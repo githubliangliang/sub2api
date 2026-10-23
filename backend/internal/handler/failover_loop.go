@@ -56,6 +56,9 @@ const (
 const profitVetoExhaustedMessage = "No available accounts: all candidates rejected by group profit control"
 
 func sameAccountRetryDelayFor(failoverErr *service.UpstreamFailoverError, retryCount int) time.Duration {
+	if failoverErr != nil && failoverErr.RequestScopedTransient && failoverErr.SameAccountRetryDelay > 0 {
+		return min(failoverErr.SameAccountRetryDelay, maxRequestScopedRetryDelay)
+	}
 	if failoverErr == nil || !failoverErr.RequestScopedTransient || retryCount <= 1 {
 		return sameAccountRetryDelay
 	}

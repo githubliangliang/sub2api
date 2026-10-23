@@ -1,0 +1,45 @@
+2026/10/23 13:44:53 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestOpenAIStreamErrorFrameDoesNotStartClientOutput
+    openai_capacity_shed_test.go:110: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_capacity_shed_test.go:110
+        	Error:      	Not equal: 
+        	            	expected: false
+        	            	actual  : true
+        	Test:       	TestOpenAIStreamErrorFrameDoesNotStartClientOutput
+        	Messages:   	data={"type":"response.queued","response":{"id":"resp_1","status":"queued"}} type=response.queued
+--- FAIL: TestOpenAIStreamErrorFrameDoesNotStartClientOutput (0.00s)
+=== RUN   TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver
+=== RUN   TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/native
+    openai_capacity_shed_test.go:176: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_capacity_shed_test.go:176
+        	Error:      	Should be in error chain:
+        	            	expected: *service.UpstreamFailoverError
+        	            	in chain: "upstream response failed: Our servers are currently overloaded. Please try again later." (*errors.errorString)
+        	Test:       	TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/native
+=== RUN   TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/passthrough
+    openai_capacity_shed_test.go:176: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_capacity_shed_test.go:176
+        	Error:      	Should be in error chain:
+        	            	expected: *service.UpstreamFailoverError
+        	            	in chain: "upstream response failed: Our servers are currently overloaded. Please try again later." (*errors.errorString)
+        	Test:       	TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/passthrough
+--- FAIL: TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver (0.00s)
+    --- FAIL: TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/native (0.00s)
+    --- FAIL: TestOpenAIStreamMetadataPreambleAndMessageOnlyOverloadFailOver/passthrough (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataBeforeCapacityFailover
+2026/10/23 13:44:53 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_turn_completed account_id=12 turn=1 response_id=resp_shed payload_bytes=55 duration_ms=0 events=5 token_events=0 terminal_events=1 first_event=response.created last_event=response.fail first_token_ms=-1 client_disconnected=false
+    openai_ws_http_bridge_test.go:373: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_ws_http_bridge_test.go:373
+        	Error:      	Expected nil, but got: &service.OpenAIForwardResult{RequestID:"resp_shed", ResponseID:"", Usage:service.OpenAIUsage{InputTokens:0, ImageInputTokens:0, OutputTokens:0, CacheCreationInputTokens:0, CacheReadInputTokens:0, ImageOutputTokens:0, ProviderCostUSD:(*float64)(nil)}, Model:"gpt-5", BillingModel:"", UpstreamModel:"gpt-5", UpstreamResponseModel:"", UpstreamResponseModelConflict:false, UpstreamEndpoint:"", ServiceTier:(*string)(nil), ReasoningEffort:(*string)(nil), Stream:true, OpenAIWSMode:true, UpstreamTerminalEvent:"response.failed", ResponseHeaders:http.Header{"X-Request-Id":[]string{"rid-ws-bridge-capacity"}}, Duration:125031, FirstTokenMs:(*int)(nil), ClientDisconnect:false, ImageCount:0, ImageSize:"", ImageInputSize:"", ImageOutputSize:"", ImageOutputSizes:[]string(nil), ImageSizeSource:"", ImageSizeBreakdown:map[string]int(nil), VideoCount:0, VideoResolution:"", VideoDurationSeconds:0, WebSearchCalls:0, SearchCount:0, AudioUsage:(*service.AudioUsage)(nil), wsReplayInput:[]jsontext.Value(nil), wsReplayInputExists:false, wsAccountFailoverReplayInput:[]jsontext.Value(nil)}
+        	Test:       	TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataBeforeCapacityFailover
+--- FAIL: TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataBeforeCapacityFailover (0.00s)
+=== RUN   TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapacityFailover
+2026/10/23 13:44:53 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_http_bridge_turn_completed account_id=12 turn=1 response_id=resp_shed payload_bytes=55 duration_ms=0 events=6 token_events=0 terminal_events=1 first_event=response.created last_event=response.fail first_token_ms=-1 client_disconnected=false
+    openai_ws_http_bridge_test.go:1585: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_ws_http_bridge_test.go:1585
+        	Error:      	Expected nil, but got: &service.OpenAIForwardResult{RequestID:"resp_shed", ResponseID:"", Usage:service.OpenAIUsage{InputTokens:0, ImageInputTokens:0, OutputTokens:0, CacheCreationInputTokens:0, CacheReadInputTokens:0, ImageOutputTokens:0, ProviderCostUSD:(*float64)(nil)}, Model:"gpt-5", BillingModel:"", UpstreamModel:"gpt-5", UpstreamResponseModel:"", UpstreamResponseModelConflict:false, UpstreamEndpoint:"", ServiceTier:(*string)(nil), ReasoningEffort:(*string)(nil), Stream:true, OpenAIWSMode:true, UpstreamTerminalEvent:"response.failed", ResponseHeaders:http.Header{"X-Request-Id":[]string{"rid-ws-bridge-capacity"}}, Duration:82756, FirstTokenMs:(*int)(nil), ClientDisconnect:false, ImageCount:0, ImageSize:"", ImageInputSize:"", ImageOutputSize:"", ImageOutputSizes:[]string(nil), ImageSizeSource:"", ImageSizeBreakdown:map[string]int(nil), VideoCount:0, VideoResolution:"", VideoDurationSeconds:0, WebSearchCalls:0, SearchCount:0, AudioUsage:(*service.AudioUsage)(nil), wsReplayInput:[]jsontext.Value(nil), wsReplayInputExists:false, wsAccountFailoverReplayInput:[]jsontext.Value(nil)}
+        	Test:       	TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapacityFailover
+--- FAIL: TestProxyOpenAIWSHTTPBridgeTurnStagesMetadataAndRelaysKeepaliveBeforeCapacityFailover (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.021s
+FAIL

@@ -1,0 +1,71 @@
+2026/10/23 15:19:32 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAnthropicCompatErrorAfterOutputRetainsUsage
+=== RUN   TestAnthropicCompatErrorAfterOutputRetainsUsage/chat_completions
+    anthropic_compat_contract_test.go:27: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/anthropic_compat_contract_test.go:27
+        	Error:      	Expected value not to be nil.
+        	Test:       	TestAnthropicCompatErrorAfterOutputRetainsUsage/chat_completions
+        	Messages:   	observed usage after visible output must remain billable on failure
+=== RUN   TestAnthropicCompatErrorAfterOutputRetainsUsage/responses
+    anthropic_compat_contract_test.go:27: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/anthropic_compat_contract_test.go:27
+        	Error:      	Expected value not to be nil.
+        	Test:       	TestAnthropicCompatErrorAfterOutputRetainsUsage/responses
+        	Messages:   	observed usage after visible output must remain billable on failure
+--- FAIL: TestAnthropicCompatErrorAfterOutputRetainsUsage (0.00s)
+    --- FAIL: TestAnthropicCompatErrorAfterOutputRetainsUsage/chat_completions (0.00s)
+    --- FAIL: TestAnthropicCompatErrorAfterOutputRetainsUsage/responses (0.00s)
+=== RUN   TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble
+=== RUN   TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble/chat_completions
+    anthropic_compat_contract_test.go:53: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/anthropic_compat_contract_test.go:53
+        	Error:      	Not equal: 
+        	            	expected: ": ping\n\n"
+        	            	actual  : ": ping\n\ndata: {\"id\":\"msg_disc\",\"object\":\"chat.completion.chunk\",\"created\":1792768772,\"model\":\"claude-sonnet-4-6\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\ndata: {\"error\":{\"message\":\"Overloaded\",\"type\":\"overloaded_error\"}}\n\n"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -2,2 +2,6 @@
+        	            	 
+        	            	+data: {"id":"msg_disc","object":"chat.completion.chunk","created":1792768772,"model":"claude-sonnet-4-6","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+        	            	 
+        	            	+data: {"error":{"message":"Overloaded","type":"overloaded_error"}}
+        	            	+
+        	            	+
+        	Test:       	TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble/chat_completions
+        	Messages:   	transport comments may pass; response metadata must remain private until semantic output
+=== RUN   TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble/responses
+    anthropic_compat_contract_test.go:53: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/anthropic_compat_contract_test.go:53
+        	Error:      	Not equal: 
+        	            	expected: ""
+        	            	actual  : "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"msg_disc\",\"object\":\"response\",\"created_at\":1792768772,\"model\":\"claude-sonnet-4-6\",\"status\":\"in_progress\",\"output\":[]}}\n\nevent: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"id\":\"msg_disc\",\"object\":\"response\",\"created_at\":1792768772,\"model\":\"claude-sonnet-4-6\",\"status\":\"failed\",\"output\":[],\"error\":{\"code\":\"overloaded_error\",\"message\":\"Overloaded\"}},\"sequence_number\":1}\n\n"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1,7 @@
+        	            	+event: response.created
+        	            	+data: {"type":"response.created","response":{"id":"msg_disc","object":"response","created_at":1792768772,"model":"claude-sonnet-4-6","status":"in_progress","output":[]}}
+        	            	 
+        	            	+event: response.failed
+        	            	+data: {"type":"response.failed","response":{"id":"msg_disc","object":"response","created_at":1792768772,"model":"claude-sonnet-4-6","status":"failed","output":[],"error":{"code":"overloaded_error","message":"Overloaded"}},"sequence_number":1}
+        	            	+
+        	            	+
+        	Test:       	TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble/responses
+        	Messages:   	transport comments may pass; response metadata must remain private until semantic output
+--- FAIL: TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble (0.00s)
+    --- FAIL: TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble/chat_completions (0.00s)
+    --- FAIL: TestAnthropicCompatErrorBeforeSemanticOutputDiscardsPreamble/responses (0.00s)
+=== RUN   TestAnthropicCompatActiveDrainHasTotalBound
+=== RUN   TestAnthropicCompatActiveDrainHasTotalBound/chat_completions
+    anthropic_compat_contract_test.go:94: active upstream traffic must not reset the total disconnect-drain bound
+=== RUN   TestAnthropicCompatActiveDrainHasTotalBound/responses
+    anthropic_compat_contract_test.go:94: active upstream traffic must not reset the total disconnect-drain bound
+--- FAIL: TestAnthropicCompatActiveDrainHasTotalBound (1.41s)
+    --- FAIL: TestAnthropicCompatActiveDrainHasTotalBound/chat_completions (0.71s)
+    --- FAIL: TestAnthropicCompatActiveDrainHasTotalBound/responses (0.70s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	1.439s
+FAIL

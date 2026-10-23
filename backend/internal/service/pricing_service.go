@@ -230,8 +230,10 @@ type PricingRemoteClient interface {
 // LiteLLMRawEntry 用于解析原始JSON数据
 type LiteLLMRawEntry struct {
 	InputCostPerToken                   *float64 `json:"input_cost_per_token"`
+	InputCostPerTokenAbove200k          *float64 `json:"input_cost_per_token_above_200k_tokens"`
 	InputCostPerTokenPriority           *float64 `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  *float64 `json:"output_cost_per_token"`
+	OutputCostPerTokenAbove200k         *float64 `json:"output_cost_per_token_above_200k_tokens"`
 	OutputCostPerTokenPriority          *float64 `json:"output_cost_per_token_priority"`
 	CacheCreationInputTokenCost         *float64 `json:"cache_creation_input_token_cost"`
 	CacheCreationInputTokenCostPriority *float64 `json:"cache_creation_input_token_cost_priority"`
@@ -708,6 +710,20 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		if entry.LongContextOutputCostMultiplier != nil {
 			pricing.LongContextOutputCostMultiplier = *entry.LongContextOutputCostMultiplier
 		}
+		// Fast catalogs use absolute above-200k rates. Adapt only this card;
+		// explicit local threshold/multipliers and other model policies stay intact.
+		if isGrok47FastPricingModel(modelName) && entry.InputCostPerTokenAbove200k != nil &&
+			entry.OutputCostPerTokenAbove200k != nil && pricing.InputCostPerToken > 0 && pricing.OutputCostPerToken > 0 {
+			if entry.LongContextInputTokenThreshold == nil {
+				pricing.LongContextInputTokenThreshold = 200000
+			}
+			if entry.LongContextInputCostMultiplier == nil {
+				pricing.LongContextInputCostMultiplier = *entry.InputCostPerTokenAbove200k / pricing.InputCostPerToken
+			}
+			if entry.LongContextOutputCostMultiplier == nil {
+				pricing.LongContextOutputCostMultiplier = *entry.OutputCostPerTokenAbove200k / pricing.OutputCostPerToken
+			}
+		}
 		if entry.OutputCostPerImage != nil {
 			pricing.OutputCostPerImage = *entry.OutputCostPerImage
 		}
@@ -1101,13 +1117,17 @@ func (s *PricingService) buildModelLookupCandidates(modelLower string) []string 
 		lastSegment(modelLower),
 		lastSegment(strings.TrimPrefix(modelLower, "models/")),
 	}
+	// Keep an explicitly priced alias ahead of the shared Fast card.
+	if isGrok47FastPricingModel(modelLower) {
+		rawCandidates = append(rawCandidates, "grok-4.7-fast")
+	}
 	normalized := normalizeModelNameForPricing(modelLower)
 
 	// A tier-specific entry should take precedence when the pricing catalog gains
 	// one later. Today Antigravity's Gemini 3.6 Flash tiers share the base rate,
 	// so the normalized base remains the fallback after the exact aliases.
 	candidates := rawCandidates
-	if normalizeGeminiThinkingTierAlias(lastSegment(modelLower)) != lastSegment(modelLower) {
+	if isAntigravityThinkingTierAlias(lastSegment(modelLower)) {
 		candidates = append(candidates, normalized)
 	} else {
 		// Prefer canonical model names for all other aliases (including models/xxx).
@@ -1163,7 +1183,7 @@ func normalizeModelNameForPricing(model string) string {
 		}
 		return canonical
 	}
-	return normalizeGeminiThinkingTierAlias(model)
+	return normalizeAntigravityClaudeTierAlias(normalizeGeminiThinkingTierAlias(model))
 }
 
 // normalizeGeminiThinkingTierAlias maps Antigravity's Gemini 3.6 Flash
@@ -1208,6 +1228,7 @@ func (s *PricingService) extractBaseName(model string) string {
 
 // matchByModelFamily 基于模型系列匹配
 func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
+	model = normalizeAntigravityClaudeTierAlias(model)
 	if claude.IsOpus55(model) {
 		if pricing, ok := s.pricingData["claude-opus-5-5"]; ok {
 			return pricing
@@ -1540,4 +1561,21 @@ func isNumeric(s string) bool {
 		}
 	}
 	return true
+}
+
+// Existing Claude thinking aliases select reasoning depth at the base token rate.
+func normalizeAntigravityClaudeTierAlias(model string) string {
+	native := lastSegment(model)
+	for _, base := range []string{"claude-opus-5-5", "claude-sonnet-5-5"} {
+		for _, tier := range []string{"-high", "-medium", "-low"} {
+			if native == base+tier {
+				return base
+			}
+		}
+	}
+	return model
+}
+
+func isAntigravityThinkingTierAlias(model string) bool {
+	return normalizeGeminiThinkingTierAlias(model) != model || normalizeAntigravityClaudeTierAlias(model) != model
 }

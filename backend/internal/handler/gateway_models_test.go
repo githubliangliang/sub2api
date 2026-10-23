@@ -103,6 +103,44 @@ func newGatewayModelsHandlerForTest(repo service.AccountRepository, routeRepo ..
 	}
 }
 
+func TestRetiredOpenAICatalogKeepsEmptyListAuthoritative(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformComposite} {
+		for _, custom := range []bool{false, true} {
+			t.Run(platform+map[bool]string{true: "/custom", false: "/default"}[custom], func(t *testing.T) {
+				group := &service.Group{ID: 9001, Platform: platform}
+				if custom {
+					group.ModelsListConfig = service.GroupModelsListConfig{Enabled: true, Models: []string{"legacy", "gpt-5.5"}}
+				}
+				repo := &gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{group.ID: {{
+					ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth,
+					Status: service.StatusActive, Schedulable: true,
+					Credentials: map[string]any{"model_mapping": map[string]any{"legacy": "gpt-5.5"}},
+				}}}}
+				h := newGatewayModelsHandlerForTest(repo)
+				for _, codex := range []bool{false, true} {
+					rec := httptest.NewRecorder()
+					c, _ := gin.CreateTestContext(rec)
+					c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+					c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: group})
+					if codex {
+						h.CodexModels(c)
+						var body codexModelsResponseForTest
+						require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+						require.Empty(t, body.Models, rec.Body.String())
+					} else {
+						h.Models(c)
+						var body gatewayModelsResponseForTest
+						require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+						require.Empty(t, body.Data, rec.Body.String())
+					}
+					require.Equal(t, http.StatusOK, rec.Code)
+				}
+			})
+		}
+	}
+}
+
 func TestGatewayCompositeRouteModelsAppearInBothCatalogs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const groupID int64 = 7784

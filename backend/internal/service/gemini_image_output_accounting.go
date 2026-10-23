@@ -21,7 +21,8 @@ const geminiImageOutputCounterKey = "gemini_image_output_counter"
 //   - 增量式流且多图分散在不同 chunk：会低估到 1，与改动前的模型名启发式同值，
 //     不构成回退。
 type geminiImageOutputCounter struct {
-	count int
+	count       int
+	streamCount int
 }
 
 // beginGeminiImageOutputObservation 在每次 Forward 开头重置计数器。

@@ -34,9 +34,10 @@ import (
 const geminiStickySessionTTL = time.Hour
 
 const (
-	geminiMaxRetries     = 5
-	geminiRetryBaseDelay = 1 * time.Second
-	geminiRetryMaxDelay  = 16 * time.Second
+	geminiMaxRetries             = 5
+	geminiRetryBaseDelay         = 1 * time.Second
+	geminiRetryMaxDelay          = 16 * time.Second
+	geminiVertexFallbackCooldown = time.Minute
 )
 
 // Gemini tool calling now requires `thoughtSignature` in parts that include `functionCall`.
@@ -766,12 +767,17 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	}
 
 	var resp *http.Response
+	var checkedPolicy *ErrorPolicyResult
 	signatureRetryStage := 0
 	for attempt := 1; attempt <= geminiMaxRetries; attempt++ {
+		checkedPolicy = nil
 		upstreamReq, idHeader, err := buildReq(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
+			}
+			if failoverErr := s.handleVertexServiceAccountNotFound(ctx, c, account, err); failoverErr != nil {
+				return nil, failoverErr
 			}
 			// Local build error: don't retry.
 			if strings.Contains(err.Error(), "missing project_id") {
@@ -855,11 +861,11 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 
 		// 错误策略优先：匹配则跳过重试直接处理。
-		if matched, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp, mappedModel); matched {
-			resp = rebuilt
+		checked, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp, mappedModel)
+		resp = rebuilt
+		checkedPolicy = checked
+		if checked != nil && *checked != ErrorPolicyNone {
 			break
-		} else {
-			resp = rebuilt
 		}
 
 		if resp.StatusCode >= 400 && s.shouldRetryGeminiUpstreamError(account, resp.StatusCode) {
@@ -925,7 +931,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		respBody := s.readUpstreamErrorBody(resp)
 		// 统一错误策略：自定义错误码 + 临时不可调度
 		if s.rateLimitService != nil {
-			policy := s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, respBody, mappedModel)
+			policy := s.finalErrorPolicy(ctx, account, resp.StatusCode, respBody, mappedModel, checkedPolicy)
 			switch policy {
 			case ErrorPolicySkipped:
 				upstreamReqID := resp.Header.Get(requestIDHeader)
@@ -1045,6 +1051,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	clientDisconnect := false
 	if req.Stream {
 		streamRes, err := s.handleStreamingResponse(c, resp, startTime, originalModel)
 		if err != nil {
@@ -1052,6 +1059,10 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		clientDisconnect = streamRes.clientDisconnect
+		if clientDisconnect {
+			logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] client disconnected; stream_finished=%t", streamRes.finished)
+		}
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
@@ -1079,6 +1090,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 	imageInputSize := s.extractImageInputSize(body)
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
 	imageCount := resolveGeminiImageCount(c, originalModel, mappedModel)
+	if clientDisconnect {
+		imageCount = observedGeminiStreamImages(c)
+	}
 
 	return &ForwardResult{
 		RequestID:                     requestID,
@@ -1090,6 +1104,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		Stream:                        req.Stream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		ClientDisconnect:              clientDisconnect,
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
@@ -1285,11 +1300,16 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 
 	var resp *http.Response
+	var checkedPolicy *ErrorPolicyResult
 	for attempt := 1; attempt <= geminiMaxRetries; attempt++ {
+		checkedPolicy = nil
 		upstreamReq, idHeader, err := buildReq(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, err
+			}
+			if failoverErr := s.handleVertexServiceAccountNotFound(ctx, c, account, err); failoverErr != nil {
+				return nil, failoverErr
 			}
 			// Local build error: don't retry.
 			if strings.Contains(err.Error(), "missing project_id") {
@@ -1329,11 +1349,11 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		}
 
 		// 错误策略优先：匹配则跳过重试直接处理。
-		if matched, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp, mappedModel); matched {
-			resp = rebuilt
+		checked, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp, mappedModel)
+		resp = rebuilt
+		checkedPolicy = checked
+		if checked != nil && *checked != ErrorPolicyNone {
 			break
-		} else {
-			resp = rebuilt
 		}
 
 		if resp.StatusCode >= 400 && s.shouldRetryGeminiUpstreamError(account, resp.StatusCode) {
@@ -1441,7 +1461,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 		// 统一错误策略：自定义错误码 + 临时不可调度
 		if s.rateLimitService != nil {
-			policy := s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, respBody, mappedModel)
+			policy := s.finalErrorPolicy(ctx, account, resp.StatusCode, respBody, mappedModel, checkedPolicy)
 			switch policy {
 			case ErrorPolicySkipped:
 				if failoverErr := s.poolModeSkippedFailoverError(c, account, resp.StatusCode, respBody, requestID); failoverErr != nil {
@@ -1577,6 +1597,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	clientDisconnect := false
 
 	if stream {
 		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth)
@@ -1585,6 +1606,10 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		clientDisconnect = streamRes.clientDisconnect
+		if clientDisconnect {
+			logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] client disconnected; stream_finished=%t", streamRes.finished)
+		}
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
@@ -1613,6 +1638,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	imageInputSize := s.extractImageInputSize(body)
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
 	imageCount := resolveGeminiImageCount(c, originalModel, mappedModel)
+	if clientDisconnect {
+		imageCount = observedGeminiStreamImages(c)
+	}
 
 	return &ForwardResult{
 		RequestID:                     requestID,
@@ -1624,20 +1652,20 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		Stream:                        stream,
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  firstTokenMs,
+		ClientDisconnect:              clientDisconnect,
 		ImageCount:                    imageCount,
 		ImageSize:                     imageSize,
 		ImageInputSize:                imageInputSize,
 	}, nil
 }
 
-// checkErrorPolicyInLoop 在重试循环内预检查错误策略。
-// 返回 true 表示策略已匹配（调用者应 break），resp 已重建可直接使用。
-// 返回 false 表示 ErrorPolicyNone，resp 已重建，调用者继续走重试逻辑。
+// checkErrorPolicyInLoop returns the decision for this response so final
+// handling cannot apply a stateful rule twice. A nil result means unchecked.
 func (s *GeminiMessagesCompatService) checkErrorPolicyInLoop(
 	ctx context.Context, account *Account, resp *http.Response, mappedModel string,
-) (matched bool, rebuilt *http.Response) {
+) (checked *ErrorPolicyResult, rebuilt *http.Response) {
 	if resp.StatusCode < 400 || s.rateLimitService == nil {
-		return false, resp
+		return nil, resp
 	}
 	body := s.readUpstreamErrorBody(resp)
 	_ = resp.Body.Close()
@@ -1647,7 +1675,20 @@ func (s *GeminiMessagesCompatService) checkErrorPolicyInLoop(
 		Body:       io.NopCloser(bytes.NewReader(body)),
 	}
 	policy := s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, body, mappedModel)
-	return policy != ErrorPolicyNone, rebuilt
+	return &policy, rebuilt
+}
+
+// finalErrorPolicy 返回循环外处理最终上游错误响应时使用的错误策略。每个上游响应只检查一次：
+// 错误策略检查会触发临时不可调度规则，并据账号上已记录的 401 暂停把 401 升级为 error。
+// checked 非 nil 时它就是重试循环内对同一响应的检查结果，直接复用；否则在此检查。
+// 调用方保证 s.rateLimitService 非 nil。
+func (s *GeminiMessagesCompatService) finalErrorPolicy(
+	ctx context.Context, account *Account, statusCode int, body []byte, mappedModel string, checked *ErrorPolicyResult,
+) ErrorPolicyResult {
+	if checked != nil {
+		return *checked
+	}
+	return s.rateLimitService.CheckErrorPolicy(ctx, account, statusCode, body, mappedModel)
 }
 
 func (s *GeminiMessagesCompatService) shouldRetryGeminiUpstreamError(account *Account, statusCode int) bool {
@@ -1975,8 +2016,10 @@ func mapGeminiStatusToClaudeErrorType(status string) string {
 }
 
 type geminiStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage            *ClaudeUsage
+	firstTokenMs     *int
+	clientDisconnect bool
+	finished         bool
 }
 
 func (s *GeminiMessagesCompatService) handleNonStreamingResponse(c *gin.Context, resp *http.Response, originalModel string) (*ClaudeUsage, error) {
@@ -2014,11 +2057,22 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
-	flusher, ok := c.Writer.(http.Flusher)
+	_, ok := c.Writer.(http.Flusher)
 	if !ok {
 		return nil, errors.New("streaming not supported")
 	}
 
+	writer := &geminiStreamClientWriter{c: c}
+	var firstTokenMs *int
+	var usage ClaudeUsage
+	finishReason := ""
+	streamResult := func() (*geminiStreamResult, error) {
+		disconnected := writer.err != nil || geminiStreamClientGone(c)
+		if disconnected && !geminiStreamHasObservedUsage(c, &usage) {
+			return nil, geminiStreamAbortError(c, writer.err)
+		}
+		return &geminiStreamResult{usage: &usage, firstTokenMs: firstTokenMs, clientDisconnect: disconnected, finished: finishReason != ""}, nil
+	}
 	messageID := generateAnthropicMsgID()
 	messageStart := map[string]any{
 		"type": "message_start",
@@ -2036,12 +2090,12 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 			},
 		},
 	}
-	writeSSE(c.Writer, "message_start", messageStart)
-	flusher.Flush()
+	writeSSE(writer, "message_start", messageStart)
+	writer.Flush()
 
-	var firstTokenMs *int
-	var usage ClaudeUsage
-	finishReason := ""
+	if writer.err != nil {
+		return streamResult()
+	}
 	sawToolUse := false
 
 	nextBlockIndex := 0
@@ -2057,6 +2111,9 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
+			if geminiStreamAbortedWithBillableOutput(c, err, &usage) {
+				return streamResult()
+			}
 			return nil, fmt.Errorf("stream read error: %w", err)
 		}
 
@@ -2083,7 +2140,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 			observer = beginUpstreamResponseModelObservation(c)
 		}
 		observer.ObserveGemini(unwrappedBytes)
-		observeGeminiImageOutputs(c, unwrappedBytes)
+		observeGeminiStreamImages(c, unwrappedBytes)
 
 		var geminiResp map[string]any
 		if err := json.Unmarshal(unwrappedBytes, &geminiResp); err != nil {
@@ -2104,7 +2161,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 				// text block starts, emitting overlapping Anthropic content
 				// blocks that violate the SSE contract.
 				if openToolIndex >= 0 {
-					writeSSE(c.Writer, "content_block_stop", map[string]any{
+					writeSSE(writer, "content_block_stop", map[string]any{
 						"type":  "content_block_stop",
 						"index": openToolIndex,
 					})
@@ -2121,7 +2178,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 
 				if openBlockType != "text" {
 					if openBlockIndex >= 0 {
-						writeSSE(c.Writer, "content_block_stop", map[string]any{
+						writeSSE(writer, "content_block_stop", map[string]any{
 							"type":  "content_block_stop",
 							"index": openBlockIndex,
 						})
@@ -2129,7 +2186,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					openBlockType = "text"
 					openBlockIndex = nextBlockIndex
 					nextBlockIndex++
-					writeSSE(c.Writer, "content_block_start", map[string]any{
+					writeSSE(writer, "content_block_start", map[string]any{
 						"type":  "content_block_start",
 						"index": openBlockIndex,
 						"content_block": map[string]any{
@@ -2143,7 +2200,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					ms := int(time.Since(startTime).Milliseconds())
 					firstTokenMs = &ms
 				}
-				writeSSE(c.Writer, "content_block_delta", map[string]any{
+				writeSSE(writer, "content_block_delta", map[string]any{
 					"type":  "content_block_delta",
 					"index": openBlockIndex,
 					"delta": map[string]any{
@@ -2151,7 +2208,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 						"text": delta,
 					},
 				})
-				flusher.Flush()
+				writer.Flush()
 				continue
 			}
 
@@ -2164,7 +2221,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 
 				// Close any open text block before tool_use.
 				if openBlockIndex >= 0 {
-					writeSSE(c.Writer, "content_block_stop", map[string]any{
+					writeSSE(writer, "content_block_stop", map[string]any{
 						"type":  "content_block_stop",
 						"index": openBlockIndex,
 					})
@@ -2174,7 +2231,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 
 				// If we receive streamed tool args in pieces, keep a single tool block open and emit deltas.
 				if openToolIndex >= 0 && openToolName != name {
-					writeSSE(c.Writer, "content_block_stop", map[string]any{
+					writeSSE(writer, "content_block_stop", map[string]any{
 						"type":  "content_block_stop",
 						"index": openToolIndex,
 					})
@@ -2190,7 +2247,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					nextBlockIndex++
 					sawToolUse = true
 
-					writeSSE(c.Writer, "content_block_start", map[string]any{
+					writeSSE(writer, "content_block_start", map[string]any{
 						"type":  "content_block_start",
 						"index": openToolIndex,
 						"content_block": map[string]any{
@@ -2219,7 +2276,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 				delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
 				seenToolJSON = newSeen
 				if delta != "" {
-					writeSSE(c.Writer, "content_block_delta", map[string]any{
+					writeSSE(writer, "content_block_delta", map[string]any{
 						"type":  "content_block_delta",
 						"index": openToolIndex,
 						"delta": map[string]any{
@@ -2228,12 +2285,15 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 						},
 					})
 				}
-				flusher.Flush()
+				writer.Flush()
 			}
 		}
 
 		if u := extractGeminiUsage(unwrappedBytes); u != nil {
 			usage = *u
+		}
+		if writer.err != nil {
+			return streamResult()
 		}
 
 		// Process the final unterminated line at EOF as well.
@@ -2243,13 +2303,13 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	}
 
 	if openBlockIndex >= 0 {
-		writeSSE(c.Writer, "content_block_stop", map[string]any{
+		writeSSE(writer, "content_block_stop", map[string]any{
 			"type":  "content_block_stop",
 			"index": openBlockIndex,
 		})
 	}
 	if openToolIndex >= 0 {
-		writeSSE(c.Writer, "content_block_stop", map[string]any{
+		writeSSE(writer, "content_block_stop", map[string]any{
 			"type":  "content_block_stop",
 			"index": openToolIndex,
 		})
@@ -2266,7 +2326,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	if usage.InputTokens > 0 {
 		usageObj["input_tokens"] = usage.InputTokens
 	}
-	writeSSE(c.Writer, "message_delta", map[string]any{
+	writeSSE(writer, "message_delta", map[string]any{
 		"type": "message_delta",
 		"delta": map[string]any{
 			"stop_reason":   stopReason,
@@ -2274,12 +2334,12 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 		},
 		"usage": usageObj,
 	})
-	writeSSE(c.Writer, "message_stop", map[string]any{
+	writeSSE(writer, "message_stop", map[string]any{
 		"type": "message_stop",
 	})
-	flusher.Flush()
+	writer.Flush()
 
-	return &geminiStreamResult{usage: &usage, firstTokenMs: firstTokenMs}, nil
+	return streamResult()
 }
 
 func writeSSE(w io.Writer, event string, data any) {
@@ -2493,8 +2553,10 @@ func mergeCollectedTextParts(response map[string]any, textParts []string) map[st
 }
 
 type geminiNativeStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage            *ClaudeUsage
+	firstTokenMs     *int
+	clientDisconnect bool
+	finished         bool
 }
 
 func isGeminiInsufficientScope(headers http.Header, body []byte) bool {
@@ -2632,11 +2694,12 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	}
 	c.Header("Content-Type", contentType)
 
-	flusher, ok := c.Writer.(http.Flusher)
+	_, ok := c.Writer.(http.Flusher)
 	if !ok {
 		return nil, errors.New("streaming not supported")
 	}
 
+	writer := &geminiStreamClientWriter{c: c}
 	reader := bufio.NewReader(resp.Body)
 	usage := &ClaudeUsage{}
 	observer := upstreamResponseModelObserverFromContext(c)
@@ -2644,17 +2707,31 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 		observer = beginUpstreamResponseModelObservation(c)
 	}
 	var firstTokenMs *int
+	finished := false
+	streamResult := func() (*geminiNativeStreamResult, error) {
+		disconnected := writer.err != nil || geminiStreamClientGone(c)
+		if disconnected && !geminiStreamHasObservedUsage(c, usage) {
+			return nil, geminiStreamAbortError(c, writer.err)
+		}
+		return &geminiNativeStreamResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: disconnected, finished: finished}, nil
+	}
 
 	for {
 		line, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			if geminiStreamAbortedWithBillableOutput(c, err, usage) {
+				return streamResult()
+			}
+			return nil, err
+		}
 		if len(line) > 0 {
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
 				// Keepalive / done markers
 				if payload == "" || payload == "[DONE]" {
-					_, _ = io.WriteString(c.Writer, line)
-					flusher.Flush()
+					_, _ = io.WriteString(writer, line)
+					writer.Flush()
 				} else {
 					var rawToWrite string
 					rawToWrite = payload
@@ -2670,11 +2747,17 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 						rawBytes = []byte(payload)
 					}
 
-					if u := extractGeminiUsage(rawBytes); u != nil {
-						usage = u
+					if gjson.ValidBytes(rawBytes) {
+						if u := extractGeminiUsage(rawBytes); u != nil {
+							usage = u
+						}
+						observer.ObserveGemini(rawBytes)
+						observeGeminiStreamImages(c, rawBytes)
+						gjson.GetBytes(rawBytes, "candidates").ForEach(func(_, candidate gjson.Result) bool {
+							finished = finished || candidate.Get("finishReason").String() != ""
+							return true
+						})
 					}
-					observer.ObserveGemini(rawBytes)
-					observeGeminiImageOutputs(c, rawBytes)
 
 					if firstTokenMs == nil {
 						ms := int(time.Since(startTime).Milliseconds())
@@ -2683,19 +2766,22 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 
 					if isOAuth {
 						// SSE format requires double newline (\n\n) to separate events
-						_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", rawToWrite)
+						_, _ = fmt.Fprintf(writer, "data: %s\n\n", rawToWrite)
 					} else {
 						// Pass-through for AI Studio responses.
-						_, _ = io.WriteString(c.Writer, line)
+						_, _ = io.WriteString(writer, line)
 					}
-					flusher.Flush()
+					writer.Flush()
 				}
 			} else {
-				_, _ = io.WriteString(c.Writer, line)
-				flusher.Flush()
+				_, _ = io.WriteString(writer, line)
+				writer.Flush()
 			}
 		}
 
+		if writer.err != nil {
+			return streamResult()
+		}
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -2704,7 +2790,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 		}
 	}
 
-	return &geminiNativeStreamResult{usage: usage, firstTokenMs: firstTokenMs}, nil
+	return streamResult()
 }
 
 // ForwardAIStudioGET forwards a GET request to AI Studio (generativelanguage.googleapis.com) for
@@ -2905,9 +2991,10 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 	}
 
 	// 注意：Gemini 的 promptTokenCount 包含 cachedContentTokenCount，
-	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去
+	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去。
+	// prompt 被拦截时上游可能只报 cachedContentTokenCount，差值下限为 0。
 	return &ClaudeUsage{
-		InputTokens:          prompt - cached,
+		InputTokens:          max(prompt-cached, 0),
 		OutputTokens:         cand + thoughts,
 		CacheReadInputTokens: cached,
 		ImageOutputTokens:    imageTokens,
@@ -2977,6 +3064,12 @@ func (s *GeminiMessagesCompatService) handleGeminiUpstreamError(ctx context.Cont
 			} else {
 				logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini 429] Account %d (Google One OAuth, tier=%s, project=%s) rate limited, cooldown=%v", account.ID, tierID, projectID, time.Until(ra).Truncate(time.Second))
 			}
+		} else if account.IsVertexServiceAccount() {
+			if isVertexSharedCapacity429(body) {
+				logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini 429] Vertex account %d shared capacity exhausted; account stays schedulable", account.ID)
+				return
+			}
+			ra = time.Now().Add(geminiVertexFallbackCooldown)
 		} else {
 			// API Key / AI Studio OAuth: PST 午夜
 			if ts := nextGeminiDailyResetUnix(); ts != nil {
@@ -3568,12 +3661,24 @@ func isClaudeWebSearchToolMap(tool map[string]any) bool {
 
 // cleanToolSchema 清理工具的 JSON Schema，移除 Gemini 不支持的字段
 func cleanToolSchema(schema any) any {
+	return cleanToolSchemaNode(schema, true)
+}
+
+func cleanToolSchemaNode(schema any, schemaNode bool) any {
 	if schema == nil {
 		return nil
 	}
 
 	switch v := schema.(type) {
 	case map[string]any:
+		if !schemaNode {
+			cleaned := make(map[string]any, len(v))
+			for key, value := range v {
+				cleaned[key] = cleanToolSchemaNode(value, false)
+			}
+			return cleaned
+		}
+
 		cleaned := make(map[string]any)
 		for key, value := range v {
 			// 跳过不支持的字段
@@ -3581,11 +3686,73 @@ func cleanToolSchema(schema any) any {
 				key == "$defs" || key == "definitions" ||
 				key == "additionalProperties" || key == "patternProperties" || key == "minLength" ||
 				key == "maxLength" || key == "minItems" || key == "maxItems" || key == "exclusiveMinimum" ||
-				key == "deprecated" {
+				key == "deprecated" || key == "examples" {
 				continue
 			}
-			// 递归清理嵌套对象
-			cleaned[key] = cleanToolSchema(value)
+
+			switch key {
+			case "properties", "dependentSchemas":
+				if propertySchemas, ok := value.(map[string]any); ok {
+					cleanedProperties := make(map[string]any, len(propertySchemas))
+					for propertyName, propertySchema := range propertySchemas {
+						cleanedProperties[propertyName] = cleanToolSchemaNode(propertySchema, true)
+					}
+					cleaned[key] = cleanedProperties
+				} else {
+					cleaned[key] = cleanToolSchemaNode(value, false)
+				}
+			case "items", "contains", "propertyNames", "if", "then", "else", "not", "contentSchema",
+				"additionalItems", "unevaluatedItems", "unevaluatedProperties":
+				cleaned[key] = cleanToolSchemaNode(value, true)
+			case "dependencies":
+				if dependencies, ok := value.(map[string]any); ok {
+					cleanedDependencies := make(map[string]any, len(dependencies))
+					for propertyName, dependency := range dependencies {
+						if dependencySchema, ok := dependency.(map[string]any); ok {
+							cleanedDependencies[propertyName] = cleanToolSchemaNode(dependencySchema, true)
+						} else {
+							cleanedDependencies[propertyName] = cleanToolSchemaNode(dependency, false)
+						}
+					}
+					cleaned[key] = cleanedDependencies
+				} else {
+					cleaned[key] = cleanToolSchemaNode(value, false)
+				}
+			case "anyOf", "allOf", "oneOf", "prefixItems":
+				if schemas, ok := value.([]any); ok {
+					cleanedSchemas := make([]any, len(schemas))
+					for i, childSchema := range schemas {
+						cleanedSchemas[i] = cleanToolSchemaNode(childSchema, true)
+					}
+					cleaned[key] = cleanedSchemas
+				} else {
+					cleaned[key] = cleanToolSchemaNode(value, false)
+				}
+			default:
+				cleaned[key] = cleanToolSchemaNode(value, false)
+			}
+		}
+		if constValue, exists := v["const"]; exists {
+			if stringValue, ok := constValue.(string); ok {
+				if originalEnum, hasEnum := v["enum"].([]any); hasEnum {
+					intersection := make([]any, 0, 1)
+					for _, value := range originalEnum {
+						if enumString, ok := value.(string); ok && enumString == stringValue {
+							intersection = append(intersection, stringValue)
+							break
+						}
+					}
+					cleaned["enum"] = intersection
+				} else {
+					cleaned["enum"] = []any{stringValue}
+				}
+				if _, hasType := cleaned["type"]; !hasType {
+					cleaned["type"] = "STRING"
+				}
+			}
+			// Non-string constants are unsupported: omit the constant, retain the
+			// original type, and do not stringify the constant or infer a type.
+			delete(cleaned, "const")
 		}
 		if enum, ok := cleaned["enum"].([]any); ok {
 			if normalized, ok := normalizeGeminiEnum(enum); ok {
@@ -3620,7 +3787,7 @@ func cleanToolSchema(schema any) any {
 	case []any:
 		cleaned := make([]any, len(v))
 		for i, item := range v {
-			cleaned[i] = cleanToolSchema(item)
+			cleaned[i] = cleanToolSchemaNode(item, schemaNode)
 		}
 		return cleaned
 	default:
@@ -3789,4 +3956,26 @@ func (s *GeminiMessagesCompatService) handleGeminiThirdParty429(ctx context.Cont
 		return
 	}
 	_ = s.accountRepo.SetRateLimited(ctx, account.ID, time.Now().Add(defaultRateLimit429CooldownSeconds*time.Second))
+}
+
+func isVertexSharedCapacity429(body []byte) bool {
+	errObj := gjson.GetBytes(body, "error")
+	if !errObj.Exists() {
+		errObj = gjson.GetBytes(body, "0.error")
+	}
+	if !errObj.IsObject() {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(errObj.Get("status").String()), "RESOURCE_EXHAUSTED") {
+		return false
+	}
+	details := errObj.Get("details")
+	if (details.Exists() && details.Type != gjson.Null && !details.IsArray()) || len(details.Array()) > 0 {
+		return false
+	}
+	msg := strings.ToLower(errObj.Get("message").String())
+	if !strings.Contains(msg, "resource exhausted") || !strings.Contains(msg, "try again later") {
+		return false
+	}
+	return !strings.Contains(msg, "quota") && !strings.Contains(msg, "provisioned throughput")
 }

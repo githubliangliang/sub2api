@@ -18,7 +18,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const anthropicMessagesForeignOAuthReason = GatewayFailureReason("anthropic_messages_foreign_oauth")
+
+// API Key endpoints may implement multiple protocols, but OAuth credentials
+// may only be sent to the provider that issued them. Gemini and Antigravity
+// use their separate forwarders before reaching this Anthropic request builder.
+func anthropicMessagesCredentialAllowed(account *Account) bool {
+	return account == nil || !account.IsOAuth() || account.Platform == PlatformAnthropic
+}
+
+func checkAnthropicMessagesCredential(account *Account) error {
+	if anthropicMessagesCredentialAllowed(account) {
+		return nil
+	}
+	return &UpstreamFailoverError{StatusCode: http.StatusBadGateway, Reason: anthropicMessagesForeignOAuthReason}
+}
+
 func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, reqStream bool, mimicClaudeCode bool) (*http.Request, []byte, error) {
+	if err := checkAnthropicMessagesCredential(account); err != nil {
+		return nil, nil, err
+	}
 	if account.Platform == PlatformAnthropic && account.Type == AccountTypeServiceAccount {
 		req, err := s.buildUpstreamRequestAnthropicVertex(ctx, c, account, body, token, modelID, reqStream)
 		return req, body, err

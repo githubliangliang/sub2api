@@ -1,0 +1,240 @@
+2026/10/23 13:52:11 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestExtractGeminiUsageNonNegativeInputPreservesBuckets
+=== RUN   TestExtractGeminiUsageNonNegativeInputPreservesBuckets/missing
+    gemini_messages_compat_service_test.go:917: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:917
+        	Error:      	Not equal: 
+        	            	expected: &service.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, CacheCreation5mTokens:0, CacheCreation1hTokens:0, ImageOutputTokens:2}
+        	            	actual  : &service.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, CacheCreation5mTokens:0, CacheCreation1hTokens:0, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (*service.ClaudeUsage)({
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestExtractGeminiUsageNonNegativeInputPreservesBuckets/missing
+=== RUN   TestExtractGeminiUsageNonNegativeInputPreservesBuckets/zero
+    gemini_messages_compat_service_test.go:917: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:917
+        	Error:      	Not equal: 
+        	            	expected: &service.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, CacheCreation5mTokens:0, CacheCreation1hTokens:0, ImageOutputTokens:2}
+        	            	actual  : &service.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, CacheCreation5mTokens:0, CacheCreation1hTokens:0, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (*service.ClaudeUsage)({
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestExtractGeminiUsageNonNegativeInputPreservesBuckets/zero
+=== RUN   TestExtractGeminiUsageNonNegativeInputPreservesBuckets/less_than_cached
+    gemini_messages_compat_service_test.go:917: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_messages_compat_service_test.go:917
+        	Error:      	Not equal: 
+        	            	expected: &service.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, CacheCreation5mTokens:0, CacheCreation1hTokens:0, ImageOutputTokens:2}
+        	            	actual  : &service.ClaudeUsage{InputTokens:-5, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, CacheCreation5mTokens:0, CacheCreation1hTokens:0, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (*service.ClaudeUsage)({
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -5,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestExtractGeminiUsageNonNegativeInputPreservesBuckets/less_than_cached
+=== RUN   TestExtractGeminiUsageNonNegativeInputPreservesBuckets/equal_to_cached
+=== RUN   TestExtractGeminiUsageNonNegativeInputPreservesBuckets/greater_than_cached
+--- FAIL: TestExtractGeminiUsageNonNegativeInputPreservesBuckets (0.00s)
+    --- FAIL: TestExtractGeminiUsageNonNegativeInputPreservesBuckets/missing (0.00s)
+    --- FAIL: TestExtractGeminiUsageNonNegativeInputPreservesBuckets/zero (0.00s)
+    --- FAIL: TestExtractGeminiUsageNonNegativeInputPreservesBuckets/less_than_cached (0.00s)
+    --- PASS: TestExtractGeminiUsageNonNegativeInputPreservesBuckets/equal_to_cached (0.00s)
+    --- PASS: TestExtractGeminiUsageNonNegativeInputPreservesBuckets/greater_than_cached (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.023s
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/non-stream
+    usage_contract_test.go:30: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:30
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/non-stream
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/message_start
+    usage_contract_test.go:48: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:48
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/message_start
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/usage_update
+    usage_contract_test.go:60: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:60
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/usage_update
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/non-stream
+    usage_contract_test.go:30: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:30
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/non-stream
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/message_start
+    usage_contract_test.go:48: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:48
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/message_start
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/usage_update
+    usage_contract_test.go:60: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:60
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-8, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -8,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/usage_update
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/non-stream
+    usage_contract_test.go:30: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:30
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-5, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -5,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/non-stream
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/message_start
+    usage_contract_test.go:48: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:48
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-5, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -5,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/message_start
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/usage_update
+    usage_contract_test.go:60: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/antigravity/usage_contract_test.go:60
+        	Error:      	Not equal: 
+        	            	expected: antigravity.ClaudeUsage{InputTokens:0, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	actual  : antigravity.ClaudeUsage{InputTokens:-5, OutputTokens:5, CacheCreationInputTokens:0, CacheReadInputTokens:8, ImageOutputTokens:2}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,3 +1,3 @@
+        	            	 (antigravity.ClaudeUsage) {
+        	            	- InputTokens: (int) 0,
+        	            	+ InputTokens: (int) -5,
+        	            	  OutputTokens: (int) 5,
+        	Test:       	TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/usage_update
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached/non-stream
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached/message_start
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached/usage_update
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached/non-stream
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached/message_start
+=== RUN   TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached/usage_update
+--- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets (0.00s)
+    --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/non-stream (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/message_start (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/missing/usage_update (0.00s)
+    --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/non-stream (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/message_start (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/zero/usage_update (0.00s)
+    --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/non-stream (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/message_start (0.00s)
+        --- FAIL: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/less_than_cached/usage_update (0.00s)
+    --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached (0.00s)
+        --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached/non-stream (0.00s)
+        --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached/message_start (0.00s)
+        --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/equal_to_cached/usage_update (0.00s)
+    --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached (0.00s)
+        --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached/non-stream (0.00s)
+        --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached/message_start (0.00s)
+        --- PASS: TestGeminiUsageMapping_NonNegativeInputPreservesBuckets/greater_than_cached/usage_update (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/pkg/antigravity	0.006s
+FAIL

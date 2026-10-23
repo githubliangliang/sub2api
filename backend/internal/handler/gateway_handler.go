@@ -566,7 +566,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			forceCacheBilling := fs.ForceCacheBilling
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			sessionID := service.ExtractClientSessionID(c)
-			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
+			channelUsageFields := clientRequestedUsageFields(c, channelMapping, reqModel, result.UpstreamModel)
+			h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:             result,
 					QuotaPlatform:      quotaPlatform,
@@ -583,7 +584,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					RequestPayloadHash: requestPayloadHash,
 					ForceCacheBilling:  forceCacheBilling,
 					APIKeyService:      h.apiKeyService,
-					ChannelUsageFields: clientRequestedUsageFields(c, channelMapping, reqModel, result.UpstreamModel),
+					ChannelUsageFields: channelUsageFields,
 				}); err != nil {
 					logger.L().With(
 						zap.String("component", "handler.gateway.messages"),
@@ -1135,6 +1136,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 
 	if platform == service.PlatformComposite {
 		availableModels := h.compositeAvailableModels(c.Request.Context(), groupID, "")
+		if availableModels != nil && len(availableModels) == 0 {
+			writeModelsList(c, platform, availableModels)
+			return
+		}
 		if apiKey != nil && apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
 			availableModels = filterModelsByCustomList(availableModels, defaultModelIDsForPlatform(service.PlatformComposite), apiKey.Group.ModelsListConfig.Models)
 			writeCustomModelsList(c, service.PlatformComposite, availableModels)
@@ -1150,6 +1155,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 
 	// Get available models from account configurations for the selected group platform.
 	availableModels := h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, platform)
+	if platform == service.PlatformOpenAI && availableModels != nil && len(availableModels) == 0 {
+		writeModelsList(c, platform, availableModels)
+		return
+	}
 	if apiKey != nil && apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
 		fallbackModels := defaultModelIDsForPlatform(platform)
 		availableModels = filterModelsByCustomList(customModelsListSource(platform, availableModels, fallbackModels), fallbackModels, apiKey.Group.ModelsListConfig.Models)
@@ -1237,6 +1246,9 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 	}
 	if platform == service.PlatformComposite {
 		availableModels := h.compositeAvailableModels(ctx, groupID, service.CompositeRouteEndpointResponses)
+		if availableModels != nil && len(availableModels) == 0 {
+			return availableModels
+		}
 		fallbackModels := defaultCodexModelIDsForPlatform(service.PlatformComposite)
 		if group.CustomModelsListEnabled() {
 			return filterModelsByCustomList(availableModels, fallbackModels, group.ModelsListConfig.Models)
@@ -1248,6 +1260,9 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 	}
 
 	availableModels := h.gatewayService.GetAvailableModels(ctx, groupID, platform)
+	if platform == service.PlatformOpenAI && availableModels != nil && len(availableModels) == 0 {
+		return availableModels
+	}
 	fallbackModels := defaultCodexModelIDsForPlatform(platform)
 	if group.CustomModelsListEnabled() {
 		return filterModelsByCustomList(
@@ -1268,10 +1283,13 @@ func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *
 	}
 	seen := make(map[string]struct{})
 	models := make([]string, 0)
+	authoritativeEmpty := false
 	schedulablePlatforms := h.gatewayService.GetSchedulablePlatforms(ctx, groupID)
 	for _, platform := range []string{service.PlatformAnthropic, service.PlatformGemini, service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGrok} {
 		platformModels := h.gatewayService.GetAvailableModels(ctx, groupID, platform)
-		if len(platformModels) == 0 {
+		filteredOpenAI := platform == service.PlatformOpenAI && platformModels != nil
+		authoritativeEmpty = authoritativeEmpty || filteredOpenAI
+		if len(platformModels) == 0 && !filteredOpenAI {
 			if _, ok := schedulablePlatforms[platform]; ok {
 				platformModels = defaultModelIDsForPlatform(platform)
 			}
@@ -1296,6 +1314,9 @@ func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *
 				models = append(models, model)
 			}
 		}
+	}
+	if len(models) == 0 && !authoritativeEmpty {
+		return nil
 	}
 	return models
 }

@@ -21,6 +21,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/cespare/xxhash/v2"
@@ -675,12 +676,13 @@ type GatewayFailureReason string
 // source-compatible and preserves their legacy retry-next-account behavior.
 type UpstreamFailoverError struct {
 	StatusCode               int
-	ResponseBody             []byte      // 上游响应体，用于错误透传规则匹配
-	ResponseHeaders          http.Header // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
-	ForceCacheBilling        bool        // Antigravity 粘性会话切换时设为 true
-	RetryableOnSameAccount   bool        // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
-	RequestScopedTransient   bool        // 故障因素与账号无关（如上游按客户端身份/模型容量降载）：可同账号重试，但不得据此对账号做临时封禁
-	SafeToFailoverAfterWrite bool        // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
+	ResponseBody             []byte        // 上游响应体，用于错误透传规则匹配
+	ResponseHeaders          http.Header   // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
+	ForceCacheBilling        bool          // Antigravity 粘性会话切换时设为 true
+	RetryableOnSameAccount   bool          // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
+	SameAccountRetryDelay    time.Duration // 上游提示的同账号重试间隔；零值使用既有指数退避
+	RequestScopedTransient   bool          // 故障因素与账号无关（如上游按客户端身份/模型容量降载）：可同账号重试，但不得据此对账号做临时封禁
+	SafeToFailoverAfterWrite bool          // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
 	Stage                    GatewayFailureStage
 	Scope                    GatewayFailureScope
 	Reason                   GatewayFailureReason
@@ -729,7 +731,9 @@ func (e *UpstreamFailoverError) ShouldReportAccountScheduleFailure() bool {
 // Error() 保持原字符串以兼容现有日志/检索；调用方应通过 errors.As
 // 提取 RawData 并构造 UpstreamFailoverError.ResponseBody。
 type sseStreamErrorEventError struct {
-	RawData string
+	RawData                  string
+	afterSemanticOutput      bool
+	safeToFailoverAfterWrite bool
 }
 
 func (e *sseStreamErrorEventError) Error() string { return "have error in stream" }
@@ -1392,7 +1396,18 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		accounts, err = s.accountRepo.ListSchedulable(ctx)
 	}
 
-	if err != nil || len(accounts) == 0 {
+	if err != nil {
+		return nil
+	}
+	retirementAccounts := accounts
+	if platform == PlatformOpenAI {
+		// Retirement is a configured capability, independent of temporary
+		// cooldowns. Keep the visible aliases based on schedulable accounts.
+		configured, listErr := s.accountRepo.ListModelAvailabilityCandidates(ctx, groupID, []string{PlatformOpenAI}, groupID == nil)
+		if listErr == nil {
+			retirementAccounts = configured
+		}
+	} else if len(accounts) == 0 {
 		return nil
 	}
 
@@ -1422,6 +1437,12 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	}
 
 	// If no account has model_mapping, return nil (use default)
+	if !hasAnyMapping && platform == PlatformOpenAI {
+		models := filterRetiredOpenAIModelIDs(retirementAccounts, openai.DefaultModelIDs())
+		if len(models) != len(openai.DefaultModels) {
+			return models
+		}
+	}
 	if !hasAnyMapping {
 		if s.modelsListCache != nil {
 			s.modelsListCache.Set(cacheKey, []string(nil), s.modelsListCacheTTL)
@@ -1436,6 +1457,14 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		models = append(models, model)
 	}
 	sort.Strings(models)
+
+	if platform == PlatformOpenAI {
+		models = filterRetiredOpenAIModelIDs(retirementAccounts, models)
+		// nil means use defaults. Preserve an authoritative empty catalog.
+		if len(models) == 0 {
+			return models
+		}
+	}
 
 	if s.modelsListCache != nil {
 		s.modelsListCache.Set(cacheKey, cloneStringSlice(models), s.modelsListCacheTTL)
@@ -1459,21 +1488,23 @@ func (s *GatewayService) resolveCompositeModelOwnership(ctx context.Context, gro
 		}
 	}
 
-	accounts, err := s.accountRepo.ListSchedulableByGroupID(ctx, groupID)
+	// 归属取决于配置而非运行时健康：限流/临时不可调度不应让同一模型在
+	// 「唯一归属」与「歧义」之间来回翻转，否则配置错误只会间歇暴露。
+	accounts, err := s.accountRepo.ListModelAvailabilityCandidates(ctx, &groupID, []string{PlatformAnthropic, PlatformOpenAI, PlatformGrok, PlatformGemini, PlatformAntigravity}, false)
 	if err != nil {
 		return CompositeModelOwnership{}, err
 	}
 
 	platforms := make(map[string]struct{})
+	ownership := CompositeModelOwnership{}
 	for _, account := range accounts {
-		platform := strings.TrimSpace(account.Platform)
-		if !isConcreteRequestPlatform(platform) || !explicitModelMappingClaims(account, model) {
-			continue
+		if explicitModelMappingClaims(account, model) {
+			platforms[account.Platform] = struct{}{}
+			ownership.OpenAIGatewayOAuthClaimed = ownership.OpenAIGatewayOAuthClaimed ||
+				(account.IsOAuth() && (account.Platform == PlatformOpenAI || account.Platform == PlatformGrok))
 		}
-		platforms[platform] = struct{}{}
 	}
 
-	ownership := CompositeModelOwnership{}
 	if len(platforms) == 1 {
 		for platform := range platforms {
 			ownership.TargetPlatform = platform

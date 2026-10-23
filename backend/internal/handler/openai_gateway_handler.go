@@ -2300,6 +2300,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Failed to resolve composite model route")
 			return
 		}
+		if decision.OAuthAmbiguous() {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, decision.AmbiguousMessage())
+			return
+		}
 		if decision.Matched {
 			c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
 			wsRouteModel = decision.UpstreamModel
@@ -3215,6 +3220,9 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 func credentialFailoverClientResponse(failoverErr *service.UpstreamFailoverError) (int, string) {
 	if failoverErr != nil && failoverErr.Reason == service.AntigravityCredentialRejectedReason {
 		return http.StatusBadGateway, service.AntigravityCredentialRejectedClientMessage
+	}
+	if failoverErr != nil && failoverErr.Reason == service.GatewayFailureReason("vertex_service_account_not_found") {
+		return http.StatusBadGateway, "Upstream authentication failed, please contact administrator"
 	}
 	return http.StatusServiceUnavailable, service.GrokCredentialUnavailableClientMessage
 }
