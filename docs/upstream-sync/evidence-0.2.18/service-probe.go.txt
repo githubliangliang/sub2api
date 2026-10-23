@@ -1,0 +1,62 @@
+//go:build unit
+
+package service
+
+import (
+ "context"
+ "io"
+ "net/http"
+ "net/http/httptest"
+ "strings"
+ "testing"
+ "time"
+ "github.com/Wei-Shaw/sub2api/internal/config"
+ "github.com/gin-gonic/gin"
+ "github.com/stretchr/testify/require"
+)
+
+// These assertions describe the frozen baseline, NOT desired acceptance behavior.
+func TestIntake0218BaselineDefects(t *testing.T) {
+ t.Run("queued_metadata_commits_output",func(t *testing.T){
+  require.True(t,openAIStreamDataStartsClientOutput(`{"type":"response.queued"}`,"response.queued"))
+  require.True(t,openAIStreamDataStartsClientOutput(`{"type":"response.output_text.delta","delta":""}`,"response.output_text.delta"))
+ })
+ t.Run("synthesized_failure_lacks_created_at",func(t *testing.T){
+  require.NotContains(t,buildOpenAIResponseFailedSSE("r","grok-4.7",nil,"failed"),"created_at")
+ })
+ t.Run("cached_only_usage_negative",func(t *testing.T){
+  u:=extractGeminiUsage([]byte(`{"usageMetadata":{"cachedContentTokenCount":8}}`))
+  require.NotNil(t,u);require.Equal(t,-8,u.InputTokens)
+ })
+ t.Run("grok_fast_uses_standard_fallback",func(t *testing.T){
+  s:=newTestBillingService()
+  require.Equal(t,s.getFallbackPricing("grok-4.7"),s.getFallbackPricing("grok-4.7-fast"))
+ })
+ t.Run("tool_schema_unsupported_constant_retained",func(t *testing.T){
+  schema:=map[string]any{"type":"string","const":"fixed","examples":[]any{"fixed"}}
+  got:=cleanToolSchema(schema).(map[string]any)
+  require.Equal(t,"fixed",got["const"]); require.Contains(t,got,"examples")
+ })
+ t.Run("oauth_retired_model_still_supported",func(t *testing.T){
+  a:=&Account{Platform:PlatformOpenAI,Type:AccountTypeOAuth}
+  require.True(t,a.IsModelSupported("gpt-5.5"))
+ })
+ t.Run("foreign_oauth_request_can_target_anthropic",func(t *testing.T){
+  c,_:=gin.CreateTestContext(httptest.NewRecorder());c.Request=httptest.NewRequest("POST","/v1/messages",nil)
+  a:=&Account{Platform:PlatformOpenAI,Type:AccountTypeOAuth}
+  req,_,err:=(&GatewayService{cfg:&config.Config{}}).buildUpstreamRequest(context.Background(),c,a,[]byte(`{"model":"gpt-5.5","messages":[]}`),"synthetic-token","oauth","gpt-5.5",false,false)
+  require.NoError(t,err);require.Equal(t,"api.anthropic.com",req.URL.Host)
+ })
+ t.Run("anthropic_premature_eof_succeeds",func(t *testing.T){
+  c,_:=gin.CreateTestContext(httptest.NewRecorder());c.Request=httptest.NewRequest("POST","/v1/chat/completions",nil)
+  body:="event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"role\":\"assistant\",\"usage\":{\"input_tokens\":9}}}\n\n"
+  result,err:=(&GatewayService{}).handleCCStreamingFromAnthropic(&http.Response{Body:io.NopCloser(strings.NewReader(body)),Header:http.Header{}},c,"gpt-5","claude-sonnet-4.5",nil,time.Now())
+  require.NoError(t,err);require.NotNil(t,result)
+ })
+ t.Run("image_downloader_accepts_loopback_nonimage",func(t *testing.T){
+  server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){w.Header().Set("Content-Type","application/json");_,_=w.Write([]byte(`{"local":"fixture"}`))}));defer server.Close()
+  u:=NewImageResultUploader(nil,"",0,nil)
+  data,_,err:=u.download(context.Background(),server.URL)
+  require.NoError(t,err);require.Contains(t,string(data),"fixture")
+ })
+}

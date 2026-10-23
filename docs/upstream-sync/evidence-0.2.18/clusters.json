@@ -1,0 +1,197 @@
+[
+  {
+    "id": "F01",
+    "title": "Codex 工作区导入身份隔离",
+    "ids": [
+      "PR8088"
+    ],
+    "gap": "buildCodexStoredIdentityKeys 在有 account_id 时仍把 user_id 作为首选键；两个工作区同一用户生成相同 user:same-user，探针已复现。",
+    "behavior": "以 workspace/account 与 user 的组合区分完整 OAuth 身份；同一工作区重复导入更新原账号，不覆盖其它工作区。",
+    "boundary": "保留 accessToken-only 升级和 account 兜底；长度编码防拼接碰撞，不改变凭据存储格式。",
+    "sites": "backend/internal/handler/admin/account_codex_import.go:913，buildCodexStoredIdentityKeys/buildCodexAccountIndex；新增 codexCompositeIdentityKey 仅依赖现有 fmt。",
+    "accept": "两个工作区同一用户各自创建；再次导入只更新对应账号；只有 token、缺 user/account、共享 account 的成员身份分别覆盖。"
+  },
+  {
+    "id": "F02",
+    "title": "Codex 前导元数据不阻止重试",
+    "ids": [
+      "PR8139"
+    ],
+    "gap": "openAIStreamEventIsMetadata 不含 response.queued/response.metadata；探针确认 queued 被当成可见模型输出。",
+    "behavior": "排队和审查元数据保持首个语义输出之前的状态，后续容量错误仍可安全重试，首输出超时仍有效。",
+    "boundary": "真实文本、工具参数和未知事件仍按现有输出语义；保留本地 SSE 注释写出后的安全换号规则。",
+    "sites": "backend/internal/service/openai_gateway_passthrough.go:876，openAIStreamEventIsMetadata；消费者 openAIStreamDataStartsClientOutput 与 openai_ws_http_bridge.go 已存在。",
+    "accept": "HTTP SSE、透传和 WS-HTTP 桥在 queued/metadata 后遇到 overload 可重试；已有有效输出后不重试。"
+  },
+  {
+    "id": "F03",
+    "title": "Grok Fast 用量成本价卡",
+    "ids": [
+      "PR8170"
+    ],
+    "gap": "本地 grok-4.7-fast/build-fast 未有专属 fallback；探针确认 fast 与普通 4.7 费用参数相同。本地未知 Grok 实际兜底键为 grok-4.6，其当前价卡与普通 4.7 等价。",
+    "behavior": "既有 Grok 模型映射/透传请求按 Fast 独立价卡计算；短上下文 input/cache/output 每百万为 4/1/12，达到 200k 后为 6/1.5/18（来源补丁值）。",
+    "boundary": "不扩展模型目录、平台或购买功能；普通 Grok 与显式渠道价格覆盖不变；历史账本不回写。",
+    "sites": "backend/internal/service/billing_service.go 的 initFallbackPricing/getFallbackPricing，backend/resources/model-pricing/model_prices_and_context_window.json；本地已有 LongContextThresholdInclusive 与动态价卡解析。只摘 Fast 行，不带来源上下文中的 Argon。",
+    "accept": "fast/build-fast/provider 前缀、199999/200000 边界、缓存桶、动态资源与离线 fallback 一致；普通 4.7 不受影响。"
+  },
+  {
+    "id": "F04",
+    "title": "Cloudflare 1010 不处罚账号",
+    "ids": [
+      "PR8255"
+    ],
+    "gap": "handle403 全平台入口无 1010 判断；现有 OpenAI 只豁免无结构错误的 HTML，结构化 Cloudflare JSON 仍会增加处罚。",
+    "behavior": "识别明确的 Cloudflare 1010 或 browser_signature_banned，所有既有平台跳过账号处罚，保留请求错误和换号处理。",
+    "boundary": "普通供应商 403、任意数字 1010、与 Cloudflare 无关业务错误不能被豁免；不引入 OpenCode/Command Code。",
+    "sites": "backend/internal/service/ratelimit_service.go:944 handle403；本地 isCloudflareBotBlockResponse 缺失，补完整小 helper（旧 HTML 判断4行 + 本PR JSON递归辅助），无需旧平台消费者；保留 handleOpenAI403 的已有 HTML 防护。",
+    "accept": "五个已有平台的 HTML/JSON/嵌套 Cloudflare 样本不调用 SetError/限流计数；真实403继续原有策略。"
+  },
+  {
+    "id": "F05",
+    "title": "Gemini 缓存命中用量非负",
+    "ids": [
+      "PR8177"
+    ],
+    "gap": "extractGeminiUsage 和 Antigravity 两个响应转换器直接 prompt-cached；仅 cached=8 的探针返回 input_tokens=-8。",
+    "behavior": "仅缓存计数或缓存大于 prompt 时非缓存 input_tokens 下限为0，同时保留缓存、输出和图片用量。",
+    "boundary": "正常 prompt>=cached 的计数不变；不抹掉缓存命中，不引入显式缓存CRUD或存储计费。",
+    "sites": "backend/internal/service/gemini_messages_compat_service.go:2884 extractGeminiUsage；backend/internal/pkg/antigravity/{response_transformer.go,stream_transformer.go} 三处相减；max 是当前 Go 内建。",
+    "accept": "流式 message_start/更新与非流式在 prompt缺失、0、小于/等于/大于cached 时保持非负且桶语义一致。"
+  },
+  {
+    "id": "F06",
+    "title": "Gemini 工具 Schema 常量和数据边界",
+    "ids": [
+      "PR8188"
+    ],
+    "gap": "cleanToolSchema 保留不支持的 const/examples，并对任意嵌套 map 按Schema清理。探针确认 const/examples 仍出站。",
+    "behavior": "字符串const转为单值enum，与已有enum求交；移除不支持的非字符串const和注解，区分Schema节点、属性名和数据值。",
+    "boundary": "保留上一轮 integer exclusiveMinimum 修复；不得误删名为const/examples/$schema的合法属性，也不得改写default等数据内部值。",
+    "sites": "backend/internal/service/gemini_messages_compat_service.go:3570 cleanToolSchema；新增 cleanToolSchemaNode 递归辅助，不新增依赖；normalizeGeminiEnum/incrementIntegralSchemaBound 已存在。",
+    "accept": "字符串/数值const、enum交集、组合Schema、properties同名键、数据对象、exclusiveMinimum同时验收；原schema不被修改。"
+  },
+  {
+    "id": "S01",
+    "title": "混合分组 OAuth 凭据协议隔离",
+    "ids": [
+      "PR8106"
+    ],
+    "gap": "本地有 composite 归属解析，跨平台歧义仅返回未匹配；buildUpstreamRequest 缺凭据平台守卫。探针用合成 OpenAI OAuth 账号构造出了 api.anthropic.com 请求，未向外发送。",
+    "behavior": "混合归属含只能走 OpenAI 网关的 OAuth 且模型兜底会选该族时拒绝歧义；Anthropic 请求构造在发送前阻止外平台 OAuth；count_tokens 给出可回退的404。",
+    "boundary": "API Key 多协议兼容保留；Antigravity/Gemini 独立转发在守卫前分流；配置归属不随短暂冷却变化；不记录token、不新增平台。",
+    "sites": "composite_model_route.go/composite_route_resolver.go、gateway_service.go:1447 resolveCompositeModelOwnership、gateway_upstream_request.go、gateway_count_tokens.go、server/routes/gateway.go 与 handler/openai_gateway_handler.go。ListModelAvailabilityCandidates 已存在；domain.LookupPlatform/UsesOpenAIGateway/ConcretePlatformIDs 缺失，按本地五平台常量和实际路由表达，不导入平台catalog。",
+    "accept": "HTTP/WS歧义拒绝、明确路由、纯API Key歧义、冷却账号仍参与配置归属；对OpenAI/Grok OAuth构造请求时确认未发出HTTP，合法Anthropic/Vertex及独立Gemini路径保持工作。"
+  },
+  {
+    "id": "S02",
+    "title": "Responses 时间戳与失败终态",
+    "ids": [
+      "PR8140",
+      "f2e5b55f3"
+    ],
+    "gap": "本地合成 response.failed 不带 created_at，HTTP/WS共享响应也未补缺失字段；探针确认合成帧缺字段。",
+    "behavior": "非透传 Responses JSON/SSE/WS桥缺失或null的created_at补齐；同一流共享首次确定时间；合成失败带created_at和sequence_number。",
+    "boundary": "已有值不覆盖；透传原上游帧保持字节语义，仅观察时间用于本地合成帧；保留上游usage、工具恢复与终态约束。",
+    "sites": "来源主改 openai_gateway_response_handling.go，但本地 buildOpenAIResponseFailedSSE 已移至 openai_bare_error_stream.go:63；同时适配 openai_gateway_passthrough.go/openai_ws_http_bridge.go。新增94行 stamper文件只用time/strings/gjson/sjson；本地局部 bareError state与来源不同，禁止整文件覆盖。直接测试提交仅随本簇对齐旧fixture。",
+    "accept": "缺失/null/已有时间、created与completed/failed一致、裸error替换序号、JSON和SSE转JSON、Grok桥/WS、透传未修改事件；严格JSON字段断言。"
+  },
+  {
+    "id": "S03",
+    "title": "Codex 已退役订阅模型调度一致性",
+    "ids": [
+      "PR8121"
+    ],
+    "gap": "本地 OAuth IsModelSupported(gpt-5.5) 仍返回true，默认模型/compact fallback仍有5.5；上游按ChatGPT订阅退役规则修正。",
+    "behavior": "在实际映射目标上判定订阅账号退役模型；普通/粘性/compact调度和客户端目录一致过滤；不支持时返回model_not_found及迁移提示。",
+    "boundary": "API Key上游仍可用；显式映射到可用替代模型允许，映射到退役模型拒绝；空目录有权威性；不全局替换用户模型、不删除历史价格、不引入pinned目录。",
+    "sites": "account.go:IsModelSupported、openai_account_scheduler.go、openai_gateway_scheduling.go、openai_compact_fallback.go、openai_ws_forwarder_support.go、gateway/openai_gateway_model_availability.go、handler/gateway_handler.go/no_account_error.go 与现有 openai_codex_models_service.go。来源 openai_models_list.go 本地整文件缺失，但 modelCatalogEntries 只有17行标准库JSON解析；只随消费者补等价解析，remote/file目录按本地既有别名投影链过滤后重算ETag。",
+    "accept": "OAuth/SetupToken/shadow/API Key混合、显式别名双向映射、compact专用映射、冷却与previous_response_id、remote/file与空列表；用本地桩验证，不声称验证真实账号模型权限。"
+  },
+  {
+    "id": "S04",
+    "title": "Codex 容量错误恢复与出站身份",
+    "ids": [
+      "PR8305"
+    ],
+    "gap": "默认身份仍为codex-tui；空字符串delta/done被当成输出；请求级重试不读取上游Retry-After，且缺 SameAccountRetryDelay 字段。",
+    "behavior": "TUI出站UA与originator成对归一为CLI并保留生效版本/系统指纹；空语义片段不阻止安全换号；容量错误尊重有效上游重试提示且最多8秒。",
+    "boundary": "已有真实输出不能重试；非容量错误不改变；合法非TUI身份和管理员版本策略保留；重试可取消，不引入Grok新配额/Realtime/截止时间机制。",
+    "sites": "pkg/openai/request.go、service/openai_codex_identity.go、openai_gateway_passthrough.go/openai_gateway_upstream_errors.go 与现有设置文案。#5925完整PR（4033387fd，内部953028718）仅需一个time.Duration字段和handler/failover_loop.go约6行读取逻辑，不取SameAccountRetryDeadline或Grok其余改动；来源调用点与本地都存在。",
+    "accept": "UA/originator/version配套，HTTP/WS与探测头一致；空/非空delta及done、秒/ms/HTTP-date提示、非法/负数/NaN/超大数防溢出、8秒上限和取消；保留已实施指数退避。"
+  },
+  {
+    "id": "S05",
+    "title": "Anthropic 兼容流中断结算与终态",
+    "ids": [
+      "PR8210"
+    ],
+    "gap": "两条既有Anthropic→Chat/Responses转换在写失败时提前返回，读错误或缺message_stop仍可能成功；探针复现仅message_start后EOF返回nil错误；handler错误分支丢弃部分usage。",
+    "behavior": "客户端断开后停止下游写入、有界读完上游并收集usage；上游异常终止返回对应协议错误而非成功；有已观测用量的失败也记录一次，输出前可重试错误不重复结算。",
+    "boundary": "保留本地128c5f7bf固定窗口、删除Key结算、dedup与simple mode；ping/注释写出和真实语义输出分开；不能因排水无限占用连接或goroutine。",
+    "sites": "gateway_forward_as_chat_completions.go:357、gateway_forward_as_responses.go:509、gateway_forward.go 和两个handler。新增 gateway_forward_compat_stream.go 291行；本地没有来源 native line pump，需以v0.2.18终态补162行纯流读取helper（包含config、定时器/取消），不引入两条缺失CN native消费者。opsUpstreamProxyID/Name、RequestedReasoningEffortFromContext等来源辅助缺失，使用本地既有Proxy归属和usage字段，不为复制测试拉大功能。",
+    "accept": "写失败后最终usage、客户端等待期间断开、缺stop/读错/超时/带内error、错误前后可见输出、流终态唯一、连接关闭与无goroutine泄漏；真实SQLite验证失败部分结算/删除Key/dedup。"
+  },
+  {
+    "id": "S06",
+    "title": "既有 Antigravity 协议与别名修复",
+    "ids": [
+      "PR8093"
+    ],
+    "gap": "tool_result媒体只变文本；原生Gemini缓冲聚合只累加图片/文字，丢functionCall和签名；composite→Antigravity的/v1beta被平台守卫拒绝；5.5档位别名会走泛家族价；已有裸名自映射阻止精确档位选择。",
+    "behavior": "仅修已有模型和路径：保留工具base64图片/文档、Gemini函数调用及签名；放行已解析到Antigravity的Gemini路由；已有Claude5.5档位别名用基准价格；明确的不同目标映射优先，自映射可选精确已有档位；账号测试按映射目标选协议并剔除通配符候选；兼容已有上游套餐细分ID。",
+    "boundary": "不增加Argon/Claude新档位目录，不引入元数据目录扩展、UA hub升级或生图测试新展示；工具媒体不远程下载；套餐ID只用于既有上游端点选择，不是支付功能。",
+    "sites": "pkg/antigravity/request_transformer.go:buildParts；antigravity_gateway_gemini.go 的 ensureGeminiFunctionCallThoughtSignatures 已存在可复用；antigravity_gateway_streaming.go:mergeCollectedPartsToResponse；handler/gemini_v1beta_handler.go；pricing_service.go/billing_service.go；antigravity_gemini_thinking_variant.go；account_handler.go:antigravityAccountTestModels、antigravity_gateway_service.go:TestConnection；pkg/antigravity/client.go:TierIDToPlanType 和 gateway_retry.go:accountHasAntigravityPaidTier。测试请求只修按mappedModel判定，保留旧TestConnection接口；不复制40文件整PR。",
+    "accept": "工具媒体顺序、文本兼容、functionCall/thoughtSignature回放、composite入口非Gemini仍拒绝、5.5别名动态/fallback价格、已有Gemini自映射/不同目标/通配符、映射测试协议、Pro/Ultra细分ID与未知档位。"
+  },
+  {
+    "id": "S07",
+    "title": "Gemini 错误策略单次裁决与 Vertex 认证",
+    "ids": [
+      "PR8060",
+      "PR8076"
+    ],
+    "gap": "本地checkErrorPolicyInLoop与循环外分别CheckErrorPolicy，同一401可被处理两次；Vertex共享容量429进入账号冷却；SA token account-not-found只返回普通构造错误。",
+    "behavior": "同一上游响应只裁决一次错误策略；Vertex无quota/error明细的共享容量429只做请求内重试；确切SA不存在时标记认证失效并换号。",
+    "boundary": "真实项目配额/RetryInfo/QuotaFailure保留冷却；非account-not-found token错误不永久停号；只使用现有Vertex service_account，不引入Vertex API Key或缓存绑定。",
+    "sites": "gemini_messages_compat_service.go 的 Forward/ForwardNative/checkErrorPolicyInLoop、gemini_chat_completions_compat_service.go、vertex_service_account.go。新增约24行429判定和typed token error，使用本地logger/Proxy归属；来源opsUpstreamProxyAttribution缺失，不复制隐含ops重构。",
+    "accept": "三条既有Gemini入口各自验证首次/再次401；响应重试之间策略不串用；共享容量与QuotaFailure/RetryInfo/项目额度反例；SA不存在、瞬态token错误、取消与换号耗尽。"
+  },
+  {
+    "id": "S08",
+    "title": "Gemini 客户端断开保留已观测用量",
+    "ids": [
+      "PR8168"
+    ],
+    "gap": "messages/chat/native在读取消后返回nil结果，chat成功结果还硬写ClientDisconnect=false，已有token/图片用量会丢失。",
+    "behavior": "确认由客户端断开且已观测到可计费用量时返回部分结果并结算；记录ClientDisconnect与是否收到finishReason；图片只按已观测结果处理。",
+    "boundary": "不估算未收到的token，不把真实上游错误或无用量中断伪造成功；残行读错误不算完整帧；不引入#8114新思考输出。",
+    "sites": "gemini_messages_compat_service.go 的 handleStreamingResponse/handleNativeStreamingResponse，gemini_chat_completions_compat_service.go；新helper gemini_stream_client_abort.go 25行，hasObservedTokens/observedGeminiImageOutputs本地已有。与本地图片计数修复合并，不覆盖整文件。",
+    "accept": "三协议的客户端取消/写失败、已完成后取消、无usage、图片已输出/未输出、截断残行和真正上游错误；usage队列在取消context下仍提交且SQLite去重。"
+  },
+  {
+    "id": "S09",
+    "title": "现有图片转存下载边界",
+    "ids": [
+      "PR8223"
+    ],
+    "gap": "现有ImageResultUploader用普通http.Client，接受内网URL和非图片内容；仅本机httptest探针复现从loopback下载JSON成功，未访问任何真实内网服务。",
+    "behavior": "默认下载客户端逐跳拒绝非公网目的地；直连在socket层校验实际IP；非图片响应失败，不转存为图片。",
+    "boundary": "仅加固现有转存，不开启批量生图；正常公网图/b64/大小限制保留。代理模式只能验证本地DNS，无法证明远端代理解析结果，与来源限制一致。",
+    "sites": "backend/internal/service/image_storage.go:defaultImageDownloadHTTPClient/download；urlvalidator.IsBlockedHost、isBlockedHostname/isPrivateIP/isPrivateOrLoopbackHost与detectedImageContentType均存在。新增transport共约115行，安全边界与redirect需专测，所以即使2文件CLEAN也列第二档。",
+    "accept": "直接/重定向/IPv4/IPv6/zone/private DNS/代理分支；JSON与HTML拒绝、合法图片成功、响应体关闭和大小限制；测试使用注入transport，不依赖外网。"
+  },
+  {
+    "id": "S10",
+    "title": "工具链与重定向依赖维护",
+    "ids": [
+      "PR8267",
+      "PR8275"
+    ],
+    "gap": "当前Go1.27.0；govulncheck package扫描命中标准库修复版本1.27.2/1.27.3。pnpm audit命中follow-redirects1.16.0两条high，要求>=1.16.1；DOMPurify3.4.17已在本地。",
+    "behavior": "Go升级目标1.27.3并同步go.mod/CI/Docker版本断言；只升级follow-redirects到修复版本，双份pnpm overrides保持一致并提交锁文件。",
+    "boundary": "不复制上游PG Docker阶段、支付依赖或完整lockfile；不把audit变绿作为无条件目标，不延长旧例外；其它现存advisory单列风险。",
+    "sites": "backend/go.mod、.github/workflows/{backend-ci,release,security-scan}.yml、Dockerfile；frontend/{package.json,pnpm-workspace.yaml,pnpm-lock.yaml}。本地基线Go1.27.0与上游补丁1.27.2上下文不同，必须成组更新；pnpm11从workspace读取overrides。",
+    "accept": "核验所有Go版本字串、后端build/unit/SQLite，前端typecheck/lint/build/关键vitest；重新跑audit及govulncheck，目标advisory消失且无无关依赖漂移。"
+  }
+]

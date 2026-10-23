@@ -2,9 +2,20 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-最新通用教训（[0.2.16 §9](./PORTING-0.2.16.md#9-新增通用教训)）：同名功能先核对本地替代调用链；大PR独立修复只补最小基座；缺平台的消费者不当现存缺陷；SSE心跳写出响应需验证失败语义；过期fixture的overlay诊断不等于源码已修；依赖audit重跑并处理pnpm11覆盖位置，例外不自动延期。
+最新通用教训（[0.2.18 §9](./PORTING-0.2.18.md#9-新增通用教训)）：共享map先追生产所有权；混合PR按已有消费者拆分；fork可能已移动helper；小前置随消费者摘取但缺消费者仍不适用；断流验收同时看终态、用量和资源释放；当前audit与package级命中不能冒充修复或利用证明。
 
-最新轮次检查清单：
+最新轮次检查清单（v0.2.18，2026-10-23）：
+
+- [x] 冻结v0.2.16→v0.2.18与fork `873962ce7`：56非merge、35PR、8直接提交；312文件全体先反向后正向，A4/C170/X117/N21。
+- [x] 43候选全量分档、关键调用/缺前置量测、旧遗留重述和integration build tag核查。
+- [x] 第一档6簇/第二档10簇OpenSpec提案，覆盖18PR及1直接测试提交；用户明确新能力暂缓，支付排除。
+- [x] Go测试目录、定向协议/网关/认证/SQLite、前端11项和overlay缺陷探针完成；当前pnpm audit及Go package漏洞扫描单独记录。
+- [ ] 实施第一档与第二档，并填写各自verification；当前只完成评估。
+- [ ] 完成实现后的unit/build/race/SQLite及适用前端与依赖验收；未发布/部署。
+
+上一轮通用教训（[0.2.16 §9](./PORTING-0.2.16.md#9-新增通用教训)）：同名功能先核对本地替代调用链；大PR独立修复只补最小基座；缺平台的消费者不当现存缺陷；SSE心跳写出响应需验证失败语义；过期fixture的overlay诊断不等于源码已修；依赖audit重跑并处理pnpm11覆盖位置，例外不自动延期。
+
+v0.2.16历史检查清单：
 
 - [x] 冻结v0.2.12→v0.2.16与fork `128c5f7bf`：149非merge、89PR、4直接提交，575文件先反向后正向四态检查。
 - [x] 全部候选分档、最小基座、旧待办与测试首行核对；SQLite/安装/元数据探针和当前依赖audit完成。
@@ -17,6 +28,8 @@
 上一轮通用教训（[0.2.11 §9](./PORTING-0.2.11.md#9-新增通用结论)）：同区间可能撤换设计，按目标tag终态排名；CLEAN流处理补丁也可能提前提交HTTP响应；先核实simple模式是否实际启用；模型/套餐元数据与Ultrafast能力按行为拆；旧第四档只有可独立复用子集时，量出基座并明确记录提升范围。
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
+
+- [PORTING-0.2.18.md](./PORTING-0.2.18.md) —— **最新评估，未实施**。v0.2.17–v0.2.18，56非merge / 35PR / 8直接提交；第一档6簇、第二档10簇。优先现有Claude Code/Codex/Grok缺陷，包含混合OAuth凭据隔离、Responses时间戳、Codex工作区/模型退役/容量恢复、Grok Fast成本、Anthropic/Gemini断流结算、现有图片转存和Go/follow-redirects安全维护。[第一档提案](../../openspec/changes/port-upstream-0.2.18-tier1/README.md) / [第二档提案](../../openspec/changes/port-upstream-0.2.18-tier2/README.md)。用户暂缓新增能力；最大迁移226，VERSION1.1.18及源码/锁文件未改；历史未合项见§5。
 
 - [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **第一档14簇已实现；2026-10-18 第二档16簇已提交并合入 main**。第一档在 `7c544c03f` 完成（实施起点 `0fbcab935`），承接40个本轮PR的选定行为，见[验收](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。第一档实施时 VERSION/迁移/依赖未变。第二档提交为 `847db09e1` + `5ff6e5bf9`，实施验收使用 VERSION 1.1.17/迁移226；发布 VERSION 为 1.1.18，不引入新能力与支付，未部署业务实例。第二档 S16 已定向修复 DOMPurify/axios/Vue/source-map-js，审计103→70，生产high剩xlsx两条；[剩余项](./implementation-0.2.16-tier2/dependency-review.md)和旧待办见PORTING §5。
 

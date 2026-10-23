@@ -1,0 +1,13 @@
+package admin
+
+import (
+ "testing"
+ "github.com/stretchr/testify/require"
+)
+
+func TestIntake0218WorkspaceIdentityCollision(t *testing.T) {
+ a:=buildCodexStoredIdentityKeys("workspace-a","same-user","","token-a")
+ b:=buildCodexStoredIdentityKeys("workspace-b","same-user","","token-b")
+ require.Equal(t,a[0],b[0])
+ require.Equal(t,"user:same-user",a[0])
+}
