@@ -1,6 +1,6 @@
 # v0.2.18 第二档实施证据
 
-实施起点HEAD `4984327590ed29eb4d842bfae8aa3406ef497008`；含同一会话已完成的第一档工作树。以[第二档验收](../../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)为当前状态；评估期`evidence-0.2.18`及两批source-baseline保持冻结。
+实施起点HEAD `4984327590ed29eb4d842bfae8aa3406ef497008`；含同一会话已完成的第一档工作树。以[第二档验收](../../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/verification.md)为当前状态；评估期`evidence-0.2.18`及两批source-baseline保持冻结。
 
 每次runner执行保留`<name>.txt`原始输出与同名JSON（参数、cwd、开始时间、耗时、真实退出码）。JSON不存在代表尚未完成，历史非零退出码不会被删改成通过。最终接受门禁另汇总在`checks.json`。
 

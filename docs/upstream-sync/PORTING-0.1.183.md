@@ -104,7 +104,7 @@ awk '/^diff --git /{n++; f=sprintf("%s/%03d.patch", out, n)} n{print > f}' \
 按建议顺序排列（先小后大、先无冲突后需手改）。
 
 本节 12 项已固化为 OpenSpec change
-[`openspec/changes/port-upstream-0.1.183-p0-fixes/`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)：
+[`openspec/changes/port-upstream-0.1.183-p0-fixes/`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.183-p0-fixes)：
 `specs/*/spec.md` 是移植后必须成立的行为（17 条 Requirement / 50 个 Scenario），
 `tasks.md` 是按文件的实施清单，`verification.md` 是验收证据矩阵。**逐条的 patch site 和上游 diff
 说明只在本文，不要在那边重复。** 合完一项后把下面对应条目的状态改成「已合」。
@@ -317,7 +317,7 @@ SQLite 重写**（`CREATE TEMP TABLE` + `ROW_NUMBER() OVER (PARTITION BY ...)` +
 
 ### 4.2 `4795650d` 错误日志把入站端点误报成上游端点（未发布）
 
-8 文件 +46-0，3 个产品文件冲突。状态：**已合**（2026-08-27），见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)
+8 文件 +46-0，3 个产品文件冲突。状态：**已合**（2026-08-27），见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)
 
 `force_chat_completions` 生效时，请求实际发往 `/v1/chat/completions`，但 503 / 传输失败
 这类**没有 `OpenAIForwardResult`** 的路径上，`handler.GetUpstreamEndpoint` 回落到入站端点，

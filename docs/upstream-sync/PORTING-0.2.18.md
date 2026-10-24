@@ -1,6 +1,6 @@
 # 上游 v0.2.18 移植评估（v0.2.16 → v0.2.18）
 
-> 当前实施状态（2026-10-24）：第一档6簇与第二档10簇已实现；见[第一档验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)、[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)及§10–§11的实施记录。两档实现已提交`2b79ac320`，v1.1.19发布准备见§12；以下§1–§9保留评估时快照。
+> 当前实施状态（2026-10-24）：第一档6簇与第二档10簇已实现；见[第一档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/verification.md)、[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/verification.md)及§10–§11的实施记录。两档实现已提交`2b79ac320`，v1.1.19发布准备见§12；以下§1–§9保留评估时快照。
 
 评估日期：2026-10-23。**仅评估，未实施：第一档6簇、第二档10簇，共覆盖18个PR及1个直接测试提交的选定行为。** 用户本轮明确选择“现有功能修复优先，新增能力暂缓”。支付始终第四档，不作为可选功能携带。
 
@@ -55,7 +55,7 @@ A/C/X/N表示整来源候选文件状态，包括不取的hunk与测试，重复
 | F05 Gemini 缓存命中用量非负 | [#8177](https://github.com/Wei-Shaw/sub2api/pull/8177) | 0/4/0/2 | extractGeminiUsage 和 Antigravity 两个响应转换器直接 prompt-cached；仅 cached=8 的探针返回 input_tokens=-8。 |
 | F06 Gemini 工具 Schema 常量和数据边界 | [#8188](https://github.com/Wei-Shaw/sub2api/pull/8188) | 0/2/0/0 | cleanToolSchema 保留不支持的 const/examples，并对任意嵌套 map 按Schema清理。探针确认 const/examples 仍出站。 |
 
-[第一档OpenSpec](../../openspec/changes/port-upstream-0.2.18-tier1/README.md)。
+[第一档OpenSpec](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/README.md)。
 
 ### F01 patch sites / 基座
 
@@ -132,7 +132,7 @@ backend/internal/service/gemini_messages_compat_service.go:3570 cleanToolSchema�
 | S09 现有图片转存下载边界 | [#8223](https://github.com/Wei-Shaw/sub2api/pull/8223) | 0/2/0/0 | 现有ImageResultUploader用普通http.Client，接受内网URL和非图片内容；仅本机httptest探针复现从loopback下载JSON成功，未访问任何真实内网服务。 |
 | S10 工具链与重定向依赖维护 | [#8267](https://github.com/Wei-Shaw/sub2api/pull/8267)、[#8275](https://github.com/Wei-Shaw/sub2api/pull/8275) | 0/0/7/0 | 当前Go1.27.0；govulncheck package扫描命中标准库修复版本1.27.2/1.27.3。pnpm audit命中follow-redirects1.16.0两条high，要求>=1.16.1；DOMPurify3.4.17已在本地。 |
 
-[第二档OpenSpec](../../openspec/changes/port-upstream-0.2.18-tier2/README.md)。
+[第二档OpenSpec](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/README.md)。
 
 ### S01 patch sites / 基座
 
@@ -341,7 +341,7 @@ backend/go.mod、.github/workflows/{backend-ci,release,security-scan}.yml、Dock
 
 ## 10. 第一档实施补记（2026-10-23）
 
-以上§1–§9为冻结的评估记录。用户随后授权实施第一档；从`498432759`干净工作树手工移植F01–F06，实际状态及门禁见[第一档验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)和[实施证据](./implementation-0.2.18-tier1/)。第二档未实施；新增能力、支付和其它第三/四档不扩围。VERSION 1.1.18、迁移226、依赖保持不变。
+以上§1–§9为冻结的评估记录。用户随后授权实施第一档；从`498432759`干净工作树手工移植F01–F06，实际状态及门禁见[第一档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/verification.md)和[实施证据](./implementation-0.2.18-tier1/)。第二档未实施；新增能力、支付和其它第三/四档不扩围。VERSION 1.1.18、迁移226、依赖保持不变。
 
 实施量测补充的patch sites：
 
@@ -353,7 +353,7 @@ backend/go.mod、.github/workflows/{backend-ci,release,security-scan}.yml、Dock
 
 ## 11. 第二档实施补记（2026-10-24）
 
-用户随后授权第二档实施，并指定三个agent协作；S01–S10已实现并完成定向验收，最终组合结果以[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)和[实施证据](./implementation-0.2.18-tier2/)为准。实施起点HEAD仍为`498432759`，叠加本会话第一档未提交实现；[start.json](./implementation-0.2.18-tier2/start.json)冻结其52个既有文件。没有使用git merge上游，没有扩大第三/四档，历史§1–§9及两份source-baseline保持冻结。
+用户随后授权第二档实施，并指定三个agent协作；S01–S10已实现并完成定向验收，最终组合结果以[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/verification.md)和[实施证据](./implementation-0.2.18-tier2/)为准。实施起点HEAD仍为`498432759`，叠加本会话第一档未提交实现；[start.json](./implementation-0.2.18-tier2/start.json)冻结其52个既有文件。没有使用git merge上游，没有扩大第三/四档，历史§1–§9及两份source-baseline保持冻结。
 
 本地量测补充的patch sites（来源站点仍见§4）：
 

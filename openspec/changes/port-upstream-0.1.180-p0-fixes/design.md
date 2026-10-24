@@ -185,3 +185,7 @@ Composite 端点、日志量。（原先还有一个 `frontend-dependency-securi
 
 - 阶段 4（Ollama Cloud）：两条必须一起 revert（决策 5），否则留下引用不存在函数的代码。
 - 无数据副作用、无 schema、无配置迁移、无依赖版本变更，因此不需要回滚脚本。
+
+## 规格上下文：admin-console-usability
+
+本 capability 覆盖四项管理台修复。共同失效模式：**功能在后端可用，但管理台不让你用对**。

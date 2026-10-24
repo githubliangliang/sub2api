@@ -3,7 +3,7 @@
 评估及实施日期：2026-09-30。**第一档4个PR/4簇、第二档7个PR/6簇开发及验收完成。**
 改动位于 `sync/upstream-0.2.11` 分支，起点为 `f13dee245`。包括旧v0.2.9 F04两桥thinking禁用契约及695ebede7的14行通用usage字段前置。第三档6个PR、Astra Ultrafast及第四档仍未引入。
 
-[第一档验收](../../openspec/changes/port-upstream-0.2.11-tier1/verification.md)、[第二档验收](../../openspec/changes/port-upstream-0.2.11-tier2/verification.md)记录逐场景证据：后端全量unit/build、定向race、SQLite方言/真实用量去重通过；前端1836项通过、2项既有跳过，typecheck/lint/build通过。VERSION仍1.1.14，最大迁移226，无依赖变更，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
+[第一档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier1/verification.md)、[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier2/verification.md)记录逐场景证据：后端全量unit/build、定向race、SQLite方言/真实用量去重通过；前端1836项通过、2项既有跳过，typecheck/lint/build通过。VERSION仍1.1.14，最大迁移226，无依赖变更，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
 
 下文来源统计、文件态及patch sites保留评估基线；source-baseline和evidence-0.2.11冻结快照没有改写。
 
@@ -74,7 +74,7 @@ A/C/X/N分别为ALREADY/CLEAN/CONFLICT/NOBASE，包含来源中应剔除的邻�
 `frontend/src/components/keys/UseKeyModal.vue` 的Props/defaultClientTab/clientTabs/watch，`frontend/src/views/user/KeysView.vue`传值。
 本地group类型已有claude_code_only。只改变客户端指引；F03授权路径独立验收，不能让前端标签代替服务端限制。
 
-规格：[port-upstream-0.2.11-tier1](../../openspec/changes/port-upstream-0.2.11-tier1/README.md)。
+规格：[port-upstream-0.2.11-tier1](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier1/README.md)。
 
 ## 4. 第二档：值得移植，需适配与多路径验证
 
@@ -133,7 +133,7 @@ WS首帧用responses/any路由，只允许既有OpenAI/Grok目标；原始公开
 本地manifest API、normalizeCodexBaseUrl、请求取消/ID隔离与TOML转义已在位。新增buildCodexModelCatalogUrl和responseBytes随消费者落地；终态将OpenAI HTTP/WS目录重新纳入远程/文件选择。
 **#7680是被后续改写的中间态，不单列第一档“隐藏目录”。** 远程模式provider下写model_catalog_url；旧客户端文件模式只写model_catalog_json。URL无Key；认证沿用配置；UTF-8原始响应超过1MiB后提示并切文件，不能截断目录。保留旧S08已验证的/v1、子路径、Windows `~/`和CC Switch差异。缺失平台模板不恢复。
 
-规格：[port-upstream-0.2.11-tier2](../../openspec/changes/port-upstream-0.2.11-tier2/README.md)。
+规格：[port-upstream-0.2.11-tier2](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier2/README.md)。
 
 ## 5. 按需项目与历史遗留
 
@@ -209,4 +209,4 @@ S04/S05要求race与真实HTTP/WS取消/续聊；S01/S02要求默认/显式模�
 - race发现两条既有Responses测试在并行阶段写Gin全局模式，调整测试初始化顺序后通过。初始失败与最终通过日志分别保留，未把测试装配错误算作产品修复。
 - Codex目录按#7736最终remote/file设计完成，并补齐UTF-8阈值、旧Windows路径和中文/英文说明。
 
-本地Docker更新后，已追加按用户要求执行远端部署脚本；远端用户级systemd服务与外网健康检查通过，运行二进制哈希已核对，配置未变。详见[远端部署证据](../../openspec/changes/port-upstream-0.2.11-tier2/evidence/remote-deployment.txt)。
+本地Docker更新后，已追加按用户要求执行远端部署脚本；远端用户级systemd服务与外网健康检查通过，运行二进制哈希已核对，配置未变。详见[远端部署证据](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier2/evidence/remote-deployment.txt)。

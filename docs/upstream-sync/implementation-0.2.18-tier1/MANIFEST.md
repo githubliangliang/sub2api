@@ -1,6 +1,6 @@
 # v0.2.18 第一档实施证据
 
-2026-10-23；从`4984327590ed29eb4d842bfae8aa3406ef497008`干净工作树实施，当前未提交。最终状态见[验收报告](../../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)。
+2026-10-23；从`4984327590ed29eb4d842bfae8aa3406ef497008`干净工作树实施，当前未提交。最终状态见[验收报告](../../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/verification.md)。
 
 - [start.json](./start.json)记录起点、VERSION与冻结source-baseline哈希；[code-sha256.json](./code-sha256.json)固定17个后端源码/测试文件。
 - [checks.json](./checks.json)记录最终unit/build/race/SQLite与Fast来源格式检查的命令及实际退出码；[environment.txt](./environment.txt)记录实际Go工具链。

@@ -1,6 +1,6 @@
 # 上游 v0.2.16 移植评估（v0.2.12 → v0.2.16）
 
-> 当前实施进展（2026-10-18）：第一档14簇已在 `7c544c03f` 完成（实施起点 `0fbcab935`），验收见[第一档 verification](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)。第二档16簇已提交为 `847db09e1`（功能修复）与 `5ff6e5bf9`（依赖维护），并快进合入 main，验收见[第二档 verification](../../openspec/changes/port-upstream-0.2.16-tier2/verification.md)。实施验收使用 VERSION 1.1.17，当前 VERSION 1.1.18 用于用户要求的发布；未部署业务实例。下文为2026-10-13评估快照，来源SHA/四态/基线证据保持冻结。
+> 当前实施进展（2026-10-18）：第一档14簇已在 `7c544c03f` 完成（实施起点 `0fbcab935`），验收见[第一档 verification](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier1/verification.md)。第二档16簇已提交为 `847db09e1`（功能修复）与 `5ff6e5bf9`（依赖维护），并快进合入 main，验收见[第二档 verification](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier2/verification.md)。实施验收使用 VERSION 1.1.17，当前 VERSION 1.1.18 用于用户要求的发布；未部署业务实例。下文为2026-10-13评估快照，来源SHA/四态/基线证据保持冻结。
 
 评估日期：2026-10-13。**仅评估，尚未实施：第一档14簇、第二档16簇，覆盖69个本轮PR的选定行为。**
 用户已选择“暂不增加，优先现有功能修复”。新增平台、Haiku 5.5、Gemini缓存管理/Vertex新认证、模型级冷却配置、分组多语言、TPS和紧凑筛选暂不加入。支付功能始终第四档。
@@ -183,7 +183,7 @@ backend/internal/web/embed_on.go 的 shouldBypassEmbeddedFrontend；backend/inte
 
 边界：正常 SPA 深链接和静态资源保持；不注册上游缺失的视频/语音/Realtime API。
 
-规格：[第一档](../../openspec/changes/port-upstream-0.2.16-tier1/README.md)。
+规格：[第一档](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier1/README.md)。
 
 ## 4. 第二档：适配、状态隔离与维护
 
@@ -334,7 +334,7 @@ frontend/package.json、frontend/pnpm-workspace.yaml、frontend/pnpm-lock.yaml �
 
 边界：不宣称103条全部已解决；xlsx无npm修复路径及Vite/Vitest/tinypool工具链大版本另列旧维护范围。例外只能按实际不可利用条件和负责人复核，不自动续期、不扩大支付功能。
 
-规格：[第二档](../../openspec/changes/port-upstream-0.2.16-tier2/README.md)。
+规格：[第二档](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier2/README.md)。
 
 ## 5. 按需、不做与历史遗留
 

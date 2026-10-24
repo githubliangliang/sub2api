@@ -14,5 +14,5 @@ Composite 视频端点、日志量控制与五项管理台可用性。不引入�
 逐条的 patch site 与上游 diff 说明在 [`docs/upstream-sync/PORTING-0.1.180.md`](../../../docs/upstream-sync/PORTING-0.1.180.md) §5。
 **本 change 复核时发现该文档漏了两处会导致编译失败或线上 401 的细节**，见 `source-baseline.md` §4。
 
-与 [`port-upstream-0.1.183-p0-fixes`](../port-upstream-0.1.183-p0-fixes/) 的关系：两份 P0
+与 [`port-upstream-0.1.183-p0-fixes`](../archive/2026-10-24-port-upstream-0.1.183-p0-fixes) 的关系：两份 P0
 **无文件冲突，可并行**；唯一要协调的是 0.1.180 §6.3 的调度诊断项（不在本 change 内）。

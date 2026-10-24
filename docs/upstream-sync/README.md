@@ -2,6 +2,8 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
+OpenSpec 整理（2026-10-24）：15 个已完成变更已归档，25 个主规格汇总 183 个非支付需求；6 个含未完成任务的变更保留在活动目录。见[归档清单与保留原因](../../openspec/changes/archive/README.md)。冻结来源和原始证据保持原文。
+
 最新实施教训：流服务返回部分结果后，还必须验证真实handler的队列溢出策略、请求字段快照与SQLite账本；目标Go补丁升级也可能改变导出格式，必要依赖前置须测最小版本并重扫安全记录。
 
 最新评估通用教训（[0.2.18 §9](./PORTING-0.2.18.md#9-新增通用教训)）：共享map先追生产所有权；混合PR按已有消费者拆分；fork可能已移动helper；小前置随消费者摘取但缺消费者仍不适用；断流验收同时看终态、用量和资源释放；当前audit与package级命中不能冒充修复或利用证明。
@@ -12,9 +14,9 @@
 - [x] 43候选全量分档、关键调用/缺前置量测、旧遗留重述和integration build tag核查。
 - [x] 第一档6簇/第二档10簇OpenSpec提案，覆盖18PR及1直接测试提交；用户明确新能力暂缓，支付排除。
 - [x] Go测试目录、定向协议/网关/认证/SQLite、前端11项和overlay缺陷探针完成；当前pnpm audit及Go package漏洞扫描单独记录。
-- [x] 第一档6簇已实现并填写[验收](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)，实施起点`498432759`，两档实现已共同提交为`2b79ac320`。
+- [x] 第一档6簇已实现并填写[验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/verification.md)，实施起点`498432759`，两档实现已共同提交为`2b79ac320`。
 - [x] 第一档全量unit/build、定向race、真实SQLite结算/dedup/固定窗口通过；前端/依赖未改，无对应pnpm/audit门禁；未发布/部署。
-- [x] 第二档S01–S10实现，三agent协作；[第二档验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)记录最终组合门禁及缺陷/夹具失败；第三/四档保持暂缓/排除。
+- [x] 第二档S01–S10实现，三agent协作；[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/verification.md)记录最终组合门禁及缺陷/夹具失败；第三/四档保持暂缓/排除。
 
 上一轮通用教训（[0.2.16 §9](./PORTING-0.2.16.md#9-新增通用教训)）：同名功能先核对本地替代调用链；大PR独立修复只补最小基座；缺平台的消费者不当现存缺陷；SSE心跳写出响应需验证失败语义；过期fixture的overlay诊断不等于源码已修；依赖audit重跑并处理pnpm11覆盖位置，例外不自动延期。
 
@@ -24,7 +26,7 @@ v0.2.16历史检查清单：
 - [x] 全部候选分档、最小基座、旧待办与测试首行核对；SQLite/安装/元数据探针和当前依赖audit完成。
 - [x] 第一档14簇/第二档16簇OpenSpec计划，覆盖69个本轮PR选定行为；用户明确暂不增加新功能。
 - [x] 记录基线通过与失败：定向后端/SQLite、前端242项/typecheck通过；embed两处旧logo用例失败、audit103条记录仍待修。
-- [x] 第一档14簇在 `7c544c03f` 完成；第二档16簇已在 `847db09e1` + `5ff6e5bf9` 提交并快进合入 main，见[第二档报告](../../openspec/changes/port-upstream-0.2.16-tier2/verification.md)。实施验收使用 VERSION 1.1.17、迁移226，依赖定向维护；当前 VERSION 1.1.18 用于发布，未部署业务实例。
+- [x] 第一档14簇在 `7c544c03f` 完成；第二档16簇已在 `847db09e1` + `5ff6e5bf9` 提交并快进合入 main，见[第二档报告](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier2/verification.md)。实施验收使用 VERSION 1.1.17、迁移226，依赖定向维护；当前 VERSION 1.1.18 用于发布，未部署业务实例。
 
 上一轮教训（[0.2.12 §9](./PORTING-0.2.12.md#9-新增通用教训)）：payment-only安全修复仍排除；无关依赖子项独立处理；缓存并发/TTL/旧链接必须验收；保留minimum与preferred pin区别；调整档位与tag/VERSION错位须明确记录。
 
@@ -32,15 +34,15 @@ v0.2.16历史检查清单：
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
 
-- [PORTING-0.2.18.md](./PORTING-0.2.18.md) —— **第一档6簇、第二档10簇已实现**。v0.2.17–v0.2.18，冻结评估为56非merge / 35PR / 8直接提交。第一档验收见[报告](../../openspec/changes/port-upstream-0.2.18-tier1/verification.md)及[证据](./implementation-0.2.18-tier1/)。第二档含凭据隔离、Responses字段、Codex退休/容量/身份、Anthropic/Gemini断流结算、既有Antigravity/Vertex、图片下载及工具链安全维护，见[验收](../../openspec/changes/port-upstream-0.2.18-tier2/verification.md)与[证据](./implementation-0.2.18-tier2/)。第二档Go1.27.3需最小x/tools编译前置及强制传递依赖；follow-redirects精确1.16.1，[剩余依赖风险](./implementation-0.2.18-tier2/dependency-review.md)单列。新增能力暂缓，支付排除；最大迁移226；实施验收VERSION1.1.18保持历史值，发布文件已升1.1.19，见[发布说明](../releases/v1.1.19.md)。实现已提交`2b79ac320`，未部署业务实例；旧未合项见§5。
+- [PORTING-0.2.18.md](./PORTING-0.2.18.md) —— **第一档6簇、第二档10簇已实现**。v0.2.17–v0.2.18，冻结评估为56非merge / 35PR / 8直接提交。第一档验收见[报告](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/verification.md)及[证据](./implementation-0.2.18-tier1/)。第二档含凭据隔离、Responses字段、Codex退休/容量/身份、Anthropic/Gemini断流结算、既有Antigravity/Vertex、图片下载及工具链安全维护，见[验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/verification.md)与[证据](./implementation-0.2.18-tier2/)。第二档Go1.27.3需最小x/tools编译前置及强制传递依赖；follow-redirects精确1.16.1，[剩余依赖风险](./implementation-0.2.18-tier2/dependency-review.md)单列。新增能力暂缓，支付排除；最大迁移226；实施验收VERSION1.1.18保持历史值，发布文件已升1.1.19，见[发布说明](../releases/v1.1.19.md)。实现已提交`2b79ac320`，未部署业务实例；旧未合项见§5。
 
-- [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **第一档14簇已实现；2026-10-18 第二档16簇已提交并合入 main**。第一档在 `7c544c03f` 完成（实施起点 `0fbcab935`），承接40个本轮PR的选定行为，见[验收](../../openspec/changes/port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。第一档实施时 VERSION/迁移/依赖未变。第二档提交为 `847db09e1` + `5ff6e5bf9`，实施验收使用 VERSION 1.1.17/迁移226；发布 VERSION 为 1.1.18，不引入新能力与支付，未部署业务实例。第二档 S16 已定向修复 DOMPurify/axios/Vue/source-map-js，审计103→70，生产high剩xlsx两条；[剩余项](./implementation-0.2.16-tier2/dependency-review.md)和旧待办见PORTING §5。
+- [PORTING-0.2.16.md](./PORTING-0.2.16.md) —— **第一档14簇已实现；2026-10-18 第二档16簇已提交并合入 main**。第一档在 `7c544c03f` 完成（实施起点 `0fbcab935`），承接40个本轮PR的选定行为，见[验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier1/verification.md)及[实施证据](./implementation-0.2.16-tier1/)。冻结评估仍为149条非merge / 89PR / 4直接提交、A0/C367/X168/N40，两个批次合计69个PR选定行为。重点保留Claude Code/Codex/Grok修复、SQLite结算去重与固定窗口；F10补测后小范围修正既有错误解析helper。第一档实施时 VERSION/迁移/依赖未变。第二档提交为 `847db09e1` + `5ff6e5bf9`，实施验收使用 VERSION 1.1.17/迁移226；发布 VERSION 为 1.1.18，不引入新能力与支付，未部署业务实例。第二档 S16 已定向修复 DOMPurify/axios/Vue/source-map-js，审计103→70，生产high剩xlsx两条；[剩余项](./implementation-0.2.16-tier2/dependency-review.md)和旧待办见PORTING §5。
 
-- [PORTING-0.2.12.md](./PORTING-0.2.12.md) —— **上一轮评估及实施2026-10-02，第一档3簇/第二档3簇完成于`405246789`**。19条非merge、9PR、1直接提交，冻结四态A0/C108/X42/N10。[第一档验收](../../openspec/changes/port-upstream-0.2.12-tier1/verification.md)：Grok CLI身份、Antigravity脱敏、错误码文案；[第二档验收](../../openspec/changes/port-upstream-0.2.12-tier2/verification.md)：邮箱原子化及用户确认的账号优先级/密钥排序。补齐旧验证码次数继承和优先级异步归属；全量Go unit/build、定向race、SQLite方言/用量去重/排序，前端typecheck/lint/build与1854通过/2既有跳过。支付两PR/TypeSafe/axios当轮排除，VERSION 1.1.15、迁移226不变，未发布/部署。历史遗留见最新§5。
+- [PORTING-0.2.12.md](./PORTING-0.2.12.md) —— **上一轮评估及实施2026-10-02，第一档3簇/第二档3簇完成于`405246789`**。19条非merge、9PR、1直接提交，冻结四态A0/C108/X42/N10。[第一档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier1/verification.md)：Grok CLI身份、Antigravity脱敏、错误码文案；[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier2/verification.md)：邮箱原子化及用户确认的账号优先级/密钥排序。补齐旧验证码次数继承和优先级异步归属；全量Go unit/build、定向race、SQLite方言/用量去重/排序，前端typecheck/lint/build与1854通过/2既有跳过。支付两PR/TypeSafe/axios当轮排除，VERSION 1.1.15、迁移226不变，未发布/部署。历史遗留见最新§5。
 
-- [PORTING-0.2.11.md](./PORTING-0.2.11.md) —— **上一轮，2026-09-30，第一档4簇与第二档6簇开发验收完成**。改动在 `sync/upstream-0.2.11` 分支，基线 `f13dee245` / v1.1.14。[第一档验收](../../openspec/changes/port-upstream-0.2.11-tier1/verification.md)与[第二档验收](../../openspec/changes/port-upstream-0.2.11-tier2/verification.md)记录全量Go unit/build、定向race、SQLite和前端1836通过/2既有跳过、typecheck/lint/build。包含旧0.2.9 F04两桥前置与695ebede7仅14行通用usage字段；采用#7736最终目录设计。VERSION仍1.1.14，最大迁移226，无依赖变更；第三/四档及Astra Ultrafast未引入，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
+- [PORTING-0.2.11.md](./PORTING-0.2.11.md) —— **上一轮，2026-09-30，第一档4簇与第二档6簇开发验收完成**。改动在 `sync/upstream-0.2.11` 分支，基线 `f13dee245` / v1.1.14。[第一档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier1/verification.md)与[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier2/verification.md)记录全量Go unit/build、定向race、SQLite和前端1836通过/2既有跳过、typecheck/lint/build。包含旧0.2.9 F04两桥前置与695ebede7仅14行通用usage字段；采用#7736最终目录设计。VERSION仍1.1.14，最大迁移226，无依赖变更；第三/四档及Astra Ultrafast未引入，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
 
-- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **历史评估2026-09-28；第二档已于2026-09-29落地159d04222，第一档仍待实施**。以本地 `bfbcd79` / v1.1.13 对照上游 v0.2.5→v0.2.9：215条非 merge、161个PR和9个直接提交。第二档48PR/16簇的[实施验收](../../openspec/changes/port-upstream-0.2.9-tier2/verification.md)记录后端unit/build/race、SQLite与前端1808通过/2既有跳过及浏览器验证；包含在v1.1.14。第一档原39PR/15簇此前只落了第二档S14所需dialog ID和空Tab前置；本次0.2.11另外完成F04 thinking禁用契约，其余仍待实施。原PORTING/source-baseline保留评估时历史快照，不当当前实施状态。第三/四档及更早遗留见最新评估§5。
+- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **历史评估2026-09-28；第二档已于2026-09-29落地159d04222，第一档仍待实施**。以本地 `bfbcd79` / v1.1.13 对照上游 v0.2.5→v0.2.9：215条非 merge、161个PR和9个直接提交。第二档48PR/16簇的[实施验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier2/verification.md)记录后端unit/build/race、SQLite与前端1808通过/2既有跳过及浏览器验证；包含在v1.1.14。第一档原39PR/15簇此前只落了第二档S14所需dialog ID和空Tab前置；本次0.2.11另外完成F04 thinking禁用契约，其余仍待实施。原PORTING/source-baseline保留评估时历史快照，不当当前实施状态。第三/四档及更早遗留见最新评估§5。
 
 - [PORTING-0.2.4.md](./PORTING-0.2.4.md) —— **历史轮次，2026-09-12，第一档13项、第二档12簇已落地 main，最终构建和总检查通过**。两份 OpenSpec 的任务和验收已回填；[最终验收](./evidence-0.2.4/implementation.md)记录54包后端 unit、240文件/1720项前端测试、静态单文件构建及真实 SQLite/浏览器验证，并追加 API Key Responses namespace 修复及其定向验证。初始151条提交、114候选、1,044条四态证据保持冻结。VERSION仍为1.1.11，迁移仍为226，SQLite/miniredis/simple mode保留。第三/四档与旧DOMPurify独立待办未实施；本次未创建新 tag 或 Release。
 
@@ -49,13 +51,13 @@ v0.2.16历史检查清单：
 - [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版。**全部合完**：§3 的 12 项 P0、§4.1（监控 v2 composite，见 0.1.184 §25）、§4.2、以及原判「缺基座不做」的 §5.1 Responses Lite 簇（更正见 0.1.184 §17–§18）。
 - [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。0.2.0 §5.2 那簇（长上下文阶梯数据驱动）的 573 行基座就是这份 §7 未合的那一支。**§5.1 dompurify 已于 2026-09-02 重新量过、改判「建议做」并曾并入 0.2.0 第二档作为阶段 9（见其 §12）**，但第二档实施时按目标 **未改 lockfile，故仍未合**：3 个文件 / 22 行 lockfile / 零代码改动，一次可清掉 18 条 advisory；同时更正了原判两处判据（暴露面是 7 个净化调用点而不是 1 个，其中 `/legal/*` 完全公开；原清单唯一引用的那条 CVE 用四种污染形态都没能复现）。量的时候还撞见两条不在任何清单里的直接依赖 high：`xlsx` 原型污染 + ReDoS（运行时，无干净升级路径，值得单独立项）与 `vite` / `vitest` 的 dev-only 项。
 
-两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/port-upstream-0.1.183-p0-fixes/)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
+两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.183-p0-fixes)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
 
-`openspec/changes/` 当前全貌（按时间倒序）：[`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/)（§3.1–§3.7 已在 `sync/upstream-20260902-p1` 落地）与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)（§3.8–§3.11 + §4 已落地，阶段 9 dompurify 未做）→ [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（5 项交付 + 1 项撤回）→ [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)（4 项 P1 + 3 个决策）→ 上面那两批 P0。新一轮的立项规则见 [AGENTS.md](../../AGENTS.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
+`openspec/changes/` 当前保留 6 个活动变更：0.1.180 P0、0.2.0 两批、0.2.5 两批和 0.2.9 第一档；具体任务计数与保留原因见[归档清单](../../openspec/changes/archive/README.md)。已完成批次的行为契约汇总于[主规格](../../openspec/specs/)，实施证据仍在各档案中。新一轮的立项规则见 [AGENTS.md](../../AGENTS.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
 
-两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
+两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
 
-再下一批是 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)（2026-08-28）：从剩余 backlog 里挑 6 条「缺陷已核实、patch site 对得上、彼此无文件冲突」的候选，**实际交付 5 条**——0.1.180 §6.1 的 4 条工具桥接修复（PDF 附件静默丢弃、流式 tool_call 空身份、HTTP bridge 重复回放与孤儿 tool call）+ §6.3 的 composite `/v1/messages` 闸门。第 6 条 `17c0ee385` 在实施中被证实是 **`apply --check` 干净的 no-op**（依赖同簇未合的 `953028718`）并撤回——这是本仓库遇到的**第四种假信号**，详见该 change 的 `design.md` 决策 7 与 `source-baseline.md` §3。
+再下一批是 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/archive/2026-10-24-port-upstream-p1-tool-bridge-and-composite-dispatch)（2026-08-28）：从剩余 backlog 里挑 6 条「缺陷已核实、patch site 对得上、彼此无文件冲突」的候选，**实际交付 5 条**——0.1.180 §6.1 的 4 条工具桥接修复（PDF 附件静默丢弃、流式 tool_call 空身份、HTTP bridge 重复回放与孤儿 tool call）+ §6.3 的 composite `/v1/messages` 闸门。第 6 条 `17c0ee385` 在实施中被证实是 **`apply --check` 干净的 no-op**（依赖同簇未合的 `953028718`）并撤回——这是本仓库遇到的**第四种假信号**，详见该 change 的 `design.md` 决策 7 与 `source-baseline.md` §3。
 
 上一轮 [PORTING-0.1.179.md](./PORTING-0.1.179.md)，P0/P1 已全合；再上一轮 [PORTING-0.1.176.md](./PORTING-0.1.176.md)，标题写 0.1.177，已全合。
 
@@ -260,7 +262,7 @@ go generate ./cmd/server     # 动了 wire.go
     curl -sSL "https://raw.githubusercontent.com/Wei-Shaw/sub2api/<上游tag>/<path>" | grep -n '<新放行的值>'
     ```
 
-    实例：`17c0ee385`（Grok compaction 422 同号重试）。详见 [PORTING-0.1.180.md](./PORTING-0.1.180.md) 第 2 节「第四种假信号」、§6.2(c) 与 §10，以及 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/) 的 `design.md` 决策 7。
+    实例：`17c0ee385`（Grok compaction 422 同号重试）。详见 [PORTING-0.1.180.md](./PORTING-0.1.180.md) 第 2 节「第四种假信号」、§6.2(c) 与 §10，以及 [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/archive/2026-10-24-port-upstream-p1-tool-bridge-and-composite-dispatch) 的 `design.md` 决策 7。
 
 ---
 

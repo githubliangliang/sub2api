@@ -285,7 +285,7 @@ Docker + cgroup v2 且未设内存上限时，`used` 是容器数、`total` 是�
 只有 `bafd2e293`（已列在 5.4）和另一条 apply 干净，其余因同文件多次改动需按序落地。
 
 **2026-08-28：本簇 8 条里已合 4 条**（`4d4a0be1a` / `cc894ef57` / `25da02ddd` / `66808413d`），
-见 OpenSpec change [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/)。
+见 OpenSpec change [`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/archive/2026-10-24-port-upstream-p1-tool-bridge-and-composite-dispatch)。
 剩下 4 条都落在 `chatcompletions_responses_bridge.go` / `openai_gateway_responses_chat_fallback.go` /
 `responses_client_tools.go` / `openai_gateway_grok.go` 这几个本仓库有自有改动的文件上，需逐 hunk 解。
 
@@ -312,7 +312,7 @@ Docker + cgroup v2 且未设内存上限时，`used` 是容器数、`total` 是�
 5 文件 +62-24。`git apply --check` 只在 `openai_gateway_grok.go:1173` 冲突（本仓库该文件有自有改动），
 `xai/models.go` 与 `billing_service.go` 两处干净。
 
-状态：**已合**（2026-08-27），见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+状态：**已合**（2026-08-27），见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)。
 
 ⚠️ **2026-08-27 复核补充**：`openai_gateway_grok.go` 的那个 hunk 不是「冲突」而是**不可移植**——
 它调用 `grokSameAccountRetryMetadata`，本仓库 grep 零命中（属下面 (c) 那簇 Grok 429 同号重试）。
@@ -366,7 +366,7 @@ widen 内层的是本簇的 **`953028718`**（实测：`v0.1.180` 区间里只�
 （`invalid_compaction` / `compaction_decode_error`）与 `grokStructuredErrorMessageCandidates`
 （本仓库零命中）——也就是说标题里的「compaction」识别能力全在 `953028718` 里。
 ⇒ **随本簇整体排期。** 详细证据见 OpenSpec change
-[`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/port-upstream-p1-tool-bridge-and-composite-dispatch/) 的 `design.md` 决策 7。
+[`port-upstream-p1-tool-bridge-and-composite-dispatch`](../../openspec/changes/archive/2026-10-24-port-upstream-p1-tool-bridge-and-composite-dispatch) 的 `design.md` 决策 7。
 
 📌 这是 §2「三种假信号」之外的**第四种**：`apply --check` 通过、符号齐全、编译通过，**但行为为空**。
 今后判定单行守卫类改动，要连同它守卫的下游判定一起看。
@@ -478,7 +478,7 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 - 决定跟的话，`39485f2e2` 与 `f7145c750` 必须一起，否则代码默认与存量 DB 设置会不一致。
 
 状态：**已决策并落地（2026-08-27）—— 跟到 `grok-4.6`**。`39485f2e2` + `f7145c750` 成对，
-落地顺序在 6.2(a) 之后。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+落地顺序在 6.2(a) 之后。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)。
 ⚠️ `f7145c750` 的数据迁移**不可逆**：revert 代码不会把 DB 里已被改写的
 `grok_default_text_model` 改回 `grok-4.5`。
 
@@ -499,7 +499,7 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 
 可以先不跟。但拖久了，后续每轮移植都要在两套 ent 生成结果之间手工调和。
 
-状态：**已决策并落地（2026-08-27）—— 跟到 `1.27.0`** + golangci-lint `v2.13`。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+状态：**已决策并落地（2026-08-27）—— 跟到 `1.27.0`** + golangci-lint `v2.13`。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)。
 ⚠️ 两处本节原文写少了：版本断言实际是 **5 行**（`backend-ci.yml` 两处、`security-scan.yml` 一处、
 `release.yml` 两处），golang 镜像是 **3 个** Dockerfile（根 / `backend/` / `deploy/`）。
 `DEV_GUIDE.md:52` 现在写的「三个 workflow ... 两处」也要一并纠正。
@@ -508,7 +508,7 @@ chat_completions*}.go` 这几个被本仓库反复改过的文件。
 
 与 0.1.180 无关。`billing_service.go:1103-1105` 那一行 `applyLongCtx = applyLongCtx && *input.…`。
 
-状态：**已决策并落地（2026-08-27）—— 改成分组为主、账号只能额外开启（区间定价前置条件仍为 AND）**。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/resolve-pending-decisions-and-p1-fixes/)。
+状态：**已决策并落地（2026-08-27）—— 改成分组为主、账号只能额外开启（区间定价前置条件仍为 AND）**。见 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)。
 
 ⚠️ 两条实施要点：
 

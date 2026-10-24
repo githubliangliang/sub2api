@@ -196,7 +196,7 @@ IntervalRow 由 PricingEntryCard 实际消费；不是新增推理力度导出�
 | S15 Codex WS 上下文切换 | [#7615](https://github.com/Wei-Shaw/sub2api/pull/7615) | 0/3/0/0 | window_id 改变时删除旧 previous_response_id 并清空旧续聊推断锚点 |
 | S16 Codex 请求边界兼容 | [#7038](https://github.com/Wei-Shaw/sub2api/pull/7038)、[#7426](https://github.com/Wei-Shaw/sub2api/pull/7426) | 0/7/1/1 | 映射到 GPT-5.5 时移除不兼容 Lite 标记但保留历史与工具；turn metadata 序列化保留非 ASCII 转义 |
 
-第二档行为规格：[port-upstream-0.2.9-tier2](../../openspec/changes/port-upstream-0.2.9-tier2/README.md)。
+第二档行为规格：[port-upstream-0.2.9-tier2](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier2/README.md)。
 
 ### S01：模型目录和计费别名
 

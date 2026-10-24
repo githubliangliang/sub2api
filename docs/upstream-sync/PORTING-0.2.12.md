@@ -3,7 +3,7 @@
 评估及实施日期：2026-10-02。**第一档3簇、第二档3簇已开发及验收完成。**
 实现提交 `405246789`，分支 `sync/upstream-0.2.12`，实施基线 `5eb58199e`。用户确认两项管理便利功能后，又明确授权“完成第一档和第二档”。
 
-[第一档验收](../../openspec/changes/port-upstream-0.2.12-tier1/verification.md)、[第二档验收](../../openspec/changes/port-upstream-0.2.12-tier2/verification.md)：全量Go unit/build、定向race、SQLite方言/真实用量去重/分组排序，前端typecheck/lint/build及1854通过/2既有跳过。VERSION仍1.1.15、最大迁移226，无依赖变更，未发布或部署。
+[第一档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier1/verification.md)、[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier2/verification.md)：全量Go unit/build、定向race、SQLite方言/真实用量去重/分组排序，前端typecheck/lint/build及1854通过/2既有跳过。VERSION仍1.1.15、最大迁移226，无依赖变更，未发布或部署。
 
 下文来源、四态与基线测试保持评估语境，source-baseline及evidence-0.2.12冻结不改；当前实施差异另见§10。
 
@@ -67,7 +67,7 @@ A/C/X/N为ALREADY/CLEAN/CONFLICT/NOBASE，按完整来源计。
 
 `frontend/src/i18n/locales/{zh,en}/admin/accounts.ts`的customErrorCodesWarning。后端 `Account.ShouldHandleErrorCode` 空列表不筛选，仅决定常规账号错误处理；网关自己的retry/failover/透传规则另外决定请求结果。只改说明，不改调度规则。
 
-规格：[第一档](../../openspec/changes/port-upstream-0.2.12-tier1/README.md)。
+规格：[第一档](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier1/README.md)。
 
 ## 4. 第二档：缓存并发修复与用户确认的管理便利功能
 
@@ -99,7 +99,7 @@ A/C/X/N为ALREADY/CLEAN/CONFLICT/NOBASE，按完整来源计。
 
 按分组名称而非ID排序，升降序均未分组最后，以ID同向次排序保证跨页稳定；搜索、状态、用户隔离、软删除过滤及group预加载保持。来源 `api_key_repo_sort_test.go`为无integration标签的SQLite用例，所需newAPIKeyRepoSQLite/mustCreateAPIKeyRepoUser本地存在；正式实施必须运行真实SQLite查询，不能只断言生成SQL或前端列配置。
 
-规格：[第二档](../../openspec/changes/port-upstream-0.2.12-tier2/README.md)。
+规格：[第二档](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier2/README.md)。
 
 ## 5. 按需、不做与历史遗留
 

@@ -1,7 +1,5 @@
 ## ADDED Requirements
 
-本 capability 覆盖四项管理台修复。共同失效模式：**功能在后端可用，但管理台不让你用对**。
-
 ### Requirement: 批量代理解析必须支持带方括号的 IPv6 主机
 系统 SHALL 在批量代理 URL 解析中接受 `[2001:db8::1]:8080` 形式的 IPv6 字面量，
 并在提交前去掉方括号（后端会自行重新加括号拼接 host:port）。

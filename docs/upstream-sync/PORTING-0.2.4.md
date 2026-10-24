@@ -72,7 +72,7 @@ ALREADY 只证明该文件的反向补丁可应用；不证明整个功能已存
 
 ## 3. 第一档：确认存在且改动较小
 
-对应 change：[port-upstream-0.2.4-p0-fixes](../../openspec/changes/port-upstream-0.2.4-p0-fixes/)。
+对应 change：[port-upstream-0.2.4-p0-fixes](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.4-p0-fixes)。
 下表 C/X/N 分别为 CLEAN/CONFLICT/NOBASE，完整 ALREADY 数在证据表；本节本轮候选均无 ALREADY。
 路径以 `backend/` 为根。每项实施时产品代码与相应回归测试一起移植。
 
@@ -97,7 +97,7 @@ F01 是当前最值得优先修的可用性问题；先合独立小项只是便�
 
 ## 4. 第二档：收益明确，需要按行为移植
 
-对应 change：[port-upstream-0.2.4-p1-stability](../../openspec/changes/port-upstream-0.2.4-p1-stability/)。
+对应 change：[port-upstream-0.2.4-p1-stability](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.4-p1-stability)。
 每簇独立验收；列出的 PR 是来源边界，不授权整 PR 覆盖文件。
 
 | ID | 来源 / C-X-N | 价值与实际工作 |
