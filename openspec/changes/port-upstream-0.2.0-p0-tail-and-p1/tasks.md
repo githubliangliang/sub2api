@@ -1,6 +1,6 @@
 ## 0. 前置条件
 
-- [ ] 0.1 ⚠️ **第一档（[`port-upstream-0.2.0-p0-fixes`](../port-upstream-0.2.0-p0-fixes/)）必须已合回
+- [ ] 0.1 ⚠️ **第一档（[`port-upstream-0.2.0-p0-fixes`](../archive/2026-10-24-port-upstream-0.2.0-p0-fixes)）必须已合回
       `main` 并通过门禁。** 本批多处冲突只因第一档未落，提前开工会把顺序误当难度。
       **偏离**：第一档仍未合；本批从 `3da1c2dd0` 开工，见 `verification.md` 文首。
 - [x] 0.2 重新量一遍本批的四态（`source-baseline.md` §2 的数字是在第一档之前量的），偏差记入该文件 §2

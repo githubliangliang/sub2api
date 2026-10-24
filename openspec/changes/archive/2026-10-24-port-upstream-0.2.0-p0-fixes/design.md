@@ -84,7 +84,7 @@ payload** 判定账号状态（要不要摘号、要不要冷却）。原地改�
 ## 4. 明确不做（本批边界）
 
 - **不碰 PORTING §3.8–§3.11 与 §4** —— 那是第二档，见
-  [`port-upstream-0.2.0-p0-tail-and-p1`](../port-upstream-0.2.0-p0-tail-and-p1/)。
+  [`port-upstream-0.2.0-p0-tail-and-p1`](../../port-upstream-0.2.0-p0-tail-and-p1)。
 - **不碰 PORTING §5 六簇** —— 第三档/第四档，**等用户确认后再决定是否立项**。
 - **不新增迁移**（迁移号保持 `224`）、**不改 ent schema**、**不动 `wire.go` / `wire_gen.go`**、
   **不改 `VERSION`**、**不动 `frontend/`**（含 `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml`）。

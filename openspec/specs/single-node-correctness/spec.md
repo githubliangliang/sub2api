@@ -397,3 +397,463 @@ Grok CLI代理请求 SHALL 使用1.0.46默认身份与运行平台UA；包级最
 
 - **WHEN** 输入不满足修复触发条件，或发生错误、切换、重复提交等边界情况
 - **THEN** 不宣称103条全部已解决；xlsx无npm修复路径及Vite/Vitest/tinypool工具链大版本另列旧维护范围。例外只能按实际不可利用条件和负责人复核，不自动续期、不扩大支付功能。
+
+### Requirement: T01 Antigravity token 缓存按账号隔离
+Antigravity OAuth token 缓存 SHALL 以账号 ID 作为唯一键；MUST NOT 使用 `project_id` 作为主键。
+失效逻辑 SHALL 同时清理旧 `ag:<project_id>` 与新 `ag:account:<id>` 两种键。
+
+#### Scenario: 两个账号共用同一 project_id
+- **WHEN** 账号 A 与账号 B 的 `project_id` 相同，且 A 的 token 已缓存
+- **THEN** B 取 token 时不得命中 A 的缓存条目，各自使用自己的凭据。
+
+#### Scenario: 账号无 project_id
+- **WHEN** 账号未配置 `project_id`
+- **THEN** 仍按账号 ID 缓存，行为与既有回退分支一致。
+
+#### Scenario: 升级后的旧缓存
+- **WHEN** 升级前写入的 `ag:<project_id>` 条目仍存在
+- **THEN** 失效动作清理该旧键，同时新读取路径不再访问旧 project 键；不要求全量扫描缓存。
+
+### Requirement: T02 Antigravity Gemini SSE 单一空行分隔
+透传 Gemini SSE 时，系统 SHALL 只在事件之间写出一个 `\n\n` 分隔；MUST NOT 额外透传上游的空行。
+
+#### Scenario: 上游事件之间带空行
+- **WHEN** 上游流在 `data:` 行之后另发一个空行
+- **THEN** 下游收到的字节流中事件之间恰好一个空行，第二个及后续事件可被 `\n\n` 分帧器正常解析。
+
+#### Scenario: 非空非 data 行
+- **WHEN** 上游发送非空注释或其它非 data 行
+- **THEN** 保持既有透传内容和顺序；data 行继续既有解包逻辑，不增加额外分隔。
+
+### Requirement: T03 转发不产生重复 accept-encoding
+转发请求头 SHALL 使用规范大小写写出 `Accept-Encoding`，使 `net/http` 能识别并去重。
+
+#### Scenario: 客户端带 Accept-Encoding
+- **WHEN** 客户端请求携带 `Accept-Encoding: gzip`
+- **THEN** 出站请求只出现一个 `Accept-Encoding` 头。
+
+#### Scenario: 其它被转发头
+- **WHEN** 转发其它头部
+- **THEN** 既有转发与剥离规则不变。
+
+### Requirement: T04 批量生图账号优先级升序
+批量生图选号 SHALL 按 `priority` 升序排序（小值优先），与本仓库其它调度路径一致。
+
+#### Scenario: 多账号不同优先级
+- **WHEN** 候选账号 priority 分别为 1、5、10 且均可用
+- **THEN** 先选 priority=1 的账号。
+
+#### Scenario: 优先级相同
+- **WHEN** 多个账号 priority 相同
+- **THEN** 保持 account ID 升序的次级排序规则；不可调度或不支持模型的账号仍被跳过。
+
+### Requirement: T05 调度候选投影保留阈值与窗口元数据
+`filterSchedulerCredentials` SHALL 保留 `account_scheduling_threshold`；
+`filterSchedulerExtra` SHALL 保留 `session_window_utilization`、`passive_usage_7d_utilization`、
+`passive_usage_7d_reset`、`passive_usage_7d_oi_utilization`、`passive_usage_7d_oi_reset`。
+
+#### Scenario: 账号自带阈值覆盖
+- **WHEN** 账号设置了区别于平台默认的 `account_scheduling_threshold`
+- **THEN** 候选准入按账号阈值判定，不回退到平台阈值。
+
+#### Scenario: Anthropic 共享窗口字段
+- **WHEN** 账号带有 session window 或 passive usage 指标
+- **THEN** 这些字段出现在投影中，供共享窗口判定使用。
+
+#### Scenario: 未配置上述字段
+- **WHEN** 账号没有这些键
+- **THEN** 投影不新增空值键，既有其它键集合不变。
+
+### Requirement: T06 Codex User-Agent 校验后才参与身份配对
+系统 SHALL 在解析并转发 Codex User-Agent 前校验其为合法 header 字段值，
+MUST NOT 允许 CR/LF 或不符合 header value 语法的控制字节进入出站头；校验 SHALL 在 trim 前执行。
+
+#### Scenario: UA 携带 CRLF
+- **WHEN** User-Agent 含 `\r\n` 、NUL、DEL 等非法字节
+- **THEN** 拒绝该身份配对，整体使用既有默认身份，不把非法输入值写入出站请求头。
+
+#### Scenario: 合法 UA
+- **WHEN** User-Agent 是正常的 `codex-tui/x.y.z (...)` 形态
+- **THEN** 既有身份配对与 originator 推导行为不变。
+
+### Requirement: T07 瞬时故障不得表现为身份不存在
+认证中间件 SHALL 区分「用户确实不存在」与「查询失败」：
+仅前者返回 401 `USER_NOT_FOUND`，后者 SHALL 返回 500。
+JWT 与管理员 GetByID 查询 SHALL 使用 `errors.Is` 识别包装后的 `service.ErrUserNotFound`。
+API Key 的既有 GetByKey 查询错误分类 SHALL 保留：非 not-found 错误为 500，过载为 503；
+查询成功但关联 User 为 nil 时仍返回 401 `USER_NOT_FOUND`，不得把该分支当成查询异常修改。
+
+#### Scenario: 查询期间数据库超时
+- **WHEN** 用户查询因 DB 超时或连接失败返回非 not-found 错误
+- **THEN** 返回 500，客户端会话不被清除。
+
+#### Scenario: 用户确实不存在
+- **WHEN** JWT 或管理员用户查询返回原始或包装后的 `service.ErrUserNotFound`
+- **THEN** 保持既有 401 `USER_NOT_FOUND` 语义。
+
+#### Scenario: API Key 既有错误分类
+- **WHEN** GetByKey 返回普通查询错误、`ErrAPIKeyAuthOverloaded` 或 `ErrAPIKeyNotFound`
+- **THEN** 分别保留 500 `INTERNAL_ERROR`、503 `API_KEY_AUTH_OVERLOADED`、401 `INVALID_API_KEY`。
+
+#### Scenario: API Key 缺失关联用户
+- **WHEN** GetByKey 成功返回但 `apiKey.User == nil`
+- **THEN** 保持 401 `USER_NOT_FOUND`，不臆测为数据库查询异常。
+
+### Requirement: T08 刷新令牌的瞬时失败保留会话
+前端 SHALL 对 Axios 网络错误（无响应或状态 0）、429 与 5xx 保留会话并报告不可用；
+401/403、其它非瞬时拒绝及现有刷新逻辑抛出的无效响应错误 SHALL 保持既有登出行为。
+会话已被替换时 SHALL 优先保护新会话，不受旧刷新请求结果影响。
+
+#### Scenario: 刷新请求遇到瞬时错误
+- **WHEN** 刷新接口返回 429、500、503 或请求根本没有响应，且会话未替换
+- **THEN** 保留 auth_token、refresh_token、auth_user、token_expires_at，不设置 auth_expired、不跳转 `/login`；返回 `TOKEN_REFRESH_UNAVAILABLE` 与原响应状态（无响应为 0），不自动增加重试。
+
+#### Scenario: 刷新被明确拒绝
+- **WHEN** 刷新接口返回 401/403
+- **THEN** 保持既有登出与跳转行为。
+
+#### Scenario: 刷新期间会话变化
+- **WHEN** 旧请求刷新未完成时用户登出或切换到另一会话
+- **THEN** 保留既有 sessionChanged 保护，旧请求不得删除新会话凭据。
+
+#### Scenario: 刷新成功
+- **WHEN** 刷新成功且会话仍有效
+- **THEN** 使用新 access token 重放原请求，并保持现有同页/跨标签刷新协调。
+
+### Requirement: T09 分组峰谷配置非法时返回 400
+创建与更新分组时，峰谷配置校验失败 SHALL 以 400 及 `INVALID_PEAK_RATE_CONFIG` 返回，MUST NOT 返回 500。
+既有归一化、校验规则和合法配置行为 SHALL 不变。
+
+#### Scenario: 不支持的跨夜区间
+- **WHEN** 为订阅分组启用峰谷并提交 22:00–02:00
+- **THEN** 返回 400，错误信息指明具体字段，且分组未被写库。
+
+#### Scenario: 合法峰谷配置
+- **WHEN** 配置合法
+- **THEN** 创建/更新照常成功。
+
+### Requirement: T10 成本浮层保留 8 位小数
+UsageTable 成本浮层 SHALL 对输入/输出、图像、缓存、原始/用户/账号费用使用 8 位小数；
+缺省金额 SHALL 显示 `0.00000000`。表格行格式、其它单价格式及计费算法 SHALL 保持不变。
+
+#### Scenario: 可表示的微小成本
+- **WHEN** 浮层成本为 0.00000012
+- **THEN** 显示 `$0.00000012`，不被 6 位小数舍入为零；小于 8 位精度的数仍按既有舍入规则显示。
+
+#### Scenario: 缺省金额
+- **WHEN** 浮层金额缺省走零值回退
+- **THEN** 显示 `$0.00000000`。
+
+### Requirement: T13 待验证邮箱按身份删除
+删除待验证的余额通知邮箱 SHALL 按邮箱身份删除，MUST NOT 在异步完成时使用旧列表下标。
+
+#### Scenario: 验证完成与列表变化竞态
+- **WHEN** 邮箱 A 的验证请求未结束时邮箱 B 被删除或列表重排，随后 A 验证成功
+- **THEN** 仅从 pending 列表移除 A，其它邮箱保留。
+
+#### Scenario: 验证失败
+- **WHEN** 验证请求失败
+- **THEN** 保留对应 pending 邮箱且不误删其它条目。
+
+### Requirement: T14 筛选变更重置分页
+代理列表的筛选条件变更 SHALL 将分页重置到第 1 页再请求数据。
+
+#### Scenario: 在靠后页码上收紧筛选
+- **WHEN** 用户处于第 5 页并把筛选结果缩小到不足一页
+- **THEN** 列表回到第 1 页并展示匹配结果，不出现空列表。
+
+### Requirement: T15 订阅分配目标随搜索关键词失效
+修改用户搜索关键词且 trim 后不等于已选邮箱时 SHALL 在防抖执行前失效 selectedUser 和 assignForm.user_id，
+MUST NOT 保留与当前关键词不符的旧选择；trim 后仍相同的关键词 SHALL 保留有效选择。
+
+#### Scenario: 改动关键词后立即提交
+- **WHEN** 已选中某用户，随后修改关键词并在防抖搜索完成前提交
+- **THEN** 不会把订阅分配给上一个已失效的用户。
+
+#### Scenario: 同一邮箱的空白变化
+- **WHEN** 关键词仅增加首尾空白，trim 后仍等于已选邮箱
+- **THEN** 保留有效选择；搜索后显式选择另一用户时，只向新用户分配。
+
+### Requirement: T16 兑换时长上限与后端一致
+兑换码时长输入上限 SHALL 为后端 MaxValidityDays 的 36500，下限、步进与默认值 SHALL 保持不变。
+
+#### Scenario: 超过一年的时长
+- **WHEN** 管理员输入大于 365 且不超过后端上限的天数
+- **THEN** 前端接受 366 与 36500 等输入，由后端统一裁决。
+
+#### Scenario: 超过后端上限
+- **WHEN** 输入 36501 天
+- **THEN** 前端 max 约束仍拒绝该值，后端上限不变。
+
+### Requirement: T17 兑换成功不被用户信息刷新失败覆盖
+兑换接口已成功后，用户信息刷新失败 SHALL 仅展示独立 warning，不进入兑换失败分支，并继续后续订阅状态/兑换历史处理（来源 #7055）。
+
+#### Scenario: 兑换成功但 refreshUser 失败
+- **WHEN** 成功兑换后用户信息刷新请求失败
+- **THEN** 保留兑换成功结果，提示信息刷新失败，不引导用户把已成功兑换视作失败重试。
+
+#### Scenario: 兑换本身失败
+- **WHEN** 兑换接口直接返回错误
+- **THEN** 继续使用原有兑换失败提示，不显示成功结果。
+
+### Requirement: T18 CSV 导出冻结筛选参数
+用量 CSV 导出 SHALL 在开始时冻结筛选与日期，所有页只变更页码，文件名 SHALL 使用同一日期快照（来源 #7054）。
+
+#### Scenario: 导出期间修改筛选
+- **WHEN** 跨页导出时用户更改日期或其它筛选
+- **THEN** 后续页仍使用开始时的参数，文件名日期也不随界面变化。
+
+#### Scenario: 单页导出
+- **WHEN** 结果只有一页且筛选未变
+- **THEN** 数据内容与原有列格式保持一致；本项不新增分页重置功能。
+
+### Requirement: T19 chat 桥接保留 agent_message 正文
+桥接 SHALL 将 `agent_message` 中字符串正文，或按顺序拼接的 `input_text`/`text` 与 `encrypted_content` 文本片段转换为原位置的一条 user 消息（来源 #6964）。这里只转送自定义 provider 的明文内容，不引入解密能力。
+
+#### Scenario: 子代理信封与任务正文分开存放
+- **WHEN** 信封在 input_text、任务正文在 encrypted_content 片段
+- **THEN** 两部分按原顺序送达 chat 上游，并清理跨越该消息的待附加 reasoning 状态。
+
+#### Scenario: 空内容与既有工具能力
+- **WHEN** agent_message 没有可提取文本，或同请求含既有 additional_tools、namespace 与工具结果
+- **THEN** 空项不生成空 user 消息，其它既有能力不被覆盖。
+
+### Requirement: T20 密钥配额重置同步目标状态
+配额重置 SHALL 使用接口返回的 quota_used/status 更新操作开始时的密钥；仅当前仍选中同一密钥时同步编辑表单（来源 #7026）。
+
+#### Scenario: 配额重置恢复可用
+- **WHEN** 返回账号密钥 status 从停用变为 active
+- **THEN** 列表与仍在编辑的该密钥状态同步，不依赖刷新；不硬编码假设每次都会变为 active。
+
+#### Scenario: 等待期间切换密钥
+- **WHEN** A 的重置请求未完成时用户选中 B
+- **THEN** 返回后更新 A，不覆写 B 的配额或表单状态。
+
+### Requirement: T21 自动刷新遵循所选间隔
+自动刷新 SHALL 在所选秒数到达时触发，不额外多等一秒；渠道状态页加载完成后 SHALL 按当前所选间隔重置倒计时（来源 #7112）。
+
+#### Scenario: 连续自动刷新与手动刷新
+- **WHEN** 用户选择非默认间隔并触发自动或手动刷新
+- **THEN** 后续倒计时仍使用所选间隔，每周期不多等待一秒。
+
+#### Scenario: 自动刷新关闭
+- **WHEN** 用户关闭自动刷新
+- **THEN** 保持既有关闭行为，不因加载完成重新开启计时。
+
+### Requirement: T22 资料与密码错误使用统一提取规则
+个人资料与密码更新失败 SHALL 使用既有 extractApiErrorMessage 规则展示后端错误，并在不可提取时使用各自本地化兜底（来源 #7023）。
+
+#### Scenario: 标准 API 错误与未知异常
+- **WHEN** 后端返回标准错误消息，或异常没有可提取消息
+- **THEN** 分别展示统一提取结果或对应兜底，避免只读 detail 导致有效错误丢失。
+
+#### Scenario: 更新成功
+- **WHEN** 资料或密码更新成功
+- **THEN** 保留既有用户状态更新、成功提示与密码表单清空行为。
+
+### Requirement: T23 代理部分导入后关闭弹窗刷新列表
+代理导入弹窗 SHALL 记住本次打开期间是否发生过成功创建/复用；部分失败后关闭 SHALL 在存在成功数据时通知父列表刷新一次（来源 #7025）。
+
+#### Scenario: 部分成功后关闭
+- **WHEN** 导入结果同时包含失败与成功创建/复用，用户随后关闭弹窗
+- **THEN** 保留失败详情并在关闭时发出一次 imported 通知，父列表可见已导入数据。
+
+#### Scenario: 全失败、完整成功与重新打开
+- **WHEN** 导入全失败、完整成功或弹窗重新打开
+- **THEN** 全失败不触发虚假刷新；完整成功按既有路径通知且关闭不重复；重新打开清空上次待刷新状态。
+
+### Requirement: F01 调度 RPM 配置投影
+系统 MUST 满足：账号 base_rpm、rpm_strategy、rpm_sticky_buffer 经过缓存投影后仍参与候选限流。
+
+#### Scenario: F01 tiered配置经过缓存
+- **WHEN** base_rpm=10、rpm_strategy=tiered、buffer=1的账号已用11 RPM，序列化后再解码
+- **THEN** 三个配置字段保留，候选被拒绝；sticky_exempt同样负载仅允许已有粘性
+
+### Requirement: F02 OAuth 重授权保留账号设置
+系统 MUST 满足：更新认证凭据时保留原 model_mapping 等非认证设置，新认证字段覆盖旧值。
+
+#### Scenario: F02 部分OAuth凭据
+- **WHEN** 旧凭据含model_mapping及旧access_token，重授权只返回新access_token
+- **THEN** model_mapping保持原值，access_token替换为新值，未返回的配置字段不丢失
+
+### Requirement: F03 账号身份与错误状态
+系统 MUST 满足：非法 UA 回退时保留已解析版本；读到用量快照不能抹掉 refresh token 拒绝错误。
+
+#### Scenario: F03 非法UA与指定版本
+- **WHEN** 配置已解析的CLI版本，UA含CR/LF或不能配对的指纹
+- **THEN** 回退为合法规范UA，使用已解析版本而非丢弃该版本
+
+#### Scenario: F03 快照不证明恢复
+- **WHEN** 账号因refresh token拒绝而报错，读取缓存用量快照成功
+- **THEN** 不清除账号错误；只有既有真实恢复流程可清除
+
+### Requirement: F04 关闭 thinking 的桥接语义
+系统 MUST 满足：Anthropic thinking.type=disabled 优先于 output_config.effort，两条 OpenAI 桥均输出 none。
+
+#### Scenario: F04 显式禁用优先
+- **WHEN** thinking.type=disabled且output_config.effort=high，分别走Responses和Chat桥
+- **THEN** 两者reasoning effort为none，Responses不请求summary
+
+#### Scenario: F04 未指定thinking
+- **WHEN** 未给thinking及effort，或effort=max
+- **THEN** 前者保持medium，后者映射xhigh
+
+### Requirement: F05 显式 beta 头兼容
+系统 MUST 满足：mimic 路径保留显式 structured-outputs beta；OpenAI 出站保留多智能体 beta 并剔除旧 Responses token。
+
+#### Scenario: F05 结构化输出beta
+- **WHEN** mimic请求显式携带structured-outputs-2025-11-13且未被策略drop
+- **THEN** 该token保留；未知token不顺带放行；策略drop仍优先
+
+#### Scenario: F05 Responses混合beta
+- **WHEN** OpenAI请求携带旧Responses beta及需要保留的多智能体beta
+- **THEN** 只删除旧Responses token；空beta不自动注入其它token
+
+### Requirement: F06 Responses 消息与最终正文
+系统 MUST 满足：角色消息带 type=message；终止事件空正文时回填已积累的文本。
+
+#### Scenario: F06 角色项类型
+- **WHEN** Chat system/user/assistant文本分别转换为Responses input
+- **THEN** 每个角色项都含type=message及原角色
+
+#### Scenario: F06 空终态回填
+- **WHEN** 已积累delta文本hello，terminal output数组非空但message只有空白文本
+- **THEN** 返回hello；若terminal已有world则保留world，工具output不被替换
+
+### Requirement: F07 Alpha search 成功判定
+系统 MUST 满足：仅在 response.completed 且状态成功后返回可计费用量。
+
+#### Scenario: F07 成功才返回
+- **WHEN** alpha search SSE含response.completed，response.status=completed
+- **THEN** 返回解析结果并允许成功用量路径处理
+
+#### Scenario: F07 失败或截断
+- **WHEN** SSE只有文本delta/DONE/EOF，或含failed/incomplete/error，或completed缺response
+- **THEN** 返回错误，不返回可计费成功结果
+
+### Requirement: F08 未来重置时间前保持配额暂停
+系统 MUST 满足：陈旧但有明确未来 reset 的额度快照继续用于暂停，达到 reset 后放行。
+
+#### Scenario: F08 旧快照未来重置
+- **WHEN** 额度已到暂停阈值，快照过期，但规范窗口reset仍在未来
+- **THEN** 保持暂停并保留已知reset时间
+
+#### Scenario: F08 失去暂停依据
+- **WHEN** reset已经到达，或陈旧快照没有已知未来reset
+- **THEN** 按既有fail-open规则不再依靠该旧百分比暂停
+
+### Requirement: F09 TOTP 输入与计时器
+系统 MUST 满足：验证码输入同步、错误文本可读，弹窗销毁后迟到响应不重启计时器。
+
+#### Scenario: F09 输入与错误
+- **WHEN** TOTP设置组件更换输入值并提交，API返回有可读消息的错误
+- **THEN** 提交当前验证码，展示可读API错误而非对象字符串
+
+#### Scenario: F09 销毁后迟到响应
+- **WHEN** TOTP弹窗请求进行中关闭/卸载，随后返回成功并推进fake timer
+- **THEN** 不重新建立倒计时；重新打开的独立会话正常工作
+
+### Requirement: F10 公共表单交互
+系统 MUST 满足：分页跳转、对话框标题 ID、复制失败、标签 Tab、IME、下拉键盘与搜索、日期关闭和跨午夜选择保持一致。
+
+#### Scenario: F10 数字跳页
+- **WHEN** 分页jumpPage由数值输入产生数字2，提交跳转
+- **THEN** 不会调用数字.trim导致异常；跳到第2页
+
+#### Scenario: F10 对话框唯一ID
+- **WHEN** 同时挂载两个BaseDialog
+- **THEN** 标题ID不同，各自aria-labelledby指向自身标题
+
+#### Scenario: F10 复制失败
+- **WHEN** 旧剪贴板fallback的execCommand抛错
+- **THEN** 返回失败状态而不抛未处理异常
+
+#### Scenario: F10 标签Tab
+- **WHEN** 空标签输入按Tab；随后非空新标签按Tab
+- **THEN** 空值允许焦点移动；非空值添加一次标签并阻止该次Tab默认动作
+
+#### Scenario: F10 搜索IME
+- **WHEN** 中文compositionstart到compositionend期间连续输入拼音
+- **THEN** 组合中不发中间搜索，完成后按最终文本防抖搜索
+
+#### Scenario: F10 Select筛选焦点
+- **WHEN** 下拉已打开后搜索过滤选项，再按Enter；另用键盘打开无搜索下拉
+- **THEN** 焦点移动到过滤后首个可用项并选中；无搜索下拉取得键盘焦点
+
+#### Scenario: F10 取消日期草稿
+- **WHEN** 改日期范围但按Escape/点击外部关闭，随后重开
+- **THEN** 恢复父组件已应用范围，不能复用未应用草稿
+
+#### Scenario: F10 跨午夜日期
+- **WHEN** 组件在本地午夜前挂载，午夜后点击今天或最近范围预设
+- **THEN** 按点击时日期计算，结束日期/输入max不缓存前一天
+
+### Requirement: F11 代理管理小修
+系统 MUST 满足：同代理重复测试共享进行中的结果，过期边界展示与后台一致。
+
+#### Scenario: F11 代理重复测试
+- **WHEN** 同一代理已有进行中测试，再发一次；同时测试不同代理
+- **THEN** 同一代理不重复请求，不同代理结果彼此隔离
+
+#### Scenario: F11 到期边界
+- **WHEN** 代理expires_at等于当前时间
+- **THEN** 按已到期展示；没有expires_at的代理不显示虚假过期
+
+### Requirement: F12 配置表单错误与输入边界
+系统 MUST 满足：设置和 Antigravity 映射加载失败可重试，替换分组显示错误，倍率必须正数，RPM override 只接受非负整数。
+
+#### Scenario: F12 可重试加载
+- **WHEN** 第一次Settings或Antigravity映射加载失败，第二次成功
+- **THEN** 失败不写loaded=true或永久缓存空数组，第二次会重新请求
+
+#### Scenario: F12 替换分组失败
+- **WHEN** GroupReplace API返回有消息的错误
+- **THEN** 用户看到该消息，不能显示成功状态
+
+#### Scenario: F12 倍率与RPM校验
+- **WHEN** 分别输入倍率0/-1/0.5，以及RPM空值/0/1.5/2
+- **THEN** 倍率只接受0.5；RPM接受0和2，空值/1.5拒绝且不提交
+
+### Requirement: F13 异步弹窗状态隔离
+系统 MUST 满足：错误详情、用户 API Key、临时不可调度状态仅接受当前对象请求，分组弹窗释放监听和待执行搜索。
+
+#### Scenario: F13 A到B乱序返回
+- **WHEN** 错误详情、UserApiKeys和TempUnsched弹窗从对象A切到B，B先返回A后返回
+- **THEN** 最终只显示B的数据/错误，A返回不修改B的loading状态
+
+#### Scenario: F13 卸载清理
+- **WHEN** 分组RPM/倍率弹窗已注册document点击监听并有待执行搜索，随后卸载
+- **THEN** 清除监听与定时搜索，不再发送卸载后搜索
+
+### Requirement: F14 用量与价格显示
+系统 MUST 满足：CSV 保留缺失推理力度的单独减号占位符；区间输入正确解析科学计数法；空闲窗口有 reset 时显示倒计时。
+
+#### Scenario: F14 CSV占位符
+- **WHEN** 导出缺推理力度的字段值为单独字符-，并另导出以=或其他公式前缀开头的内容
+- **THEN** 单独-原样保留，其它危险公式前缀继续按已有规则转义
+
+#### Scenario: F14 科学计数法
+- **WHEN** IntervalRow token边界输入1e5
+- **THEN** 解析为100000而不是parseInt得到的1
+
+#### Scenario: F14 空闲倒计时
+- **WHEN** utilization=0、showNowWhenIdle=true且resetsAt有未来时间
+- **THEN** 显示真实倒计时；未给reset时才显示立即可用
+
+### Requirement: F15 请求 ID 和配额诊断
+系统 MUST 满足：已识别的 Responses input item ID 超过64字节时移除；Grok 冷却期仍能查询配额。
+
+#### Scenario: F15 过长ID
+- **WHEN** 已识别message/reasoning/tool-call项携带长度65且前缀合法的ID
+- **THEN** 移除ID；长度64的合法ID保留，未知类型遵守本地原逻辑
+
+#### Scenario: F15 冷却查询配额
+- **WHEN** 有效Grok认证账号处于调度冷却中，管理员发起配额查询
+- **THEN** 使用手动测试认证通道完成查询，不受模型调度门阻断；无效凭据仍失败
+
+### Requirement: Preserve personal SQLite deployment
+系统 MUST 保留SQLite唯一数据库、可关闭Redis、现有菜单和用量去重；不得引入支付或上游新迁移。
+
+#### Scenario: Scope verification
+- **WHEN** 审核相对实施起点的最终diff与真实SQLite运行结果
+- **THEN** 无支付/插件/新平台扩展，无已应用迁移修改，成功用量只写入一次

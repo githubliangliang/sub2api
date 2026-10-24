@@ -3,7 +3,7 @@
 执行日期：2026-09-02。分支 `sync/upstream-20260902-p1`，起点 `3da1c2dd0`，
 代码尖 `0af248bc8`。
 
-⚠️ **偏离**：第一档 [`port-upstream-0.2.0-p0-fixes`](../port-upstream-0.2.0-p0-fixes/)
+⚠️ **偏离**：第一档 [`port-upstream-0.2.0-p0-fixes`](../archive/2026-10-24-port-upstream-0.2.0-p0-fixes)
 仍未合回 `main`。本批从 `3da1c2dd0` 开工，WS/handler 上多出来的冲突按 hunk 手解。
 第 9 项（dompurify `3.3.1` → `3.4.14`）按本目标 **未做**（不改 lockfile）。
 

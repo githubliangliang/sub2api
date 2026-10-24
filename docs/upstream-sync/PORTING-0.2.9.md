@@ -1,5 +1,7 @@
 # 上游 v0.2.9 移植评估（v0.2.5 → v0.2.9）
 
+> 当前归档状态补记（2026-10-24）：用户明确确认第一档已完成，现与第二档一并归档；见[第一档完成确认](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1/completion-record.md)。第一档旧任务与空白验收框架保存在归档前快照中，下文“产品未实施”等描述是2026-09-28评估时状态，不再作为当前完成判断。
+
 评估日期：2026-09-28。**建议分批移植第一档 39 个 PR、第二档 48 个 PR；不做整仓 merge。**
 本轮只生成评估与两份 OpenSpec，产品补丁尚未实施。前端基线通过；后端缺少 Go，编译/运行验收待补，不能据此直接发布。
 
@@ -69,7 +71,7 @@ A/C/X/N 依次表示 ALREADY/CLEAN/CONFLICT/NOBASE，统计含来源 PR 测试�
 | F14 用量与价格显示 | [#7446](https://github.com/Wei-Shaw/sub2api/pull/7446)、[#7418](https://github.com/Wei-Shaw/sub2api/pull/7418)、[#7611](https://github.com/Wei-Shaw/sub2api/pull/7611) | 0/6/0/0 | CSV 保留缺失推理力度的单独减号占位符；区间输入正确解析科学计数法；空闲窗口有 reset 时显示倒计时 |
 | F15 请求 ID 和配额诊断 | [#7488](https://github.com/Wei-Shaw/sub2api/pull/7488)、[#6920](https://github.com/Wei-Shaw/sub2api/pull/6920) | 0/2/1/1 | 已识别的 Responses input item ID 超过64字节时移除；Grok 冷却期仍能查询配额 |
 
-第一档行为规格：[port-upstream-0.2.9-tier1](../../openspec/changes/port-upstream-0.2.9-tier1/README.md)。
+第一档行为规格：[port-upstream-0.2.9-tier1](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1/README.md)。
 
 ### F01：调度 RPM 配置投影
 

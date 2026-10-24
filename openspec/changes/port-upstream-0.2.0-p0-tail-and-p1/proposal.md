@@ -1,6 +1,6 @@
 ## Why
 
-第一档（[`port-upstream-0.2.0-p0-fixes`](../port-upstream-0.2.0-p0-fixes/)）吃掉了 6 项「小、干净、
+第一档（[`port-upstream-0.2.0-p0-fixes`](../archive/2026-10-24-port-upstream-0.2.0-p0-fixes)）吃掉了 6 项「小、干净、
 无冲突」的修复。本批是评估里的**第二档**：同样是「缺陷已核实或功能收益明确」，但每一项都要手工改
 ——补基座、拆上游 PR、写 SQLite 迁移、或动本仓库长期自有改动过的前端文件。
 

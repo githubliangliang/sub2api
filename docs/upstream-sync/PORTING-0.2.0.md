@@ -1,5 +1,7 @@
 # 移植清单：上游 v0.1.185 / v0.2.0
 
+> 归档状态补记（2026-10-24）：用户明确确认第一档已完成，已补归档；见[完成确认记录](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.0-p0-fixes/completion-record.md)。第二档仍保留为独立活动变更。本次关闭第一档历史未核销任务，下文原评估和实施时状态保持历史值。
+
 对照日期：2026-09-02。基线 `3da1c2dd0`（= 本仓库 `1.1.11`，含 0.1.183 全部 + 0.1.184
 §3 的 14 项 P0、§4 的 11 项 P1、§5.1 Codex routed catalog 与 §5.7 Antigravity 混合工具两簇）。
 
@@ -143,7 +145,7 @@ SQLite 不支持 `ADD COLUMN ... IF NOT EXISTS`，也没有 `COMMENT ON`。照�
 
 **本节已按档固化为两个 OpenSpec change**（行为契约与验收看 change，逐条 patch site 只看本文）：
 
-- **第一档** = §3.1–§3.7 → [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/)
+- **第一档** = §3.1–§3.7 → [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.0-p0-fixes)
   （6 项，6 个 capability；无迁移、无前端改动）
 - **第二档** = §3.8–§3.11 + §4 → [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)
   （8 项，7 个 capability；+2 迁移、大面积前端）

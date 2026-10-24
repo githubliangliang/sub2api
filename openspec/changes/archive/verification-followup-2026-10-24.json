@@ -1,0 +1,600 @@
+{
+  "archived_at": "2026-10-24",
+  "baseline_commit": "c36a19b7a1a132e690eaf9ce0d878b301ffffcb4",
+  "tool": "@fission-ai/openspec@1.14.3",
+  "completion_basis": "explicit user confirmation",
+  "user_confirmation": "0.1.180 P0，0.2.0 第一档，0.2.5 第一档，0.2.9 第一档，都已经完成。",
+  "supplemental_archived_changes": [
+    {
+      "name": "port-upstream-0.1.180-p0-fixes",
+      "previous_completed_tasks": 46,
+      "total_tasks": 47,
+      "closed_tasks": 1,
+      "unchecked_task_lines": [
+        "- [ ] 2.7 阶段 1 上线后进入观察期（`verification.md` §5）：2.4 会让此前被静默排除的 OAuth 账号重新进入调度"
+      ],
+      "tasks_snapshot_sha256": "b98ef41ea173781a1b54f10caddfd9061f0923c095433849982ff39848ccc085",
+      "verification_snapshot_sha256": "ce1ed7a0daaeeae02a72f566b8bc6d498adac8563b18687f013b27328d53fbe3",
+      "archive_path": "openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes"
+    },
+    {
+      "name": "port-upstream-0.2.0-p0-fixes",
+      "previous_completed_tasks": 55,
+      "total_tasks": 56,
+      "closed_tasks": 1,
+      "unchecked_task_lines": [
+        "- [ ] 8.7 合回 `main`（`--no-ff`），合并后在 `main` 上复跑 8.1 三道门禁并回填 SHA"
+      ],
+      "tasks_snapshot_sha256": "3add27bca1376b9dba6056056990499ecc5f6dc92744d15f270c395f54006a24",
+      "verification_snapshot_sha256": "f65ab613905e44e252dde61762860d85f6f527330784d15260dbeb6b8360b5e1",
+      "archive_path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.0-p0-fixes"
+    },
+    {
+      "name": "port-upstream-0.2.5-tier1",
+      "previous_completed_tasks": 28,
+      "total_tasks": 34,
+      "closed_tasks": 6,
+      "unchecked_task_lines": [
+        "- [ ] 按现行22个 PR 重跑正反向 apply 检查；记录整 PR 状态和异常文件，区分 NOBASE 与上下文冲突。",
+        "- [ ] 保持 source-* 与 evidence 快照不变；确认现行映射的勘误仍适用于实施起点。",
+        "- [ ] 记录 VERSION=1.1.12、最大迁移=226、依赖/lockfile/Ent/Wire 初始状态。",
+        "- [ ] T11：续费弹窗标题可见、列表滚动；代码与 Vitest 已通过，真实登录态浏览器验收待补。",
+        "- [ ] T16：前端 max=36500；源定义与 typecheck 已核对，真实浏览器输入边界待补。",
+        "- [ ] 完成 T11 真浏览器验收及 T16 输入边界核验，不能用 jsdom 类名检查冒充布局验证。"
+      ],
+      "tasks_snapshot_sha256": "f3f046bea50ba560d5302e8edc5c40f62b3a2505352a10499ff6e5356a787982",
+      "verification_snapshot_sha256": "e61d6ebb7ce62ca2dd52b2ce6494b779043f5a1da613f3ed3244b7f04c0e4e94",
+      "archive_path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.5-tier1"
+    },
+    {
+      "name": "port-upstream-0.2.9-tier1",
+      "previous_completed_tasks": 0,
+      "total_tasks": 21,
+      "closed_tasks": 21,
+      "unchecked_task_lines": [
+        "- [ ] 1.1 记录实际实施起点与干净工作树；读取冻结来源和PORTING约束。",
+        "- [ ] 1.2 补齐Go1.27，运行已有unit/build、go test -list与相关SQLite基线，失败先登记。",
+        "- [ ] 2.1 F01 调度 RPM 配置投影：先复现“账号 base_rpm、rpm_strategy、rpm_sticky_buffer 经过缓存投影后仍参与候选限流”的旧行为缺口，再移植最小终态；验证“tiered 红区拒绝、sticky_exempt 仍仅允许粘性；未配置账号保持现状”，记录来源取舍及测试结果。",
+        "- [ ] 2.2 F02 OAuth 重授权保留账号设置：先复现“更新认证凭据时保留原 model_mapping 等非认证设置，新认证字段覆盖旧值”的旧行为缺口，再移植最小终态；验证“新旧字段冲突、显式空值遵守已有 MergeCredentials 语义”，记录来源取舍及测试结果。",
+        "- [ ] 2.3 F03 账号身份与错误状态：先复现“非法 UA 回退时保留已解析版本；读到用量快照不能抹掉 refresh token 拒绝错误”的旧行为缺口，再移植最小终态；验证“合法 UA 保持身份；真实恢复通过既有恢复入口清错”，记录来源取舍及测试结果。",
+        "- [ ] 2.4 F04 关闭 thinking 的桥接语义：先复现“Anthropic thinking.type=disabled 优先于 output_config.effort，两条 OpenAI 桥均输出 none”的旧行为缺口，再移植最小终态；验证“未禁用时保持 medium 默认和 max→xhigh；none 不请求 reasoning summary”，记录来源取舍及测试结果。",
+        "- [ ] 2.5 F05 显式 beta 头兼容：先复现“mimic 路径保留显式 structured-outputs beta；OpenAI 出站保留多智能体 beta 并剔除旧 Responses token”的旧行为缺口，再移植最小终态；验证“未知 Anthropic beta 继续受白名单/丢弃策略限制；空请求不自动注入”，记录来源取舍及测试结果。",
+        "- [ ] 2.6 F06 Responses 消息与最终正文：先复现“角色消息带 type=message；终止事件空正文时回填已积累的文本”的旧行为缺口，再移植最小终态；验证“已有非空最终文本优先，工具结果不得被正文替换”，记录来源取舍及测试结果。",
+        "- [ ] 2.7 F07 Alpha search 成功判定：先复现“仅在 response.completed 且状态成功后返回可计费用量”的旧行为缺口，再移植最小终态；验证“error/failed/incomplete、只有 delta 或 DONE、提前 EOF 必须失败”，记录来源取舍及测试结果。",
+        "- [ ] 2.8 F08 未来重置时间前保持配额暂停：先复现“陈旧但有明确未来 reset 的额度快照继续用于暂停，达到 reset 后放行”的旧行为缺口，再移植最小终态；验证“无未来 reset 的陈旧快照保持 fail-open；兼容规范窗口与旧字段”，记录来源取舍及测试结果。",
+        "- [ ] 2.9 F09 TOTP 输入与计时器：先复现“验证码输入同步、错误文本可读，弹窗销毁后迟到响应不重启计时器”的旧行为缺口，再移植最小终态；验证“成功流程不变；关闭后返回的网络响应不得重建 timer”，记录来源取舍及测试结果。",
+        "- [ ] 2.10 F10 公共表单交互：先复现“分页跳转、对话框标题 ID、复制失败、标签 Tab、IME、下拉键盘与搜索、日期关闭和跨午夜选择保持一致”的旧行为缺口，再移植最小终态；验证“IME 组合期间不提交；多个弹窗不共享 ID；键盘及鼠标选择均可用”，记录来源取舍及测试结果。",
+        "- [ ] 2.11 F11 代理管理小修：先复现“同代理重复测试共享进行中的结果，过期边界展示与后台一致”的旧行为缺口，再移植最小终态；验证“不同代理不串结果；临界时刻及无到期时间正常”，记录来源取舍及测试结果。",
+        "- [ ] 2.12 F12 配置表单错误与输入边界：先复现“设置和 Antigravity 映射加载失败可重试，替换分组显示错误，倍率必须正数，RPM override 只接受非负整数”的旧行为缺口，再移植最小终态；验证“倍率0/负数拒绝；RPM 0允许、空值和小数拒绝；失败不伪装保存成功”，记录来源取舍及测试结果。",
+        "- [ ] 2.13 F13 异步弹窗状态隔离：先复现“错误详情、用户 API Key、临时不可调度状态仅接受当前对象请求，分组弹窗释放监听和待执行搜索”的旧行为缺口，再移植最小终态；验证“A→B 快速切换及关闭后迟到响应不覆盖 B 或重开弹窗”，记录来源取舍及测试结果。",
+        "- [ ] 2.14 F14 用量与价格显示：先复现“CSV 保留缺失推理力度的单独减号占位符；区间输入正确解析科学计数法；空闲窗口有 reset 时显示倒计时”的旧行为缺口，再移植最小终态；验证“其它CSV公式前缀继续转义；不重算历史费用；无 reset 时允许显示可用”，记录来源取舍及测试结果。",
+        "- [ ] 2.15 F15 请求 ID 和配额诊断：先复现“已识别的 Responses input item ID 超过64字节时移除；Grok 冷却期仍能查询配额”的旧行为缺口，再移植最小终态；验证“短合法 ID、未知类型及无 ID 保持本地语义；配额查询仍校验认证”，记录来源取舍及测试结果。",
+        "- [ ] 3.1 相关后端unit、完整build、SQLite方言和真实库通过；有并发/响应体变化时race通过。",
+        "- [ ] 3.2 前端受影响组件Vitest与typecheck通过；新UI交互按需浏览器验证。",
+        "- [ ] 3.3 审查未跟踪、暂存及工作树全部diff，无新平台/支付/迁移/版本越界。",
+        "- [ ] 3.4 回填verification真实结果、未通过项和实施SHA；仅通过后更新完成状态。"
+      ],
+      "tasks_snapshot_sha256": "038a7c101cf19b275a0829d37b78c0bc2f280e1f8e91783f4ad61a37f9ecf8e6",
+      "verification_snapshot_sha256": "d95327261f0accef21add787ec3ff98f6d99021be91bc52a8a791f3212310ebc",
+      "archive_path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1"
+    }
+  ],
+  "archive_operations": [
+    {
+      "command": [
+        "rtk",
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec@1.14.3",
+        "archive",
+        "port-upstream-0.1.180-p0-fixes",
+        "--yes",
+        "--json"
+      ],
+      "exit_code": 0,
+      "result": {
+        "archive": {
+          "change": "port-upstream-0.1.180-p0-fixes",
+          "archivedAs": "2026-10-24-port-upstream-0.1.180-p0-fixes",
+          "path": "/home/liang/myself/work_space/idea/github/sub2api/openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes",
+          "specsUpdated": true,
+          "totals": {
+            "added": 21,
+            "modified": 0,
+            "removed": 0,
+            "renamed": 0
+          }
+        },
+        "root": {
+          "path": "/home/liang/myself/work_space/idea/github/sub2api",
+          "source": "nearest"
+        }
+      }
+    },
+    {
+      "command": [
+        "rtk",
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec@1.14.3",
+        "archive",
+        "port-upstream-0.2.0-p0-fixes",
+        "--yes",
+        "--json"
+      ],
+      "exit_code": 0,
+      "result": {
+        "archive": {
+          "change": "port-upstream-0.2.0-p0-fixes",
+          "archivedAs": "2026-10-24-port-upstream-0.2.0-p0-fixes",
+          "path": "/home/liang/myself/work_space/idea/github/sub2api/openspec/changes/archive/2026-10-24-port-upstream-0.2.0-p0-fixes",
+          "specsUpdated": true,
+          "totals": {
+            "added": 10,
+            "modified": 0,
+            "removed": 0,
+            "renamed": 0
+          }
+        },
+        "root": {
+          "path": "/home/liang/myself/work_space/idea/github/sub2api",
+          "source": "nearest"
+        }
+      }
+    },
+    {
+      "command": [
+        "rtk",
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec@1.14.3",
+        "archive",
+        "port-upstream-0.2.5-tier1",
+        "--yes",
+        "--json"
+      ],
+      "exit_code": 0,
+      "result": {
+        "archive": {
+          "change": "port-upstream-0.2.5-tier1",
+          "archivedAs": "2026-10-24-port-upstream-0.2.5-tier1",
+          "path": "/home/liang/myself/work_space/idea/github/sub2api/openspec/changes/archive/2026-10-24-port-upstream-0.2.5-tier1",
+          "specsUpdated": true,
+          "totals": {
+            "added": 23,
+            "modified": 0,
+            "removed": 0,
+            "renamed": 0
+          }
+        },
+        "root": {
+          "path": "/home/liang/myself/work_space/idea/github/sub2api",
+          "source": "nearest"
+        }
+      }
+    },
+    {
+      "command": [
+        "rtk",
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec@1.14.3",
+        "archive",
+        "port-upstream-0.2.9-tier1",
+        "--yes",
+        "--json"
+      ],
+      "exit_code": 0,
+      "result": {
+        "archive": {
+          "change": "port-upstream-0.2.9-tier1",
+          "archivedAs": "2026-10-24-port-upstream-0.2.9-tier1",
+          "path": "/home/liang/myself/work_space/idea/github/sub2api/openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1",
+          "specsUpdated": true,
+          "totals": {
+            "added": 16,
+            "modified": 0,
+            "removed": 0,
+            "renamed": 0
+          }
+        },
+        "root": {
+          "path": "/home/liang/myself/work_space/idea/github/sub2api",
+          "source": "nearest"
+        }
+      }
+    }
+  ],
+  "checks": {
+    "strict_all": {
+      "command": [
+        "rtk",
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec@1.14.3",
+        "validate",
+        "--all",
+        "--strict",
+        "--no-interactive",
+        "--json"
+      ],
+      "exit_code": 0,
+      "summary": {
+        "totals": {
+          "items": 44,
+          "passed": 44,
+          "failed": 0
+        },
+        "byType": {
+          "change": {
+            "items": 2,
+            "passed": 2,
+            "failed": 0
+          },
+          "spec": {
+            "items": 42,
+            "passed": 42,
+            "failed": 0
+          }
+        }
+      }
+    },
+    "archived_tasks": {
+      "command": [
+        "rtk",
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec@1.14.3",
+        "validate",
+        "--archived",
+        "--strict",
+        "--no-interactive",
+        "--json"
+      ],
+      "exit_code": 0,
+      "summary": {
+        "totals": {
+          "items": 19,
+          "passed": 19,
+          "failed": 0
+        },
+        "byType": {
+          "change": {
+            "items": 19,
+            "passed": 19,
+            "failed": 0
+          }
+        }
+      }
+    },
+    "list": {
+      "command": [
+        "rtk",
+        "pnpm",
+        "dlx",
+        "@fission-ai/openspec@1.14.3",
+        "list",
+        "--all",
+        "--sort",
+        "name",
+        "--json"
+      ],
+      "exit_code": 0,
+      "archived_changes": 19,
+      "active_changes": [
+        {
+          "name": "port-upstream-0.2.0-p0-tail-and-p1",
+          "completedTasks": 109,
+          "totalTasks": 128,
+          "lastModified": "2026-10-24T14:49:20.586Z",
+          "status": "in-progress",
+          "archived": false
+        },
+        {
+          "name": "port-upstream-0.2.5-tier2",
+          "completedTasks": 29,
+          "totalTasks": 33,
+          "lastModified": "2026-10-24T14:49:20.587Z",
+          "status": "in-progress",
+          "archived": false
+        }
+      ]
+    }
+  },
+  "integrity": {
+    "baseline_commit": "c36a19b7a1a132e690eaf9ce0d878b301ffffcb4",
+    "archived_changes": 19,
+    "retained_changes": 2,
+    "main_capabilities": 42,
+    "main_requirements": 251,
+    "main_scenarios": 662,
+    "main_requirements_and_scenarios_match_original_main_plus_four_deltas": true,
+    "original_main_capabilities": 25,
+    "delta_requirement_contributions": {
+      "port-upstream-0.1.180-p0-fixes": 21,
+      "port-upstream-0.2.0-p0-fixes": 10,
+      "port-upstream-0.2.5-tier1": 23,
+      "port-upstream-0.2.9-tier1": 16
+    },
+    "payment_exclusions": [
+      {
+        "change": "port-upstream-0.2.5-tier1",
+        "capability": "single-node-correctness",
+        "requirement": "T11 续费套餐弹窗可滚动",
+        "reason": "historical payment requirement retained only in archive"
+      },
+      {
+        "change": "port-upstream-0.2.5-tier1",
+        "capability": "single-node-correctness",
+        "requirement": "T12 EasyPay 自定义方式 code 允许点号",
+        "reason": "historical payment requirement retained only in archive"
+      }
+    ],
+    "task_states": [
+      {
+        "path": "openspec/changes/archive/2026-10-24-add-openai-compatible-prompt-audit/tasks.md",
+        "complete": 153,
+        "total": 153,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.1.183-p0-fixes/tasks.md",
+        "complete": 47,
+        "total": 47,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier1/tasks.md",
+        "complete": 18,
+        "total": 18,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier2/tasks.md",
+        "complete": 24,
+        "total": 24,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier1/tasks.md",
+        "complete": 15,
+        "total": 15,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier2/tasks.md",
+        "complete": 15,
+        "total": 15,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier1/tasks.md",
+        "complete": 48,
+        "total": 48,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier2/tasks.md",
+        "complete": 54,
+        "total": 54,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/tasks.md",
+        "complete": 22,
+        "total": 22,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/tasks.md",
+        "complete": 34,
+        "total": 34,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.4-p0-fixes/tasks.md",
+        "complete": 18,
+        "total": 18,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.4-p1-stability/tasks.md",
+        "complete": 20,
+        "total": 20,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier2/tasks.md",
+        "complete": 22,
+        "total": 22,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-p1-tool-bridge-and-composite-dispatch/tasks.md",
+        "complete": 51,
+        "total": 51,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes/tasks.md",
+        "complete": 69,
+        "total": 69,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes/tasks.md",
+        "complete": 47,
+        "total": 47,
+        "basis": "explicit user confirmation",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.0-p0-fixes/tasks.md",
+        "complete": 56,
+        "total": 56,
+        "basis": "explicit user confirmation",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/tasks.md",
+        "complete": 109,
+        "total": 128,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.5-tier1/tasks.md",
+        "complete": 34,
+        "total": 34,
+        "basis": "explicit user confirmation",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/port-upstream-0.2.5-tier2/tasks.md",
+        "complete": 29,
+        "total": 33,
+        "basis": "unchanged",
+        "matches_expected": true
+      },
+      {
+        "path": "openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1/tasks.md",
+        "complete": 21,
+        "total": 21,
+        "basis": "explicit user confirmation",
+        "matches_expected": true
+      }
+    ],
+    "historical_unchecked_tasks_closed_on_user_confirmation": 29,
+    "completed_tasks_archived": 768,
+    "snapshots": [
+      {
+        "change": "port-upstream-0.1.180-p0-fixes",
+        "file": "tasks-before-archive.md",
+        "sha256": "b98ef41ea173781a1b54f10caddfd9061f0923c095433849982ff39848ccc085",
+        "unchanged": true
+      },
+      {
+        "change": "port-upstream-0.1.180-p0-fixes",
+        "file": "verification-before-archive.md",
+        "sha256": "ce1ed7a0daaeeae02a72f566b8bc6d498adac8563b18687f013b27328d53fbe3",
+        "unchanged": true
+      },
+      {
+        "change": "port-upstream-0.2.0-p0-fixes",
+        "file": "tasks-before-archive.md",
+        "sha256": "3add27bca1376b9dba6056056990499ecc5f6dc92744d15f270c395f54006a24",
+        "unchanged": true
+      },
+      {
+        "change": "port-upstream-0.2.0-p0-fixes",
+        "file": "verification-before-archive.md",
+        "sha256": "f65ab613905e44e252dde61762860d85f6f527330784d15260dbeb6b8360b5e1",
+        "unchanged": true
+      },
+      {
+        "change": "port-upstream-0.2.5-tier1",
+        "file": "tasks-before-archive.md",
+        "sha256": "f3f046bea50ba560d5302e8edc5c40f62b3a2505352a10499ff6e5356a787982",
+        "unchanged": true
+      },
+      {
+        "change": "port-upstream-0.2.5-tier1",
+        "file": "verification-before-archive.md",
+        "sha256": "e61d6ebb7ce62ca2dd52b2ce6494b779043f5a1da613f3ed3244b7f04c0e4e94",
+        "unchanged": true
+      },
+      {
+        "change": "port-upstream-0.2.9-tier1",
+        "file": "tasks-before-archive.md",
+        "sha256": "038a7c101cf19b275a0829d37b78c0bc2f280e1f8e91783f4ad61a37f9ecf8e6",
+        "unchanged": true
+      },
+      {
+        "change": "port-upstream-0.2.9-tier1",
+        "file": "verification-before-archive.md",
+        "sha256": "d95327261f0accef21add787ec3ff98f6d99021be91bc52a8a791f3212310ebc",
+        "unchanged": true
+      }
+    ],
+    "frozen_files_verified": 587,
+    "frozen_manifest_sha256": "9841fc38e28b3ff56862a2cdf8f2411755354233487dc5881bee8ff1814aca96",
+    "source_baseline_sha256": {
+      "openspec/changes/archive/2026-10-24-add-openai-compatible-prompt-audit/source-baseline.md": "39c3f2d2d9072f9b263dce9eeb1aec5eda8ee4bafce3f85e46e8bf63431c2c57",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.1.183-p0-fixes/source-baseline.md": "0bb6a22374ee2d13167c1a71ce3d898a20a4c0c35f29dc483d477cec598fc285",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier1/source-baseline.md": "1258f4ce67f41177827d484ca2e1113996f9f344bd65b450b2d969ac20722d44",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier2/source-baseline.md": "52c5ca4c0c88f044af1e8d864db17642eae50bd45be235e33cc12b67c7ae9cbc",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier1/source-baseline.md": "a157a282d5ceb605a496279d6a8cc37160bbc1e9a782bc7ff9f314f348685582",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.12-tier2/source-baseline.md": "ba1a0e79692a99433d71d459121cb1c96c62e49c2c6fd7651a31cdc4cf4e3be0",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier1/source-baseline.md": "94d2562df81a51a46c32151d40dcf54c65f08c8a3ad66c6c548b204085d67492",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier2/source-baseline.md": "c58b8db77b7e3d98f7ca567912f463206a02833899a5b727d1d6a39bd7279057",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/source-baseline.md": "103d22dd4d5d360b7fd5abab2b314bdacb51d9ace16364cf3310c4953d5c97f2",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/source-baseline.md": "c6e5b20567710d94e1bcff575b3649ee98699ccc2457bf3c4574f3d4a89ac0b7",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.4-p0-fixes/source-baseline.md": "565ad1f41f259c603261fe4941b5338d044b31ba86b3b22c5a0e042a007794f3",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.4-p1-stability/source-baseline.md": "8c38c1c837b1b6b3af10ffac62d8e8a183de65e919e0ed30e39003a3810ac753",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier2/source-baseline.md": "81800a421096630e67a3247796fa39a9c34f41df8b5d21a94d944a892d9b007a",
+      "openspec/changes/archive/2026-10-24-port-upstream-p1-tool-bridge-and-composite-dispatch/source-baseline.md": "a5ba50caf3cdff733008fed60c81693491da7828b7008b727daa361375cdcca9",
+      "openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes/source-baseline.md": "a66a3ab3bdf57a77bc10bdd6ac82cbfcf36636ce18a1357bc751041e44a241ec",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes/source-baseline.md": "fa18ccb77120dfe5a98fbbdf5b4f81c50f678f23a27cf30dc39d72349504cd28",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.0-p0-fixes/source-baseline.md": "fa476c79cdf108d5dbd13dcf741d2de0d967b27d21a2b3313892ff76ef2ca8d1",
+      "openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/source-baseline.md": "f28fc11ab0ea3dfc98b93da98f532330a8f25fd3703d773e70b48fee4389ce42",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.5-tier1/source-baseline.md": "1929d39937a17b7467911049ab44318f29efc10afe4a2812a6f0e25f733011e5",
+      "openspec/changes/port-upstream-0.2.5-tier2/source-baseline.md": "65fa873d02044816b6a1317605ce41b9b2089be7a3b0ed63ea827c9b670c13d4",
+      "openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1/source-baseline.md": "80cd6a4fd6c017cfc14d97199ae5b575cebc5a73412986c8ae397accf113c046"
+    },
+    "first_archive_verification_snapshot_unchanged": true,
+    "out_of_scope_tracked_diffs": [],
+    "failures": []
+  },
+  "links": {
+    "scope": "AGENTS.md, upstream-sync Markdown and OpenSpec Markdown; frozen links use historical source locations and current README entries",
+    "checked_markdown_files": 320,
+    "checked_relative_links": 939,
+    "frozen_links_resolved_via_original_location_and_archive_mapping": 39,
+    "frozen_links_missing_current_readme_entries": [],
+    "preexisting_broken_links": [
+      {
+        "file": "openspec/changes/archive/2026-10-24-port-upstream-0.2.5-tier1/source-feature-map.md",
+        "link": "../../../docs/upstream-sync/PORTING-0.2.5.md",
+        "target": "openspec/docs/upstream-sync/PORTING-0.2.5.md",
+        "original_target": "docs/upstream-sync/PORTING-0.2.5.md"
+      },
+      {
+        "file": "openspec/changes/port-upstream-0.2.5-tier2/source-feature-map.md",
+        "link": "../../../docs/upstream-sync/PORTING-0.2.5.md",
+        "target": "docs/upstream-sync/PORTING-0.2.5.md",
+        "original_target": "docs/upstream-sync/PORTING-0.2.5.md"
+      },
+      {
+        "file": "openspec/changes/port-upstream-0.2.5-tier2/source-feature-map.md",
+        "link": "../../../docs/upstream-sync/PORTING-0.2.5.md",
+        "target": "docs/upstream-sync/PORTING-0.2.5.md",
+        "original_target": "docs/upstream-sync/PORTING-0.2.5.md"
+      }
+    ],
+    "pending_generated_report_links": 0,
+    "introduced_broken_links": [],
+    "generated_report_link_resolves": true
+  },
+  "format": {
+    "checked_changed_markdown_files": 52,
+    "tracked_git_diff_check_exit_code": 0,
+    "untracked_and_moved_markdown_diff_check": "Compared changed maintained Markdown with its original HEAD path; snapshots and frozen inputs retained byte-for-byte. --no-index exit 1 with no diagnostics is a clean difference.",
+    "failures": []
+  },
+  "scope": "Supplemental OpenSpec archival, task closure on explicit user completion confirmation, specification sync and Markdown link/index maintenance. Original tasks and verification text are preserved in eight before-archive snapshots; 587 frozen inputs and raw evidence plus the first archival verification report are byte-for-byte unchanged. No product code, dependencies, migrations, VERSION or deployment changes. No new implementation SHA, merge path or historical test evidence is inferred; backend/frontend runtime tests were not rerun for this documentation-only change."
+}

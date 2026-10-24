@@ -2,7 +2,7 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-OpenSpec 整理（2026-10-24）：15 个已完成变更已归档，25 个主规格汇总 183 个非支付需求；6 个含未完成任务的变更保留在活动目录。见[归档清单与保留原因](../../openspec/changes/archive/README.md)。冻结来源和原始证据保持原文。
+OpenSpec 整理（2026-10-24，含用户确认后的补充归档）：19 个已完成变更已归档，42 个主规格汇总 251 个非支付需求；活动目录仅保留 0.2.0 第二档与 0.2.5 第二档。用户确认完成的四批通过各自 completion-record 关闭旧任务，并保留任务与验收原始快照。见[归档清单与保留原因](../../openspec/changes/archive/README.md)。冻结来源和原始证据保持原文。
 
 最新实施教训：流服务返回部分结果后，还必须验证真实handler的队列溢出策略、请求字段快照与SQLite账本；目标Go补丁升级也可能改变导出格式，必要依赖前置须测最小版本并重扫安全记录。
 
@@ -42,18 +42,18 @@ v0.2.16历史检查清单：
 
 - [PORTING-0.2.11.md](./PORTING-0.2.11.md) —— **上一轮，2026-09-30，第一档4簇与第二档6簇开发验收完成**。改动在 `sync/upstream-0.2.11` 分支，基线 `f13dee245` / v1.1.14。[第一档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier1/verification.md)与[第二档验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.11-tier2/verification.md)记录全量Go unit/build、定向race、SQLite和前端1836通过/2既有跳过、typecheck/lint/build。包含旧0.2.9 F04两桥前置与695ebede7仅14行通用usage字段；采用#7736最终目录设计。VERSION仍1.1.14，最大迁移226，无依赖变更；第三/四档及Astra Ultrafast未引入，已按用户要求完成本地Docker及远端部署并通过健康检查，未发布Release。
 
-- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **历史评估2026-09-28；第二档已于2026-09-29落地159d04222，第一档仍待实施**。以本地 `bfbcd79` / v1.1.13 对照上游 v0.2.5→v0.2.9：215条非 merge、161个PR和9个直接提交。第二档48PR/16簇的[实施验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier2/verification.md)记录后端unit/build/race、SQLite与前端1808通过/2既有跳过及浏览器验证；包含在v1.1.14。第一档原39PR/15簇此前只落了第二档S14所需dialog ID和空Tab前置；本次0.2.11另外完成F04 thinking禁用契约，其余仍待实施。原PORTING/source-baseline保留评估时历史快照，不当当前实施状态。第三/四档及更早遗留见最新评估§5。
+- [PORTING-0.2.9.md](./PORTING-0.2.9.md) —— **历史评估2026-09-28；两档均已完成归档**。第二档48PR/16簇在 `159d04222` 落地，其[实施验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier2/verification.md)保留原有后端、SQLite、前端及浏览器证据。第一档39PR/15簇于2026-10-24由用户明确确认完成，见[完成确认记录](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1/completion-record.md)与归档前任务/验收快照。冻结的215条非merge、161PR、四态和来源SHA保留历史值，旧待实施描述按本次完成确认更新当前状态，不回写原始评估。
 
 - [PORTING-0.2.4.md](./PORTING-0.2.4.md) —— **历史轮次，2026-09-12，第一档13项、第二档12簇已落地 main，最终构建和总检查通过**。两份 OpenSpec 的任务和验收已回填；[最终验收](./evidence-0.2.4/implementation.md)记录54包后端 unit、240文件/1720项前端测试、静态单文件构建及真实 SQLite/浏览器验证，并追加 API Key Responses namespace 修复及其定向验证。初始151条提交、114候选、1,044条四态证据保持冻结。VERSION仍为1.1.11，迁移仍为226，SQLite/miniredis/simple mode保留。第三/四档与旧DOMPurify独立待办未实施；本次未创建新 tag 或 Release。
 
-- [PORTING-0.2.0.md](./PORTING-0.2.0.md) —— 上游 v0.1.185 + v0.2.0（2026-09-02，历史轮次）。60 个非 merge commit，11 项 P0 与 4 项 P1 主体已落；两个 change 为 [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/port-upstream-0.2.0-p0-fixes/) 与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)，已于 `c9d9bebe8` 合回 main。新迁移为 `225` 推理档位与 `226` 渠道 1h 缓存价。第二档阶段 9 DOMPurify 仍未做；旧 §5.4 API Key instructions 已在 0.2.4 重新核实并提升为 F13，其余未合项以最新 §5.3 盘点为准。历史 source-baseline 与当时验证记录不改写。
+- [PORTING-0.2.0.md](./PORTING-0.2.0.md) —— 上游 v0.1.185 + v0.2.0（2026-09-02，历史轮次）。60 个非 merge commit，11 项 P0 与 4 项 P1 主体已落；两个 change 为 [`port-upstream-0.2.0-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.0-p0-fixes) 与 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)，已于 `c9d9bebe8` 合回 main。新迁移为 `225` 推理档位与 `226` 渠道 1h 缓存价。第二档阶段 9 DOMPurify 仍未做；旧 §5.4 API Key instructions 已在 0.2.4 重新核实并提升为 F13，其余未合项以最新 §5.3 盘点为准。历史 source-baseline 与当时验证记录不改写。
 - [PORTING-0.1.184.md](./PORTING-0.1.184.md) —— 上游 0.1.184 大混合版（2026-08-31）。**§3 的 14 项 P0 与 §4 的 11 项 P1 已全部合入**（实施记录见其 §9 / §11 / §13，验证矩阵见 §10 / §12 / §13.4）。上游 3 条新迁移全部不合，故本仓库迁移号仍是 224。**§5.1 Codex routed model catalog 整簇也已合入**（立项见 §14，落地与剔除见 §15）。**§5.7 Antigravity 混合内置工具也已合入**（其「基座」其实只是两条 ≤ v0.1.183 的漏项，见 §16）。剩下的是 §4 那组「取决于是否用到该功能」的按需项 + §5 余下五簇。⚠️ 其 §1 那句「上游 main `200602b41` 之后 3 条本文不含」说的是**该文档的覆盖范围**，不是「本仓库没有」——`e2624fb65` 实际已随 §5.1 落地，见 0.2.0 §6 / §9.1。
 - [PORTING-0.1.183.md](./PORTING-0.1.183.md) —— 上游 0.1.181 / 0.1.182 / 0.1.183 三个纯 bugfix 版。**全部合完**：§3 的 12 项 P0、§4.1（监控 v2 composite，见 0.1.184 §25）、§4.2、以及原判「缺基座不做」的 §5.1 Responses Lite 簇（更正见 0.1.184 §17–§18）。
 - [PORTING-0.1.180.md](./PORTING-0.1.180.md) —— 上游 0.1.180 大混合版。**§5 的 19 项 P0、§6.2 / §6.3 的决策与小项、§6.1 的 4 条工具桥接修复已合**；仍未做的是 §6.1 剩余 4 条、§6.2(c) Grok 稳定性整簇、§7 的四个大功能。上面那份里的 Responses Lite 簇要等 §6.1 的 `7498d8fdc` 与 §7.1。0.2.0 §5.2 那簇（长上下文阶梯数据驱动）的 573 行基座就是这份 §7 未合的那一支。**§5.1 dompurify 已于 2026-09-02 重新量过、改判「建议做」并曾并入 0.2.0 第二档作为阶段 9（见其 §12）**，但第二档实施时按目标 **未改 lockfile，故仍未合**：3 个文件 / 22 行 lockfile / 零代码改动，一次可清掉 18 条 advisory；同时更正了原判两处判据（暴露面是 7 个净化调用点而不是 1 个，其中 `/legal/*` 完全公开；原清单唯一引用的那条 CVE 用四种污染形态都没能复现）。量的时候还撞见两条不在任何清单里的直接依赖 high：`xlsx` 原型污染 + ReDoS（运行时，无干净升级路径，值得单独立项）与 `vite` / `vitest` 的 dev-only 项。
 
-两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.183-p0-fixes)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
+两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.183-p0-fixes)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
 
-`openspec/changes/` 当前保留 6 个活动变更：0.1.180 P0、0.2.0 两批、0.2.5 两批和 0.2.9 第一档；具体任务计数与保留原因见[归档清单](../../openspec/changes/archive/README.md)。已完成批次的行为契约汇总于[主规格](../../openspec/specs/)，实施证据仍在各档案中。新一轮的立项规则见 [AGENTS.md](../../AGENTS.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
+`openspec/changes/` 当前保留 2 个活动变更：0.2.0 第二档和 0.2.5 第二档；具体任务计数与保留原因见[归档清单](../../openspec/changes/archive/README.md)。已完成批次的行为契约汇总于[主规格](../../openspec/specs/)，实施证据仍在各档案中。新一轮的立项规则见 [AGENTS.md](../../AGENTS.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
 
 两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
 

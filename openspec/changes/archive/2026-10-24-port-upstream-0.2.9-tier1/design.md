@@ -2,7 +2,7 @@
 
 按行为移植，不整仓合并或覆盖repository/生成代码。新helper随消费者一起加入，先确认本地调用点。
 共享文件串行修改，以v0.2.9终态消除中间补丁依赖；源PR中的不相关测试/平台/文档hunk不携带。
-详细基座测量与patch sites见[PORTING](../../../docs/upstream-sync/PORTING-0.2.9.md)；本文定义行为边界，不另复制代码位置。
+详细基座测量与patch sites见[PORTING](../../../../docs/upstream-sync/PORTING-0.2.9.md)；本文定义行为边界，不另复制代码位置。
 
 | ID | 必须保留的反例和范围边界 |
 |---|---|

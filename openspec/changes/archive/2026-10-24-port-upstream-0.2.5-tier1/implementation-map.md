@@ -35,7 +35,7 @@
 | T22 | 原第二档 S11 | #7023 / `f2b51e3b2` | `frontend/src/components/user/profile/ProfileEditForm.vue`、`frontend/src/components/user/profile/ProfilePasswordForm.vue` | 沿用原第二档行为测试；具体入口见 verification.md |
 | T23 | 原第二档 S11 | #7025 / `329641a86` | `frontend/src/components/admin/proxy/ImportDataModal.vue` | 沿用原第二档行为测试；具体入口见 verification.md |
 
-前移来源的完整 SHA 保留在 [第二档冻结映射](../port-upstream-0.2.5-tier2/source-feature-map.md)；
+前移来源的完整 SHA 保留在 [第二档冻结映射](../../port-upstream-0.2.5-tier2/source-feature-map.md)；
 原第二档 S07 退役，S11仅余#6654/#6916/#7111；现行契约不得在两档重复维护。
 
 ## 2026-09-19 勘误

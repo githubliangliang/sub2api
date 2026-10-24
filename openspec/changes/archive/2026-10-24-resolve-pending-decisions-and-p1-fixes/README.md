@@ -2,7 +2,7 @@
 
 归档于 2026-10-24，原变更 `resolve-pending-decisions-and-p1-fixes`；[归档清单](../README.md)。以下版本、实施与部署状态保留为历史记录。
 
-两批 P0（[0.1.180](../../port-upstream-0.1.180-p0-fixes) / [0.1.183](../2026-10-24-port-upstream-0.1.183-p0-fixes)）
+两批 P0（[0.1.180](../2026-10-24-port-upstream-0.1.180-p0-fixes) / [0.1.183](../2026-10-24-port-upstream-0.1.183-p0-fixes)）
 落地之后的下一批：**4 项 P1 修复 + 3 个长期未决决策一次性拍板**。
 
 | # | 内容 | 来源 |

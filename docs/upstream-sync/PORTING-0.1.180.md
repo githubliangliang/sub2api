@@ -1,5 +1,7 @@
 # 移植清单：上游 v0.1.180
 
+> 归档状态补记（2026-10-24）：用户明确确认本轮 P0 已完成，已补归档；见[完成确认记录](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes/completion-record.md)。旧未勾选的观察任务已据确认核销，原任务与验收内容保存在归档前快照中。下文评估、来源与历史实施事实保持原样。
+
 对照日期：2026-08-24。「本仓库现状」结论均在 `f8f257ad7` 上逐条 grep / `git apply --check` 核实。
 合完一项就把状态改成「已合」。
 
@@ -31,7 +33,7 @@
 **2026-08-26 复核后的落地口径**：第 5 节的 21 项 P0 逐条重核（方法见第 2 节，多了按文件切开与
 依赖符号两道关），**21 项全部仍然成立**；其中 2 项前端依赖安全项已决定推迟，实际交付 **19 项**。
 已固化为 OpenSpec change
-[`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)。
+[`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes)。
 
 ### 1.1 按簇统计
 
@@ -178,7 +180,7 @@ cd /tmp/wt180 && git apply -p1 A.patch && git apply --check -p1 B.patch   # 两�
 除 5.1 外全部 `git apply --check` 通过。
 
 本节 21 项已固化为 OpenSpec change
-[`openspec/changes/port-upstream-0.1.180-p0-fixes/`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/)：
+[`openspec/changes/port-upstream-0.1.180-p0-fixes/`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes)：
 `specs/*/spec.md` 是移植后必须成立的行为（21 条 Requirement / 77 个 Scenario，覆盖交付的 19 项），
 `tasks.md` 是按文件的实施清单，`verification.md` 是验收证据矩阵。合完一项后把下面对应条目的
 状态改成「已合」。
@@ -556,7 +558,7 @@ cd .. && make test-frontend-critical
 ```
 
 第 5 节那 19 项的逐条证据矩阵在 OpenSpec change 的
-[`verification.md`](../../openspec/changes/port-upstream-0.1.180-p0-fixes/verification.md)，
+[`verification.md`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes/verification.md)，
 其中三条**必须先复现失效再验修复**（它们都不抛错，按「代码改了」验收等于没验收）：
 5.2 池模式重试、`40c26f343` 空 capabilities、5.3 ops 内存混用。
 

@@ -2,7 +2,7 @@
 
 归档于 2026-10-24，原变更 `port-upstream-p1-tool-bridge-and-composite-dispatch`；[归档清单](../README.md)。以下版本、实施与部署状态保留为历史记录。
 
-三批 P0（[0.1.180](../../port-upstream-0.1.180-p0-fixes) / [0.1.183](../2026-10-24-port-upstream-0.1.183-p0-fixes)）
+三批 P0（[0.1.180](../2026-10-24-port-upstream-0.1.180-p0-fixes) / [0.1.183](../2026-10-24-port-upstream-0.1.183-p0-fixes)）
 与 [`resolve-pending-decisions-and-p1-fixes`](../2026-10-24-resolve-pending-decisions-and-p1-fixes) 之后的下一批：
 **从剩余 P1/P2 backlog 里挑出 6 条候选，实际交付 5 条**（第 5 条实施中被证实不可独立移植，见下），
 其余大簇（0.1.180 §6.2(c) Grok 稳定性、§7.1 大礼包、§7.2/§7.3、0.1.183 §4.1 监控 v2）**本批不做**。

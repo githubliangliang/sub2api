@@ -1,5 +1,11 @@
 # 上游 0.2.5 第一档
 
+归档于 2026-10-24，依据本次用户完成确认；原变更 `port-upstream-0.2.5-tier1`。见[完成确认记录](./completion-record.md)和[归档清单](../README.md)。
+
+冻结来源和归档前快照保留原文，历史相对路径以原变更目录解释；当前材料入口：[candidates.tsv](../../../../docs/upstream-sync/evidence-0.2.5/candidates.tsv) / [files.tsv](../../../../docs/upstream-sync/evidence-0.2.5/files.tsv)。
+
+当前状态（2026-10-24）：**用户确认本批已完成，归档核销**。见[完成确认记录](./completion-record.md)、[任务快照](./tasks-before-archive.md)和[验收快照](./verification-before-archive.md)。下文原有状态、版本和实施说明作为历史记录保留。
+
 状态：**产品实现已完成，验收证据已回填，工作树未提交**。T01–T23 的代码与门禁已落地；T11/T16 的真实登录态浏览器验收仍为 PARTIAL。
 现行范围：22 个来源 PR，拆为 T01–T23；#7052 分为后端 T07 与前端 T08。
 原 T01–T16 编号不变，原第二档七项前移为 T17–T23；两档合计仍为原43个 PR，没有新增来源或行为。

@@ -11,5 +11,5 @@
 
 ## Impact
 
-本次交付规格，尚未修改产品。实施涉及现有服务/转换器/界面；详细patch位置仅在[评估文档](../../../docs/upstream-sync/PORTING-0.2.9.md)。
+本次交付规格，尚未修改产品。实施涉及现有服务/转换器/界面；详细patch位置仅在[评估文档](../../../../docs/upstream-sync/PORTING-0.2.9.md)。
 前端现有基线通过；后端工具链缺失，需在实施前补齐unit/build/race与SQLite验证。

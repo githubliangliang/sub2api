@@ -4,7 +4,7 @@
 现行范围：原28个来源 PR 中7个前移第一档后，剩 **21个 PR / 11簇**。
 保留 S01–S12 既有编号，S07迁至第一档T19后退役；S11仅保留#6654/#6916/#7111。
 两档合计仍为原43个 PR，没有新增来源或行为。
-第一档（[port-upstream-0.2.5-tier1](../port-upstream-0.2.5-tier1/)）先落地，本批在其之上实施。
+第一档（[port-upstream-0.2.5-tier1](../archive/2026-10-24-port-upstream-0.2.5-tier1)）先落地，本批在其之上实施。
 
 - [proposal.md](./proposal.md)：问题与交付边界。
 - [source-baseline.md](./source-baseline.md)、[source-feature-map.md](./source-feature-map.md)：冻结来源，实施期间不改写。

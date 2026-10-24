@@ -1,8 +1,12 @@
 # port-upstream-0.2.0-p0-fixes
 
-上游 v0.1.185 + v0.2.0 评估（[`docs/upstream-sync/PORTING-0.2.0.md`](../../../docs/upstream-sync/PORTING-0.2.0.md)）
+归档于 2026-10-24，依据本次用户完成确认；原变更 `port-upstream-0.2.0-p0-fixes`。见[完成确认记录](./completion-record.md)和[归档清单](../README.md)。
+
+当前状态（2026-10-24）：**用户确认本批已完成，归档核销**。见[完成确认记录](./completion-record.md)、[任务快照](./tasks-before-archive.md)和[验收快照](./verification-before-archive.md)。下文原有状态、版本和实施说明作为历史记录保留。
+
+上游 v0.1.185 + v0.2.0 评估（[`docs/upstream-sync/PORTING-0.2.0.md`](../../../../docs/upstream-sync/PORTING-0.2.0.md)）
 划出的 **第一档**：6 项「缺陷已核实、基座符号在位、彼此无文件冲突」的小改动。
-第二档见 [`port-upstream-0.2.0-p0-tail-and-p1`](../port-upstream-0.2.0-p0-tail-and-p1/)；
+第二档见 [`port-upstream-0.2.0-p0-tail-and-p1`](../../port-upstream-0.2.0-p0-tail-and-p1)；
 第三档（按需）与第四档（不合）**未立项，等用户确认**，理由见 PORTING §5。
 
 | # | 内容 | 上游 | PORTING | 逐文件 apply 三态 |
@@ -31,5 +35,5 @@
 六个 `specs/*/spec.md` → `tasks.md` → `verification.md`。
 
 逐条 patch site 与上游 diff 说明只在
-[`docs/upstream-sync/PORTING-0.2.0.md`](../../../docs/upstream-sync/PORTING-0.2.0.md) §3，
+[`docs/upstream-sync/PORTING-0.2.0.md`](../../../../docs/upstream-sync/PORTING-0.2.0.md) §3，
 本 change 不复制，只定义**移植后必须成立的行为**与验收证据。

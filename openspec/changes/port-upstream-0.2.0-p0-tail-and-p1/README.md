@@ -2,7 +2,7 @@
 
 上游 v0.1.185 + v0.2.0 评估（[`docs/upstream-sync/PORTING-0.2.0.md`](../../../docs/upstream-sync/PORTING-0.2.0.md)）
 划出的 **第二档**：4 项 P0 余项 + 4 项 P1 + 1 项并入的依赖卫生（第 9 项，来源不是本轮，见下）。**必须在
-[`port-upstream-0.2.0-p0-fixes`](../port-upstream-0.2.0-p0-fixes/)（第一档）之后实施**——
+[`port-upstream-0.2.0-p0-fixes`](../archive/2026-10-24-port-upstream-0.2.0-p0-fixes)（第一档）之后实施**——
 本批多处冲突只因第一档未落，排序后会塌掉一大半。
 
 第三档（按需）与第四档（不合）**未立项，等用户确认**，理由见 PORTING §5。
