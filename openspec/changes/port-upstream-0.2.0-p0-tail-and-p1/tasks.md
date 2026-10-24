@@ -1,8 +1,13 @@
+# 实施任务与当前收尾状态
+
+2026-10-24 复核：**125/128 项已关闭**。本次将有实现、提交或后续验收依据的 16 项旧未勾选任务核销；`9.6`、`9.14`、`10.11` 保留未完成。
+
+`[x]` 表示已落实，或已由明确的后续批次接管关闭；接管项逐条注明依据，不表示原步骤曾在 2026-09-02 执行。当前复核见 [verification.md](./verification.md)，原实施时间、版本和来源基线保持历史值。
+
 ## 0. 前置条件
 
-- [ ] 0.1 ⚠️ **第一档（[`port-upstream-0.2.0-p0-fixes`](../archive/2026-10-24-port-upstream-0.2.0-p0-fixes)）必须已合回
-      `main` 并通过门禁。** 本批多处冲突只因第一档未落，提前开工会把顺序误当难度。
-      **偏离**：第一档仍未合；本批从 `3da1c2dd0` 开工，见 `verification.md` 文首。
+- [x] 0.1 第一档（[`port-upstream-0.2.0-p0-fixes`](../archive/2026-10-24-port-upstream-0.2.0-p0-fixes)）的当前完成状态已确认：两档均已在 `c9d9bebe8` 合回 `main`，第一档已完成归档。
+      **历史偏离保留**：本批开工时第一档尚未合回，实际起点仍为 `3da1c2dd0`；本次不改写执行顺序，见 `verification.md` 的历史验收部分。
 - [x] 0.2 重新量一遍本批的四态（`source-baseline.md` §2 的数字是在第一档之前量的），偏差记入该文件 §2
 - [x] 0.3 起点 = 第一档的合并提交（回填 SHA），工作分支 `sync/upstream-20260902-p1`
       （实际起点 `3da1c2dd0`，分支名符合）
@@ -185,37 +190,26 @@
 - [x] 8.4 `cd frontend && pnpm run test:run && pnpm run typecheck && pnpm run lint:check`
 - [x] 8.5 独立提交
 
-## 9. 阶段 9 — `4a1da2950` dompurify `3.3.1` → `3.4.14`（并入项，**必须最后做**）
+## 9. 阶段 9 — DOMPurify 维护（已由 0.2.16 第二档 S16 接管）
 
-**本批未做**（目标 non-goals：不改 frontend lockfile）。0.1.180 §5.1 仍挂着。
+2026-09-02 本批确实未改依赖；该历史事实保持不变。旧 `3.4.14` 计划已由后续 S16 的 `3.4.17` 定向维护替代，提交为 `5ff6e5bf9`，已在当前 `main` 历史中。依据见 [S16 依赖报告](../../../docs/upstream-sync/implementation-0.2.16-tier2/dependency-review.md)及[验收](../archive/2026-10-24-port-upstream-0.2.16-tier2/verification.md)。
 
-⚠️ 这一项**不是打 patch**：上游那两个文件都不能照搬（上游 lockfile 是 pnpm 9 产物，本仓库本地是
-pnpm 11，且本仓库多一个上游没有的 `pnpm-workspace.yaml`）。按结论手改，逐条事实见
-`source-baseline.md` §5。
-
-- [ ] 9.1 记录升级前基线：`cd frontend && pnpm audit --json`（记 dompurify advisory 数，预期 18）
-      与 `pnpm audit --prod --audit-level=high`（记门禁集合，预期 `xlsx` ×2 + `nanoid` ×1）
-- [ ] 9.2 `frontend/package.json`：`"dompurify": "^3.3.1"` → `"^3.4.14"`
-- [ ] 9.3 同文件 `pnpm.overrides` 加 `"dompurify@<3.4.14": ">=3.4.14"`
-- [ ] 9.4 `frontend/pnpm-workspace.yaml` 的 `overrides:` 块加 `dompurify@<3.4.14: '>=3.4.14'`
-- [ ] 9.5 ⚠️ **两处必须同值**：本地 pnpm 11 只读 workspace 那份，CI / Docker（pnpm 9）只读
-      `package.json` 那份。只改一处 = 一边去重、另一边没去重
-- [ ] 9.6 同文件 `devDependencies` 删 `"@types/dompurify"`（官方标注的 stub，dompurify 自带类型）
-- [ ] 9.7 `cd frontend && pnpm install --lockfile-only` 重新生成 `pnpm-lock.yaml`；
-      ⚠️ **MUST NOT 从上游抄 lockfile**
-- [ ] 9.8 核对 churn：预期 **22 行**，全在 dompurify 条目与 overrides 块；
-      ⚠️ 若出现其它包的版本变化 ⇒ 停下来查，不要接受
-- [ ] 9.9 核对去重：lockfile 里 `dompurify` MUST 只剩一个版本，且 mermaid 那条路径
-      （`. > @lobehub/icons > @lobehub/ui > mermaid > dompurify`）解析到同一版本
-- [ ] 9.10 `pnpm install --frozen-lockfile` MUST 通过（5 处 CI/Docker 都用它）
-- [ ] 9.11 `pnpm audit --json` 复核：dompurify advisory MUST 归零
-- [ ] 9.12 ⚠️ `pnpm audit --prod --audit-level=high` 的结果 MUST 与 9.1 **相同**——
-      本项 MUST NOT 被当成让门禁转绿的手段；`.github/audit-exceptions.yml` MUST 逐字节不变
-- [ ] 9.13 `pnpm run test:run && pnpm run typecheck && pnpm run lint:check`；`make test-frontend-critical`
-- [ ] 9.14 ⚠️ 手工看四处渲染：`/legal/:documentId`（公开页）、`/custom/:id`（含 iframe 嵌入）、
-      公告弹窗/铃铛、侧栏自定义 SVG 图标。MUST 与升级前一致
-- [ ] 9.15 ⚠️ MUST NOT 改任何 `.ts` / `.vue`（7 个净化调用点一个都不动）
-- [ ] 9.16 三个依赖文件**一起提交**（单独提 `package.json` 会让 5 处 `--frozen-lockfile` 立刻失败）
+- [x] 9.1 升级前后依赖审计由 S16 接管并留存原始 JSON：全树 103→70 条记录，DOMPurify 19→0。原 0.2.0 的预期 18 条及旧门禁集合仅是当时基线，不补造执行记录。
+- [x] 9.2 `frontend/package.json` 的直接依赖已由 S16 升为 `"dompurify": "^3.4.17"`，满足原计划的最低版本要求。
+- [x] 9.3 `package.json.pnpm.overrides` 已固定 `dompurify: 3.4.17`，统一覆盖直接与传递解析。
+- [x] 9.4 `frontend/pnpm-workspace.yaml` 的 `overrides` 同样固定 `dompurify: 3.4.17`。
+- [x] 9.5 两处 overrides 当前同值；pnpm 11 本地解析及 S16 的 pnpm 9 隔离验证均有记录。
+- [ ] 9.6 移除 `devDependencies` 中的 `"@types/dompurify"` 类型桩依赖。当前仍声明 `^3.0.5`、安装为 `3.2.0`；此独立清理尚未执行，不影响已完成的 DOMPurify 单版本升级。
+- [x] 9.7 S16 已使用本地 pnpm 11.21.0 生成锁文件，没有整取上游 lockfile；生成及安装记录见 S16 依赖报告。
+- [x] 9.8 **由后续范围替代关闭**：原“仅 DOMPurify、22 行 churn”约束属于旧单包计划；S16 已明确接管 DOMPurify、axios、Vue、source-map-js 及其必要依赖闭包，并记录实际变更范围，不将其描述为原 22 行操作已执行。
+- [x] 9.9 当前 lockfile 及 `pnpm why dompurify --json` 都只解析到 `3.4.17`；直接依赖、类型桩依赖与 mermaid 传递路径使用同一版本。
+- [x] 9.10 S16 的隔离 pnpm 9.15.9 `install --lockfile-only --frozen-lockfile --ignore-scripts` 检查通过，锁文件 SHA256 不变；据此关闭锁文件与 manifest 一致性检查，不宣称本次重装了依赖。
+- [x] 9.11 本次 `pnpm audit --json` 复核 DOMPurify 告警为 0；全树仍有其它包的 75 条记录、命令返回 1，不记为审计全绿。
+- [x] 9.12 **由后续范围替代关闭**：旧固定门禁集合及“例外文件逐字节不变”约束由 S16 后续维护替代；六条过期例外已移除，未续期或新增豁免，生产 xlsx 剩余问题在 S16 报告单列。本次没有调整审计门禁或例外。
+- [x] 9.13 S16 已完成前端全量 Vitest（2027 passed / 2 skipped）、typecheck、lint、build；本次定向 10 文件 / 98 测试通过，并补跑 `make test-frontend-critical`（14 文件 / 176 passed / 2 skipped）。后续验收覆盖与本次复跑分别记于 `verification.md`。
+- [ ] 9.14 补齐四处真实浏览器人工验收记录：`/legal/:documentId`（公开页）、`/custom/:id`（含 iframe 嵌入）、公告弹窗/铃铛、侧栏自定义 SVG 图标。现有真实 DOMPurify 的 jsdom 回归通过，不能替代这四处渲染验收。
+- [x] 9.15 `5ff6e5bf9` 仅修改三个依赖文件与 `.github/audit-exceptions.yml`；没有修改 `.ts` / `.vue` 净化调用点。
+- [x] 9.16 `frontend/package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml` 已在 `5ff6e5bf9` 同一提交内更新。
 
 ## 10. 收尾
 
@@ -228,8 +222,8 @@ pnpm 11，且本仓库多一个上游没有的 `pnpm-workspace.yaml`）。按结
 - [x] 10.6 确认 `git diff --stat` 里没有 `wire_gen.go`、`.github/audit-exceptions.yml`；
       `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` **应当有且仅有阶段 9 的那次改动**
 - [x] 10.7 填 `verification.md`（含 §0 基线、§2 逐项证据、§3 影响面复核）
-- [ ] 10.8 `docs/upstream-sync/PORTING-0.1.180.md`：§5.1 标头与 §12.6 标「已合」+ 本仓库短 SHA
+- [x] 10.8 `docs/upstream-sync/PORTING-0.1.180.md` 的 §5.1 与 §12.6 已补记“由 0.2.16 第二档 S16 / `5ff6e5bf9` 接管完成”；保留旧版本评估、未合状态与来源作为历史记录。
 - [x] 10.9 `docs/upstream-sync/PORTING-0.2.0.md`：§3.8–§3.11 与 §4.1–§4.4 逐条标「已合」+ 本仓库短 SHA；
       §2.3 的迁移号表回填实际号；§7 第二/三批打勾
 - [x] 10.10 `docs/upstream-sync/README.md` 顶部「当前待移植清单」段落更新本批落点与剩余项（**两处**：0.2.0 那行与 0.1.180 那行）
-- [ ] 10.11 合回 `main`（`--no-ff`），合并后在 `main` 上复跑 10.1–10.4 并回填 SHA
+- [ ] 10.11 合回 `main` 部分已完成（双亲合并提交 `c9d9bebe8`）。仍待补齐本项要求的合并后 `main` 全量 10.1–10.4 门禁及 SHA 回填；本次仅定向后端、前端与关键套件复跑，不能记作全量复验完成。

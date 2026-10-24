@@ -1,0 +1,204 @@
+{
+  "checked_at": "2026-10-24",
+  "code_baseline": "67b1a07270acd79f5d54432b44ae396c3f7e360c",
+  "change": "port-upstream-0.2.0-p0-tail-and-p1",
+  "previous_task_state": {
+    "closed": 109,
+    "total": 128
+  },
+  "current_task_state": {
+    "closed": 125,
+    "total": 128
+  },
+  "closed_task_ids": [
+    "0.1",
+    "9.1",
+    "9.2",
+    "9.3",
+    "9.4",
+    "9.5",
+    "9.7",
+    "9.8",
+    "9.9",
+    "9.10",
+    "9.11",
+    "9.12",
+    "9.13",
+    "9.15",
+    "9.16",
+    "10.8"
+  ],
+  "remaining_task_ids": [
+    "9.6",
+    "9.14",
+    "10.11"
+  ],
+  "closure_rule": "Checked tasks are implemented or explicitly superseded by the documented later S16 scope. A superseded historical instruction is not recorded as having been executed in September.",
+  "verified_commits": {
+    "c9d9bebe8": {
+      "sha": "c9d9bebe87926791bfdd716f59abcba413fee20a",
+      "ancestor_of_current_head": true
+    },
+    "5ff6e5bf9": {
+      "sha": "5ff6e5bf9657fc699db46dbc36b831d3fc96a174",
+      "ancestor_of_current_head": true
+    }
+  },
+  "checks": {
+    "backend-targeted": {
+      "name": "backend-targeted",
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-tags=unit",
+        "./internal/handler",
+        "./internal/handler/admin",
+        "./internal/service",
+        "./internal/service/openai_ws_v2",
+        "./internal/pkg/antigravity",
+        "./internal/pkg/claude",
+        "./internal/domain",
+        "./internal/repository",
+        "./migrations",
+        "-run",
+        "Bootstrap|CompatPromptCacheKey|AgentIdentityCompat|APIKeyAutoDerives|ResponsesShapeDoesNotAutoDerive|OpenAIWSRelayActiveTurnID|Relay_Upstream(NormalCloseBeforeTerminal|EOFBeforeTerminal|Disconnect)|Relay_DirtyUpstream|FallbackPricing|Fable51|PricingOverride|ReasoningEffort|CacheWriteTTL|Migrations225And226|Migration225|Migration226|ProductionSQLUsesSQLiteDialect",
+        "-count=1"
+      ],
+      "cwd": "/home/liang/myself/work_space/idea/github/sub2api/backend",
+      "exit_code": 0,
+      "duration_seconds": 9.41,
+      "passed_tests": 357,
+      "skipped_tests": 0,
+      "failed_tests": [],
+      "packages": [
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/handler",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/domain",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/migrations",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/pkg/claude",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/pkg/antigravity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/service",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/Wei-Shaw/sub2api/internal/repository",
+          "action": "pass"
+        }
+      ]
+    },
+    "frontend-targeted": {
+      "name": "frontend-targeted",
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "src/components/admin/group/__tests__/ReasoningEffortPolicyFields.spec.ts",
+        "src/views/admin/__tests__/groupsReasoningEffort.spec.ts",
+        "src/views/admin/__tests__/groupsModelsListLayout.spec.ts",
+        "src/components/admin/channel/__tests__/types.spec.ts",
+        "src/components/admin/channel/__tests__/PricingEntryCard.modelDefaultPrice.spec.ts",
+        "src/composables/__tests__/useModelWhitelist.spec.ts",
+        "src/components/keys/__tests__/UseKeyModal.spec.ts",
+        "src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts",
+        "src/views/user/__tests__/CustomPageView.race.spec.ts",
+        "src/components/layout/__tests__/siteLogoSanitization.spec.ts",
+        "--reporter=json",
+        "--outputFile=/tmp/sub2api-020-completion-20261024/frontend-test-results.json"
+      ],
+      "cwd": "/home/liang/myself/work_space/idea/github/sub2api/frontend",
+      "exit_code": 0,
+      "duration_seconds": 4.95,
+      "passed_tests": 98,
+      "failed_tests": 0,
+      "test_files": 10
+    },
+    "dependency-tree": {
+      "name": "dependency-tree",
+      "command": [
+        "pnpm",
+        "why",
+        "dompurify",
+        "--json"
+      ],
+      "cwd": "/home/liang/myself/work_space/idea/github/sub2api/frontend",
+      "exit_code": 0,
+      "duration_seconds": 0.68,
+      "dompurify_versions": [
+        "3.4.17"
+      ],
+      "dompurify_dependency_occurrences": 1,
+      "mermaid_path_seen": true
+    },
+    "dependency-audit": {
+      "name": "dependency-audit",
+      "command": [
+        "pnpm",
+        "audit",
+        "--json"
+      ],
+      "cwd": "/home/liang/myself/work_space/idea/github/sub2api/frontend",
+      "exit_code": 1,
+      "duration_seconds": 1.75,
+      "dompurify_advisories": 0,
+      "total_advisory_records": 75,
+      "metadata": {
+        "vulnerabilities": {
+          "info": 0,
+          "low": 4,
+          "moderate": 35,
+          "high": 33,
+          "critical": 3
+        },
+        "dependencies": 684,
+        "devDependencies": 341,
+        "optionalDependencies": 47,
+        "totalDependencies": 1025
+      },
+      "error": null
+    },
+    "frontend-critical": {
+      "command": [
+        "make",
+        "test-frontend-critical"
+      ],
+      "cwd": "/home/liang/myself/work_space/idea/github/sub2api",
+      "exit_code": 0,
+      "test_files": 14,
+      "passed_tests": 176,
+      "skipped_tests": 2,
+      "failed_tests": 0,
+      "vitest_duration_seconds": 8.04
+    }
+  },
+  "remaining_work": {
+    "9.6": "Remove the @types/dompurify stub dependency; still declared ^3.0.5 and installed as 3.2.0.",
+    "9.14": "Record real-browser acceptance for legal/custom pages, announcement popup/bell and custom sidebar SVG; jsdom tests do not satisfy this manual rendering check.",
+    "10.11": "Merge completed at c9d9bebe8; the task-specific full post-merge main gates 10.1–10.4 and SHA writeback remain incomplete. Targeted tests and the critical suite do not replace them."
+  },
+  "scope": "Task/document status maintenance only. Existing runtime checks are from the preceding completion audit in this session; the frontend critical suite was additionally run for task 9.13. No implementation, dependency, VERSION, migration, deployment or frozen-source changes; no new browser or full backend/frontend-gate result is claimed."
+}

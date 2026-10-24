@@ -1,5 +1,32 @@
 # 验收证据
 
+## 当前任务复核（2026-10-24）
+
+复核代码基线为 `67b1a0727`（VERSION 1.1.19、最大迁移 226）；本次更新任务和文档，保留下文 2026-09-02 的原始验收口径。
+
+- `c9d9bebe8` 是双亲合并提交，包含本轮第一、二档；该提交与 S16 的 `5ff6e5bf9` 均是当前 HEAD 的祖先。历史“未合回 main”不再作为当前判断。
+- DOMPurify 已由 [S16 依赖维护](../../../docs/upstream-sync/implementation-0.2.16-tier2/dependency-review.md)接管，后续[验收](../archive/2026-10-24-port-upstream-0.2.16-tier2/verification.md)记录完整前端 2027 passed / 2 skipped、typecheck、lint 与 build 通过。旧 3.4.14、22 行 lockfile 及固定审计集合不是本次实际执行结果。
+- 本次关闭 16 项旧未勾选任务，任务状态由 109/128 更新为 **125/128**；明确接管的项目按“后续替代关闭”记录，不补造原步骤的执行时间与结果。
+
+| 本次检查 | 结果 |
+|---|---|
+| 后端定向回归（handler/admin/service/WS、模型、SQLite 方言与迁移等 9 个包） | 357 个测试及子测试通过，0 失败、0 跳过；不是全量 unit/build/lint |
+| 前端定向回归 | 10 个文件、98 个测试通过，包含推理档位、定价展示、模型目录及真实 DOMPurify 净化 |
+| `make test-frontend-critical` | 14 个文件通过，176 passed / 2 skipped，exit 0 |
+| `pnpm why dompurify --json` 与 lockfile | 唯一版本 3.4.17，直接依赖与 mermaid 路径一致；package/workspace overrides 同值 |
+| `pnpm audit --json` | DOMPurify 0 条；全树其它包仍有 75 条记录（critical 3 / high 33 / moderate 35 / low 4），exit 1 |
+| 迁移 225 / 226 | 与 `c9d9bebe8` 中内容逐字节相同，相关 SQLite 测试通过 |
+
+上述实际命令、范围及结果见[本次检查记录](./completion-check-2026-10-24.json)。S16 的 pnpm 9 冻结锁验证见其原始 [pnpm9-lock-validation.txt](../../../docs/upstream-sync/implementation-0.2.16-tier2/pnpm9-lock-validation.txt)；本次没有再次安装或更新依赖。
+
+仍未关闭的三项：
+
+- `9.6`：`@types/dompurify` 仍声明为 `^3.0.5`，安装为 3.2.0，清理未执行。
+- `9.14`：未找到四处页面的完整真实浏览器验收记录；jsdom 净化回归不能替代布局与渲染验收。
+- `10.11`：合回 main 已完成；本项要求的合并后全量 10.1–10.4 门禁及 SHA 回填仍待补齐。本次定向检查和关键套件不冒充全量复验。
+
+## 历史实施验收（2026-09-02）
+
 执行日期：2026-09-02。分支 `sync/upstream-20260902-p1`，起点 `3da1c2dd0`，
 代码尖 `0af248bc8`。
 

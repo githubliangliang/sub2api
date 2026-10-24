@@ -36,7 +36,7 @@
 
 | 变更 | 任务状态 | 保留原因 |
 |---|---:|---|
-| [port-upstream-0.2.0-p0-tail-and-p1](../port-upstream-0.2.0-p0-tail-and-p1/tasks.md) | 109/128 | 阶段 9 与合回/回填任务仍未核销；DOMPurify 已由 0.2.16 第二档 S16 接替。未纳入本次四批完成确认。 |
+| [port-upstream-0.2.0-p0-tail-and-p1](../port-upstream-0.2.0-p0-tail-and-p1/tasks.md) | 125/128 | 主体已合回 main，DOMPurify 由 S16 接管；尚余类型桩清理、四处真实浏览器验收与合并后全量门禁回填。见[当前复核](../port-upstream-0.2.0-p0-tail-and-p1/verification.md)。 |
 | [port-upstream-0.2.5-tier2](../port-upstream-0.2.5-tier2/tasks.md) | 29/33 | 默认容量系数决策与迁移 227 相关任务尚未关闭。未纳入本次四批完成确认。 |
 
 ## 文档与冻结材料

@@ -204,6 +204,8 @@ cd /tmp/wt180 && git apply -p1 A.patch && git apply --check -p1 B.patch   # 两�
 
 ### 5.1 dompurify `3.3.1` → `3.4.14`（安全项，**已重量并立项，第二档实施时未合**）
 
+> 后续完成补记（2026-10-24）：本维护已由 0.2.16 第二档 S16 / `5ff6e5bf9` 接管完成，直接与传递依赖统一为 3.4.17；见[后续验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.16-tier2/verification.md)与[依赖报告](./implementation-0.2.16-tier2/dependency-review.md)。下文 3.4.14 计划和当时未合状态保留为历史记录。
+
 上游 `4a1da2950`。2 文件 +20-64。状态：2026-08-26 判**推迟**；**2026-09-02 重新量过，改判「做」并已并入 0.2.0 第二档 OpenSpec change 的阶段 9，同时更正了本节两处判据 —— 见 [§12](#12-51-dompurify-重新量2026-09-02只读核查未改任何文件)。下面这段保留 2026-08-26 的原文，其中「暴露面只有 SVG 那条链」与「唯一引用的那条 CVE 可利用」两点已被 §12 更正。**
 
 CVE-2026-65913 / GHSA-cj63-jhhr-wcxv：`USE_PROFILES` 打开时 `ALLOWED_ATTR` 被重建成普通数组并用
@@ -709,6 +711,8 @@ lockfile churn **22 行**，全部集中在 dompurify 自己：
 `USE_PROFILES` 的 API 形状没变。
 
 ### 12.6 修正后的建议 —— **已并入 0.2.0 第二档立项；实施时未合（2026-09-02）**
+
+> 后续完成补记（2026-10-24）：旧 DOMPurify 升级目标已由 S16 / `5ff6e5bf9` 接管完成；0.2.0 第二档的当前[任务状态](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/tasks.md)已据后续证据更新。原 22 行变更、旧审计集合与例外约束属于下面的历史方案；类型桩清理与四处真实浏览器验收仍单列待办。
 
 按用户决定并入
 [`port-upstream-0.2.0-p0-tail-and-p1`](../../openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/)
