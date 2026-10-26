@@ -1,0 +1,123 @@
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 INFO web search emulation: search completed provider=brave results_count=1
+2026/10/24 23:49:20 [Billing] Using fallback pricing for model: gpt-5.2
+2026/10/24 23:49:20 [SIMPLE MODE] Usage recorded (not billed): user=9703, tokens=0
+==================
+WARNING: DATA RACE
+Write at 0x00c00045fe60 by goroutine 30:
+  runtime.mapassign_faststr()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/internal/runtime/maps/runtime_faststr.go:261 +0x0
+  github.com/Wei-Shaw/sub2api/internal/handler.(*contentModerationHandlerSettingRepo).Set()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/openai_gateway_handler_test.go:1278 +0xb8
+  github.com/Wei-Shaw/sub2api/internal/service.(*SettingService).SaveWebSearchEmulationConfig()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/websearch_config.go:167 +0x5e5
+  github.com/Wei-Shaw/sub2api/internal/handler.runPersonalSearchHandler.func3()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_websearch_personal_test.go:109 +0x95
+  testing.(*common).Cleanup.func1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:1462 +0x168
+  testing.(*common).runCleanup()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:1822 +0x225
+  testing.tRunner.func2()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2189 +0x4c
+  runtime.deferreturn()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/panic.go:668 +0x53
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x38
+
+Previous read at 0x00c00045fe60 by goroutine 42:
+  runtime.mapaccess2_faststr()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/internal/runtime/maps/runtime_faststr.go:120 +0x0
+  github.com/Wei-Shaw/sub2api/internal/handler.(*contentModerationHandlerSettingRepo).GetValue()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/openai_gateway_handler_test.go:1268 +0x54
+  github.com/Wei-Shaw/sub2api/internal/service.(*SettingService).refreshOpenAIQuotaAutoPauseSettings()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/setting_gateway_runtime.go:1021 +0x124
+  github.com/Wei-Shaw/sub2api/internal/service.(*SettingService).GetOpenAIQuotaAutoPauseSettings.func1()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/setting_gateway_runtime.go:982 +0x3c
+  golang.org/x/sync/singleflight.(*Group).doCall.func2()
+      /home/liang/go/pkg/mod/golang.org/x/sync@v0.23.0/singleflight/singleflight.go:198 +0xa9
+  golang.org/x/sync/singleflight.(*Group).doCall()
+      /home/liang/go/pkg/mod/golang.org/x/sync@v0.23.0/singleflight/singleflight.go:200 +0x131
+  golang.org/x/sync/singleflight.(*Group).DoChan.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/x/sync@v0.23.0/singleflight/singleflight.go:138 +0x64
+
+Goroutine 30 (running) created at:
+  testing.(*T).Run()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0xb12
+  github.com/Wei-Shaw/sub2api/internal/handler.TestOpenAIWebSearchMessagesHandler_UsageAndSlots()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_websearch_personal_test.go:194 +0x104
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x38
+
+Goroutine 42 (finished) created at:
+  golang.org/x/sync/singleflight.(*Group).DoChan()
+      /home/liang/go/pkg/mod/golang.org/x/sync@v0.23.0/singleflight/singleflight.go:138 +0x55c
+  github.com/Wei-Shaw/sub2api/internal/service.(*SettingService).GetOpenAIQuotaAutoPauseSettings()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/setting_gateway_runtime.go:981 +0x190
+  github.com/Wei-Shaw/sub2api/internal/service.(*OpenAIGatewayService).withOpenAIQuotaAutoPauseContext()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_scheduling.go:698 +0x8d
+  github.com/Wei-Shaw/sub2api/internal/service.(*OpenAIGatewayService).selectAccountWithSchedulerOnce()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_account_scheduler.go:2267 +0xae
+  github.com/Wei-Shaw/sub2api/internal/service.(*OpenAIGatewayService).selectAccountWithScheduler()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_account_scheduler.go:2233 +0x1a4
+  github.com/Wei-Shaw/sub2api/internal/service.(*OpenAIGatewayService).SelectAccountWithSchedulerForCapability()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_account_scheduler.go:2189 +0x1bd
+  github.com/Wei-Shaw/sub2api/internal/handler.(*OpenAIGatewayHandler).Messages()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/openai_gateway_handler.go:1127 +0x22d8
+  github.com/Wei-Shaw/sub2api/internal/handler.runPersonalSearchHandler.func7()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_websearch_personal_test.go:171 +0x264
+  github.com/gin-gonic/gin.(*Context).Next()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/context.go:174 +0xb06
+  github.com/gin-gonic/gin.(*Engine).handleHTTPRequest()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/gin.go:620 +0x751
+  github.com/gin-gonic/gin.(*Engine).ServeHTTP()
+      /home/liang/go/pkg/mod/github.com/gin-gonic/gin@v1.9.1/gin.go:576 +0x3e6
+  github.com/Wei-Shaw/sub2api/internal/handler.runPersonalSearchHandler()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_websearch_personal_test.go:181 +0x272c
+  github.com/Wei-Shaw/sub2api/internal/handler.TestOpenAIWebSearchMessagesHandler_UsageAndSlots.func1()
+      /home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_websearch_personal_test.go:195 +0x76
+  testing.tRunner()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195 +0x21c
+  testing.(*T).Run.gowrap1()
+      /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x38
+==================
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 INFO web search emulation: search completed provider=brave results_count=1
+2026/10/24 23:49:20 [Billing] Using fallback pricing for model: gpt-5.2
+2026/10/24 23:49:20 [SIMPLE MODE] Usage recorded (not billed): user=9703, tokens=0
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 INFO web search emulation: search completed provider=brave results_count=1
+2026/10/24 23:49:20 [Billing] Using fallback pricing for model: gpt-5.2
+2026/10/24 23:49:20 [SIMPLE MODE] Usage recorded (not billed): user=9703, tokens=0
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 INFO web search emulation: search completed provider=brave results_count=1
+2026/10/24 23:49:20 [Billing] Using fallback pricing for model: gpt-5.2
+2026/10/24 23:49:20 [SIMPLE MODE] Usage recorded (not billed): user=9703, tokens=0
+--- FAIL: TestOpenAIWebSearchMessagesHandler_UsageAndSlots (0.01s)
+    --- FAIL: TestOpenAIWebSearchMessagesHandler_UsageAndSlots/stream=false/queued=false (0.00s)
+        testing.go:1867: race detected during execution of test
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 ERROR web search emulation: search failed error="local provider failure"
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 ERROR web search emulation: search failed error="context canceled"
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 INFO web search emulation: search completed provider=brave results_count=1
+2026/10/24 23:49:20 WARN web search emulation: SSE write failed, stopping error="write: io: read/write on closed pipe"
+2026/10/24 23:49:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9701 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 ERROR web search emulation: search failed error="websearch: proxy unavailable"
+2026/10/24 23:49:20 INFO web search emulation: executing search account_id=9704 account_name=personal-search query="latest search query"
+2026/10/24 23:49:20 INFO web search emulation: search completed provider=brave results_count=1
+2026/10/24 23:49:20 [Billing] Using fallback pricing for model: gpt-5.2
+2026/10/24 23:49:20 [SIMPLE MODE] Usage recorded (not billed): user=9703, tokens=0
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler	0.064s
+FAIL

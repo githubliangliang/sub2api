@@ -4,6 +4,9 @@ import { defineComponent } from 'vue'
 
 import AccountsView from '../AccountsView.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
+import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
+import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
+import Pagination from '@/components/common/Pagination.vue'
 
 const {
   listAccounts,
@@ -223,6 +226,64 @@ describe('admin AccountsView lite account list', () => {
       expect.objectContaining({ lite: '1' }),
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+    wrapper.unmount()
+  })
+
+  it('restores platform and status in the first request and saves clearing without extra filters', async () => {
+    localStorage.setItem('account-filter-values', JSON.stringify({ platform: 'openai', status: 'error' }))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(listAccounts.mock.calls[0][2]).toMatchObject({ platform: 'openai', status: 'error', search: '', group: '' })
+    const filters = wrapper.findComponent(AccountTableFilters)
+    filters.vm.$emit('update:filters', { ...filters.props('filters'), platform: '', status: 'active', search: 'not-persisted' })
+    filters.vm.$emit('change')
+    await flushPromises()
+    expect(JSON.parse(localStorage.getItem('account-filter-values')!)).toEqual({ platform: '', status: 'active' })
+    wrapper.unmount()
+  })
+
+  it('opens and filters when storage fails specifically for the saved account filters', async () => {
+    const getItem = Storage.prototype.getItem
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (key) {
+      if (key === 'account-filter-values') throw new Error('disabled')
+      return getItem.call(this, key)
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(listAccounts.mock.calls[0][2]).toMatchObject({ platform: '', status: '' })
+    const setItem = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
+      if (key === 'account-filter-values') throw new Error('full')
+      return setItem.call(this, key, value)
+    })
+    const filters = wrapper.findComponent(AccountTableFilters)
+    filters.vm.$emit('update:filters', { ...filters.props('filters'), platform: 'grok' })
+    filters.vm.$emit('change')
+    await flushPromises()
+    expect(filters.props('filters').platform).toBe('grok')
+    wrapper.unmount()
+  })
+
+  it('returns to page one and clears selected accounts when remembered filters change', async () => {
+    vi.useFakeTimers()
+    listAccounts.mockResolvedValue({ items: [listRow], total: 100, page: 1, page_size: 20, pages: 5 })
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.findComponent(Pagination).vm.$emit('update:page', 5)
+    await flushPromises()
+    expect(listAccounts.mock.lastCall?.[0]).toBe(5)
+    const bulk = wrapper.findComponent(AccountBulkActionsBar)
+    bulk.vm.$emit('select-page')
+    await flushPromises()
+    expect(bulk.props('selectedIds')).toEqual([42])
+    const filters = wrapper.findComponent(AccountTableFilters)
+    filters.vm.$emit('update:filters', { ...filters.props('filters'), platform: 'grok', status: 'active' })
+    filters.vm.$emit('change')
+    await vi.advanceTimersByTimeAsync(301)
+    await flushPromises()
+    expect(listAccounts.mock.lastCall?.[0]).toBe(1)
+    expect(bulk.props('selectedIds')).toEqual([])
+    expect(JSON.parse(localStorage.getItem('account-filter-values')!)).toEqual({ platform: 'grok', status: 'active' })
     wrapper.unmount()
   })
 

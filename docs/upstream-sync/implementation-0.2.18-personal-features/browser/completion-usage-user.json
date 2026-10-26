@@ -1,0 +1,110 @@
+[
+  {
+    "at_utc": "2026-10-25T04:10:54.757962+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "scrollintoview",
+      "[data-testid=\"output-tps\"]"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Done\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T04:10:55.294586+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "wait",
+      "--fn",
+      "(() => {const r=document.querySelector(\"[data-testid=output-tps]\")?.getBoundingClientRect(); return r&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})()"
+    ],
+    "exit_code": 0,
+    "stdout": "true\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T04:10:55.314164+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "eval",
+      "(() => {const e=document.querySelector('[data-testid=output-tps]'); const r=e.getBoundingClientRect(); const visible=r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth; if(e.textContent!=='50.0 tok/s'||!visible) throw Error('TPS must be in view'); return {text:e.textContent,visible,rect:{top:r.top,left:r.left,bottom:r.bottom,right:r.right},lang:document.documentElement.lang,viewport:[innerWidth,innerHeight],bodyOverflow:document.documentElement.scrollWidth>innerWidth}})()"
+    ],
+    "exit_code": 0,
+    "stdout": "{\n  \"bodyOverflow\": false,\n  \"lang\": \"zh\",\n  \"rect\": {\n    \"bottom\": 738,\n    \"left\": 300.859375,\n    \"right\": 356,\n    \"top\": 722\n  },\n  \"text\": \"50.0 tok/s\",\n  \"viewport\": [\n    390,\n    844\n  ],\n  \"visible\": true\n}\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T04:10:55.409545+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "screenshot",
+      "/home/liang/myself/work_space/idea/github/sub2api/docs/upstream-sync/implementation-0.2.18-personal-features/browser/usage-user-mobile-completion.png"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Screenshot saved to /home/liang/myself/work_space/idea/github/sub2api/docs/upstream-sync/implementation-0.2.18-personal-features/browser/usage-user-mobile-completion.png\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T04:10:55.437593+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "set",
+      "viewport",
+      "1280",
+      "900"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Done\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T04:10:55.623126+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "open",
+      "http://127.0.0.1:33886/admin/accounts"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Local feature QA - AI API Gateway\n  http://127.0.0.1:33886/admin/accounts\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T04:11:20.699506+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "wait",
+      "text=Codex Local QA"
+    ],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "✗ Wait timed out after 25000ms\n"
+  }
+]

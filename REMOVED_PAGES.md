@@ -7,7 +7,7 @@
 | `/admin/redeem` | 管理端兑换码 |
 | `/admin/promo-codes` | 管理端优惠码 |
 | `/admin/announcements` | 管理端公告 |
-| `/admin/ops` | 运维监控页 |
+| `/admin/ops` | 运维监控页；2026-10-25 按用户要求恢复完整页面、侧栏和菜单管理入口 |
 | `/admin/dashboard` | 管理端仪表盘（首页 → `/admin/accounts`） |
 | `/monitor` | 用户渠道状态 |
 | `/subscriptions` | 用户我的订阅 |
@@ -35,12 +35,14 @@
 ## 后端
 
 - 不注册：dashboard / announcements / redeem / promo 管理路由
-- ops：页面 `/admin/ops` 仍下线，但保留 `/api/v1/admin/ops/*`（用量页错误请求依赖）
+- ops：`/api/v1/admin/ops/*` 始终保留（用量页错误请求依赖）；2026-10-25 恢复完整前端页面，继续使用这些 API。
 - 不注册：用户 announcements / redeem / subscriptions / channel-monitors
 - 不注册：`RegisterPaymentRoutes`
 - 不注册：`registerAffiliateRoutes` 及用户 `/user/aff*`
 
 handler 代码仍保留，仅下线路由。
+
+恢复的运维页仅管理员可访问，standard/simple 模式均可用；侧栏继续受 `ops_monitoring_enabled` 与 `hidden_menu_keys` 控制。其他已移除页面和 simple 模式限制保持原样，SQLite 聚合/采集缓存默认开关保持原设置。
 
 ## 部署配置建议
 

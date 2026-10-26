@@ -10,6 +10,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -925,6 +926,8 @@ const (
 
 // GatewayConfig API网关相关配置
 type GatewayConfig struct {
+	// MinOutputTokens is the output limit floor used by protocol conversions.
+	MinOutputTokens int `mapstructure:"min_output_tokens"`
 	// 等待上游响应头的超时时间（秒），0表示无超时
 	// 注意：这不影响流式数据传输，只控制等待响应头的时间
 	ResponseHeaderTimeout int `mapstructure:"response_header_timeout"`
@@ -1838,6 +1841,11 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	forwardedClientIPHeadersEnv, forwardedClientIPHeadersEnvConfigured := os.LookupEnv("SECURITY_FORWARDED_CLIENT_IP_HEADERS")
 	trustedProxiesConfigured := viper.InConfig("server.trusted_proxies") ||
 		viper.IsSet("server.trusted_proxies") || trustedProxiesEnvConfigured
+	// Validate the raw value before weak decoding can truncate a fractional
+	// number or overflow an integer. Explicit zero is not an unset default.
+	if value, err := strconv.Atoi(fmt.Sprint(viper.Get("gateway.min_output_tokens"))); err != nil || value < 16 {
+		return nil, fmt.Errorf("gateway.min_output_tokens must be an integer of at least 16")
+	}
 
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
@@ -2016,6 +2024,7 @@ func configureConfigSource(setConfigFile, addConfigPath func(string)) {
 
 func setDefaults() {
 	viper.SetDefault("run_mode", RunModeStandard)
+	viper.SetDefault("gateway.min_output_tokens", 128)
 
 	// Server
 	viper.SetDefault("server.host", "0.0.0.0")
@@ -2663,6 +2672,11 @@ func setEnvReachableDefaults() {
 }
 
 func (c *Config) Validate() error {
+	// A programmatically constructed zero-value configuration keeps the
+	// compatibility floor; explicit configuration is checked by load above.
+	if c.Gateway.MinOutputTokens != 0 && c.Gateway.MinOutputTokens < 16 {
+		return fmt.Errorf("gateway.min_output_tokens must be at least 16")
+	}
 	forwardedClientIPHeaders, err := NormalizeForwardedClientIPHeaders(c.Security.ForwardedClientIPHeaders)
 	if err != nil {
 		return fmt.Errorf("security.forwarded_client_ip_headers: %w", err)

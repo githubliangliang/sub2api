@@ -8,6 +8,7 @@ type NavigationGuard = (
 
 const routerHarness = vi.hoisted(() => ({
   guard: null as NavigationGuard | null,
+  routes: [] as Array<{ path: string; meta?: Record<string, unknown>; component?: unknown }>,
 }))
 
 const authStore = vi.hoisted(() => ({
@@ -32,13 +33,16 @@ const appStore = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   createWebHistory: vi.fn(() => ({})),
-  createRouter: vi.fn(() => ({
-    beforeEach: vi.fn((guard: NavigationGuard) => {
-      routerHarness.guard = guard
-    }),
-    afterEach: vi.fn(),
-    onError: vi.fn(),
-  })),
+  createRouter: vi.fn((options) => {
+    routerHarness.routes = options.routes
+    return {
+      beforeEach: vi.fn((guard: NavigationGuard) => {
+        routerHarness.guard = guard
+      }),
+      afterEach: vi.fn(),
+      onError: vi.fn(),
+    }
+  }),
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -117,6 +121,31 @@ describe('feature route guard', () => {
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
+  })
+
+  it.each([false, true])('opens the restored ops page for an administrator in simple mode=%s', async (simple) => {
+    const route = routerHarness.routes.find(item => item.path === '/admin/ops')
+    expect(route).toBeDefined()
+    expect(route?.component).toBeTypeOf('function')
+    expect(route?.meta).toMatchObject({ requiresAuth: true, requiresAdmin: true })
+    authStore.isAdmin = true
+    authStore.isSimpleMode = simple
+    const { navigation, next } = runGuard(route!.meta!, route!.path)
+    await navigation
+    expect(next).toHaveBeenCalledWith()
+  })
+
+  it('requires a signed-in administrator for the restored ops page', async () => {
+    const route = routerHarness.routes.find(item => item.path === '/admin/ops')
+    expect(route).toBeDefined()
+    authStore.isAuthenticated = false
+    let attempt = runGuard(route!.meta!, route!.path)
+    await attempt.navigation
+    expect(attempt.next).toHaveBeenCalledWith({ path: '/login', query: { redirect: '/admin/ops' } })
+    authStore.isAuthenticated = true
+    attempt = runGuard(route!.meta!, route!.path)
+    await attempt.navigation
+    expect(attempt.next).toHaveBeenCalledWith('/dashboard')
   })
 
   it('waits for the first public-settings request before deciding payment access', async () => {

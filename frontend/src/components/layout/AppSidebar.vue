@@ -715,6 +715,7 @@ const adminNavItems = computed((): NavItem[] => {
       ],
     },
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
+    { path: '/admin/ops', label: t('nav.ops'), icon: SignalIcon, featureFlag: () => adminSettingsStore.opsMonitoringEnabled },
     { path: '/admin/audit-logs', label: t('nav.auditLogs'), icon: ShieldIcon, hideInSimpleMode: true }
   ]
 

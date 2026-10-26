@@ -1002,11 +1002,14 @@ export interface GeminiCredentials {
   model_mapping?: Record<string, string>
 }
 
+export type TempUnschedulableScope = 'account' | 'model'
+
 export interface TempUnschedulableRule {
   error_code: number
   keywords: string[]
   duration_minutes: number
   description: string
+  scope?: TempUnschedulableScope
 }
 
 export interface TempUnschedulableState {
@@ -1016,6 +1019,8 @@ export interface TempUnschedulableState {
   matched_keyword: string
   rule_index: number
   error_message: string
+  scope?: TempUnschedulableScope
+  model?: string
   trigger_count?: number
   trigger_threshold?: number
   trigger_window_minutes?: number

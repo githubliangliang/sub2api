@@ -39,6 +39,7 @@ export const ADMIN_BUILTIN_MENUS: BuiltinMenuEntry[] = [
   { path: '/admin/risk-control', labelKey: 'nav.contentModeration', scope: 'admin' },
   { path: '/admin/prompt-audit', labelKey: 'nav.promptAudit', scope: 'admin' },
   { path: '/admin/usage', labelKey: 'nav.usage', scope: 'admin' },
+  { path: '/admin/ops', labelKey: 'nav.ops', scope: 'admin' },
   { path: '/admin/audit-logs', labelKey: 'nav.auditLogs', scope: 'admin' },
   { path: '/admin/settings', labelKey: 'nav.settings', scope: 'admin' },
   { path: '/admin/menu', labelKey: 'nav.menuManagement', scope: 'admin' },

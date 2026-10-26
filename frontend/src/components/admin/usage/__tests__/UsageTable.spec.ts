@@ -136,6 +136,23 @@ describe('admin UsageTable tooltip', () => {
     } as DOMRect)
   })
 
+  it.each([true, false])('shows total-duration TPS and updates paged rows while honoring the latency column (account billing: %s)', async (showAccountBilling) => {
+    const row = { ...baseImageRow, request_id: 'text-row', billing_mode: 'token', request_type: 'stream', image_count: 0, image_input_tokens: 400, image_output_tokens: 0, output_tokens: 100, duration_ms: 2000, first_token_ms: 1500 }
+    const wrapper = mount(UsageTable, {
+      props: { data: [row], loading: false, showAccountBilling, columns: [{ key: 'latency', label: 'Latency' }] },
+      global: { stubs: {
+        DataTable: { props: ['data', 'columns'], template: '<div><div v-for="row in data" :key="row.request_id"><slot v-if="columns.some(c => c.key === \'latency\')" name="cell-latency" :row="row" /></div></div>' },
+        Icon: true
+      } }
+    })
+    expect(wrapper.get('[data-testid="output-tps"]').text()).toBe('50.0 tok/s')
+    await wrapper.setProps({ data: [{ ...row, request_id: 'next-page', output_tokens: 200, duration_ms: 5000 }] })
+    expect(wrapper.get('[data-testid="output-tps"]').text()).toBe('40.0 tok/s')
+    await wrapper.setProps({ columns: [] })
+    expect(wrapper.find('[data-testid="output-tps"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('marks only usage rows that actually applied long-context billing', () => {
     const wrapper = mount(UsageTable, {
       props: {

@@ -1,0 +1,27 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/views/admin/ops/utils/__tests__/accountNameMap.spec.ts (6 tests | 1 failed) 26ms
+   × ops account name lookup > replaces an older pending lookup when a manual refresh requests current names 5ms
+     → expected "spy" to be called 2 times, but got 1 times
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/admin/ops/utils/__tests__/accountNameMap.spec.ts > ops account name lookup > replaces an older pending lookup when a manual refresh requests current names
+AssertionError: expected "spy" to be called 2 times, but got 1 times
+ ❯ src/views/admin/ops/utils/__tests__/accountNameMap.spec.ts:45:26
+     43|     const signal = listAccounts.mock.calls[0][3].signal as AbortSignal
+     44|     const manualRefresh = getAccountNameMap('a', true)
+     45|     expect(listAccounts).toHaveBeenCalledTimes(2)
+       |                          ^
+     46|     expect(signal.aborted).toBe(true)
+     47|     expect((await manualRefresh).get(1)).toBe('renamed')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  23:34:45
+   Duration  1.06s (transform 72ms, setup 86ms, collect 49ms, tests 26ms, environment 296ms, prepare 67ms)
+

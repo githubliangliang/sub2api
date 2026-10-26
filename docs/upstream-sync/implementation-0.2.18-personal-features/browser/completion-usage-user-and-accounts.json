@@ -1,0 +1,79 @@
+[
+  {
+    "at_utc": "2026-10-25T03:53:44.056661+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "set",
+      "viewport",
+      "390",
+      "844"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Done\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T03:53:44.414237+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "open",
+      "http://127.0.0.1:33886/usage"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Local feature QA - AI API Gateway\n  http://127.0.0.1:33886/usage\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T03:53:45.144428+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "wait",
+      "[data-testid=\"output-tps\"]"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Done\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T03:53:45.161072+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "scrollintoview",
+      "[data-testid=\"output-tps\"]"
+    ],
+    "exit_code": 0,
+    "stdout": "✓ Done\n",
+    "stderr": ""
+  },
+  {
+    "at_utc": "2026-10-25T03:53:45.175501+00:00",
+    "command": [
+      "rtk",
+      "proxy",
+      "agent-browser",
+      "--session",
+      "sub2api-personal-completion",
+      "eval",
+      "(() => {const e=document.querySelector('[data-testid=output-tps]'); const r=e.getBoundingClientRect(); const visible=r.width>0&&r.height>0&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth; if(e.textContent!=='50.0 tok/s'||!visible) throw Error('TPS must be in view'); return {text:e.textContent,visible,rect:{top:r.top,left:r.left,bottom:r.bottom,right:r.right},lang:document.documentElement.lang,viewport:[innerWidth,innerHeight],bodyOverflow:document.documentElement.scrollWidth>innerWidth}})()"
+    ],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "✗ Evaluation error: Error: TPS must be in view\n    at <anonymous>:1:255\n    at <anonymous>:1:511\n"
+  }
+]

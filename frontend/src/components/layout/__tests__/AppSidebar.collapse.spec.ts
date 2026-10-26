@@ -5,7 +5,7 @@ const { route, app, auth, settings } = vi.hoisted(() => ({
   route: { path: '/admin/channels/pricing' },
   app: { sidebarCollapsed: false, mobileOpen: false, siteName: 'Test', siteLogo: '', siteVersion: '', publicSettingsLoaded: true, sidebarScrollTop: 0, cachedPublicSettings: { hidden_menu_keys: [] as string[], custom_menu_items: [] }, toggleSidebar: vi.fn(), setMobileOpen: vi.fn() },
   auth: { isAdmin: true, isSimpleMode: false },
-  settings: { customMenuItems: [], hiddenMenuKeys: [] as string[], fetch: vi.fn().mockResolvedValue(undefined) },
+  settings: { customMenuItems: [], hiddenMenuKeys: [] as string[], opsMonitoringEnabled: true, fetch: vi.fn().mockResolvedValue(undefined) },
 }))
 vi.mock('@/stores', () => ({ useAppStore: () => app, useAuthStore: () => auth, useAdminSettingsStore: () => settings, useOnboardingStore: () => ({ isCurrentStep: () => false }) }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => app }))
@@ -20,8 +20,29 @@ const renderSidebar = () => mount(AppSidebar, { global: { stubs: { VersionBadge:
 
 describe('sidebar group choices', () => {
   beforeEach(() => {
+    auth.isAdmin = true
     auth.isSimpleMode = false
+    settings.opsMonitoringEnabled = true
+    settings.hiddenMenuKeys = []
     app.cachedPublicSettings.hidden_menu_keys = []
+  })
+
+  it.each([false, true])('shows enabled ops to administrators in simple mode=%s', (simple) => {
+    auth.isSimpleMode = simple
+    const wrapper = renderSidebar()
+    expect(wrapper.find('a[href="/admin/ops"]').exists()).toBe(true)
+    if (simple) expect(wrapper.find('a[href="/admin/groups"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it.each(['disabled', 'public-hidden', 'admin-hidden', 'regular-user'])('keeps the ops menu hidden for %s', (reason) => {
+    if (reason === 'disabled') settings.opsMonitoringEnabled = false
+    if (reason === 'public-hidden') app.cachedPublicSettings.hidden_menu_keys = ['/admin/ops']
+    if (reason === 'admin-hidden') settings.hiddenMenuKeys = ['/admin/ops']
+    if (reason === 'regular-user') auth.isAdmin = false
+    const wrapper = renderSidebar()
+    expect(wrapper.find('a[href="/admin/ops"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('collapses and reopens a group while its child route stays active', async () => {

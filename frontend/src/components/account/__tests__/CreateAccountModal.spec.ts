@@ -8,8 +8,10 @@ const {
   importCodexSessionMock,
   createOpenAICodexPATMock,
   syncUpstreamModelsMock,
+  webSearchConfigMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
+  webSearchConfigMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
   importCodexSessionMock: vi.fn(),
   createOpenAICodexPATMock: vi.fn(),
@@ -39,7 +41,7 @@ vi.mock('@/api/admin', () => ({
       syncUpstreamModels: syncUpstreamModelsMock,
     },
     settings: {
-      getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
+      getWebSearchEmulationConfig: webSearchConfigMock,
       getSettings: vi.fn().mockResolvedValue({}),
     },
     tlsFingerprintProfiles: {
@@ -150,6 +152,7 @@ async function openCodexImportStep(toggleClicks = 0) {
 
 describe('CreateAccountModal OpenAI long-context billing', () => {
   beforeEach(() => {
+    webSearchConfigMock.mockReset().mockResolvedValue({ enabled: false, providers: [] })
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
     probeUpstreamBillingMock.mockReset().mockResolvedValue({})
     importCodexSessionMock.mockReset().mockResolvedValue({
@@ -162,6 +165,68 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     })
     createOpenAICodexPATMock.mockReset().mockResolvedValue({})
     syncUpstreamModelsMock.mockReset().mockResolvedValue({ models: [], warnings: [] })
+  })
+
+  it('creates OpenAI search emulation with model-scoped defaults and explicit account-scoped rules', async () => {
+    webSearchConfigMock.mockResolvedValue({ enabled: true, providers: [{}] })
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    expect(wrapper.find('[data-testid="web-search-emulation"]').exists()).toBe(false)
+    await selectButtonByText(wrapper, 'API Key')
+    await flushPromises()
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('search key')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('search-secret')
+    await wrapper.get('[data-testid="web-search-emulation"]').setValue('enabled')
+    await wrapper.get('[data-testid="temp-unsched-toggle"]').trigger('click')
+    await selectButtonByText(wrapper, 'admin.accounts.tempUnschedulable.presets.rateLimitLabel')
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="temp-unsched-scope"]').element.value).toBe('model')
+    await wrapper.get('[data-testid="temp-unsched-scope"]').setValue('account')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock.mock.calls[0][0].extra.web_search_emulation).toBe('enabled')
+    expect(createAccountMock.mock.calls[0][0].credentials.temp_unschedulable_rules[0]).toMatchObject({ error_code: 429, scope: 'account' })
+    wrapper.unmount()
+  })
+
+  it('clears API key search emulation when switching account categories', async () => {
+    webSearchConfigMock.mockResolvedValue({ enabled: true, providers: [{}] })
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await flushPromises()
+    await wrapper.get('[data-testid="web-search-emulation"]').setValue('disabled')
+    await selectButtonByText(wrapper, 'OAuth')
+    expect(wrapper.find('[data-testid="web-search-emulation"]').exists()).toBe(false)
+    await selectButtonByText(wrapper, 'API Key')
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="web-search-emulation"]').element.value).toBe('default')
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['openai', 'anthropic', 'enabled'], ['openai', 'anthropic', 'disabled'],
+    ['anthropic', 'openai', 'enabled'], ['anthropic', 'openai', 'disabled']
+  ] as const)('does not carry %s API key search overrides to %s (%s)', async (from, to, mode) => {
+    webSearchConfigMock.mockResolvedValue({ enabled: true, providers: [{}] })
+    const wrapper = mountModal()
+    if (from === 'openai') {
+      await selectButtonByText(wrapper, 'OpenAI')
+      await selectButtonByText(wrapper, 'API Key')
+    } else {
+      await selectButtonByText(wrapper, 'admin.accounts.claudeConsole')
+    }
+    await flushPromises()
+    await wrapper.get('[data-testid="web-search-emulation"]').setValue(mode)
+    const target = wrapper.findAll('button').find(button => button.text() === (to === 'openai' ? 'OpenAI' : 'Anthropic'))!
+    await target.trigger('click')
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="web-search-emulation"]').element.value).toBe('default')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue(`${to} switched account`)
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('switched-key')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock.mock.calls[0][0].platform).toBe(to)
+    expect(createAccountMock.mock.calls[0][0].extra || {}).not.toHaveProperty('web_search_emulation')
+    wrapper.unmount()
   })
 
   it('persists previewed model capabilities before finishing account creation', async () => {

@@ -2,7 +2,17 @@
 
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
-OpenSpec 整理（2026-10-24，含用户确认后的补充归档）：19 个已完成变更已归档，42 个主规格汇总 251 个非支付需求；活动目录仅保留 0.2.0 第二档与 0.2.5 第二档。用户确认完成的四批通过各自 completion-record 关闭旧任务，并保留任务与验收原始快照。见[归档清单与保留原因](../../openspec/changes/archive/README.md)。冻结来源和原始证据保持原文。
+OpenSpec 整理（2026-10-24，含用户确认后的补充归档）：19 个已完成变更已归档，42 个主规格汇总 251 个非支付需求；归档后保留的历史活动变更为 0.2.0 第二档与 0.2.5 第二档。用户确认完成的四批通过各自 completion-record 关闭旧任务，并保留任务与验收原始快照。见[归档清单与保留原因](../../openspec/changes/archive/README.md)。冻结来源和原始证据保持原文。
+
+用户选定个人功能（规格2026-10-24，开发验收2026-10-26）：[补充评估与patch sites](./PORTING-0.2.18-personal-features.md) / [OpenSpec](../../openspec/changes/port-upstream-0.2.18-personal-features/README.md)。日志输出TPS、平台/状态筛选记忆、运维详情账号名、模型级冷却规则、OpenAI API Key搜索模拟、最小输出Token配置六项已实现，后续选定的完整运维页入口也已恢复。详见[验收及完成工作树哈希](../../openspec/changes/port-upstream-0.2.18-personal-features/verification.md)。原第三档历史和冻结来源不改写，其他按需项与支付边界不扩展；尚未提交、归档、发布或部署。
+
+- [x] 实施F01–F03的日志/筛选/运维展示及异常、列偏好、缓存生命周期验收；恢复完整/admin/ops、侧栏和菜单项并保留权限/开关与其他页面限制。
+- [x] 实施F04–F06的作用范围、搜索配置与网关转换，真实SQLite/miniredis/simple mode、Messages handler、用量归属及错误/取消/资源释放通过。
+- [x] 完成组合门禁并填写独立verification：后端54个测试包、定向race/SQLite，前端2089通过/2项既有跳过、typecheck/lint/build；无迁移/依赖/VERSION变化。
+
+补充评估教训：同名兼容helper不等于相同接入能力；配置继承需核对实际UI保存者；用精确delta解除旧批次范围限制，见[补充§9](./PORTING-0.2.18-personal-features.md#9-本次通用教训)。
+
+个人功能实施教训：异步用量任务入队前快照请求上下文；SSE取消需要检查每个Write/Flush边界；手动刷新不能复用旧快照；明确凭据失败的判断需覆盖所有既有可达平台。见[整合审查](./implementation-0.2.18-personal-features/review.md)与[补充实施记录](./PORTING-0.2.18-personal-features.md#10-实施完成补记2026-10-26)。
 
 最新实施教训：流服务返回部分结果后，还必须验证真实handler的队列溢出策略、请求字段快照与SQLite账本；目标Go补丁升级也可能改变导出格式，必要依赖前置须测最小版本并重扫安全记录。
 
@@ -53,7 +63,7 @@ v0.2.16历史检查清单：
 
 两份的 P0 都已固化为 OpenSpec change：[`port-upstream-0.1.183-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.183-p0-fixes)（12 项）与 [`port-upstream-0.1.180-p0-fixes`](../../openspec/changes/archive/2026-10-24-port-upstream-0.1.180-p0-fixes)（19 项交付 + 2 项推迟）。行为契约与验收看 change，逐条 patch site 看这两份 PORTING 文档。
 
-`openspec/changes/` 当前保留 2 个活动变更：0.2.0 第二档和 0.2.5 第二档；具体任务计数与保留原因见[归档清单](../../openspec/changes/archive/README.md)。已完成批次的行为契约汇总于[主规格](../../openspec/specs/)，实施证据仍在各档案中。新一轮的立项规则见 [AGENTS.md](../../AGENTS.md) 的「Upstream release intake」：**只有第一档/第二档立 change，第三档/第四档必须先问过用户**。
+`openspec/changes/` 保留的历史未完成变更为0.2.0第二档和0.2.5第二档；具体任务计数与保留原因见[归档清单](../../openspec/changes/archive/README.md)。此外，本次用户选定的个人功能change已开发验收，保留在活动目录等待后续提交/归档。已归档批次的行为契约汇总于[主规格](../../openspec/specs/)，实施证据仍在各档案中。新一轮的立项规则见 [AGENTS.md](../../AGENTS.md) 的「Upstream release intake」：第一档/第二档按流程立change，第三档/第四档须先获用户选定；本次授权不扩展到其他按需能力。
 
 两批 P0 之后的下一批是 [`resolve-pending-decisions-and-p1-fixes`](../../openspec/changes/archive/2026-10-24-resolve-pending-decisions-and-p1-fixes)：4 项 P1（依赖审计例外过期、Grok 目录计费、调度 veto 诊断、真实上游端点）+ 3 个决策一次性拍板（Grok 默认 4.6 / Go 1.27 / 长上下文门控改 OR）。
 

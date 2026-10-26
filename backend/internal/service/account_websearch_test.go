@@ -86,13 +86,13 @@ func TestGetWebSearchEmulationMode_MissingField(t *testing.T) {
 	require.Equal(t, WebSearchModeDefault, a.GetWebSearchEmulationMode())
 }
 
-func TestGetWebSearchEmulationMode_NonAnthropicPlatform(t *testing.T) {
+func TestGetWebSearchEmulationMode_OpenAIAPIKey(t *testing.T) {
 	a := &Account{
 		Platform: PlatformOpenAI,
 		Type:     AccountTypeAPIKey,
 		Extra:    map[string]any{featureKeyWebSearchEmulation: "enabled"},
 	}
-	require.Equal(t, WebSearchModeDefault, a.GetWebSearchEmulationMode())
+	require.Equal(t, WebSearchModeEnabled, a.GetWebSearchEmulationMode())
 }
 
 func TestGetWebSearchEmulationMode_NonAPIKeyType(t *testing.T) {

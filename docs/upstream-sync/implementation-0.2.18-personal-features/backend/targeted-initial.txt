@@ -1,0 +1,15 @@
+$ go test -tags=unit ./internal/config ./internal/pkg/apicompat ./internal/service -run TestPersonalFeatures_|TestLoadMinOutputTokens|Test.*TempUnsched.*Scope|TestOpenAIFailoverSideEffects_401|TestCountTokensEntries_Explicit|TestAnthropicFailoverEntries_Explicit|TestGetWebSearchEmulationMode_|TestShouldEmulateWebSearch_ -count=1
+ok  	github.com/Wei-Shaw/sub2api/internal/config	0.017s
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/apicompat	0.029s [no tests to run]
+FAIL	github.com/Wei-Shaw/sub2api/internal/service [build failed]
+FAIL
+# github.com/Wei-Shaw/sub2api/internal/service [github.com/Wei-Shaw/sub2api/internal/service.test]
+internal/service/websearch_config.go:286:33: mgr.TestSearch undefined (type webSearchManager has no field or method TestSearch)
+internal/service/websearch_config.go:315:19: mgr.GetUsage undefined (type webSearchManager has no field or method GetUsage)
+internal/service/websearch_config.go:328:13: mgr.ResetUsage undefined (type webSearchManager has no field or method ResetUsage)
+internal/service/websearch_config.go:349:19: mgr.GetUsage undefined (type webSearchManager has no field or method GetUsage)
+internal/service/temp_unsched_scope_test.go:241:115: too many arguments in call to gateway.shouldFailoverOpenAIUpstreamResponse
+	have (*Account, number, string, []byte)
+	want (int, string, []byte)
+
+exit=1

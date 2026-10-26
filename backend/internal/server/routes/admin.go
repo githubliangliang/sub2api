@@ -32,9 +32,7 @@ func RegisterAdminRoutes(
 		registerAdminComplianceRoutes(admin, h)
 
 		// 仪表盘 / 公告 / 卡密 / 优惠码：页面已下线，不再注册 HTTP 路由
-		// 运维监控页已下线，但用量页「错误请求」依赖 /admin/ops/errors 等 API，仍注册 ops 路由
-
-		// 运维监控 API（供用量页错误日志等使用）
+		// 运维监控 API（供运维页面和用量页错误日志使用）
 		registerOpsRoutes(admin, h)
 
 		// 用户管理

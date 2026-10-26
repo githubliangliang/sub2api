@@ -231,6 +231,8 @@
               <span v-else class="text-gray-400 dark:text-gray-500">-</span>
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatDuration(row.duration_ms) }}</span>
+              <span class="text-gray-400 dark:text-gray-500" :title="t('usage.outputTpsHint')">{{ t('usage.outputTps') }}</span>
+              <span data-testid="output-tps" class="font-medium tabular-nums text-gray-700 dark:text-gray-300">{{ formatUsageOutputRate(row) }}</span>
             </div>
           </div>
         </template>
@@ -513,6 +515,7 @@ import {
   LATENCY_TEXT_CLASSES,
   durationSeverity,
   firstTokenSeverity,
+  formatUsageOutputRate,
 } from '@/utils/latencyHealth'
 import {
   BILLING_MODE_TOKEN,

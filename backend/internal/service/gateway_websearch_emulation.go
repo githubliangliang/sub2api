@@ -29,22 +29,38 @@ const (
 	defaultWebSearchModel      = "claude-sonnet-4-6"
 	webSearchMsgIDPrefix       = "msg_ws_"
 	webSearchToolUseIDPrefix   = "srvtoolu_ws_"
-	tokenEstimateDivisor       = 4
 
 	// featureKeyWebSearchEmulation is the key used in Account.Extra and Channel.FeaturesConfig.
 	featureKeyWebSearchEmulation = "web_search_emulation"
 )
 
-// webSearchManagerPtr stores *websearch.Manager atomically for concurrent safety.
-var webSearchManagerPtr atomic.Pointer[websearch.Manager]
+type webSearchManager interface {
+	SearchWithBestProvider(context.Context, websearch.SearchRequest) (*websearch.SearchResponse, string, error)
+}
+
+type webSearchManagerState struct{ manager webSearchManager }
+
+var webSearchManagerPtr atomic.Pointer[webSearchManagerState]
 
 // SetWebSearchManager wires the websearch.Manager into the gateway (goroutine-safe).
-func SetWebSearchManager(m *websearch.Manager) {
-	webSearchManagerPtr.Store(m)
+func SetWebSearchManager(m webSearchManager) {
+	if concrete, ok := m.(*websearch.Manager); m == nil || (ok && concrete == nil) {
+		webSearchManagerPtr.Store(nil)
+		return
+	}
+	webSearchManagerPtr.Store(&webSearchManagerState{manager: m})
+}
+
+func getWebSearchExecutor() webSearchManager {
+	if state := webSearchManagerPtr.Load(); state != nil {
+		return state.manager
+	}
+	return nil
 }
 
 func getWebSearchManager() *websearch.Manager {
-	return webSearchManagerPtr.Load()
+	manager, _ := getWebSearchExecutor().(*websearch.Manager)
+	return manager
 }
 
 // shouldEmulateWebSearch checks whether a request should be intercepted.
@@ -52,13 +68,27 @@ func getWebSearchManager() *websearch.Manager {
 // Judgment chain: manager exists → only web_search tool → global enabled → account/channel enabled.
 // Account-level mode: "enabled" (force on), "disabled" (force off), "default" (follow channel).
 func (s *GatewayService) shouldEmulateWebSearch(ctx context.Context, account *Account, groupID *int64, body []byte) bool {
-	if getWebSearchManager() == nil {
+	return shouldEmulateWebSearchFor(ctx, s.settingService, s.channelService, account, groupID, body)
+}
+
+// shouldEmulateWebSearchFor is shared by the Anthropic gateway and the OpenAI
+// gateway's /v1/messages path.
+func shouldEmulateWebSearchFor(
+	ctx context.Context, settingService *SettingService, channelService *ChannelService,
+	account *Account, groupID *int64, body []byte,
+) bool {
+	if getWebSearchExecutor() == nil || account == nil || settingService == nil {
+		return false
+	}
+	// OpenAI OAuth/setup-token accounts retain native search regardless of
+	// channel configuration. Only API key accounts opt into emulation.
+	if account.Platform == PlatformOpenAI && (account.Type != AccountTypeAPIKey || account.IsShadow()) {
 		return false
 	}
 	if !isOnlyWebSearchToolInBody(body) {
 		return false
 	}
-	if !s.settingService.IsWebSearchEmulationEnabled(ctx) {
+	if !settingService.IsWebSearchEmulationEnabled(ctx) {
 		return false
 	}
 
@@ -69,10 +99,10 @@ func (s *GatewayService) shouldEmulateWebSearch(ctx context.Context, account *Ac
 	case WebSearchModeDisabled:
 		return false
 	default: // "default" → follow channel config
-		if groupID == nil || s.channelService == nil {
+		if groupID == nil || channelService == nil {
 			return false
 		}
-		ch, err := s.channelService.GetChannelForGroup(ctx, *groupID)
+		ch, err := channelService.GetChannelForGroup(ctx, *groupID)
 		if err != nil || ch == nil {
 			return false
 		}
@@ -143,15 +173,25 @@ func extractWebSearchTextFromContent(content gjson.Result) string {
 func (s *GatewayService) handleWebSearchEmulation(
 	ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest,
 ) (*ForwardResult, error) {
-	startTime := time.Now()
-
 	// Release the serial queue lock immediately — we don't need upstream.
 	if parsed.OnUpstreamAccepted != nil {
 		parsed.OnUpstreamAccepted()
 	}
+	return writeEmulatedWebSearch(ctx, c, account, parsed.Body.Bytes(), parsed.Model, parsed.Stream)
+}
 
-	query := extractSearchQueryFromBody(parsed.Body.Bytes())
-	if query == "" {
+// writeEmulatedWebSearch runs the search for the last user message and writes
+// an Anthropic Messages response (SSE when stream is true).
+func writeEmulatedWebSearch(
+	ctx context.Context, c *gin.Context, account *Account, body []byte, model string, stream bool,
+) (*ForwardResult, error) {
+	startTime := time.Now()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	query := extractSearchQueryFromBody(body)
+	if strings.TrimSpace(query) == "" {
 		return nil, fmt.Errorf("web search emulation: no query found in messages")
 	}
 
@@ -169,16 +209,18 @@ func (s *GatewayService) handleWebSearchEmulation(
 		}
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	slog.Info("web search emulation: search completed",
 		"provider", providerName, "results_count", len(resp.Results))
 
-	model := parsed.Model
 	if model == "" {
 		model = defaultWebSearchModel
 	}
 
-	if parsed.Stream {
+	if stream {
 		return writeWebSearchStreamResponse(c, query, resp, model, startTime)
 	}
 	return writeWebSearchNonStreamResponse(c, query, resp, model, startTime)
@@ -186,7 +228,7 @@ func (s *GatewayService) handleWebSearchEmulation(
 
 func doWebSearch(ctx context.Context, account *Account, query string) (*websearch.SearchResponse, string, error) {
 	proxyURL := resolveAccountProxyURL(account)
-	mgr := getWebSearchManager()
+	mgr := getWebSearchExecutor()
 	if mgr == nil {
 		return nil, "", fmt.Errorf("web search emulation: manager not initialized")
 	}
@@ -201,7 +243,7 @@ func doWebSearch(ctx context.Context, account *Account, query string) (*websearc
 }
 
 func resolveAccountProxyURL(account *Account) string {
-	if account.ProxyID != nil && account.Proxy != nil {
+	if account != nil && account.ProxyID != nil && account.Proxy != nil {
 		return account.Proxy.URL()
 	}
 	return ""
@@ -216,21 +258,30 @@ func writeWebSearchStreamResponse(
 	toolUseID := webSearchToolUseIDPrefix + uuid.New().String()[:16]
 	textSummary := buildTextSummary(query, resp.Results)
 
+	ctx := c.Request.Context()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	setSSEHeaders(c)
 	w := c.Writer
 	for _, fn := range []func() error{
-		func() error { return writeSSEMessageStart(w, msgID, model) },
-		func() error { return writeSSEServerToolUse(w, toolUseID, query, 0) },
-		func() error { return writeSSEToolResult(w, toolUseID, resp.Results, 1) },
-		func() error { return writeSSETextBlock(w, textSummary, 2) },
-		func() error { return writeSSEMessageEnd(w, len(textSummary)/tokenEstimateDivisor) },
+		func() error { return writeSSEMessageStart(ctx, w, msgID, model) },
+		func() error { return writeSSEServerToolUse(ctx, w, toolUseID, query, 0) },
+		func() error { return writeSSEToolResult(ctx, w, toolUseID, resp.Results, 1) },
+		func() error { return writeSSETextBlock(ctx, w, textSummary, 2) },
+		func() error { return writeSSEMessageEnd(ctx, w, 0) },
 	} {
+		if err := c.Request.Context().Err(); err != nil {
+			return nil, err
+		}
 		if err := fn(); err != nil {
 			slog.Warn("web search emulation: SSE write failed, stopping", "error", err)
-			break
+			return nil, err
 		}
 	}
-	w.Flush()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	return &ForwardResult{Model: model, Duration: time.Since(startTime), Usage: ClaudeUsage{}}, nil
 }
@@ -243,7 +294,7 @@ func setSSEHeaders(c *gin.Context) {
 	c.Writer.WriteHeader(http.StatusOK)
 }
 
-func writeSSEMessageStart(w http.ResponseWriter, msgID, model string) error {
+func writeSSEMessageStart(ctx context.Context, w http.ResponseWriter, msgID, model string) error {
 	evt := map[string]any{
 		"type": "message_start",
 		"message": map[string]any{
@@ -252,10 +303,10 @@ func writeSSEMessageStart(w http.ResponseWriter, msgID, model string) error {
 			"usage": map[string]int{"input_tokens": 0, "output_tokens": 0},
 		},
 	}
-	return flushSSEJSON(w, "message_start", evt)
+	return flushSSEJSON(ctx, w, "message_start", evt)
 }
 
-func writeSSEServerToolUse(w http.ResponseWriter, toolUseID, query string, index int) error {
+func writeSSEServerToolUse(ctx context.Context, w http.ResponseWriter, toolUseID, query string, index int) error {
 	start := map[string]any{
 		"type": "content_block_start", "index": index,
 		"content_block": map[string]any{
@@ -263,13 +314,13 @@ func writeSSEServerToolUse(w http.ResponseWriter, toolUseID, query string, index
 			"name": toolNameWebSearch, "input": map[string]string{"query": query},
 		},
 	}
-	if err := flushSSEJSON(w, "content_block_start", start); err != nil {
+	if err := flushSSEJSON(ctx, w, "content_block_start", start); err != nil {
 		return err
 	}
-	return flushSSEJSON(w, "content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
+	return flushSSEJSON(ctx, w, "content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
 }
 
-func writeSSEToolResult(w http.ResponseWriter, toolUseID string, results []websearch.SearchResult, index int) error {
+func writeSSEToolResult(ctx context.Context, w http.ResponseWriter, toolUseID string, results []websearch.SearchResult, index int) error {
 	start := map[string]any{
 		"type": "content_block_start", "index": index,
 		"content_block": map[string]any{
@@ -277,52 +328,58 @@ func writeSSEToolResult(w http.ResponseWriter, toolUseID string, results []webse
 			"content": buildSearchResultBlocks(results),
 		},
 	}
-	if err := flushSSEJSON(w, "content_block_start", start); err != nil {
+	if err := flushSSEJSON(ctx, w, "content_block_start", start); err != nil {
 		return err
 	}
-	return flushSSEJSON(w, "content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
+	return flushSSEJSON(ctx, w, "content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
 }
 
-func writeSSETextBlock(w http.ResponseWriter, text string, index int) error {
-	if err := flushSSEJSON(w, "content_block_start", map[string]any{
+func writeSSETextBlock(ctx context.Context, w http.ResponseWriter, text string, index int) error {
+	if err := flushSSEJSON(ctx, w, "content_block_start", map[string]any{
 		"type": "content_block_start", "index": index,
 		"content_block": map[string]any{"type": "text", "text": ""},
 	}); err != nil {
 		return err
 	}
-	if err := flushSSEJSON(w, "content_block_delta", map[string]any{
+	if err := flushSSEJSON(ctx, w, "content_block_delta", map[string]any{
 		"type": "content_block_delta", "index": index,
 		"delta": map[string]string{"type": "text_delta", "text": text},
 	}); err != nil {
 		return err
 	}
-	return flushSSEJSON(w, "content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
+	return flushSSEJSON(ctx, w, "content_block_stop", map[string]any{"type": "content_block_stop", "index": index})
 }
 
-func writeSSEMessageEnd(w http.ResponseWriter, outputTokens int) error {
-	if err := flushSSEJSON(w, "message_delta", map[string]any{
+func writeSSEMessageEnd(ctx context.Context, w http.ResponseWriter, outputTokens int) error {
+	if err := flushSSEJSON(ctx, w, "message_delta", map[string]any{
 		"type":  "message_delta",
 		"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
 		"usage": map[string]int{"output_tokens": outputTokens},
 	}); err != nil {
 		return err
 	}
-	return flushSSEJSON(w, "message_stop", map[string]string{"type": "message_stop"})
+	return flushSSEJSON(ctx, w, "message_stop", map[string]string{"type": "message_stop"})
 }
 
 // flushSSEJSON marshals data to JSON and writes an SSE event.
-func flushSSEJSON(w http.ResponseWriter, event string, data any) error {
+func flushSSEJSON(ctx context.Context, w http.ResponseWriter, event string, data any) error {
 	b, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b); err != nil {
 		return fmt.Errorf("write: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
-	return nil
+	return ctx.Err()
 }
 
 // --- Non-streaming JSON response ---
@@ -348,14 +405,24 @@ func writeWebSearchNonStreamResponse(
 			map[string]any{"type": "text", "text": textSummary},
 		},
 		"stop_reason": "end_turn", "stop_sequence": nil,
-		"usage": map[string]int{"input_tokens": 0, "output_tokens": len(textSummary) / tokenEstimateDivisor},
+		"usage": map[string]int{"input_tokens": 0, "output_tokens": 0},
 	}
 
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("web search emulation: marshal response: %w", err)
 	}
-	c.Data(http.StatusOK, "application/json", body)
+	if err := c.Request.Context().Err(); err != nil {
+		return nil, err
+	}
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(http.StatusOK)
+	if _, err := c.Writer.Write(body); err != nil {
+		return nil, fmt.Errorf("web search emulation: write response: %w", err)
+	}
+	if err := c.Request.Context().Err(); err != nil {
+		return nil, err
+	}
 
 	return &ForwardResult{Model: model, Duration: time.Since(startTime), Usage: ClaudeUsage{}}, nil
 }

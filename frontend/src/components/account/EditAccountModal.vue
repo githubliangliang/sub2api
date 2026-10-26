@@ -1238,6 +1238,7 @@
           </div>
           <button
             type="button"
+            data-testid="temp-unsched-toggle"
             @click="tempUnschedEnabled = !tempUnschedEnabled"
             :class="[
               'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
@@ -1333,6 +1334,14 @@
                     class="input"
                     :placeholder="t('admin.accounts.tempUnschedulable.durationPlaceholder')"
                   />
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="input-label">{{ t('admin.accounts.tempUnschedulable.scope') }}</label>
+                  <select v-model="rule.scope" class="input" data-testid="temp-unsched-scope">
+                    <option value="model">{{ t('admin.accounts.tempUnschedulable.scopeModel') }}</option>
+                    <option value="account">{{ t('admin.accounts.tempUnschedulable.scopeAccount') }}</option>
+                  </select>
+                  <p class="input-hint">{{ t('admin.accounts.tempUnschedulable.scopeHint') }}</p>
                 </div>
                 <div class="sm:col-span-2">
                   <label class="input-label">{{ t('admin.accounts.tempUnschedulable.keywords') }}</label>
@@ -1793,9 +1802,9 @@
         </div>
       </div>
 
-      <!-- Anthropic API Key: Web Search Emulation (hidden when global disabled) -->
+      <!-- API Key Web Search Emulation (hidden when global disabled) -->
       <div
-        v-if="account?.platform === 'anthropic' && account?.type === 'apikey' && webSearchGlobalEnabled"
+        v-if="(account?.platform === 'anthropic' || account?.platform === 'openai') && account?.type === 'apikey' && webSearchGlobalEnabled"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -1805,7 +1814,7 @@
               {{ t('admin.accounts.anthropic.webSearchEmulationDesc') }}
             </p>
           </div>
-          <select v-model="webSearchEmulationMode" class="input w-24 text-sm">
+          <select v-model="webSearchEmulationMode" class="input w-24 text-sm" data-testid="web-search-emulation">
             <option value="default">{{ t('admin.accounts.anthropic.webSearchDefault') }}</option>
             <option value="enabled">{{ t('admin.accounts.anthropic.webSearchEnabled') }}</option>
             <option value="disabled">{{ t('admin.accounts.anthropic.webSearchDisabled') }}</option>
@@ -2713,6 +2722,8 @@
 </template>
 
 <script setup lang="ts">
+import type { TempUnschedulableScope } from '@/types'
+import { resolveTempUnschedScope } from '@/utils/tempUnschedScope'
 import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -2844,6 +2855,7 @@ interface TempUnschedRuleForm {
   keywords: string
   duration_minutes: number | null
   description: string
+  scope: TempUnschedulableScope
 }
 
 // State
@@ -3265,7 +3277,8 @@ const tempUnschedPresets = computed(() => [
       error_code: 529,
       keywords: 'overloaded, too many',
       duration_minutes: 60,
-      description: t('admin.accounts.tempUnschedulable.presets.overloadDesc')
+      description: t('admin.accounts.tempUnschedulable.presets.overloadDesc'),
+      scope: 'model' as const
     }
   },
   {
@@ -3274,7 +3287,8 @@ const tempUnschedPresets = computed(() => [
       error_code: 429,
       keywords: 'rate limit, too many requests',
       duration_minutes: 10,
-      description: t('admin.accounts.tempUnschedulable.presets.rateLimitDesc')
+      description: t('admin.accounts.tempUnschedulable.presets.rateLimitDesc'),
+      scope: 'model' as const
     }
   },
   {
@@ -3283,7 +3297,8 @@ const tempUnschedPresets = computed(() => [
       error_code: 503,
       keywords: 'unavailable, maintenance',
       duration_minutes: 30,
-      description: t('admin.accounts.tempUnschedulable.presets.unavailableDesc')
+      description: t('admin.accounts.tempUnschedulable.presets.unavailableDesc'),
+      scope: 'model' as const
     }
   }
 ])
@@ -3531,6 +3546,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     anthropicAPIKeyAuthScheme.value = extra?.anthropic_apikey_auth_scheme === 'authorization_bearer'
       ? 'authorization_bearer'
       : 'x_api_key'
+  }
+  if ((newAccount.platform === 'anthropic' || newAccount.platform === 'openai') && newAccount.type === 'apikey') {
     // 三态：string "default"/"enabled"/"disabled"，向后兼容旧 bool
     const wsVal = extra?.web_search_emulation
     if (wsVal === 'enabled' || wsVal === 'disabled') {
@@ -3918,7 +3935,8 @@ const addTempUnschedRule = (preset?: TempUnschedRuleForm) => {
     error_code: null,
     keywords: '',
     duration_minutes: 30,
-    description: ''
+    description: '',
+    scope: 'model'
   })
 }
 
@@ -3941,6 +3959,7 @@ const buildTempUnschedRules = (rules: TempUnschedRuleForm[]) => {
     keywords: string[]
     duration_minutes: number
     description: string
+    scope: TempUnschedulableScope
   }> = []
 
   for (const rule of rules) {
@@ -3960,7 +3979,8 @@ const buildTempUnschedRules = (rules: TempUnschedRuleForm[]) => {
       error_code: Math.trunc(errorCode),
       keywords,
       duration_minutes: Math.trunc(duration),
-      description: rule.description.trim()
+      description: rule.description.trim(),
+      scope: resolveTempUnschedScope(rule.scope, errorCode)
     })
   }
 
@@ -4062,7 +4082,8 @@ function loadTempUnschedRules(credentials?: Record<string, unknown>) {
       error_code: toPositiveNumber(entry.error_code),
       keywords: formatTempUnschedKeywords(entry.keywords),
       duration_minutes: toPositiveNumber(entry.duration_minutes),
-      description: typeof entry.description === 'string' ? entry.description : ''
+      description: typeof entry.description === 'string' ? entry.description : '',
+      scope: resolveTempUnschedScope(entry.scope, toPositiveNumber(entry.error_code))
     }
   })
 }
@@ -4887,6 +4908,11 @@ const handleSubmit = async () => {
         } else {
           delete newExtra.codex_fingerprint_mode
         }
+      }
+
+      if (props.account.type === 'apikey') {
+        if (webSearchEmulationMode.value === 'default') delete newExtra.web_search_emulation
+        else newExtra.web_search_emulation = webSearchEmulationMode.value
       }
 
       updatePayload.extra = newExtra

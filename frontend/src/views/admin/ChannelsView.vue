@@ -324,8 +324,8 @@
               </div>
             </div>
 
-            <!-- Web Search Emulation (Anthropic only, hidden when global disabled) -->
-            <div v-if="section.platform === 'anthropic' && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
+            <!-- Web Search Emulation (API-key platforms, hidden when global disabled) -->
+            <div v-if="(section.platform === 'anthropic' || section.platform === 'openai') && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
               <div class="flex items-center justify-between">
                 <div>
                   <label class="text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -335,7 +335,7 @@
                     {{ t('admin.channels.form.webSearchEmulationHint') }}
                   </p>
                 </div>
-                <Toggle v-model="section.web_search_emulation" />
+                <Toggle v-model="section.web_search_emulation" :data-testid="`channel-web-search-${section.platform}`" />
               </div>
             </div>
 
@@ -1125,13 +1125,13 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
   }
   const uniqueGroupIds = Array.from(new Set(group_ids))
 
-  // Collect web_search_emulation (only anthropic platform supports it)
+  // Collect web_search_emulation for the supported API-key platforms
   // Always write the key so that disabling in the UI correctly sets platform to false,
   // rather than leaving a stale true value from the cloned features_config.
   const wsEmulation: Record<string, boolean> = {}
   for (const section of form.platforms) {
     if (!section.enabled) continue
-    if (section.platform === 'anthropic') {
+    if (section.platform === 'anthropic' || section.platform === 'openai') {
       wsEmulation[section.platform] = !!section.web_search_emulation
     }
   }

@@ -1,0 +1,72 @@
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/router/__tests__/feature-access.spec.ts (8 tests | 3 failed) 371ms
+   × feature route guard > opens the restored ops page for an administrator in simple mode=false 9ms
+     → expected undefined to be defined
+   × feature route guard > opens the restored ops page for an administrator in simple mode=true 1ms
+     → expected undefined to be defined
+   × feature route guard > requires a signed-in administrator for the restored ops page 1ms
+     → expected undefined to be defined
+ ❯ src/components/layout/__tests__/AppSidebar.collapse.spec.ts (8 tests | 2 failed) 165ms
+   × sidebar group choices > shows enabled ops to administrators in simple mode=false 57ms
+     → expected false to be true // Object.is equality
+   × sidebar group choices > shows enabled ops to administrators in simple mode=true 11ms
+     → expected false to be true // Object.is equality
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 11 passed (16)
+   Start at  12:06:41
+   Duration  1.65s (transform 670ms, setup 163ms, collect 680ms, tests 537ms, environment 655ms, prepare 289ms)
+
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/router/__tests__/feature-access.spec.ts > feature route guard > opens the restored ops page for an administrator in simple mode=false
+ FAIL  src/router/__tests__/feature-access.spec.ts > feature route guard > opens the restored ops page for an administrator in simple mode=true
+AssertionError: expected undefined to be defined
+ ❯ src/router/__tests__/feature-access.spec.ts:128:19
+    126|   it.each([false, true])('opens the restored ops page for an administr…
+    127|     const route = routerHarness.routes.find(item => item.path === '/ad…
+    128|     expect(route).toBeDefined()
+       |                   ^
+    129|     expect(route?.component).toBeTypeOf('function')
+    130|     expect(route?.meta).toMatchObject({ requiresAuth: true, requiresAd…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/router/__tests__/feature-access.spec.ts > feature route guard > requires a signed-in administrator for the restored ops page
+AssertionError: expected undefined to be defined
+ ❯ src/router/__tests__/feature-access.spec.ts:140:19
+    138|   it('requires a signed-in administrator for the restored ops page', a…
+    139|     const route = routerHarness.routes.find(item => item.path === '/ad…
+    140|     expect(route).toBeDefined()
+       |                   ^
+    141|     authStore.isAuthenticated = false
+    142|     let attempt = runGuard(route!.meta!, route!.path)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/components/layout/__tests__/AppSidebar.collapse.spec.ts > sidebar group choices > shows enabled ops to administrators in simple mode=false
+ FAIL  src/components/layout/__tests__/AppSidebar.collapse.spec.ts > sidebar group choices > shows enabled ops to administrators in simple mode=true
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/layout/__tests__/AppSidebar.collapse.spec.ts:33:59
+     31|     auth.isSimpleMode = simple
+     32|     const wrapper = renderSidebar()
+     33|     expect(wrapper.find('a[href="/admin/ops"]').exists()).toBe(true)
+       |                                                           ^
+     34|     if (simple) expect(wrapper.find('a[href="/admin/groups"]').exists(…
+     35|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+

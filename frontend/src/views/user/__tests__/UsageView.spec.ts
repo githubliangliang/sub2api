@@ -149,7 +149,7 @@ function mountUsageView() {
         DateRangePicker: true,
         Icon: true,
         UsageStatsCards: chartStub,
-        UsageTable: chartStub,
+        UsageTable: { ...chartStub, props: ['columns'] },
         UserErrorRequestsTable: chartStub,
         ModelDistributionChart: chartStub,
         GroupDistributionChart: chartStub,
@@ -162,6 +162,7 @@ function mountUsageView() {
 
 describe('user UsageView', () => {
   beforeEach(() => {
+    localStorage.clear()
     query.mockReset()
     getStats.mockReset()
     getDashboardModels.mockReset()
@@ -221,6 +222,15 @@ describe('user UsageView', () => {
     expect(list).toHaveBeenCalledTimes(1)
     expect(list).toHaveBeenCalledWith(1, 100)
     expect(getAvailable).toHaveBeenCalled()
+  })
+
+  it.each([false, true])('keeps the latency/TPS area visible by default and honors saved hiding: %s', async (hidden) => {
+    if (hidden) localStorage.setItem('user-usage-hidden-columns', JSON.stringify(['latency']))
+    const wrapper = mountUsageView()
+    await flushPromises()
+    const columns = wrapper.findComponent(UsageTable).props('columns') as Array<{ key: string }>
+    expect(columns.some(column => column.key === 'latency')).toBe(!hidden)
+    wrapper.unmount()
   })
 
   it('includes API keys after the first page in both record filters and queries by the selected key', async () => {

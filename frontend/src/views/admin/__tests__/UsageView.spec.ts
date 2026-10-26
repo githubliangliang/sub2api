@@ -284,6 +284,15 @@ describe('admin UsageView request ID column visibility', () => {
     getModelStats.mockReset().mockResolvedValue({ models: [] })
   })
 
+  it.each([false, true])('keeps latency/TPS visible by default and honors the admin hidden preference: %s', async (hidden) => {
+    vi.mocked(localStorage.getItem).mockImplementation(key => key === 'usage-hidden-columns' && hidden ? JSON.stringify(['latency']) : null)
+    const wrapper = mount(UsageView, { global: { stubs: { ...defaultStubs, UsageTable: UsageTableStub } } })
+    await flushPromises()
+    const columns = wrapper.findComponent(UsageTableStub).props('columns') as Array<{ key: string }>
+    expect(columns.some(column => column.key === 'latency')).toBe(!hidden)
+    wrapper.unmount()
+  })
+
   it('keeps request ID hidden by default and allows enabling it from column settings', async () => {
     const wrapper = mount(UsageView, {
       global: {

@@ -423,6 +423,7 @@ export default {
           kind: 'Kind',
           platform: 'Platform',
           model: 'Model',
+          account: 'Account',
           duration: 'Duration',
           status: 'Status',
           requestId: 'Request ID',

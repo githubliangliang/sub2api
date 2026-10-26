@@ -1,0 +1,52 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/account/__tests__/CreateAccountModal.spec.ts (25 tests | 2 failed) 784ms
+   × CreateAccountModal OpenAI long-context billing > does not carry openai API key search overrides to anthropic (enabled) 45ms
+     → expected 'enabled' to be 'default' // Object.is equality
+   × CreateAccountModal OpenAI long-context billing > does not carry openai API key search overrides to anthropic (disabled) 45ms
+     → expected 'disabled' to be 'default' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/CreateAccountModal.spec.ts > CreateAccountModal OpenAI long-context billing > does not carry openai API key search overrides to anthropic (enabled)
+AssertionError: expected 'enabled' to be 'default' // Object.is equality
+
+Expected: "default"
+Received: "enabled"
+
+ ❯ src/components/account/__tests__/CreateAccountModal.spec.ts:222:98
+    220|     await target.trigger('click')
+    221|     await flushPromises()
+    222|     expect(wrapper.get<HTMLSelectElement>('[data-testid="web-search-em…
+       |                                                                                                  ^
+    223|     await wrapper.get('form#create-account-form input[type="text"]').s…
+    224|     await wrapper.get('form#create-account-form input[type="password"]…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/account/__tests__/CreateAccountModal.spec.ts > CreateAccountModal OpenAI long-context billing > does not carry openai API key search overrides to anthropic (disabled)
+AssertionError: expected 'disabled' to be 'default' // Object.is equality
+
+Expected: "default"
+Received: "disabled"
+
+ ❯ src/components/account/__tests__/CreateAccountModal.spec.ts:222:98
+    220|     await target.trigger('click')
+    221|     await flushPromises()
+    222|     expect(wrapper.get<HTMLSelectElement>('[data-testid="web-search-em…
+       |                                                                                                  ^
+    223|     await wrapper.get('form#create-account-form input[type="text"]').s…
+    224|     await wrapper.get('form#create-account-form input[type="password"]…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 23 passed (25)
+   Start at  23:55:26
+   Duration  3.70s (transform 1.66s, setup 84ms, collect 1.88s, tests 784ms, environment 353ms, prepare 72ms)
+

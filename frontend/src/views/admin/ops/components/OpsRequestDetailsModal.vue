@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 import { opsAPI, type OpsRequestDetailsParams, type OpsRequestDetail } from '@/api/admin/ops'
 import { parseTimeRangeMinutes, formatDateTime } from '../utils/opsFormatters'
+import { clearAccountNameCache, getAccountNameMap } from '../utils/accountNameMap'
 
 export interface OpsRequestDetailsPreset {
   title: string
@@ -34,6 +36,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 const { copyToClipboard } = useClipboard()
 
 // 与 DataTable 一致：< 768px 切换为卡片视图，避免宽表在移动端被截断。
@@ -44,6 +47,23 @@ const items = ref<OpsRequestDetail[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
+const accountNameById = ref(new Map<number, string>())
+let requestSequence = 0
+
+function isCurrentRequest(sequence: number, sessionKey: string) {
+  return sequence === requestSequence && props.modelValue && (authStore.token || '') === sessionKey
+}
+
+onBeforeUnmount(() => { requestSequence++ })
+watch(() => authStore.token, () => {
+  requestSequence++
+  clearAccountNameCache()
+  accountNameById.value = new Map()
+  items.value = []
+  total.value = 0
+  loading.value = false
+  if (props.modelValue && authStore.token) void fetchData()
+})
 
 const close = () => emit('update:modelValue', false)
 
@@ -71,8 +91,11 @@ function buildTimeParams(): Pick<OpsRequestDetailsParams, 'start_time' | 'end_ti
   }
 }
 
-const fetchData = async () => {
+const fetchData = async (forceNames = false) => {
   if (!props.modelValue) return
+  if (forceNames) clearAccountNameCache()
+  const sequence = ++requestSequence
+  const sessionKey = authStore.token || ''
   loading.value = true
   try {
     const params: OpsRequestDetailsParams = {
@@ -91,15 +114,18 @@ const fetchData = async () => {
     if (typeof props.preset.max_duration_ms === 'number') params.max_duration_ms = props.preset.max_duration_ms
 
     const res = await opsAPI.listRequestDetails(params)
+    if (!isCurrentRequest(sequence, sessionKey)) return
     items.value = res.items || []
     total.value = res.total || 0
+    void refreshAccountNames(sequence, sessionKey, forceNames)
   } catch (e: any) {
+    if (!isCurrentRequest(sequence, sessionKey)) return
     console.error('[OpsRequestDetailsModal] Failed to fetch request details', e)
     appStore.showError(e?.message || t('admin.ops.requestDetails.failedToLoad'))
     items.value = []
     total.value = 0
   } finally {
-    loading.value = false
+    if (isCurrentRequest(sequence, sessionKey)) loading.value = false
   }
 }
 
@@ -107,10 +133,16 @@ watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      if (props.resumeState) return
+      if (props.resumeState && items.value.length > 0) {
+        void refreshAccountNames(++requestSequence, authStore.token || '', false)
+        return
+      }
       page.value = 1
       pageSize.value = 10
       fetchData()
+    } else {
+      requestSequence++
+      loading.value = false
     }
   }
 )
@@ -159,6 +191,25 @@ const kindBadgeClass = (kind: string) => {
   if (kind === 'error') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
 }
+
+async function refreshAccountNames(sequence: number, sessionKey: string, force: boolean) {
+  const ids = items.value.map(row => row.account_id).filter((id): id is number => Number.isInteger(id) && (id ?? 0) > 0)
+  if (!ids.length) return
+  try {
+    let names = await getAccountNameMap(sessionKey, force)
+    if (!isCurrentRequest(sequence, sessionKey)) return
+    if (ids.some(id => !names.has(id))) names = await getAccountNameMap(sessionKey, true)
+    if (isCurrentRequest(sequence, sessionKey)) accountNameById.value = names
+  } catch {
+    // Name lookup is optional; the request details and ID fallback remain usable.
+  }
+}
+
+function accountLabel(row: OpsRequestDetail): string {
+  const id = row.account_id
+  if (!Number.isInteger(id) || id == null || id <= 0) return '-'
+  return accountNameById.value.get(id) || `#${id}`
+}
 </script>
 
 <template>
@@ -172,7 +223,7 @@ const kindBadgeClass = (kind: string) => {
           <button
             type="button"
             class="btn btn-secondary btn-sm"
-            @click="fetchData"
+            @click="fetchData(true)"
           >
             {{ t('common.refresh') }}
           </button>
@@ -212,6 +263,9 @@ const kindBadgeClass = (kind: string) => {
                     <span class="ml-auto text-[11px] text-gray-500 dark:text-gray-400">{{ formatDateTime(row.created_at) }}</span>
                   </div>
                   <div class="break-all text-xs text-gray-600 dark:text-gray-300">{{ row.model || '-' }}</div>
+                  <div class="break-all text-xs text-gray-500 dark:text-gray-400" :title="accountLabel(row)">
+                    {{ t('admin.ops.requestDetails.table.account') }}: {{ accountLabel(row) }}
+                  </div>
                   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
                     <span>{{ latencyLabel }}: {{ formatLatency(row) }}</span>
                     <span>{{ row.status_code ?? '-' }}</span>
@@ -252,6 +306,9 @@ const kindBadgeClass = (kind: string) => {
                     {{ t('admin.ops.requestDetails.table.model') }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.requestDetails.table.account') }}
+                  </th>
+                  <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     {{ latencyLabel }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -280,6 +337,9 @@ const kindBadgeClass = (kind: string) => {
                   </td>
                   <td class="max-w-[240px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="row.model || ''">
                     {{ row.model || '-' }}
+                  </td>
+                  <td class="max-w-[180px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="accountLabel(row)">
+                    {{ accountLabel(row) }}
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                     {{ formatLatency(row) }}

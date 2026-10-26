@@ -497,6 +497,7 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
 import { useTableLoader } from '@/composables/useTableLoader'
+import { loadAccountFilters, saveAccountFilters } from '@/utils/accountFilters'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
@@ -1084,9 +1085,8 @@ const {
 } = useTableLoader<AccountListItem, any>({
   fetchFn: adminAPI.accounts.list,
   initialParams: {
-    platform: '',
+    ...loadAccountFilters(),
     type: '',
-    status: '',
     privacy_mode: '',
     group: '',
     search: '',
@@ -1293,6 +1293,7 @@ const refreshUpstreamBillingSortedList = async (force = false) => {
 useIntervalFn(() => { void refreshUpstreamBillingRates() }, 5 * 60_000, { immediate: false })
 
 const debouncedReload = () => {
+  saveAccountFilters({ platform: params.platform, status: params.status })
   clearSelection()
   syncAccountListDerivedParams()
   hasPendingListSync.value = false

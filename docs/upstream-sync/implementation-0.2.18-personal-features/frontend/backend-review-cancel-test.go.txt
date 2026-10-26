@@ -1,0 +1,27 @@
+//go:build unit
+package service
+import (
+ "context"
+ "net/http/httptest"
+ "strings"
+ "testing"
+ "time"
+ "github.com/Wei-Shaw/sub2api/internal/pkg/websearch"
+ "github.com/gin-gonic/gin"
+)
+type reviewCancelEndWriter struct { *httptest.ResponseRecorder; cancel context.CancelFunc }
+func (w *reviewCancelEndWriter) Write(p []byte) (int,error) {
+ if strings.Contains(string(p), "event: message_delta\n") { w.cancel() }
+ return w.ResponseRecorder.Write(p)
+}
+func TestFrontendReview_SearchCanceledDuringEnd(t *testing.T) {
+ ctx,cancel:=context.WithCancel(context.Background()); defer cancel()
+ recorder:=httptest.NewRecorder()
+ w:=&reviewCancelEndWriter{ResponseRecorder:recorder,cancel:cancel}
+ c,_:=gin.CreateTestContext(w)
+ c.Request=httptest.NewRequest("POST","/v1/messages",nil).WithContext(ctx)
+ result,err:=writeWebSearchStreamResponse(c,"query",&websearch.SearchResponse{},"model",time.Now())
+ if err==nil || result!=nil || strings.Contains(recorder.Body.String(), "event: message_stop") {
+  t.Fatalf("canceled=%v err=%v result_nil=%v stop_after_cancel=%v",ctx.Err(),err,result==nil,strings.Contains(recorder.Body.String(),"event: message_stop"))
+ }
+}

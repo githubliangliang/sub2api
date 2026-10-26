@@ -42,6 +42,15 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 	beginUpstreamResponseModelObservation(c)
 	ClearActualOpenAIUpstreamEndpoint(c)
+	groupID := getOpenAIGroupIDFromContext(c)
+	if account.Platform == PlatformOpenAI && shouldEmulateWebSearchFor(ctx, s.settingService, s.channelService, account, &groupID, body) {
+		stream := gjson.GetBytes(body, "stream").Bool()
+		result, err := writeEmulatedWebSearch(ctx, c, account, body, gjson.GetBytes(body, "model").String(), stream)
+		if err != nil {
+			return nil, err
+		}
+		return &OpenAIForwardResult{Model: result.Model, Stream: stream, Duration: result.Duration}, nil
+	}
 	if shouldForwardOpenAIResponsesViaRawChatCompletions(account) {
 		SetActualOpenAIUpstreamEndpoint(c, "/v1/chat/completions")
 	}
@@ -126,7 +135,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	// 3. Convert Anthropic → Responses after compatibility-only replay guard.
 	anthropicReq.Model = upstreamModel
-	responsesReq, err := apicompat.AnthropicToResponses(&anthropicReq)
+	responsesReq, err := anthropicToResponses(s.cfg, &anthropicReq)
 	if err != nil {
 		return nil, fmt.Errorf("convert anthropic to responses: %w", err)
 	}

@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode, webSearchConfigMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
+  webSearchConfigMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
   authIsSimpleMode: { value: true }
 }))
@@ -31,7 +32,7 @@ vi.mock('@/api/admin', () => ({
       checkMixedChannelRisk: checkMixedChannelRiskMock
     },
     settings: {
-      getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
+      getWebSearchEmulationConfig: webSearchConfigMock,
       getSettings: vi.fn().mockResolvedValue({})
     },
     tlsFingerprintProfiles: {
@@ -314,6 +315,64 @@ function mountModal(account = buildAccount(), renderGroupSelector = false) {
 describe('EditAccountModal', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
+    webSearchConfigMock.mockReset().mockResolvedValue({ enabled: false, providers: [] })
+  })
+
+  it('preserves legacy rule scope defaults, explicit scope and ordering when saving', async () => {
+    const account = buildAccount()
+    account.credentials.temp_unschedulable_enabled = true
+    account.credentials.temp_unschedulable_rules = [
+      { error_code: 429, keywords: ['limited'], duration_minutes: 10, description: 'old' },
+      { error_code: 401, keywords: ['unauthorized'], duration_minutes: 20, description: 'old auth', scope: 'bad' },
+      { error_code: 503, keywords: ['busy'], duration_minutes: 30, description: 'global', scope: ' ACCOUNT ' }
+    ]
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    expect(wrapper.findAll<HTMLSelectElement>('[data-testid="temp-unsched-scope"]').map(select => select.element.value))
+      .toEqual(['model', 'account', 'account'])
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0][1].credentials.temp_unschedulable_rules).toEqual([
+      { error_code: 429, keywords: ['limited'], duration_minutes: 10, description: 'old', scope: 'model' },
+      { error_code: 401, keywords: ['unauthorized'], duration_minutes: 20, description: 'old auth', scope: 'account' },
+      { error_code: 503, keywords: ['busy'], duration_minutes: 30, description: 'global', scope: 'account' }
+    ])
+    wrapper.unmount()
+  })
+
+  it.each([['enabled', 'enabled'], ['disabled', 'disabled'], [true, 'enabled'], [false, 'default']])('round-trips OpenAI API key web search mode %s', async (stored, expected) => {
+    webSearchConfigMock.mockResolvedValue({ enabled: true, providers: [{}] })
+    const account = buildAccount()
+    account.extra = { web_search_emulation: stored, keep: 'value' }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="web-search-emulation"]').element.value).toBe(expected)
+    await wrapper.get('[data-testid="web-search-emulation"]').setValue('default')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0][1].extra).not.toHaveProperty('web_search_emulation')
+    expect(updateAccountMock.mock.calls[0][1].extra.keep).toBe('value')
+    wrapper.unmount()
+  })
+
+  it('resets web search mode between accounts and never exposes it to OAuth or SetupToken', async () => {
+    webSearchConfigMock.mockResolvedValue({ enabled: true, providers: [{}] })
+    const first = buildAccount()
+    first.extra = { web_search_emulation: 'enabled' }
+    const wrapper = mountModal(first)
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="web-search-emulation"]').element.value).toBe('enabled')
+    const next = { ...buildAccount(), id: 22, extra: {} }
+    await wrapper.setProps({ account: next })
+    expect(wrapper.get<HTMLSelectElement>('[data-testid="web-search-emulation"]').element.value).toBe('default')
+    updateAccountMock.mockReset().mockResolvedValue(next)
+    await wrapper.get('[data-testid="web-search-emulation"]').setValue('disabled')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0][1].extra.web_search_emulation).toBe('disabled')
+    for (const type of ['oauth', 'setup-token']) {
+      await wrapper.setProps({ account: { ...next, type } })
+      expect(wrapper.find('[data-testid="web-search-emulation"]').exists()).toBe(false)
+    }
+    wrapper.unmount()
   })
 
   it('allows removing assigned inactive groups and undoing the selection before saving', async () => {

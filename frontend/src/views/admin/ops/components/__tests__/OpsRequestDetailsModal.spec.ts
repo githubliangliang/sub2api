@@ -4,14 +4,23 @@ import type { OpsDashboardOverview } from '@/api/admin/ops'
 import { flushPromises, mount, shallowMount } from '@vue/test-utils'
 import OpsDashboardHeader from '../OpsDashboardHeader.vue'
 import OpsRequestDetailsModal from '../OpsRequestDetailsModal.vue'
+import { clearAccountNameCache } from '../../utils/accountNameMap'
+import { useAuthStore } from '@/stores/auth'
 
-const { listRequestDetails, viewport } = vi.hoisted(() => ({
+const { listRequestDetails, listAccounts, viewport } = vi.hoisted(() => ({
   listRequestDetails: vi.fn(),
+  listAccounts: vi.fn(),
   viewport: { desktop: true },
 }))
 
 vi.mock('@vueuse/core', () => ({ useMediaQuery: () => ref(viewport.desktop) }))
 vi.mock('@/api/admin/ops', () => ({ opsAPI: { listRequestDetails } }))
+vi.mock('@/api/admin/accounts', () => ({ accountsAPI: { list: listAccounts } }))
+vi.mock('@/stores/auth', async () => {
+  const { reactive } = await import('vue')
+  const state = reactive({ token: 'session-a' })
+  return { useAuthStore: () => state }
+})
 vi.mock('@/api', () => ({ adminAPI: { groups: { getAll: vi.fn().mockResolvedValue([]) } } }))
 vi.mock('@/stores', () => ({
   useAppStore: () => ({ showError: vi.fn() }),
@@ -36,6 +45,9 @@ async function openDetails(sort: 'duration_desc' | 'ttft_desc') {
 describe('Ops request latency details', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearAccountNameCache()
+    useAuthStore().token = 'session-a'
+    listAccounts.mockReset().mockResolvedValue({ items: [], total: 0 })
     viewport.desktop = true
     listRequestDetails.mockResolvedValue({
       items: [
@@ -74,7 +86,7 @@ describe('Ops request latency details', () => {
     expect(wrapper.text()).not.toContain('12000 ms')
     expect(wrapper.text()).not.toContain('9000 ms')
     expect(wrapper.text()).not.toContain('5000 ms')
-    if (desktop) expect(wrapper.findAll('tbody tr')[2].findAll('td')[4].text()).toBe('-')
+    if (desktop) expect(wrapper.findAll('tbody tr')[2].findAll('td')[5].text()).toBe('-')
     else expect(wrapper.text()).toContain('admin.ops.ttftLabel: -')
     wrapper.unmount()
   })
@@ -85,6 +97,134 @@ describe('Ops request latency details', () => {
     expect(wrapper.text()).toContain('admin.ops.requestDetails.table.duration')
     expect(wrapper.text()).toContain('12000 ms')
     expect(wrapper.text()).not.toContain('800 ms')
+    wrapper.unmount()
+  })
+
+  it.each([true, false])('shows account names with id fallback without blocking details (desktop: %s)', async (desktop) => {
+    viewport.desktop = desktop
+    listRequestDetails.mockResolvedValue({ items: [
+      { kind: 'success', account_id: 101, duration_ms: 100, model: 'text-model' },
+      { kind: 'error', account_id: 999, duration_ms: 200, model: 'text-model' },
+      { kind: 'success', account_id: null, duration_ms: 300, model: 'text-model' }
+    ], total: 3 })
+    let finish!: (value: unknown) => void
+    listAccounts.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+      .mockResolvedValue({ items: [{ id: 101, name: 'account-alpha' }], total: 1 })
+    const wrapper = await openDetails('duration_desc')
+    expect(wrapper.text()).toContain('text-model')
+    expect(wrapper.text()).toContain('#101')
+    finish({ items: [{ id: 101, name: 'account-alpha' }], total: 1 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('account-alpha')
+    expect(wrapper.text()).toContain('#999')
+    expect(listAccounts).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('refreshes account names on manual refresh and retains details when lookup fails', async () => {
+    listRequestDetails.mockResolvedValue({ items: [{ account_id: 101, model: 'text-model' }], total: 1 })
+    listAccounts.mockResolvedValueOnce({ items: [{ id: 101, name: 'old-name' }], total: 1 })
+      .mockResolvedValueOnce({ items: [{ id: 101, name: 'new-name' }], total: 1 })
+      .mockRejectedValueOnce(new Error('offline'))
+    const wrapper = await openDetails('duration_desc')
+    expect(wrapper.text()).toContain('old-name')
+    const refresh = wrapper.findAll('button').find(button => button.text() === 'common.refresh')!
+    await refresh.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('new-name')
+    await refresh.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('text-model')
+    wrapper.unmount()
+  })
+
+  it('replaces an older forced name snapshot on every explicit manual refresh', async () => {
+    let finishOldRefresh!: (value: unknown) => void
+    listRequestDetails.mockResolvedValue({ items: [{ account_id: 101, model: 'text-model' }], total: 1 })
+    listAccounts.mockResolvedValueOnce({ items: [{ id: 101, name: 'initial-name' }], total: 1 })
+      .mockReturnValueOnce(new Promise(resolve => { finishOldRefresh = resolve }))
+      .mockResolvedValueOnce({ items: [{ id: 101, name: 'renamed-again' }], total: 1 })
+    const wrapper = await openDetails('duration_desc')
+    const refresh = wrapper.findAll('button').find(button => button.text() === 'common.refresh')!
+    await refresh.trigger('click')
+    await flushPromises()
+    expect(listAccounts).toHaveBeenCalledTimes(2)
+    const oldSignal = listAccounts.mock.calls[1][3].signal as AbortSignal
+    await refresh.trigger('click')
+    await flushPromises()
+    expect(listAccounts).toHaveBeenCalledTimes(3)
+    expect(oldSignal.aborted).toBe(true)
+    expect(wrapper.text()).toContain('renamed-again')
+    finishOldRefresh({ items: [{ id: 101, name: 'old-refresh-name' }], total: 1 })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('old-refresh-name')
+    expect(wrapper.text()).toContain('renamed-again')
+    wrapper.unmount()
+  })
+
+  it('does not apply stale details or names after paging, closing or session changes', async () => {
+    let finishNames!: (value: unknown) => void
+    listRequestDetails.mockResolvedValue({ items: [{ account_id: 101, model: 'old-session-model' }], total: 20 })
+    listAccounts.mockReturnValueOnce(new Promise(resolve => { finishNames = resolve }))
+    const wrapper = await openDetails('duration_desc')
+    listRequestDetails.mockResolvedValue({ items: [{ account_id: 202, model: 'new-session-model' }], total: 1 })
+    listAccounts.mockResolvedValue({ items: [{ id: 202, name: 'new-session-name' }], total: 1 })
+    useAuthStore().token = 'session-b'
+    await flushPromises()
+    finishNames({ items: [{ id: 101, name: 'old-session-name' }], total: 1 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('new-session-name')
+    expect(wrapper.text()).not.toContain('old-session-name')
+    await wrapper.setProps({ modelValue: false })
+    wrapper.unmount()
+  })
+
+  it('ignores a slower earlier page response after the filter context changes', async () => {
+    let finishEarlierPage!: (value: unknown) => void
+    listRequestDetails.mockResolvedValueOnce({ items: [{ model: 'page-one' }], total: 30 })
+      .mockReturnValueOnce(new Promise(resolve => { finishEarlierPage = resolve }))
+      .mockResolvedValueOnce({ items: [{ model: 'latest-page' }], total: 30 })
+    const wrapper = await openDetails('duration_desc')
+    const pagination = wrapper.findComponent({ name: 'Pagination' })
+    pagination.vm.$emit('update:page', 2)
+    await flushPromises()
+    await wrapper.setProps({ timeRange: '24h' })
+    await flushPromises()
+    finishEarlierPage({ items: [{ model: 'stale-page' }], total: 30 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('latest-page')
+    expect(wrapper.text()).not.toContain('stale-page')
+    wrapper.unmount()
+  })
+
+  it('does not write late names into a closed dialog and shares their pending lookup on reopening', async () => {
+    let finishNames!: (value: unknown) => void
+    listRequestDetails.mockResolvedValue({ items: [{ account_id: 101, model: 'text-model' }], total: 1 })
+    listAccounts.mockReturnValue(new Promise(resolve => { finishNames = resolve }))
+    const wrapper = await openDetails('duration_desc')
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+    expect(listAccounts).toHaveBeenCalledTimes(1)
+    await wrapper.setProps({ modelValue: false })
+    finishNames({ items: [{ id: 101, name: 'late-name' }], total: 1 })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('late-name')
+    wrapper.unmount()
+  })
+
+  it('resumes pending account names when returning from error details without reloading the saved list', async () => {
+    let finishNames!: (value: unknown) => void
+    listRequestDetails.mockResolvedValue({ items: [{ kind: 'error', account_id: 101, model: 'saved-context' }], total: 1 })
+    listAccounts.mockReturnValue(new Promise(resolve => { finishNames = resolve }))
+    const wrapper = await openDetails('duration_desc')
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true, resumeState: true })
+    expect(listRequestDetails).toHaveBeenCalledTimes(1)
+    finishNames({ items: [{ id: 101, name: 'resumed-account' }], total: 1 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('saved-context')
+    expect(wrapper.text()).toContain('resumed-account')
     wrapper.unmount()
   })
 })
