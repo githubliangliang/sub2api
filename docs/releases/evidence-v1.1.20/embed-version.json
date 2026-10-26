@@ -1,0 +1,13 @@
+{
+  "name": "embed-version",
+  "cwd": "backend",
+  "command": [
+    "python3",
+    "-c",
+    "import os, pathlib, subprocess; env=os.environ.copy(); env.update(CGO_ENABLED=\"0\", GOOS=\"linux\", GOARCH=\"amd64\"); binary=\"/tmp/sub2api-v1.1.20-release-check\"; command=[\"rtk\",\"proxy\",\"go\",\"build\",\"-tags=embed\",\"-ldflags=-s -w -X main.Version=1.1.20 -X main.Commit=0e38d06d82557a0a3b372ca9165a24b9b3acbc93 -X main.Date=2026-10-26 -X main.BuildType=release\",\"-trimpath\",\"-o\",binary,\"./cmd/server\"]; print(\"Command:\",command,flush=True); subprocess.run(command,env=env,check=True); output=subprocess.check_output([\"rtk\",\"proxy\",binary,\"--version\"],text=True); print(output); assert \"Sub2API 1.1.20 \" in output; assert pathlib.Path(\"cmd/server/VERSION\").read_text().strip()==\"1.1.20\""
+  ],
+  "started_at_utc": "2026-10-26T14:38:50.702162+00:00",
+  "exit_code": 0,
+  "seconds": 11.566,
+  "finished_at_utc": "2026-10-26T14:39:02.268424+00:00"
+}

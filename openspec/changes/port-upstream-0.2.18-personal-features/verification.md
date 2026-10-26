@@ -1,8 +1,8 @@
 # 实施验收证据
 
-当前状态：**六项已实现并完成开发验收（2026-10-26），改动保留在未提交工作树**。2026-10-24用户后续授权实现，2026-10-25补充选择恢复完整运维页；[起点快照](../../../docs/upstream-sync/implementation-0.2.18-personal-features/start-state.json)保留原实施记录。本表使用实际产品测试、真实SQLite/miniredis、浏览器固定数据检查及最终文件哈希，不以[规格基线检查](../../../docs/upstream-sync/evidence-0.2.18-personal-features/baseline-checks.md)或OpenSpec结构校验代替实现验收。
+当前状态：**六项已实现并完成开发验收（2026-10-26），实现提交为`0e38d06d82557a0a3b372ca9165a24b9b3acbc93`**。2026-10-24用户后续授权实现，2026-10-25补充选择恢复完整运维页；[起点快照](../../../docs/upstream-sync/implementation-0.2.18-personal-features/start-state.json)保留原实施记录。本表使用实际产品测试、真实SQLite/miniredis、浏览器固定数据检查及最终文件哈希，不以[规格基线检查](../../../docs/upstream-sync/evidence-0.2.18-personal-features/baseline-checks.md)或OpenSpec结构校验代替实现验收。
 
-最终产品为[72个文件的SHA-256清单](../../../docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/product-files.sha256)，与最终门禁对应；文档收尾复核时72项全部一致。发布、tag、push、部署未执行；change未归档。
+最终产品为[72个文件的SHA-256清单](../../../docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/product-files.sha256)，与最终门禁对应；文档收尾复核时72项全部一致。实施验收时未发布/tag/push；用户后续授权发布v1.1.20，发布准备见[版本说明](../../../docs/releases/v1.1.20.md)与[独立检查记录](../../../docs/releases/evidence-v1.1.20/readiness.md)。未部署业务实例，change未归档；冻结来源及原始日志/状态JSON保留当时值。
 
 ## 实施基线
 
@@ -11,9 +11,10 @@
 | 实施开始日期 | 2026-10-24 |
 | 实施起点SHA/工作树 | 67b1a07270acd79f5d54432b44ae396c3f7e360c；原spec/评估未提交，AGENTS/上游索引有对应文档修改；相关产品文件起点无修改 |
 | 与冻结基线的差异 | c36a19b7a到67b1a0727仅归档文档变化，backend/frontend/deploy/.github无提交差异；冻结SHA/证据哈希保持不变 |
-| 产品完成SHA/工作树 | HEAD为f96d00ef8517c7f2d6d6b73017a8bc742136a25f，产品实现尚未提交；使用上述72项文件哈希标识完成工作树，不能将HEAD当作实现提交 |
+| 产品完成SHA/工作树 | 实现提交0e38d06d82557a0a3b372ca9165a24b9b3acbc93；与上述72项文件哈希一致。原验收时HEAD为f96d00ef8517c7f2d6d6b73017a8bc742136a25f，保留的状态JSON记录的是该提交前工作树 |
 | 后续基线差异 | 67b1a0727到f96d00ef8仅历史OpenSpec任务核销文档变化；当前产品哈希与最终门禁一致，见[最终状态](../../../docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/final-state.json)与[收尾复核](../../../docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/closure-check.json) |
-| VERSION、Go与最大迁移 | 1.1.19；backend/go.mod和实际构建工具链均为Go1.27.3；最大SQLite迁移226。本批未修改依赖、迁移、Ent/Wire生成文件或VERSION |
+| 实施验收VERSION、Go与最大迁移 | 1.1.19；backend/go.mod和实际构建工具链均为Go1.27.3；最大SQLite迁移226。实现提交未修改依赖、迁移、Ent/Wire生成文件或VERSION |
+| 后续发布准备 | 用户要求v1.1.20，VERSION以独立发布提交升为1.1.20；只增加发布说明/检查证据与当前状态，不将历史产品测试冒称新版本重跑 |
 
 ## 逐功能证据
 
@@ -61,6 +62,6 @@ Test(LoadMinOutputTokens|ConfiguredMinOutputTokens|MinOutputTokens_|TempUnschedS
 ## 完成条件
 
 - [x] 六项所有必须场景及既有F07兼容delta均有可复核证据。
-- [x] 实际命令与结果、来源取舍及完成工作树哈希已填写；产品未提交，不虚构完成SHA。
+- [x] 实际命令与结果、来源取舍、实现提交及原验收工作树哈希已填写；保留提交前的原始证据。
 - [x] 个人单节点约束保持，未扩大到未选能力。
 - [x] 无遗留必须实现项。未选功能、PG限定测试、发布与部署不计为本次产品验收；基线检查未被记作功能完成。

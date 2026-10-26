@@ -1,6 +1,6 @@
 # 上游选定个人功能补充评估与规格（v0.2.15–v0.2.18）
 
-**实施状态补记（2026-10-26）：六项已实现并完成开发验收，改动保留在未提交工作树。** 用户在规格后授权实现，并于2026-10-25补充选择恢复完整运维页。实际命令、结果和完成文件哈希见[verification](../../openspec/changes/port-upstream-0.2.18-personal-features/verification.md)及[§10](#10-实施完成补记2026-10-26)。以下§1–§9保留2026-10-24规格评估时点；其中“仅规格/未来验收/未实施”均为该历史阶段状态，不代表当前实现进度。冻结来源和原始证据不改写。
+**实施状态补记（2026-10-26）：六项已实现并完成开发验收，实现提交为`0e38d06d82557a0a3b372ca9165a24b9b3acbc93`。** 用户在规格后授权实现，并于2026-10-25补充选择恢复完整运维页。实际命令、结果和完成文件哈希见[verification](../../openspec/changes/port-upstream-0.2.18-personal-features/verification.md)及[§10](#10-实施完成补记2026-10-26)。以下§1–§9保留2026-10-24规格评估时点；其中“仅规格/未来验收/未实施”均为该历史阶段状态，不代表当前实现进度。冻结来源和原始证据不改写。
 
 日期：2026-10-24。**本次仅编写规格，未实施产品功能。** 用户明确选择：输出TPS、账号筛选记忆、运维详情账号名称、模型级冷却规则、OpenAI API Key Web Search模拟、最小输出Token配置。
 
@@ -139,7 +139,7 @@ F01同PR的后端SQL虽多处CLEAN仍排除；F06两个NOBASE不能当成必需�
 
 ## 10. 实施完成补记（2026-10-26）
 
-六项行为及既有F07兼容delta已完成，完整运维页按后续选择恢复。实际起点为`67b1a0727`及原未提交规格；后续HEAD为`f96d00ef8`，两者之间仅历史归档文档变化。产品实现尚未提交，不能把该HEAD当作实现SHA；以[72项产品文件哈希](./implementation-0.2.18-personal-features/completion-2026-10-26/product-files.sha256)标识验收工作树。[逐场景映射](./implementation-0.2.18-personal-features/acceptance-matrix.md)覆盖22条需求、50个Scenario，[验收报告](../../openspec/changes/port-upstream-0.2.18-personal-features/verification.md)给出可复跑命令和实际来源取舍。
+六项行为及既有F07兼容delta已完成，完整运维页按后续选择恢复。实际起点为`67b1a0727`及原未提交规格；后续HEAD为`f96d00ef8`，两者之间仅历史归档文档变化。产品实现现已提交为`0e38d06d82557a0a3b372ca9165a24b9b3acbc93`，不能把原验收HEAD当作实现SHA；以[72项产品文件哈希](./implementation-0.2.18-personal-features/completion-2026-10-26/product-files.sha256)标识验收工作树。[逐场景映射](./implementation-0.2.18-personal-features/acceptance-matrix.md)覆盖22条需求、50个Scenario，[验收报告](../../openspec/changes/port-upstream-0.2.18-personal-features/verification.md)给出可复跑命令和实际来源取舍。
 
 | 门禁 | 最终结果 |
 |---|---|
@@ -152,4 +152,4 @@ F01同PR的后端SQL虽多处CLEAN仍排除；F06两个NOBASE不能当成必需�
 
 具体修正的红→绿记录保留于[整合审查](./implementation-0.2.18-personal-features/review.md)：异步使用量先快照Gin请求字段；每个SSE事件Write/Flush边界检查取消；手动刷新名称映射替换旧快照且返回错误详情上下文后续接加载；跨平台明确凭据失败不被模型规则吞掉。基线结构检查与产品验收仍分别记载。
 
-本批不创建发布、tag、push或部署，不归档change；§5其他按需能力和个人无支付边界保持原决定。
+实施阶段未创建发布、tag、push或部署。用户后续要求提交全部改动并发布v1.1.20，另行准备匹配的VERSION提交、详细annotated tag及main→tag推送；见[发布说明](../releases/v1.1.20.md)与[发布检查](../releases/evidence-v1.1.20/readiness.md)。无业务实例部署，change尚未归档；§5其他按需能力和个人无支付边界保持原决定。

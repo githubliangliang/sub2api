@@ -1,6 +1,6 @@
 # 个人版六项功能规格
 
-状态：**六项已实现并完成开发验收（2026-10-26），保留在未提交工作树**。2026-10-24 用户先选定六项原第三档功能并要求整理为 spec，随后授权实现；2026-10-25补充选择恢复完整运维页。见[验收报告](./verification.md)及[逐场景映射](../../../docs/upstream-sync/implementation-0.2.18-personal-features/acceptance-matrix.md)。发布、tag和部署不在任务范围，change尚未归档。历史分档和冻结来源不改写。
+状态：**六项已实现并完成开发验收（2026-10-26），实现提交为`0e38d06d82557a0a3b372ca9165a24b9b3acbc93`**。2026-10-24 用户先选定六项原第三档功能并要求整理为 spec，随后授权实现；2026-10-25补充选择恢复完整运维页。见[验收报告](./verification.md)及[逐场景映射](../../../docs/upstream-sync/implementation-0.2.18-personal-features/acceptance-matrix.md)。用户后续要求提交并发布v1.1.20，另作VERSION发布准备提交，见[发布说明](../../../docs/releases/v1.1.20.md)及[检查证据](../../../docs/releases/evidence-v1.1.20/readiness.md)；实施验收使用的1.1.19及原始证据不回写。未部署业务实例，change尚未归档。历史分档和冻结来源不改写。
 
 | 编号 | 功能 | 行为规格 |
 |---|---|---|

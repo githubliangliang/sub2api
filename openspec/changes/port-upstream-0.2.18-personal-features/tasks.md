@@ -1,6 +1,6 @@
 # 实施任务
 
-2026-10-24 用户后续授权实施，2026-10-25补充选择恢复完整运维页；2026-10-26六项完成开发验收。以下勾选均有[verification](./verification.md)与[逐场景映射](../../../docs/upstream-sync/implementation-0.2.18-personal-features/acceptance-matrix.md)的真实产品证据。完成状态为未提交工作树，使用72项文件哈希标识；基线通过与OpenSpec校验不代替产品验收。
+2026-10-24 用户后续授权实施，2026-10-25补充选择恢复完整运维页；2026-10-26六项完成开发验收。以下勾选均有[verification](./verification.md)与[逐场景映射](../../../docs/upstream-sync/implementation-0.2.18-personal-features/acceptance-matrix.md)的真实产品证据。实现已提交为`0e38d06d82557a0a3b372ca9165a24b9b3acbc93`，原验收工作树使用72项文件哈希标识；基线通过与OpenSpec校验不代替产品验收。
 
 ## 0. 实施准备
 
