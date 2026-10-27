@@ -788,13 +788,16 @@ func (h *UserHandler) UpdateUserPlatformQuotas(c *gin.Context) {
 
 	records := make([]service.UserPlatformQuotaRecord, 0, len(req.Quotas))
 	for _, q := range req.Quotas {
-		records = append(records, service.UserPlatformQuotaRecord{
+		record := service.UserPlatformQuotaRecord{
 			UserID:          userID,
 			Platform:        q.Platform,
 			DailyLimitUSD:   q.DailyLimitUSD,
 			WeeklyLimitUSD:  q.WeeklyLimitUSD,
 			MonthlyLimitUSD: q.MonthlyLimitUSD,
-		})
+		}
+		if record.HasAnyLimit() {
+			records = append(records, record)
+		}
 	}
 
 	ctx := c.Request.Context()
@@ -856,6 +859,7 @@ func (h *UserHandler) UpdateUserPlatformQuotas(c *gin.Context) {
 	slog.Info("admin.quota_updated",
 		"actor_admin_id", getAdminIDFromContext(c),
 		"target_user_id", userID,
+		"submitted_count", len(req.Quotas),
 		"platform_count", len(records),
 		"before_snapshot_available", beforeErr == nil,
 		"changes", changes)

@@ -67,8 +67,8 @@ func TestSnapshotPlatformQuotaDefaults_PassesToRepoBulkInsert(t *testing.T) {
 	if err := s.snapshotPlatformQuotaDefaults(context.Background(), 999, plan); err != nil {
 		t.Fatal(err)
 	}
-	if len(fakeRepo.records) != 4 {
-		t.Errorf("expected 4 records, got %d", len(fakeRepo.records))
+	if len(fakeRepo.records) != 1 {
+		t.Errorf("expected 1 configured record, got %d", len(fakeRepo.records))
 	}
 	found := false
 	for _, r := range fakeRepo.records {
@@ -78,6 +78,31 @@ func TestSnapshotPlatformQuotaDefaults_PassesToRepoBulkInsert(t *testing.T) {
 	}
 	if !found {
 		t.Error("anthropic daily = 5 not snapshotted")
+	}
+}
+
+func TestSnapshotPlatformQuotaDefaults_SkipsUnlimitedAndKeepsZero(t *testing.T) {
+	repo := &fakeInsertRecorder{}
+	svc := &AuthService{userPlatformQuotaRepo: repo}
+	zero := 0.0
+	plan := &signupGrantPlan{PlatformQuotas: map[string]*DefaultPlatformQuotaSetting{
+		"anthropic": nil,
+		"gemini":    {},
+		"openai":    {MonthlyLimitUSD: &zero},
+	}}
+	if err := svc.snapshotPlatformQuotaDefaults(context.Background(), 7, plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.records) != 1 || repo.records[0].Platform != "openai" || repo.records[0].MonthlyLimitUSD == nil || *repo.records[0].MonthlyLimitUSD != 0 {
+		t.Fatalf("only explicit zero configuration should be stored: %+v", repo.records)
+	}
+	repo.records = nil
+	plan.PlatformQuotas = map[string]*DefaultPlatformQuotaSetting{"openai": {}, "grok": nil}
+	if err := svc.snapshotPlatformQuotaDefaults(context.Background(), 7, plan); err != nil {
+		t.Fatal(err)
+	}
+	if repo.records != nil {
+		t.Fatalf("empty defaults must not create quota rows: %+v", repo.records)
 	}
 }
 

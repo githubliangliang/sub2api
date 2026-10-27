@@ -112,12 +112,36 @@ func TestUpdateUserPlatformQuotas_Success(t *testing.T) {
 	if len(repo.upsertCalls) != 1 {
 		t.Fatalf("UpsertForUser should be called once, got %d", len(repo.upsertCalls))
 	}
-	if repo.upsertCalls[0].userID != 42 || len(repo.upsertCalls[0].records) != len(service.AllowedQuotaPlatforms) {
+	if repo.upsertCalls[0].userID != 42 || len(repo.upsertCalls[0].records) != 2 {
 		t.Errorf("unexpected upsert call: %+v", repo.upsertCalls[0])
 	}
 	// 缓存失效：按全部允许平台统一失效。
 	if len(cache.deleteCalls) != 5 {
 		t.Errorf("expected 5 cache delete calls, got %d: %+v", len(cache.deleteCalls), cache.deleteCalls)
+	}
+}
+
+func TestUpdateUserPlatformQuotas_DropsUnlimitedAndPreservesExplicitZero(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+		want int
+	}{
+		{"clear", `{"quotas":[{"platform":"openai","daily_limit_usd":null,"weekly_limit_usd":null,"monthly_limit_usd":null}]}`, 0},
+		{"zero", `{"quotas":[{"platform":"openai","daily_limit_usd":0}]}`, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &upsertCapturingQuotaRepo{}
+			handler := buildTestHandler(repo, &billingCacheStub{})
+			context, recorder := putReq(t, test.body)
+			handler.UpdateUserPlatformQuotas(context)
+			if recorder.Code != http.StatusOK || len(repo.upsertCalls) != 1 || len(repo.upsertCalls[0].records) != test.want {
+				t.Fatalf("unexpected quota update: status=%d calls=%+v", recorder.Code, repo.upsertCalls)
+			}
+			if test.want == 1 && (repo.upsertCalls[0].records[0].DailyLimitUSD == nil || *repo.upsertCalls[0].records[0].DailyLimitUSD != 0) {
+				t.Fatalf("zero limit was not preserved: %+v", repo.upsertCalls[0].records)
+			}
+		})
 	}
 }
 

@@ -74,6 +74,26 @@ beforeEach(() => {
 })
 
 describe('UserPlatformQuotaModal', () => {
+  it('does not enable reset for missing or unsaved quota configuration', async () => {
+    const wrapper = await mountAndOpen()
+    const buttons = wrapper.findAll('button').filter(button => button.text() === '↻')
+    expect(buttons).toHaveLength(15)
+    expect(buttons.every(button => (button.element as HTMLButtonElement).disabled)).toBe(true)
+    await wrapper.findAll('input[type=number]')[0].setValue('10')
+    expect(buttons.every(button => (button.element as HTMLButtonElement).disabled)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('allows reset for an explicit saved zero limit only on that platform', async () => {
+    apiMocks.getPlatformQuotas.mockResolvedValueOnce({ platform_quotas: [
+      { platform: 'openai', daily_limit_usd: 0, weekly_limit_usd: null, monthly_limit_usd: null }
+    ] })
+    const wrapper = await mountAndOpen()
+    const buttons = wrapper.findAll('button').filter(button => button.text() === '↻')
+    expect(buttons.slice(0, 3).every(button => (button.element as HTMLButtonElement).disabled)).toBe(true)
+    expect(buttons.slice(3, 6).every(button => !(button.element as HTMLButtonElement).disabled)).toBe(true)
+    wrapper.unmount()
+  })
   it('挂载并 show=true 时调用 getPlatformQuotas', async () => {
     await mountAndOpen()
     expect(apiMocks.getPlatformQuotas).toHaveBeenCalledWith(99)
@@ -170,6 +190,9 @@ describe('UserPlatformQuotaModal', () => {
 
   it('重置按钮 confirm 取消则不调用 API', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    apiMocks.getPlatformQuotas.mockResolvedValueOnce({ platform_quotas: [
+      { platform: 'anthropic', daily_limit_usd: 10, weekly_limit_usd: null, monthly_limit_usd: null }
+    ] })
     const w = await mountAndOpen()
     const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
     expect(resetBtns.length).toBeGreaterThan(0)
@@ -181,6 +204,9 @@ describe('UserPlatformQuotaModal', () => {
 
   it('重置按钮 confirm 确认则调用 API', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    apiMocks.getPlatformQuotas.mockResolvedValueOnce({ platform_quotas: [
+      { platform: 'anthropic', daily_limit_usd: 10, weekly_limit_usd: null, monthly_limit_usd: null }
+    ] })
     const w = await mountAndOpen()
     const resetBtns = w.findAll('button').filter((b) => b.text() === '↻')
     await resetBtns[0].trigger('click') // 第一个是 anthropic.daily

@@ -1888,6 +1888,9 @@ func (s *AuthService) snapshotPlatformQuotaDefaults(ctx context.Context, userID 
 	ctx = dbent.WithoutTx(ctx)
 	records := make([]UserPlatformQuotaRecord, 0, len(plan.PlatformQuotas))
 	for platform, q := range plan.PlatformQuotas {
+		if !q.HasAnyLimit() {
+			continue
+		}
 		rec := UserPlatformQuotaRecord{
 			UserID:   userID,
 			Platform: platform,
@@ -1898,6 +1901,9 @@ func (s *AuthService) snapshotPlatformQuotaDefaults(ctx context.Context, userID 
 			rec.MonthlyLimitUSD = q.MonthlyLimitUSD
 		}
 		records = append(records, rec)
+	}
+	if len(records) == 0 {
+		return nil
 	}
 	if err := s.userPlatformQuotaRepo.BulkInsertInitial(ctx, records); err != nil {
 		logger.LegacyPrintf("service.auth", "[Auth] Warning: snapshot platform quota failed user=%d: %v (fail-open)", userID, err)

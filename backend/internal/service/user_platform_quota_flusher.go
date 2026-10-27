@@ -40,8 +40,8 @@ type FlusherMetrics struct {
 // flusherMaxBatchesPerTick 单次 tick 最多消费的批数，防止 tick 执行时间过长。
 const flusherMaxBatchesPerTick = 16
 
-// maxFlushBatchSize 限制单批行数,必须 ≤ repository.BatchSnapshotUsage 的 batchRows(6000),
-// 以保证单次 flush 的 snapshots 仅生成一条 UPSERT(单事务原子)。两处需手动保持一致。
+// maxFlushBatchSize bounds one cache fetch. The SQLite writer splits these rows
+// into bind-safe UPDATE batches in one transaction.
 const maxFlushBatchSize = 6000
 
 // defaultFlushBatchSize 是配置 flush_batch_size 非法(≤0)时的回退值。
@@ -180,7 +180,7 @@ func (s *UserPlatformQuotaUsageFlusher) flushOneBatch(parentCtx context.Context)
 	// 读到旧 usage 快照(此刻 member 已离开脏集),而 admin 随后写 DB、本行 UPSERT 又在 admin 写之后落库,
 	// 则旧快照会覆盖 admin 刚写入的值;DeleteCache 后 Redis MISS,下次 preflight 从 DB 重载被覆盖的旧值。
 	// 因 member 已被 SPOP,admin 侧 SREM/清脏标记无法拦截本批(故未做)。影响有限,暂列为已知取舍:
-	//   - UpsertForUser 改 limit,而本 UPSERT 不写 limit 列 → limit 配置不受影响;
+	//   - UpsertForUser 改 limit，快照只更新既有活跃行的 usage/window，不重建软删或缺失行；
 	//   - ResetExpiredWindow 改 usage,但 preflight windowExpired 会在窗口真正过期时自愈重置,
 	//     仅"强制重置未过期窗口"且与本批精确交错时短暂失效;
 	//   - 低频 admin 操作 + 默认 flusher_enabled=false。彻底消除需 version OCC(DB 加 version 列条件 UPSERT),
