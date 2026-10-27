@@ -36,7 +36,7 @@
 
 | 变更 | 任务状态 | 保留原因 |
 |---|---:|---|
-| [port-upstream-0.2.0-p0-tail-and-p1](../port-upstream-0.2.0-p0-tail-and-p1/tasks.md) | 125/128 | 主体已合回 main，DOMPurify 由 S16 接管；尚余类型桩清理、四处真实浏览器验收与合并后全量门禁回填。见[当前复核](../port-upstream-0.2.0-p0-tail-and-p1/verification.md)。 |
+| [port-upstream-0.2.0-p0-tail-and-p1](../port-upstream-0.2.0-p0-tail-and-p1/tasks.md) | 128/128 | 2026-10-27 三项收尾完成，实现提交 `5b3e1a716`；完整门禁与四处真实浏览器验收通过，保留活动目录等待后续归档。见[当前验收](../port-upstream-0.2.0-p0-tail-and-p1/verification.md)。 |
 | [port-upstream-0.2.5-tier2](../port-upstream-0.2.5-tier2/tasks.md) | 29/33 | 默认容量系数决策与迁移 227 相关任务尚未关闭。未纳入本次四批完成确认。 |
 
 ## 文档与冻结材料

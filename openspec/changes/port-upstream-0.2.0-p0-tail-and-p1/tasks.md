@@ -1,5 +1,9 @@
 # 实施任务与当前收尾状态
 
+2026-10-27 执行完成：**128/128 项已关闭**，本次核销 `9.6`、`9.14`、`10.11`。实现已提交本地 `main` / `5b3e1a7168a8bd2711d5992e23256c37f14d8911`；实际命令、完整门禁、浏览器验收和产品哈希见 [verification.md](./verification.md)及[收尾报告](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/completion-report.json)。下方两次检测保留实施前状态。
+
+2026-10-27 再核：**125/128 项已关闭**，`9.6`、`9.14`、`10.11` 仍应保留未完成。类型桩仍在，四处浏览器验收记录缺失，当前 Go lint 实际失败；逐项证据见[本次检查记录](./completion-check-2026-10-27.json)与 [verification.md](./verification.md)。
+
 2026-10-24 复核：**125/128 项已关闭**。本次将有实现、提交或后续验收依据的 16 项旧未勾选任务核销；`9.6`、`9.14`、`10.11` 保留未完成。
 
 `[x]` 表示已落实，或已由明确的后续批次接管关闭；接管项逐条注明依据，不表示原步骤曾在 2026-09-02 执行。当前复核见 [verification.md](./verification.md)，原实施时间、版本和来源基线保持历史值。
@@ -199,7 +203,7 @@
 - [x] 9.3 `package.json.pnpm.overrides` 已固定 `dompurify: 3.4.17`，统一覆盖直接与传递解析。
 - [x] 9.4 `frontend/pnpm-workspace.yaml` 的 `overrides` 同样固定 `dompurify: 3.4.17`。
 - [x] 9.5 两处 overrides 当前同值；pnpm 11 本地解析及 S16 的 pnpm 9 隔离验证均有记录。
-- [ ] 9.6 移除 `devDependencies` 中的 `"@types/dompurify"` 类型桩依赖。当前仍声明 `^3.0.5`、安装为 `3.2.0`；此独立清理尚未执行，不影响已完成的 DOMPurify 单版本升级。
+- [x] 9.6 `@types/dompurify` 已在 `5b3e1a716` 从直接依赖、锁文件与安装树移除；锁文件仅删除该包的 11 行。DOMPurify 保持 3.4.17，冻结安装、typecheck 和完整前端门禁通过。
 - [x] 9.7 S16 已使用本地 pnpm 11.21.0 生成锁文件，没有整取上游 lockfile；生成及安装记录见 S16 依赖报告。
 - [x] 9.8 **由后续范围替代关闭**：原“仅 DOMPurify、22 行 churn”约束属于旧单包计划；S16 已明确接管 DOMPurify、axios、Vue、source-map-js 及其必要依赖闭包，并记录实际变更范围，不将其描述为原 22 行操作已执行。
 - [x] 9.9 当前 lockfile 及 `pnpm why dompurify --json` 都只解析到 `3.4.17`；直接依赖、类型桩依赖与 mermaid 传递路径使用同一版本。
@@ -207,7 +211,7 @@
 - [x] 9.11 本次 `pnpm audit --json` 复核 DOMPurify 告警为 0；全树仍有其它包的 75 条记录、命令返回 1，不记为审计全绿。
 - [x] 9.12 **由后续范围替代关闭**：旧固定门禁集合及“例外文件逐字节不变”约束由 S16 后续维护替代；六条过期例外已移除，未续期或新增豁免，生产 xlsx 剩余问题在 S16 报告单列。本次没有调整审计门禁或例外。
 - [x] 9.13 S16 已完成前端全量 Vitest（2027 passed / 2 skipped）、typecheck、lint、build；本次定向 10 文件 / 98 测试通过，并补跑 `make test-frontend-critical`（14 文件 / 176 passed / 2 skipped）。后续验收覆盖与本次复跑分别记于 `verification.md`。
-- [ ] 9.14 补齐四处真实浏览器人工验收记录：`/legal/:documentId`（公开页）、`/custom/:id`（含 iframe 嵌入）、公告弹窗/铃铛、侧栏自定义 SVG 图标。现有真实 DOMPurify 的 jsdom 回归通过，不能替代这四处渲染验收。
+- [x] 9.14 四处真实 Chromium/Vite 渲染与交互验收已完成，12 张截图已目视复核；旧 3.3.1 与当前 3.4.17 的五种净化调用输出相同。公告组件通过临时入口挂载真实组件验收，其余使用真实产品路由；API 与 iframe 为本地固定数据。见[浏览器记录](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/README.md)，临时入口与服务已清理。
 - [x] 9.15 `5ff6e5bf9` 仅修改三个依赖文件与 `.github/audit-exceptions.yml`；没有修改 `.ts` / `.vue` 净化调用点。
 - [x] 9.16 `frontend/package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml` 已在 `5ff6e5bf9` 同一提交内更新。
 
@@ -226,4 +230,4 @@
 - [x] 10.9 `docs/upstream-sync/PORTING-0.2.0.md`：§3.8–§3.11 与 §4.1–§4.4 逐条标「已合」+ 本仓库短 SHA；
       §2.3 的迁移号表回填实际号；§7 第二/三批打勾
 - [x] 10.10 `docs/upstream-sync/README.md` 顶部「当前待移植清单」段落更新本批落点与剩余项（**两处**：0.2.0 那行与 0.1.180 那行）
-- [ ] 10.11 合回 `main` 部分已完成（双亲合并提交 `c9d9bebe8`）。仍待补齐本项要求的合并后 `main` 全量 10.1–10.4 门禁及 SHA 回填；本次仅定向后端、前端与关键套件复跑，不能记作全量复验完成。
+- [x] 10.11 合回 `main` 已完成（双亲提交 `c9d9bebe8`）；收尾实现为 `5b3e1a7168a8bd2711d5992e23256c37f14d8911`。本次重新完成全量 10.1–10.4：后端 54 包 unit/build、迁移、Go lint 0 issues，前端 2090 passed / 2 skipped、typecheck/lint 和关键套件 176 passed / 2 skipped；另完成前端 build 与 HTTP/2 定向 race。SHA、实际日志与 20 个产品文件哈希已回填 `verification.md`。

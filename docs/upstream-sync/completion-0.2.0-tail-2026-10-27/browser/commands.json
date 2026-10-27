@@ -1,0 +1,645 @@
+{
+  "session": "p020-tail-20261027-ac5eb5d836c2",
+  "events": [
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 1280 900",
+      "result": {
+        "chunk_id": "4d78a9",
+        "wall_time_seconds": 0.000031406,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 eval --stdin <<'JS'\nlocalStorage.setItem('sub2api_locale','zh'); localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user');\nJS",
+      "result": {
+        "chunk_id": "b4faec",
+        "wall_time_seconds": 0.000083481,
+        "exit_code": 0,
+        "original_token_count": 2,
+        "output": "null\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 open http://127.0.0.1:34916/legal/qa-policy",
+      "result": {
+        "chunk_id": "835191",
+        "wall_time_seconds": 0.060872243,
+        "exit_code": 0,
+        "original_token_count": 19,
+        "output": "✓ 个人网关 - AI API Gateway\n  http://127.0.0.1:34916/legal/qa-policy\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --text '使用须知'",
+      "result": {
+        "chunk_id": "8e688b",
+        "wall_time_seconds": 0.000026744,
+        "exit_code": 0,
+        "original_token_count": 4,
+        "output": "使用须知\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 snapshot -c",
+      "result": {
+        "chunk_id": "aa3bab",
+        "wall_time_seconds": 0.000039395,
+        "exit_code": 0,
+        "original_token_count": 234,
+        "output": "- banner\n  - link \"Logo 个人网关\" [ref=e1]\n  - link \"登录\" [ref=e2]\n- main\n  - article\n    - image\n    - paragraph\n      - StaticText \"登录条款\"\n    - heading \"服务使用说明\" [level=1, ref=e3]\n    - paragraph\n      - StaticText \"更新日期：2026-10-27\"\n    - heading \"使用须知\" [level=2, ref=e4]\n    - paragraph\n      - StaticText \"欢迎使用个人服务。\"\n      - strong\n        - StaticText \"重要内容\"\n      - StaticText \"与普通段落应清晰显示。\"\n    - list\n      - listitem [level=1]\n        - ListMarker \"• \"\n        - StaticText \"保留列表条目\"\n      - listitem [level=1]\n        - ListMarker \"• \"\n        - StaticText \"保留\"\n        - link \"帮助链接\" [ref=e5]\n    - table\n      - rowgroup\n        - row\n          - columnheader \"项目\" [ref=e8]\n          - columnheader \"说明\" [ref=e9]\n      - row\n        - cell \"文本\" [ref=e6]\n        - cell \"正常显示\" [ref=e7]\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 eval --stdin <<'JS'\n(async () => {\n  const before = (await import('/api/v1/qa/baseline-purify.mjs')).default;\n  const after = (await import('/node_modules/.vite/deps/dompurify.js')).default;\n  const {marked} = await import('/node_modules/.vite/deps/marked.js');\n  const {data} = await (await fetch('/api/v1/qa/inputs')).json();\n  const html = marked.parse(data.markdown, {breaks:true,gfm:true});\n  const cases = [\n    {surface:'legal',html,options:{}},\n    {surface:'announcement-popup',html,options:{}},\n    {surface:'announcement-bell',html,options:{}},\n    {surface:'custom-markdown',html:marked.parse(data.custom_markdown,{breaks:true,gfm:true}),options:{ADD_TAGS:['iframe'],ADD_ATTR:['allowfullscreen','frameborder','src']}},\n    {surface:'sidebar-svg',html:data.svg,options:{USE_PROFILES:{svg:true,svgFilters:true}}}\n  ];\n  const comparisons=cases.map(test=>{\n    const oldHtml=before.sanitize(test.html,test.options),newHtml=after.sanitize(test.html,test.options);\n    if(oldHtml!==newHtml) throw new Error('Sanitizer output changed for '+test.surface);\n    return {surface:test.surface,equal:true,html_length:newHtml.length,iframe_preserved:test.surface==='custom-markdown'?newHtml.includes('<iframe'):null,handler_attributes_removed:!(/onload=|onclick=|javascript:/i.test(newHtml))};\n  });\n  const content=document.querySelector('.legal-document-content');\n  if(!content) throw new Error('Legal content missing');\n  await Promise.all([...content.querySelectorAll('img')].map(img=>img.decode()));\n  const result={before_version:before.version,after_version:after.version,comparisons,anonymous:localStorage.getItem('auth_token')===null,legal:{headings:content.querySelectorAll('h2').length,table_rows:content.querySelectorAll('table tr').length,list_items:content.querySelectorAll('li').length,inline_code:content.querySelector('code')?.textContent,image_loaded:content.querySelector('img')?.naturalWidth>0,dangerous_attributes:content.querySelectorAll('[onload],[onclick],a[href^=\"javascript:\"]').length,xss_not_executed:window.__qaXss!==true},page_overflow:document.documentElement.scrollWidth>innerWidth};\n  if(!result.anonymous || result.legal.dangerous_attributes || !result.legal.xss_not_executed || !result.legal.image_loaded || result.page_overflow) throw new Error(JSON.stringify(result));\n  return result;\n})()\nJS",
+      "result": {
+        "chunk_id": "dc68d4",
+        "wall_time_seconds": 0.000031832,
+        "exit_code": 0,
+        "original_token_count": 292,
+        "output": "{\n  \"after_version\": \"3.4.17\",\n  \"anonymous\": true,\n  \"before_version\": \"3.3.1\",\n  \"comparisons\": [\n    {\n      \"equal\": true,\n      \"handler_attributes_removed\": true,\n      \"html_length\": 369,\n      \"iframe_preserved\": null,\n      \"surface\": \"legal\"\n    },\n    {\n      \"equal\": true,\n      \"handler_attributes_removed\": true,\n      \"html_length\": 369,\n      \"iframe_preserved\": null,\n      \"surface\": \"announcement-popup\"\n    },\n    {\n      \"equal\": true,\n      \"handler_attributes_removed\": true,\n      \"html_length\": 369,\n      \"iframe_preserved\": null,\n      \"surface\": \"announcement-bell\"\n    },\n    {\n      \"equal\": true,\n      \"handler_attributes_removed\": true,\n      \"html_length\": 547,\n      \"iframe_preserved\": true,\n      \"surface\": \"custom-markdown\"\n    },\n    {\n      \"equal\": true,\n      \"handler_attributes_removed\": true,\n      \"html_length\": 219,\n      \"iframe_preserved\": null,\n      \"surface\": \"sidebar-svg\"\n    }\n  ],\n  \"legal\": {\n    \"dangerous_attributes\": 0,\n    \"headings\": 1,\n    \"image_loaded\": true,\n    \"inline_code\": \"inline code\",\n    \"list_items\": 2,\n    \"table_rows\": 2,\n    \"xss_not_executed\": true\n  },\n  \"page_overflow\": false\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/legal-desktop.png",
+      "result": {
+        "chunk_id": "af967d",
+        "wall_time_seconds": 0.000036473,
+        "exit_code": 0,
+        "original_token_count": 26,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/legal-desktop.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 390 844",
+      "result": {
+        "chunk_id": "2fb9fa",
+        "wall_time_seconds": 0.000026497,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/legal-mobile.png",
+      "result": {
+        "chunk_id": "94d7a7",
+        "wall_time_seconds": 0.000026321,
+        "exit_code": 0,
+        "original_token_count": 26,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/legal-mobile.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 1280 900",
+      "result": {
+        "chunk_id": "9c8db1",
+        "wall_time_seconds": 0.000052042,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 eval --stdin <<'JS'\n(async()=>{const {data}=await(await fetch('/api/v1/user')).json();localStorage.setItem('auth_token','local-browser-fixture');localStorage.setItem('auth_user',JSON.stringify(data));localStorage.setItem('user_guide_7_user_v4_interactive','true');return {fixture_user_id:data.id,role:data.role,run_mode:data.run_mode};})()\nJS",
+      "result": {
+        "chunk_id": "da0dee",
+        "wall_time_seconds": 0.000048054,
+        "exit_code": 0,
+        "original_token_count": 18,
+        "output": "{\n  \"fixture_user_id\": 7,\n  \"role\": \"user\",\n  \"run_mode\": \"simple\"\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 open http://127.0.0.1:34916/custom/qa-guide",
+      "result": {
+        "chunk_id": "064e98",
+        "wall_time_seconds": 0.002512872,
+        "exit_code": 0,
+        "original_token_count": 19,
+        "output": "✓ 个人网关 - AI API Gateway\n  http://127.0.0.1:34916/custom/qa-guide\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait '[data-testid=\"announcement-popup-dismiss\"]'",
+      "result": {
+        "chunk_id": "0ffbca",
+        "wall_time_seconds": 1.000840257,
+        "session_id": 54398,
+        "original_token_count": 0,
+        "output": ""
+      }
+    },
+    {
+      "wait_for_session": 54398,
+      "result": {
+        "chunk_id": "f21f00",
+        "wall_time_seconds": 0.000030559,
+        "exit_code": 1,
+        "original_token_count": 9,
+        "output": "✗ Wait timed out after 25000ms\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 snapshot -i",
+      "result": {
+        "chunk_id": "9e4413",
+        "wall_time_seconds": 0.000038035,
+        "exit_code": 0,
+        "original_token_count": 222,
+        "output": "- link \"Logo\" [ref=e10]\n- link \"个人网关\" [ref=e13]\n- link \"仪表盘\" [ref=e14]\n- link \"API 密钥\" [ref=e15]\n- link \"个人资料\" [ref=e16]\n- link \"使用指南\" [ref=e17]\n- link \"嵌入页面\" [ref=e18]\n- button \"深色模式\" [ref=e11]\n- button \"收起\" [ref=e12]\n- heading \"使用指南\" [level=1, ref=e19]\n- button \"🇨🇳 ZH\" [ref=e24]\n- button \"用户菜单\" [ref=e25]\n- button [ref=e26]\n- link \"使用指南\" [ref=e27]\n- link \"使用须知\" [ref=e28]\n- link \"嵌入内容\" [ref=e29]\n- heading \"使用指南\" [level=1, ref=e20]\n- heading \"使用须知\" [level=2, ref=e21]\n- link \"帮助链接\" [ref=e30]\n- columnheader \"项目\" [ref=e33]\n- columnheader \"说明\" [ref=e34]\n- cell \"文本\" [ref=e31]\n- cell \"正常显示\" [ref=e32]\n- heading \"嵌入内容\" [level=2, ref=e22]\n- Iframe \"本地嵌入内容\" [ref=e23]\n  - heading \"嵌入内容正常显示\" [level=2, ref=e35]\n"
+      }
+    },
+    {
+      "command": "Custom markdown/iframe and sidebar SVG DOM acceptance",
+      "result": {
+        "chunk_id": "20d195",
+        "wall_time_seconds": 0.000029245,
+        "exit_code": 0,
+        "original_token_count": 160,
+        "output": "{\n  \"dangerous_attributes\": 0,\n  \"headings\": 3,\n  \"icons\": [\n    {\n      \"circle_fill\": \"#0d9488\",\n      \"handlers\": 0,\n      \"height\": 20,\n      \"viewBox\": \"0 0 24 24\",\n      \"width\": 20\n    },\n    {\n      \"circle_fill\": \"#0d9488\",\n      \"handlers\": 0,\n      \"height\": 20,\n      \"viewBox\": \"0 0 24 24\",\n      \"width\": 20\n    }\n  ],\n  \"iframe\": {\n    \"allowfullscreen\": true,\n    \"frameborder\": \"0\",\n    \"src\": \"/api/v1/qa/embed\",\n    \"text\": \"嵌入内容正常显示\\n\\n本地文档与 iframe 内容可读。\",\n    \"width\": 360\n  },\n  \"page_overflow\": false,\n  \"route\": \"/custom/qa-guide\",\n  \"toc_links\": 3,\n  \"xss_not_executed\": true\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-desktop.png",
+      "result": {
+        "chunk_id": "bdf275",
+        "wall_time_seconds": 0.000035247,
+        "exit_code": 0,
+        "original_token_count": 26,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-desktop.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 find role button click --name '收起'",
+      "result": {
+        "chunk_id": "5f1771",
+        "wall_time_seconds": 0.000034867,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/sidebar-collapsed.png",
+      "result": {
+        "chunk_id": "c4ae16",
+        "wall_time_seconds": 0.000015734,
+        "exit_code": 0,
+        "original_token_count": 27,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/sidebar-collapsed.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 390 844",
+      "result": {
+        "chunk_id": "70f182",
+        "wall_time_seconds": 0.000041188,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-mobile.png",
+      "result": {
+        "chunk_id": "01405b",
+        "wall_time_seconds": 0.000016077,
+        "exit_code": 0,
+        "original_token_count": 26,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-mobile.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 1280 900",
+      "result": {
+        "chunk_id": "35e3e0",
+        "wall_time_seconds": 0.000039059,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 open http://127.0.0.1:34916/qa-020-announcements.html",
+      "result": {
+        "chunk_id": "17f8de",
+        "wall_time_seconds": 0.066136581,
+        "exit_code": 0,
+        "original_token_count": 22,
+        "output": "✓ 个人网关 - AI API Gateway\n  http://127.0.0.1:34916/qa-020-announcements.html\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait '[data-testid=\"announcement-popup-dismiss\"]'",
+      "result": {
+        "chunk_id": "3087c3",
+        "wall_time_seconds": 0.000017185,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 snapshot -i",
+      "result": {
+        "chunk_id": "a2fdb7",
+        "wall_time_seconds": 0.000016105,
+        "exit_code": 0,
+        "original_token_count": 88,
+        "output": "- heading \"公告\" [level=1, ref=e37]\n- button \"公告\" [ref=e38]\n- heading \"服务使用说明\" [level=2, ref=e40]\n- heading \"使用须知\" [level=2, ref=e41]\n- link \"帮助链接\" [ref=e42]\n- columnheader \"项目\" [ref=e45]\n- columnheader \"说明\" [ref=e46]\n- cell \"文本\" [ref=e43]\n- cell \"正常显示\" [ref=e44]\n- button \"标记已读\" [ref=e39]\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 eval --stdin <<'JS'\n(async()=>{const popup=document.querySelector('[data-testid=\"announcement-popup-dismiss\"]')?.closest('.rounded-3xl');const content=popup?.querySelector('.markdown-body');if(!content)throw new Error('Popup body missing');await Promise.all([...content.querySelectorAll('img')].map(img=>img.decode()));const result={surface:'announcement-popup',table_rows:content.querySelectorAll('table tr').length,list_items:content.querySelectorAll('li').length,inline_code:content.querySelector('code')?.textContent,image_loaded:content.querySelector('img')?.naturalWidth>0,dangerous_attributes:content.querySelectorAll('[onload],[onclick],a[href^=\"javascript:\"]').length,xss_not_executed:window.__qaXss!==true,body_scroll_locked:document.body.style.overflow==='hidden',page_overflow:document.documentElement.scrollWidth>innerWidth};if(result.table_rows!==2||result.list_items!==2||!result.image_loaded||result.dangerous_attributes||!result.xss_not_executed||!result.body_scroll_locked||result.page_overflow)throw new Error(JSON.stringify(result));return result;})()\nJS",
+      "result": {
+        "chunk_id": "363726",
+        "wall_time_seconds": 0.000027511,
+        "exit_code": 0,
+        "original_token_count": 62,
+        "output": "{\n  \"body_scroll_locked\": true,\n  \"dangerous_attributes\": 0,\n  \"image_loaded\": true,\n  \"inline_code\": \"inline code\",\n  \"list_items\": 2,\n  \"page_overflow\": false,\n  \"surface\": \"announcement-popup\",\n  \"table_rows\": 2,\n  \"xss_not_executed\": true\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-popup-desktop.png",
+      "result": {
+        "chunk_id": "49354d",
+        "wall_time_seconds": 0.053102601,
+        "exit_code": 0,
+        "original_token_count": 29,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-popup-desktop.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 390 844",
+      "result": {
+        "chunk_id": "28f11c",
+        "wall_time_seconds": 0.000016051,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-popup-mobile.png",
+      "result": {
+        "chunk_id": "6aa366",
+        "wall_time_seconds": 0.000203219,
+        "exit_code": 0,
+        "original_token_count": 29,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-popup-mobile.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 find testid announcement-popup-dismiss click",
+      "result": {
+        "chunk_id": "b9735c",
+        "wall_time_seconds": 0.000011777,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --fn '!document.querySelector(\"[data-testid=announcement-popup-dismiss]\")'",
+      "result": {
+        "chunk_id": "ba5ac1",
+        "wall_time_seconds": 0.082033298,
+        "exit_code": 0,
+        "original_token_count": 2,
+        "output": "true\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 1280 900",
+      "result": {
+        "chunk_id": "c22095",
+        "wall_time_seconds": 0.000068309,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 find role button click --name '公告'",
+      "result": {
+        "chunk_id": "7d38b4",
+        "wall_time_seconds": 0.000024497,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 snapshot -i",
+      "result": {
+        "chunk_id": "adc821",
+        "wall_time_seconds": 0.000043274,
+        "exit_code": 0,
+        "original_token_count": 66,
+        "output": "- heading \"公告\" [level=1, ref=e37]\n- button \"公告\" [ref=e38]\n- heading \"公告\" [level=2, ref=e50]\n- button \"全部已读\" [ref=e51]\n- button \"关闭\" [ref=e52]\n- heading \"服务使用说明\" [level=3, ref=e48]\n- heading \"帮助与文档\" [level=3, ref=e49]\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-list-desktop.png",
+      "result": {
+        "chunk_id": "ff666c",
+        "wall_time_seconds": 0.132161516,
+        "exit_code": 0,
+        "original_token_count": 29,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-list-desktop.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 find text '帮助与文档' click --exact",
+      "result": {
+        "chunk_id": "8ab940",
+        "wall_time_seconds": 0.000030983,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --text '使用须知'",
+      "result": {
+        "chunk_id": "cfe88c",
+        "wall_time_seconds": 0.000012243,
+        "exit_code": 0,
+        "original_token_count": 4,
+        "output": "使用须知\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 eval --stdin <<'JS'\n(async()=>{const content=document.querySelector('.markdown-body');if(!content)throw new Error('Announcement detail missing');await Promise.all([...content.querySelectorAll('img')].map(img=>img.decode()));const result={surface:'announcement-bell-detail',table_rows:content.querySelectorAll('table tr').length,list_items:content.querySelectorAll('li').length,inline_code:content.querySelector('code')?.textContent,image_loaded:content.querySelector('img')?.naturalWidth>0,dangerous_attributes:content.querySelectorAll('[onload],[onclick],a[href^=\"javascript:\"]').length,xss_not_executed:window.__qaXss!==true,body_scroll_locked:document.body.style.overflow==='hidden',page_overflow:document.documentElement.scrollWidth>innerWidth};if(result.table_rows!==2||result.list_items!==2||!result.image_loaded||result.dangerous_attributes||!result.xss_not_executed||!result.body_scroll_locked||result.page_overflow)throw new Error(JSON.stringify(result));return result;})()\nJS",
+      "result": {
+        "chunk_id": "42f4a5",
+        "wall_time_seconds": 0.000011765,
+        "exit_code": 0,
+        "original_token_count": 63,
+        "output": "{\n  \"body_scroll_locked\": true,\n  \"dangerous_attributes\": 0,\n  \"image_loaded\": true,\n  \"inline_code\": \"inline code\",\n  \"list_items\": 2,\n  \"page_overflow\": false,\n  \"surface\": \"announcement-bell-detail\",\n  \"table_rows\": 2,\n  \"xss_not_executed\": true\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-detail-desktop.png",
+      "result": {
+        "chunk_id": "0eec79",
+        "wall_time_seconds": 0.399703186,
+        "exit_code": 0,
+        "original_token_count": 29,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-detail-desktop.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 390 844",
+      "result": {
+        "chunk_id": "90669e",
+        "wall_time_seconds": 0.000026465,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-detail-mobile.png",
+      "result": {
+        "chunk_id": "e1aefd",
+        "wall_time_seconds": 0.03753502,
+        "exit_code": 0,
+        "original_token_count": 29,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/announcement-detail-mobile.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 press Escape",
+      "result": {
+        "chunk_id": "7d4238",
+        "wall_time_seconds": 0.000038118,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 press Escape",
+      "result": {
+        "chunk_id": "0b96fc",
+        "wall_time_seconds": 0.000016334,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 eval --stdin <<'JS'\n({body_scroll_restored:document.body.style.overflow==='',page_overflow:document.documentElement.scrollWidth>innerWidth,xss_not_executed:window.__qaXss!==true})\nJS",
+      "result": {
+        "chunk_id": "e39755",
+        "wall_time_seconds": 0.00002116,
+        "exit_code": 0,
+        "original_token_count": 23,
+        "output": "{\n  \"body_scroll_restored\": true,\n  \"page_overflow\": false,\n  \"xss_not_executed\": true\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 open http://127.0.0.1:34916/custom/qa-guide",
+      "result": {
+        "chunk_id": "5560e5",
+        "wall_time_seconds": 0.105994783,
+        "exit_code": 0,
+        "original_token_count": 19,
+        "output": "✓ 个人网关 - AI API Gateway\n  http://127.0.0.1:34916/custom/qa-guide\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --fn 'document.querySelector(\".markdown-page-content iframe\")?.contentDocument?.body.innerText.includes(\"嵌入内容正常显示\")'",
+      "result": {
+        "chunk_id": "b7ebe5",
+        "wall_time_seconds": 0.000053933,
+        "exit_code": 0,
+        "original_token_count": 2,
+        "output": "true\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 eval --stdin <<'JS'\n(()=>{const content=document.querySelector('.markdown-page-content');const iframe=content?.querySelector('iframe');const result={surface:'custom-mobile',viewport:innerWidth,iframe_width:iframe?.getBoundingClientRect().width,content_width:content?.clientWidth,toc_hidden:document.querySelector('.toc-sidebar')?.getBoundingClientRect().width===0,page_overflow:document.documentElement.scrollWidth>innerWidth};if(result.page_overflow||!result.iframe_width||result.iframe_width>result.content_width||!result.toc_hidden)throw new Error(JSON.stringify(result));return result;})()\nJS",
+      "result": {
+        "chunk_id": "1dee66",
+        "wall_time_seconds": 0.000057825,
+        "exit_code": 0,
+        "original_token_count": 37,
+        "output": "{\n  \"content_width\": 356,\n  \"iframe_width\": 308,\n  \"page_overflow\": false,\n  \"surface\": \"custom-mobile\",\n  \"toc_hidden\": true,\n  \"viewport\": 390\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-mobile.png",
+      "result": {
+        "chunk_id": "18bedc",
+        "wall_time_seconds": 0.000044811,
+        "exit_code": 0,
+        "original_token_count": 26,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-mobile.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 1280 900",
+      "result": {
+        "chunk_id": "8453dc",
+        "wall_time_seconds": 0.000033821,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 open http://127.0.0.1:34916/custom/qa-embed",
+      "result": {
+        "chunk_id": "324e85",
+        "wall_time_seconds": 0.080323359,
+        "exit_code": 0,
+        "original_token_count": 19,
+        "output": "✓ 个人网关 - AI API Gateway\n  http://127.0.0.1:34916/custom/qa-embed\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --fn 'document.querySelector(\".custom-embed-frame\")?.contentDocument?.body.innerText.includes(\"嵌入内容正常显示\")'",
+      "result": {
+        "chunk_id": "699457",
+        "wall_time_seconds": 0.023985621,
+        "exit_code": 0,
+        "original_token_count": 2,
+        "output": "true\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-embed-mode.png",
+      "result": {
+        "chunk_id": "af069c",
+        "wall_time_seconds": 0.000062839,
+        "exit_code": 0,
+        "original_token_count": 27,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/custom-embed-mode.png\n"
+      }
+    },
+    {
+      "command": "Inspect sidebar geometry before final collapsed screenshot",
+      "result": {
+        "chunk_id": "c0e474",
+        "wall_time_seconds": 0.000024606,
+        "exit_code": 0,
+        "original_token_count": 194,
+        "output": "{\n  \"ancestors\": [\n    {\n      \"className\": \"sidebar-link mb-1\",\n      \"tag\": \"A\",\n      \"width\": 231\n    },\n    {\n      \"className\": \"sidebar-section\",\n      \"tag\": \"DIV\",\n      \"width\": 231\n    },\n    {\n      \"className\": \"sidebar-nav scrollbar-hide\",\n      \"tag\": \"NAV\",\n      \"width\": 255\n    }\n  ],\n  \"aside\": [\n    {\n      \"className\": \"sidebar w-64 -translate-x-full lg:translate-x-0\",\n      \"width\": 256\n    }\n  ],\n  \"buttons\": [\n    {\n      \"label\": null,\n      \"text\": \"深色模式\"\n    },\n    {\n      \"label\": null,\n      \"text\": \"收起\"\n    },\n    {\n      \"label\": \"切换菜单\",\n      \"text\": \"\"\n    },\n    {\n      \"label\": null,\n      \"text\": \"🇨🇳\\nZH\"\n    },\n    {\n      \"label\": \"用户菜单\",\n      \"text\": \"个人\\n个人用户\\nUser\"\n    }\n  ]\n}\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 open http://127.0.0.1:34916/custom/qa-guide",
+      "result": {
+        "chunk_id": "70ce2f",
+        "wall_time_seconds": 0.180416624,
+        "exit_code": 0,
+        "original_token_count": 19,
+        "output": "✓ 个人网关 - AI API Gateway\n  http://127.0.0.1:34916/custom/qa-guide\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --text '使用须知'",
+      "result": {
+        "chunk_id": "32ca99",
+        "wall_time_seconds": 0.023218869,
+        "exit_code": 0,
+        "original_token_count": 4,
+        "output": "使用须知\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 find role button click --name '收起'",
+      "result": {
+        "chunk_id": "cc5cf1",
+        "wall_time_seconds": 0.000032384,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --fn 'document.querySelector(\"aside.sidebar\")?.getBoundingClientRect().width===72'",
+      "result": {
+        "chunk_id": "57bee0",
+        "wall_time_seconds": 0.088022148,
+        "exit_code": 0,
+        "original_token_count": 2,
+        "output": "true\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/sidebar-collapsed.png",
+      "result": {
+        "chunk_id": "c1c3db",
+        "wall_time_seconds": 0.007576459,
+        "exit_code": 0,
+        "original_token_count": 27,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/sidebar-collapsed.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 set viewport 390 844",
+      "result": {
+        "chunk_id": "ba29f3",
+        "wall_time_seconds": 0.000027197,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 open http://127.0.0.1:34916/custom/qa-guide",
+      "result": {
+        "chunk_id": "c0d30f",
+        "wall_time_seconds": 0.093839529,
+        "exit_code": 0,
+        "original_token_count": 19,
+        "output": "✓ 个人网关 - AI API Gateway\n  http://127.0.0.1:34916/custom/qa-guide\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 find role button click --name '切换菜单'",
+      "result": {
+        "chunk_id": "813489",
+        "wall_time_seconds": 0.000047303,
+        "exit_code": 0,
+        "original_token_count": 3,
+        "output": "✓ Done\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 wait --fn 'document.querySelector(\"aside.sidebar\")?.getBoundingClientRect().x===0'",
+      "result": {
+        "chunk_id": "e0f9d0",
+        "wall_time_seconds": 0.210611722,
+        "exit_code": 0,
+        "original_token_count": 2,
+        "output": "true\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 screenshot docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/sidebar-mobile.png",
+      "result": {
+        "chunk_id": "af28ce",
+        "wall_time_seconds": 0.000023986,
+        "exit_code": 0,
+        "original_token_count": 26,
+        "output": "✓ Screenshot saved to docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/sidebar-mobile.png\n"
+      }
+    },
+    {
+      "command": "rtk proxy agent-browser --session p020-tail-20261027-ac5eb5d836c2 close",
+      "result": {
+        "chunk_id": "7879e9",
+        "wall_time_seconds": 0.105327831,
+        "exit_code": 0,
+        "original_token_count": 5,
+        "output": "✓ Browser closed\n"
+      }
+    }
+  ]
+}

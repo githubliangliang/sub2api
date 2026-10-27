@@ -1,0 +1,90 @@
+internal/pkg/antigravity/stream_thinking_signature_test.go:28:15: Error return value is not checked (errcheck)
+					block := event["content_block"].(map[string]any)
+					         ^
+internal/repository/group_moderation_sqlite_test.go:93:21: Error return value of `(*github.com/Wei-Shaw/sub2api/ent.Tx).Rollback` is not checked (errcheck)
+			defer tx.Rollback()
+			                 ^
+internal/service/gemini_messages_compat_service_test.go:749:13: Error return value is not checked (errcheck)
+	cleaned := cleanToolSchema(schema).(map[string]any)
+	           ^
+internal/service/gemini_messages_compat_service_test.go:755:16: Error return value is not checked (errcheck)
+	properties := cleaned["properties"].(map[string]any)
+	              ^
+internal/service/openai_first_output_timeout_test.go:172:16: Error return value of `(*io.PipeReader).Close` is not checked (errcheck)
+	defer pr.Close()
+	              ^
+internal/service/openai_first_output_timeout_test.go:173:16: Error return value of `(*io.PipeWriter).Close` is not checked (errcheck)
+	defer pw.Close()
+	              ^
+internal/service/openai_first_output_timeout_test.go:178:17: Error return value of `(*io.PipeWriter).Close` is not checked (errcheck)
+		defer pw.Close()
+		              ^
+internal/service/openai_oauth_web_search_history_ws_test.go:30:25: Error return value of `(*github.com/coder/websocket.Conn).CloseNow` is not checked (errcheck)
+			defer client.CloseNow()
+			                     ^
+internal/setup/handler_test.go:62:19: Error return value of `(*database/sql.DB).Close` is not checked (errcheck)
+				defer db.Close()
+				              ^
+internal/service/openai_responses_tool_schema_test.go:233:22: G702: Command injection via taint analysis (gosec)
+		cmd := exec.Command(os.Args[0],
+		                   ^
+internal/service/gemini_chat_completions_compat_service.go:119:3: ineffectual assignment to checkedPolicy (ineffassign)
+		checkedPolicy = nil
+		^
+internal/repository/http_upstream.go:1332:62: SA1019: golang.org/x/net/http2.Transport is deprecated: Use [http.Transport] instead. (staticcheck)
+func enableOpenAIHTTP2KeepAlive(transport *http.Transport) (*http2.Transport, error) {
+                                                             ^
+internal/repository/http_upstream.go:1333:13: SA1019: golang.org/x/net/http2.ConfigureTransports is deprecated: Set [http.Transport.Protocols] instead. (staticcheck)
+	h2, err := http2.ConfigureTransports(transport)
+	           ^
+internal/repository/http_upstream.go:1338:3: SA1019: (golang.org/x/net/http2.Transport).ReadIdleTimeout is deprecated: Use [http.Transport.HTTP2] and [http.HTTP2Config.SendPingTimeout] instead. (staticcheck)
+		h2.ReadIdleTimeout = openAIHTTP2ReadIdleTimeout
+		^
+internal/repository/http_upstream.go:1339:3: SA1019: (golang.org/x/net/http2.Transport).PingTimeout is deprecated: Use [http.Transport.HTTP2] and [http.HTTP2Config.PingTimeout] instead. (staticcheck)
+		h2.PingTimeout = openAIHTTP2PingTimeout
+		^
+internal/repository/http_upstream_http2_keepalive_test.go:55:23: SA1019: (golang.org/x/net/http2.Transport).ReadIdleTimeout is deprecated: Use [http.Transport.HTTP2] and [http.HTTP2Config.SendPingTimeout] instead. (staticcheck)
+		require.Positive(t, h2.ReadIdleTimeout, "必须启用空闲 PING 探测以剔除死连接")
+		                    ^
+internal/repository/http_upstream_http2_keepalive_test.go:56:48: SA1019: (golang.org/x/net/http2.Transport).ReadIdleTimeout is deprecated: Use [http.Transport.HTTP2] and [http.HTTP2Config.SendPingTimeout] instead. (staticcheck)
+		require.Equal(t, openAIHTTP2ReadIdleTimeout, h2.ReadIdleTimeout)
+		                                             ^
+internal/repository/http_upstream_http2_keepalive_test.go:57:44: SA1019: (golang.org/x/net/http2.Transport).PingTimeout is deprecated: Use [http.Transport.HTTP2] and [http.HTTP2Config.PingTimeout] instead. (staticcheck)
+		require.Equal(t, openAIHTTP2PingTimeout, h2.PingTimeout, "PING 无响应必须有超时判定")
+		                                         ^
+internal/server/http.go:139:13: SA1019: golang.org/x/net/http2.ConfigureServer is deprecated: Set [http.Server.Protocols] instead. (staticcheck)
+		if err := http2.ConfigureServer(server, &http2.Server{
+		          ^
+internal/server/http.go:140:4: SA1019: (golang.org/x/net/http2.Server).MaxConcurrentStreams is deprecated: Use [http.Server.HTTP2] and [http.HTTP2Config.MaxConcurrentStreams] instead. (staticcheck)
+			MaxConcurrentStreams:         h2cConfig.MaxConcurrentStreams,
+			^
+internal/server/http.go:141:4: SA1019: (golang.org/x/net/http2.Server).IdleTimeout is deprecated: Use [http.Server.IdleTimeout] instead. (staticcheck)
+			IdleTimeout:                  time.Duration(h2cConfig.IdleTimeout) * time.Second,
+			^
+internal/server/http.go:142:4: SA1019: (golang.org/x/net/http2.Server).MaxReadFrameSize is deprecated: Use [http.Server.HTTP2] and [http.HTTP2Config.MaxReadFrameSize] instead. (staticcheck)
+			MaxReadFrameSize:             uint32(h2cConfig.MaxReadFrameSize),
+			^
+internal/server/http.go:143:4: SA1019: (golang.org/x/net/http2.Server).MaxUploadBufferPerConnection is deprecated: Use [http.Server.HTTP2] and [http.HTTP2Config.MaxReceiveBufferPerConnection] instead. (staticcheck)
+			MaxUploadBufferPerConnection: int32(h2cConfig.MaxUploadBufferPerConnection),
+			^
+internal/server/http.go:144:4: SA1019: (golang.org/x/net/http2.Server).MaxUploadBufferPerStream is deprecated: Use [http.Server.HTTP2] and [http.HTTP2Config.MaxReceiveBufferPerStream] instead. (staticcheck)
+			MaxUploadBufferPerStream:     int32(h2cConfig.MaxUploadBufferPerStream),
+			^
+internal/service/gateway_forward_as_chat_completions.go:423:3: S1008: should use 'return !stream.writeFrame(c, out, anthropicCompatChatChunkStartsOutput(chunk))' instead of 'if !stream.writeFrame(c, out, anthropicCompatChatChunkStartsOutput(chunk)) { return true }; return false' (staticcheck)
+		if !stream.writeFrame(c, out, anthropicCompatChatChunkStartsOutput(chunk)) {
+		^
+internal/service/openai_codex_models_service.go:1400:16: SA1019: golang.org/x/net/http2.GoAwayError is deprecated: GoAwayError is deprecated. (staticcheck)
+	var goAwayErr http2.GoAwayError
+	              ^
+internal/service/openai_codex_models_service_test.go:1458:15: SA1019: golang.org/x/net/http2.GoAwayError is deprecated: GoAwayError is deprecated. (staticcheck)
+			err:       http2.GoAwayError{ErrCode: http2.ErrCodeNo},
+			           ^
+internal/service/openai_gateway_anthropic_native_pump.go:70:35: func (*anthropicNativeLinePump).next is unused (unused)
+func (p *anthropicNativeLinePump) next() (string, error) {
+                                  ^
+28 issues:
+* errcheck: 9
+* gosec: 1
+* ineffassign: 1
+* staticcheck: 16
+* unused: 1

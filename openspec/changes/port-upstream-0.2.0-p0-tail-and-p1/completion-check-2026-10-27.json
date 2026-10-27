@@ -1,0 +1,213 @@
+{
+  "checked_at": "2026-10-27T21:47:18+08:00",
+  "change": "port-upstream-0.2.0-p0-tail-and-p1",
+  "code_baseline": "2deacc20f4ca6ed0661c589323328bef491986ee",
+  "branch": "main",
+  "initial_worktree_status": "",
+  "version": "1.1.20",
+  "latest_migration": "226_channel_cache_write_1h_pricing.sql",
+  "task_state": {
+    "closed": 125,
+    "total": 128,
+    "remaining_task_ids": [
+      "9.6",
+      "9.14",
+      "10.11"
+    ]
+  },
+  "newly_closed_task_ids": [],
+  "verified_merge": {
+    "sha": "c9d9bebe87926791bfdd716f59abcba413fee20a",
+    "parents": [
+      "3da1c2dd05b837e69321fde0c0b55c16e8e9f680",
+      "c0fd604b0f172aaa822ee8dc01b776130ee9c0fd"
+    ],
+    "ancestor_of_head": true
+  },
+  "remaining_work": {
+    "9.6": {
+      "status": "incomplete",
+      "reason": "@types/dompurify remains a direct devDependency in package.json, pnpm-lock.yaml and the installed dependency tree.",
+      "declared_version": "^3.0.5",
+      "locked_version": "3.2.0",
+      "installed_version": "3.2.0"
+    },
+    "9.14": {
+      "status": "acceptance_evidence_missing",
+      "reason": "No complete real-browser acceptance record was found for the four required surfaces. Later browser reports cover other views and cannot establish this task's completion.",
+      "required_surfaces": [
+        "/legal/:documentId",
+        "/custom/:id including iframe",
+        "announcement popup and bell",
+        "custom sidebar SVG icons"
+      ],
+      "reviewed_browser_records": [
+        "docs/upstream-sync/implementation-0.2.16-tier1/browser.md",
+        "docs/upstream-sync/implementation-0.2.16-tier2/browser.md",
+        "docs/upstream-sync/implementation-0.2.18-personal-features/browser/README.md",
+        "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/browser/commands.json"
+      ],
+      "limitation": "Absence of a recorded browser check is not evidence of a rendering regression. No new browser acceptance was performed."
+    },
+    "10.11": {
+      "status": "partially_complete",
+      "reason": "The merge and later full unit/build/frontend validation are evidenced. Current golangci-lint fails during standard-library export-data import, so the complete post-merge gates cannot be marked passed.",
+      "missing_requirement": "A successful Go lint run and complete task-specific post-merge gate/SHA writeback."
+    }
+  },
+  "checks": {
+    "dependency-list": {
+      "command": [
+        "rtk",
+        "proxy",
+        "pnpm",
+        "list",
+        "@types/dompurify",
+        "dompurify",
+        "--depth",
+        "0",
+        "--json"
+      ],
+      "cwd": "frontend",
+      "exit_code": 0,
+      "versions": {
+        "@types/dompurify": "3.2.0",
+        "dompurify": "3.4.17"
+      }
+    },
+    "backend-lint": {
+      "command": [
+        "rtk",
+        "proxy",
+        "golangci-lint",
+        "run",
+        "./..."
+      ],
+      "cwd": "backend",
+      "exit_code": 1,
+      "output": "internal/pkg/sysutil/restart.go:6:2: could not import os (/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/os/dir.go:8:2: could not import internal/bytealg (/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/internal/bytealg/bytealg.go:8:2: could not import internal/cpu (-: could not load export data: internal error in importing \"internal/cpu\" (cannot decode \"internal/cpu\", export data version 5 is greater than maximum supported version 4); please report an issue))) (typecheck)\n\t\"os\"\n\t^\ninternal/pkg/sysutil/restart.go:7:2: could not import runtime (/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/alg.go:8:2: could not import internal/abi (/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/internal/abi/abi.go:8:2: could not import internal/goarch (-: could not load export data: internal error in importing \"internal/goarch\" (cannot decode \"internal/goarch\", export data version 5 is greater than maximum supported version 4); please report an issue))) (typecheck)\n\t\"runtime\"\n\t^\ninternal/pkg/sysutil/restart.go:8:2: could not import time (/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/time/format.go:8:2: could not import errors (/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/errors/wrap.go:8:2: could not import internal/reflectlite (/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/internal/reflectlite/swapper.go:8:2: could not import internal/goarch (-: could not load export data: internal error in importing \"internal/goarch\" (cannot decode \"internal/goarch\", export data version 5 is greater than maximum supported version 4); please report an issue)))) (typecheck)\n\t\"time\"\n\t^\n3 issues:\n* typecheck: 3\n"
+    },
+    "lint-tool-metadata": {
+      "command": [
+        "rtk",
+        "proxy",
+        "go",
+        "version",
+        "-m",
+        "/home/liang/go/bin/golangci-lint"
+      ],
+      "cwd": "backend",
+      "exit_code": 0,
+      "golangci_lint_version": "2.13.0",
+      "build_go_version": "go1.27.0",
+      "embedded_x_tools_version": "v0.49.0",
+      "target_go_version": "go1.27.3"
+    },
+    "sysutil-build": {
+      "command": [
+        "rtk",
+        "proxy",
+        "go",
+        "build",
+        "./internal/pkg/sysutil"
+      ],
+      "cwd": "backend",
+      "exit_code": 0
+    },
+    "sysutil-lint-reproduction": {
+      "command": [
+        "rtk",
+        "proxy",
+        "golangci-lint",
+        "run",
+        "./internal/pkg/sysutil"
+      ],
+      "cwd": "backend",
+      "exit_code": 1,
+      "same_export_version_diagnostic": true
+    },
+    "frontend-critical": {
+      "command": [
+        "rtk",
+        "proxy",
+        "make",
+        "test-frontend-critical"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "test_files": 14,
+      "passed_tests": 176,
+      "skipped_tests": 2,
+      "failed_tests": 0,
+      "summary_lines": [
+        " Test Files  14 passed (14)",
+        "      Tests  176 passed | 2 skipped (178)",
+        "   Duration  10.26s (transform 10.30s, setup 5.24s, collect 22.04s, tests 10.35s, environment 14.74s, prepare 2.12s)"
+      ]
+    }
+  },
+  "later_gates_referenced": {
+    "product_commit": "0e38d06d82557a0a3b372ca9165a24b9b3acbc93",
+    "product_paths_changed_since_commit": [
+      "backend/cmd/server/VERSION"
+    ],
+    "execution_date": "2026-10-26",
+    "rerun_during_this_audit": false,
+    "records": [
+      {
+        "gate": "full backend unit",
+        "metadata": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/backend-unit-final.json",
+        "log": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/backend-unit-final.log",
+        "exit_code": 0,
+        "passed_packages": 54,
+        "no_test_packages": 53,
+        "log_sha256": "030a4c1d98c1a52849895775f726b5684cd87b185caa5aac03e85ac88d2bdf67"
+      },
+      {
+        "gate": "full backend build",
+        "metadata": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/backend-build-final.json",
+        "log": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/backend-build-final.log",
+        "exit_code": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "gate": "full frontend Vitest",
+        "metadata": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/frontend-vitest.json",
+        "log": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/frontend-vitest.log",
+        "exit_code": 0,
+        "test_files": 285,
+        "passed_tests": 2089,
+        "skipped_tests": 2,
+        "log_sha256": "1ccfe12848300b0a2e1c8c4f1f1e92f6fe9ff79da21dccc2f2f74dd775c13624"
+      },
+      {
+        "gate": "frontend typecheck",
+        "metadata": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/frontend-typecheck.json",
+        "log": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/frontend-typecheck.log",
+        "exit_code": 0,
+        "log_sha256": "227a0ac17a3915c902a482fc6115b601f140279ad7a7fc933312b2d634fc340a"
+      },
+      {
+        "gate": "frontend lint",
+        "metadata": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/frontend-lint.json",
+        "log": "docs/upstream-sync/implementation-0.2.18-personal-features/completion-2026-10-26/frontend-lint.log",
+        "exit_code": 0,
+        "log_sha256": "56b1994c92e6a464bd21ed9d246134c41aa144c516b3a44a169ffba10554e258"
+      }
+    ]
+  },
+  "root_cause": {
+    "component": "The importer embedded in the locally installed golangci-lint",
+    "embedded_x_tools": "v0.49.0",
+    "target_export_data_version": 5,
+    "importer_max_supported_version": 4,
+    "prior_measured_compatibility_evidence": "docs/upstream-sync/implementation-0.2.18-tier2/dependency-review.md",
+    "conclusion": "The package builds with the target Go toolchain but both full and package-only lint fail while importing the standard library. Changing backend/go.mod's x/tools does not change the dependency embedded in the installed lint binary."
+  },
+  "frozen_file_sha256": {
+    "openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/source-baseline.md": "f28fc11ab0ea3dfc98b93da98f532330a8f25fd3703d773e70b48fee4389ce42",
+    "openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/source-feature-map.md": "56bf44e4dfb9d5b609ee30adebab378ef78ff83b57ad043b419963b19a786f5f",
+    "openspec/changes/port-upstream-0.2.0-p0-tail-and-p1/completion-check-2026-10-24.json": "7427df4b9e91a37d8cb4c74124171035ee28584ee2bcdc4ca59d39f748a92517"
+  },
+  "scope": "Audit and task/document status maintenance only. Existing full gates are referenced as their original 2026-10-26 execution, not claimed as newly run at VERSION 1.1.20. No implementation, dependency, tool installation, migration, VERSION, deployment, archival or frozen-source/evidence changes."
+}

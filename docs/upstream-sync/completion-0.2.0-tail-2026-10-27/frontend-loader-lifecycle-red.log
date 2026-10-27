@@ -1,0 +1,61 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/composables/__tests__/useTableLoader.lifecycle.spec.ts (1 test | 1 failed) 21ms
+   × useTableLoader owner lifecycle > does not start a queued debounced request after the owner unmounts 20ms
+     → expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      1,
+      20,
+      Object {},
+      Object {
+        "signal": AbortSignal {},
+      },
+    ]
+
+
+Number of calls: 1
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/composables/__tests__/useTableLoader.lifecycle.spec.ts > useTableLoader owner lifecycle > does not start a queued debounced request after the owner unmounts
+AssertionError: expected "spy" to not be called at all, but actually been called 1 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      1,
+      20,
+      Object {},
+      Object {
+        "signal": AbortSignal {},
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/composables/__tests__/useTableLoader.lifecycle.spec.ts:37:25
+     35|     await pending
+     36| 
+     37|     expect(fetchFn).not.toHaveBeenCalled()
+       |                         ^
+     38|   })
+     39| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:17:56
+   Duration  1.12s (transform 70ms, setup 95ms, collect 55ms, tests 21ms, environment 343ms, prepare 70ms)
+

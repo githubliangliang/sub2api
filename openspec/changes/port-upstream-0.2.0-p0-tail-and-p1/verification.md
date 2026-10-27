@@ -1,5 +1,51 @@
 # 验收证据
 
+## 三项收尾完成（2026-10-27）
+
+当前状态为 **128/128 项已关闭**。用户在实施前检测后要求执行剩余任务；实现已提交到本地 `main`，完成 SHA 为 **`5b3e1a7168a8bd2711d5992e23256c37f14d8911`**。本次 VERSION 为 1.1.20、Go 为 1.27.3、最大迁移为 226；原移植、S16 和两次检测保留原始时间、版本与结果。
+
+| 任务 | 实施与验收 |
+|---|---|
+| `9.6` | 删除直接类型桩与锁文件中的该包，安装树不再包含 `@types/dompurify`。锁文件仅删除相关 11 行，DOMPurify 仍唯一解析为 3.4.17；[冻结安装](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/pnpm-frozen-install-online.json)、[依赖树](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/final-dependency-tree.log)与前端门禁通过。 |
+| `9.14` | 匿名法律文档、自定义 Markdown/iframe、公告弹窗/铃铛、侧栏 SVG 的真实浏览器检查完成；12 张截图逐张目视复核，五种新旧净化调用输出一致。实际路由与临时真实组件入口的区别、固定 API 数据及清理状态见[浏览器验收](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/browser/README.md)。 |
+| `10.11` | `c9d9bebe8` 的合并已核实；本次完整执行 10.1–10.4 并回填实现 SHA。全部最终门禁退出 0，记录见下表。 |
+
+| 最终门禁 | 本次实际结果 |
+|---|---|
+| `go build ./...` / `go test -tags=unit ./... -count=1` | build 退出 0，54 个有测试的包通过，另 53 个无测试包；[build](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/backend-build.json)、[最终 unit](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/backend-unit-verified.log)。 |
+| `golangci-lint run ./...` | 本地与 CI 固定 2.14.0，内嵌 x/tools v0.50.0 支持 V5；**0 issues**，exit 0；[最终 lint](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/backend-lint-passed.log)。 |
+| `go test ./migrations/ -count=1` | exit 0；[迁移记录](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/backend-migrations.json)。 |
+| 前端全量 Vitest / typecheck / lint / build | 286 文件、**2090 passed / 2 既有 skipped / 0 未处理异常**，各项 exit 0；[Vitest](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/frontend-full-complete.log)、[typecheck](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/frontend-typecheck.json)、[lint](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/frontend-lint.json)、[build](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/frontend-build.json)。 |
+| `make test-frontend-critical` | 14 文件、176 passed / 2 既有 skipped，exit 0；[关键套件](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/frontend-critical.log)。 |
+| HTTP/2 与入站限制定向 race | repository/server 两包 exit 0，覆盖原直连/代理 H2 协商、健康探测及入站限制用例；[race](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/backend-http2-race.log)。 |
+| OpenSpec strict / 文档与冻结检查 | 固定 CLI 1.14.3 严格校验通过；128 个任务全勾选，新增证据链接存在，产品和冻结材料哈希校验通过；[strict](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/openspec-strict.json)、[收尾检查](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/closure-check.json)。 |
+
+完整门禁额外发现并修复了共享表格加载器的卸载后防抖请求缺陷，以及必要 lint 诊断。真实 Vue/VueUse 生命周期回归原代码确定性失败、修复后通过；与原 loader、AccountsView 共 24 条定向用例通过。OpenAI H2 使用标准库配置，独立 H2C 空闲超时与旧 GOAWAY 匹配保留兼容接口并定点说明；规则集没有移除 linter。[实现说明](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/implementation-notes.md)记录测量、取舍及失败修正。
+
+[收尾报告](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/completion-report.json)包含最终命令、日志 SHA-256、完成 SHA 与任务状态；[20 项产品哈希](../../../docs/upstream-sync/completion-0.2.0-tail-2026-10-27/product-files.sha256)已逐项对照实现提交。没有将检测失败、初始失败执行或历史 VERSION 写成成功。本次保留活动目录等待归档，未推送、发布或部署业务实例。
+
+## 未完成任务复核（2026-10-27）
+
+本次基线为 `main` / `2deacc20f4ca6ed0661c589323328bef491986ee`（VERSION 1.1.20、最大迁移 226）。逐项核查后仍为 **125/128 项已关闭**，没有新增核销项；下方历史验收与 2026-10-24 的原始检查记录保留当时口径。
+
+| 未勾选任务 | 结论 | 当前依据 |
+|---|---|---|
+| `9.6` 移除类型桩 | 未完成 | `frontend/package.json` 仍声明 `@types/dompurify: ^3.0.5`；锁文件及实际安装树均为 3.2.0。DOMPurify 本体为 3.4.17，升级已完成但类型桩清理仍缺。 |
+| `9.14` 四处真实浏览器验收 | 证据未齐 | 未找到法律文档、自定义页（含 iframe）、公告弹窗/铃铛、侧栏自定义 SVG 的完整验收记录；后续浏览器报告覆盖使用日志、账号配置及运维详情，不能据此关闭这四处验收。该结论不表示发现了渲染回归。 |
+| `10.11` 合并后全量门禁及 SHA 回填 | 部分完成 | `c9d9bebe8` 确为双亲合并提交且属于当前 HEAD 的祖先；后续全量 unit/build 与前端门禁已有记录，但本次 Go lint 实际失败，完整门禁仍不能记为通过。 |
+
+后续[个人功能验收](../port-upstream-0.2.18-personal-features/verification.md)记录了 2026-10-26 的后端 54 个测试包 unit/build、前端 285 文件 / 2089 passed / 2 skipped，以及 typecheck/lint 通过；对应实现提交为 `0e38d06d8`。从该提交到本次 HEAD，backend/frontend/deploy/.github 仅 `backend/cmd/server/VERSION` 改变。本次引用原始日志及命令元数据，没有将这些结果记作 VERSION 1.1.20 下重新全量执行。
+
+| 本次实际运行 | 结果 |
+|---|---|
+| `cd backend` 后 `rtk proxy golangci-lint run ./...` | exit 1；标准库导入阶段报 `export data version 5 is greater than maximum supported version 4`，3 条 typecheck 错误。 |
+| 同一报错包：`rtk proxy go build ./internal/pkg/sysutil`，随后 `rtk proxy golangci-lint run ./internal/pkg/sysutil` | 编译 exit 0；单包 lint exit 1，复现相同导出格式错误。 |
+| `rtk proxy make test-frontend-critical` | exit 0；14 文件、176 passed / 2 个既有 skipped。 |
+
+本机 golangci-lint 为 2.13.0，构建工具链为 Go 1.27.0，二进制内嵌 `x/tools v0.49.0`；目标 Go 为 1.27.3。此前 [S10 兼容性测量](../../../docs/upstream-sync/implementation-0.2.18-tier2/dependency-review.md)已记录 v0.49.0 不支持 V5；backend/go.mod 中的 v0.50.0 不会改变已安装 lint 二进制的内嵌依赖。因此 `10.11` 仍须在兼容的 lint 工具下补齐完整门禁和完成 SHA 记录。
+
+本次命令、诊断原文、引用证据及冻结文件哈希见[检查记录](./completion-check-2026-10-27.json)。新增运行限于上表和依赖树检查；四处页面真实浏览器验收仍待补齐。
+
 ## 当前任务复核（2026-10-24）
 
 复核代码基线为 `67b1a0727`（VERSION 1.1.19、最大迁移 226）；本次更新任务和文档，保留下文 2026-09-02 的原始验收口径。

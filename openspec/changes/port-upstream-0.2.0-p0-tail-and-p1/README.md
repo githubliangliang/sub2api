@@ -1,6 +1,6 @@
 # port-upstream-0.2.0-p0-tail-and-p1
 
-当前收尾状态（2026-10-24）：**125/128 项已关闭**。阶段 1–8 已在 `c9d9bebe8` 合回 main，DOMPurify 由 0.2.16 第二档 S16 / `5ff6e5bf9` 接管完成；尚余类型桩依赖清理、四处页面真实浏览器验收，以及合并后全量门禁回填。见[任务](./tasks.md)与[当前复核](./verification.md)。下文计划与实施边界保留历史口径。
+当前收尾状态（2026-10-27）：**128/128 项已关闭**。阶段 1–8 已在 `c9d9bebe8` 合回 main，DOMPurify 升级由 S16 / `5ff6e5bf9` 接管；本次剩余 `9.6` 类型桩清理、`9.14` 四处真实浏览器验收、`10.11` 完整门禁及 SHA 回填均完成，实现提交为 `5b3e1a716`。后端 54 个测试包通过、Go lint 0 issues，前端 2090 passed / 2 既有 skipped，typecheck/lint/build 和关键套件通过。见[任务](./tasks.md)与[当前验收](./verification.md)。本 change 保留在活动目录等待后续归档；下文历史计划与来源口径保留。
 
 上游 v0.1.185 + v0.2.0 评估（[`docs/upstream-sync/PORTING-0.2.0.md`](../../../docs/upstream-sync/PORTING-0.2.0.md)）
 划出的 **第二档**：4 项 P0 余项 + 4 项 P1 + 1 项并入的依赖卫生（第 9 项，来源不是本轮，见下）。**必须在
