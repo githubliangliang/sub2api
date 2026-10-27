@@ -1,5 +1,29 @@
 # 验收证据
 
+## 四项余项完成（2026-10-28）
+
+当前状态 **33/33 已关闭**，实现提交为 **`b349c7408325a0e4eba4f32268ad7a3820e2ad4f`**。本次起点 `bdd77dca1` / VERSION 1.1.20，Go 1.27.3；迁移从 226 升至 227，Ent/Wire、依赖和平台枚举未改。原 source-* 与 evidence TSV 保留原 SHA 和内容。
+
+| 余项 | 实施与证据 |
+|---|---|
+| S02 #7043 | [容量决策](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/ws-default-decision.json)：保留默认 1.0，不采用数值 5.0。配置默认、legacy/v2 容量、硬上限、零并发与保留会话获取测试通过；业务活跃会话、账号并发和资源余量未采集，不能据此扩大默认连接预算。 |
+| S12b 批准记录 | 用户要求完成本 change 未完成任务，范围包含迁移 227；指令原文、范围解读和起点状态见[start-state.json](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/start-state.json)。只实施仓库代码、以临时库验证，未执行业务升级。 |
+| S12b 配额语义 | 仅保存至少一档非 NULL，0 也保留；空默认不建行、初始化只补 NULL、清空软删、重新配置新行/新窗口、更新限额保留用量。增量/快照不建空行或复活软删行；旧 TEXT/DATETIME 窗口读取、1000 行参数安全批次、整批事务与 12 请求并发累计验证通过；[SQLite 回归](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/quota-sqlite-complete.log)。 |
+| S12b 迁移/UI | 本地 227 仅清理三档全 NULL，保留 0/非 NULL 及其用量；[真实 226→227 升级](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/quota-migration-upgrade.log)与重复执行通过。卡片并集、计数排除其他、未保存配置不能重置与已保存 0 可重置的 16 条组件用例通过；[前端定向](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/quota-frontend-green.log)。 |
+
+| 本次门禁 | 实际结果 |
+|---|---|
+| 后端 build / 全量 unit | 全部 exit 0，54 个有测试包通过；[build](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/backend-build.json)、[unit](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/backend-unit.log)。 |
+| Go lint / 迁移 | lint **0 issues**、迁移 exit 0；[lint](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/quota-lint-final.log)、[迁移](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/backend-migrations.json)。 |
+| quota 定向 race | repository/service/admin 三包 exit 0；[race](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/quota-race.log)。 |
+| 前端全量 / typecheck / lint / build | 287 文件，**2095 passed / 2 既有 skipped / 0 未处理异常**；各项 exit 0；[Vitest](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/frontend-full.log)、[类型](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/frontend-typecheck.json)、[lint](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/frontend-lint.json)、[build](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/frontend-build.json)。 |
+| `make test-frontend-critical` | 14 文件 / 176 passed / 2 既有 skipped，exit 0；[关键套件](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/frontend-critical.log)。 |
+| OpenSpec strict / 冻结与完成检查 | 固定 CLI 1.14.3 严格校验通过；33 项全关闭，新增证据链接存在，产品/日志/冻结来源哈希验证通过；[strict](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/openspec-strict.json)、[收尾检查](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/closure-check.json)。 |
+
+[收尾报告](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/completion-report.json)保存完成 SHA、所有命令与日志哈希；[18 个产品文件哈希](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/product-files.sha256)逐项对照该提交。[实现说明](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/implementation-notes.md)记录 SQLite 必要适配、失败阶段与修正，不把 PG-only 测试或未采用 5.0 记成移植。未推送、发布、归档或部署业务实例。
+
+## 历史实施验收（2026-09-19 至 2026-09-20）
+
 现行簇已实现并完成定向与全量门禁。本文件记录可复跑命令和未批准/延期项。
 后端命令在 backend/，前端命令在 frontend/，make 命令在仓库根目录执行。
 

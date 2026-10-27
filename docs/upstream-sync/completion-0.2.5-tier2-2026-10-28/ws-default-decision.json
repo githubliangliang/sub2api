@@ -1,0 +1,22 @@
+{
+  "task": "S02 #7043",
+  "decision": "Keep OAuth/API Key defaults at 1.0; do not adopt upstream default 5.0. The decision task is complete; the numeric 5.0 patch is not implemented.",
+  "basis": {
+    "deployment_target": "Personal single-node, prioritized for 1C1G.",
+    "business_active_ctx_pool_sessions": null,
+    "business_account_concurrency": null,
+    "business_memory_and_fd_headroom": null,
+    "measurement_limit": "No business instance was inspected; available evidence does not justify multiplying the default retained connection budget.",
+    "controlled_tests": "Existing config defaults, legacy/v2 capacity scaling, hard caps, zero concurrency and retained-session acquisition passed."
+  },
+  "capacity_examples": {
+    "concurrency": 3,
+    "hard_cap": 20,
+    "default_1_0": 3,
+    "explicit_1_5": 5,
+    "upstream_5_0": 15
+  },
+  "in_flight_request_slots": "Account request concurrency is unchanged; the factor only controls retained upstream pool connections.",
+  "verification_metadata": "docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/ws-capacity-default-decision.json",
+  "verification_log": "docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/ws-capacity-default-decision.log"
+}

@@ -1,0 +1,92 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/components/user/dashboard/__tests__/UserDashboardStats.spec.ts (3 tests | 2 failed) 48ms
+   × UserDashboardStats configured platform cards > does not create platform cards from unlimited quota placeholders 35ms
+     → expected 'dashboard.balance$0.00common.availabl…' not to contain 'dashboard.platformBreakdown'
+   × UserDashboardStats configured platform cards > counts the union of usage and configured limits without counting the other card 7ms
+     → expected 'dashboard.balance$0.00common.availabl…' to contain 'platform-count:2'
+ ❯ src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts (13 tests | 2 failed) 99ms
+   × UserPlatformQuotaModal > does not enable reset for missing or unsaved quota configuration 36ms
+     → expected false to be true // Object.is equality
+   × UserPlatformQuotaModal > allows reset for an explicit saved zero limit only on that platform 8ms
+     → expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts > UserPlatformQuotaModal > does not enable reset for missing or unsaved quota configuration
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts:81:85
+     79|     const buttons = wrapper.findAll('button').filter(button => button.…
+     80|     expect(buttons).toHaveLength(15)
+     81|     expect(buttons.every(button => (button.element as HTMLButtonElemen…
+       |                                                                                     ^
+     82|     await wrapper.findAll('input[type=number]')[0].setValue('10')
+     83|     expect(buttons.every(button => (button.element as HTMLButtonElemen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts > UserPlatformQuotaModal > allows reset for an explicit saved zero limit only on that platform
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts:93:97
+     91|     const wrapper = await mountAndOpen()
+     92|     const buttons = wrapper.findAll('button').filter(button => button.…
+     93|     expect(buttons.slice(0, 3).every(button => (button.element as HTML…
+       |                                                                                                 ^
+     94|     expect(buttons.slice(3, 6).every(button => !(button.element as HTM…
+     95|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/components/user/dashboard/__tests__/UserDashboardStats.spec.ts > UserDashboardStats configured platform cards > does not create platform cards from unlimited quota placeholders
+AssertionError: expected 'dashboard.balance$0.00common.availabl…' not to contain 'dashboard.platformBreakdown'
+
+Expected: "dashboard.platformBreakdown"
+Received: "dashboard.balance$0.00common.availabledashboard.apiKeys00 common.activedashboard.todayRequests0common.total: 0dashboard.todayCost$0.0000 / $0.0000common.total: $0.0000 / $0.0000dashboard.todayTokens0dashboard.input: 0 / dashboard.output: 0dashboard.totalTokens0dashboard.input: 0 / dashboard.output: 0dashboard.performance0RPM0TPMdashboard.avgResponse0msdashboard.averageTimedashboard.platformBreakdownplatform-count:0OpenAI $0.0000dashboard.todayCost$0.0000dashboard.requests-dashboard.tokens-Gemini $0.0000dashboard.todayCost$0.0000dashboard.requests-dashboard.tokens-"
+
+ ❯ src/components/user/dashboard/__tests__/UserDashboardStats.spec.ts:21:32
+     19|       props: { stats: stats(), balance: 0, isSimple: false, platformQu…
+     20|     })
+     21|     expect(wrapper.text()).not.toContain('dashboard.platformBreakdown')
+       |                                ^
+     22|     wrapper.unmount()
+     23|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/components/user/dashboard/__tests__/UserDashboardStats.spec.ts > UserDashboardStats configured platform cards > counts the union of usage and configured limits without counting the other card
+AssertionError: expected 'dashboard.balance$0.00common.availabl…' to contain 'platform-count:2'
+
+Expected: "platform-count:2"
+Received: "dashboard.balance$0.00common.availabledashboard.apiKeys00 common.activedashboard.todayRequests0common.total: 0dashboard.todayCost$2.0000 / $0.0000common.total: $2.0000 / $0.0000dashboard.todayTokens0dashboard.input: 0 / dashboard.output: 0dashboard.totalTokens0dashboard.input: 0 / dashboard.output: 0dashboard.performance0RPM0TPMdashboard.avgResponse0msdashboard.averageTimedashboard.platformBreakdownplatform-count:1Claude $0.0000dashboard.todayCost$0.0000dashboard.requests-dashboard.tokens-dashboard.platformQuota.titledashboard.platformQuota.dailydashboard.platformQuota.disabledOpenAI $1.0000dashboard.todayCost$1.0000dashboard.requests1dashboard.tokens1Gemini $0.0000dashboard.todayCost$0.0000dashboard.requests-dashboard.tokens-dashboard.platformOther $1.0000dashboard.todayCost$1.0000dashboard.requests-dashboard.tokens-"
+
+ ❯ src/components/user/dashboard/__tests__/UserDashboardStats.spec.ts:35:28
+     33|       }
+     34|     })
+     35|     expect(wrapper.text()).toContain('platform-count:2')
+       |                            ^
+     36|     expect(wrapper.text()).toContain('Claude')
+     37|     expect(wrapper.text()).toContain('OpenAI')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 12 passed (16)
+   Start at  00:43:25
+   Duration  1.07s (transform 416ms, setup 123ms, collect 646ms, tests 147ms, environment 459ms, prepare 90ms)
+

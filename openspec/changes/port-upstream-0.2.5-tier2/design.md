@@ -1,5 +1,7 @@
 # 设计与决策
 
+2026-10-28 收尾决策：本次用户要求完成该 change 未完成项，S12b 与预留迁移 227 已实现并验证；S02 独立决定保留默认 1.0，未采用数值 5.0。SQLite 快照分为最多 1000 行的 UPDATE 批次并共用事务，增量先取得写锁、读取兼容历史 TEXT 窗口列；没有改 Ent schema、依赖或平台枚举。现行依据见[收尾说明](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/implementation-notes.md)。下文“未批准/未实施”与旧 VERSION 是历史设计阶段；EasyPay 等支付归属不构成本次或后续个人版实现授权。
+
 1. 按行为手工移植，PR 整体仅用于理解来源终态，不覆盖整文件。本 fork 在这些文件里有自有逻辑
    （namespace 处理、Responses Lite、SQLite 用量写入），移植时保留。
 

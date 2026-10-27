@@ -1,5 +1,7 @@
 # 实施任务
 
+2026-10-28 收尾完成：**33/33 项已关闭**。用户要求执行本 change 的剩余任务；S12b 已实现迁移 227 与 SQLite 配额语义，S02 #7043 决策为保留默认 1.0、未采用数值 5.0。实现提交为 `b349c7408325a0e4eba4f32268ad7a3820e2ad4f`；[当前验收](./verification.md)与[收尾报告](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/completion-report.json)保存证据。以下原实施介绍按历史阶段解释，原任务/验收快照另存。
+
 产品代码已实现并完成后端/前端门禁；S02 #7043 默认值调优与 S12b #6954 迁移按规格明确延期。
 先落第一档并验证，再实施本批；S12a 可独立落地，S12b 等待迁移批准。
 现行归属以design.md为准：S07已迁第一档T19，S11仅余#6654/#6916/#7111；共21个PR/11簇。
@@ -38,18 +40,18 @@
 ## 后段：既有体验与默认值调优
 
 - [x] S11 #6654：注册确认密码校验、显隐与禁用状态回归通过。
-- [ ] S02 #7043：记录容量依据后独立决定是否采用默认5.0；采用时核对示例配置与显式覆盖，不采用时保留1.0并记未实施，不阻塞#7064验收。
+- [x] S02 #7043：已独立决定保留 OAuth/API Key 默认 1.0。现有 default/legacy/v2/硬上限/保留会话测试通过；没有业务活跃会话与资源余量依据支持扩大 1C1G 默认预算，数值 5.0 未采用，不将其记作已移植。见[决策记录](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/ws-default-decision.json)。
 
 ## 原有批准边界：平台限额迁移
 
-- [ ] S12b #6954：记录用户对迁移 227 的明确批准；未批准保持本项及以下子项未完成，不影响其它项验收。
-- [ ] S12b 获批后：核对实际最大迁移仍为 226 与本地列定义，适配限额初始化/清空/快照更新及前端卡片/重置语义。
-- [ ] S12b 获批后：新增本地 227 清理迁移，以真实 SQLite 验证仅清理三档 NULL、保留 0、幂等和不复活软删行。
+- [x] S12b #6954：本次用户“完成未完成任务项”的指令覆盖剩余 S12b 与迁移 227；原文和仓库实现范围解读记录于[start-state.json](../../../docs/upstream-sync/completion-0.2.5-tier2-2026-10-28/start-state.json)。没有执行业务库升级。
+- [x] S12b：起点最大迁移 226、nullable limit 与历史 TEXT 窗口列已核对；初始化/清空/零限额/新窗口、增量与分批快照更新、前端并集卡片/已保存配置重置语义均实现。SQLite 增量无 FOR UPDATE，读取兼容 TEXT/DATETIME，分批快照共用事务。
+- [x] S12b：新增 `227_purge_unlimited_user_platform_quotas.sql`。真实 SQLite 验证只清理三档全 NULL、保留任何非 NULL（含 0）、幂等、不复活软删行、4100 条快照与分批失败回滚、12 个并发累计；shipped runner 的 226→227 升级和重复运行通过。
 
 ## 门禁
-- [x] 后端 `go build ./...`、`go test -tags=unit ./...` 通过；lint 仅报 3 个未改动既有测试告警。
-- [x] 前端 `pnpm run typecheck`、`pnpm run lint:check` 与 tier2 定向 Vitest 通过。
-- [x] 根目录 `make test-frontend-critical` 通过（175 tests passed, 2 skipped）。
-- [x] SQLite SQL 使用 `IS NULL` 排序表达式并由 repository 回归覆盖，无 PG-only 迁移。
-- [x] 未改 Ent/Wire、依赖、新平台、VERSION；无 S12b 时最大迁移仍为 226。
-- [x] verification.md 已回填实际命令、结果、排除 hunk 与 S12b 未批准状态。
+- [x] 本次后端 `go build ./...`、全量 unit（54 个测试包）、迁移与 quota race 通过；Go lint 0 issues。
+- [x] 本次前端全量 Vitest 287 文件 / 2095 passed / 2 既有 skipped，typecheck/lint/build 通过。
+- [x] 根目录 `make test-frontend-critical` 通过（176 passed / 2 既有 skipped）。
+- [x] SQLite SQL、真实配额与 226→227 升级验证通过，未使用 PG-only 构建标签冒充验收。
+- [x] Ent/Wire、依赖、平台枚举和 VERSION 保持起点值；VERSION 1.1.20、Go 1.27.3，当前最大迁移 227。
+- [x] verification.md 已回填本次完成 SHA、实际命令、失败修正、S02 未采用 5.0 决策和 S12b 完成状态；历史快照与冻结来源保留。
