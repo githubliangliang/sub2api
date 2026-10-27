@@ -169,13 +169,13 @@ func TestOpenAIFirstOutputTimeoutAfterQueuedAndMetadata(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	pr, pw := io.Pipe()
-	defer pr.Close()
-	defer pw.Close()
+	defer func() { _ = pr.Close() }()
+	defer func() { _ = pw.Close() }()
 	body := &firstOutputCloseTrackingBody{ReadCloser: pr, closed: make(chan struct{})}
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)
-		defer pw.Close()
+		defer func() { _ = pw.Close() }()
 		_, _ = io.WriteString(pw, "data: {\"type\":\"response.queued\"}\n\ndata: {\"type\":\"response.metadata\",\"metadata\":{}}\n\n")
 		select {
 		case <-body.closed:

@@ -23,20 +23,16 @@ func http2KeepAliveTestPoolSettings() poolSettings {
 }
 
 // requireHTTP2Configured asserts HTTP/2 was explicitly attached to the
-// http.Transport. On go1.27 x/net/http2 wraps stdlib HTTP/2: ConfigureTransports
-// opens Protocols.HTTP2 and maps ReadIdleTimeout/PingTimeout onto
-// HTTP2Config.SendPingTimeout/PingTimeout. Older toolchains still set TLSNextProto.
+// http.Transport with the native Go HTTP2Config ping timeouts.
 func requireHTTP2Configured(t *testing.T, tr *http.Transport, msg string) {
 	t.Helper()
-	configured := tr.Protocols != nil && tr.Protocols.HTTP2()
-	if tr.TLSNextProto != nil && tr.TLSNextProto["h2"] != nil {
-		configured = true
-	}
-	require.True(t, configured, msg)
-	if tr.HTTP2 != nil {
-		require.Equal(t, openAIHTTP2ReadIdleTimeout, tr.HTTP2.SendPingTimeout, "HTTP2Config.SendPingTimeout")
-		require.Equal(t, openAIHTTP2PingTimeout, tr.HTTP2.PingTimeout, "HTTP2Config.PingTimeout")
-	}
+	require.NotNil(t, tr.Protocols, msg)
+	require.True(t, tr.Protocols.HTTP2(), msg)
+	require.True(t, tr.Protocols.HTTP1(), "HTTP/1.1 fallback remains available")
+	require.NotNil(t, tr.HTTP2)
+	require.Positive(t, tr.HTTP2.SendPingTimeout, "必须启用空闲 PING 探测以剔除死连接")
+	require.Equal(t, openAIHTTP2ReadIdleTimeout, tr.HTTP2.SendPingTimeout, "HTTP2Config.SendPingTimeout")
+	require.Equal(t, openAIHTTP2PingTimeout, tr.HTTP2.PingTimeout, "HTTP2Config.PingTimeout")
 }
 
 // Codex/OpenAI 上游改走 HTTP/2 后，池化连接被代理/NAT 静默掐断会成为“死连接”：
@@ -47,15 +43,7 @@ func requireHTTP2Configured(t *testing.T, tr *http.Transport, msg string) {
 func TestEnableOpenAIHTTP2KeepAlive_EnablesPingHealthCheck(t *testing.T) {
 	tr := &http.Transport{}
 
-	h2, err := enableOpenAIHTTP2KeepAlive(tr)
-	require.NoError(t, err)
-	require.NotNil(t, h2, "必须返回已配置的 *http2.Transport")
-
-	if h2 != nil {
-		require.Positive(t, h2.ReadIdleTimeout, "必须启用空闲 PING 探测以剔除死连接")
-		require.Equal(t, openAIHTTP2ReadIdleTimeout, h2.ReadIdleTimeout)
-		require.Equal(t, openAIHTTP2PingTimeout, h2.PingTimeout, "PING 无响应必须有超时判定")
-	}
+	enableOpenAIHTTP2KeepAlive(tr)
 	requireHTTP2Configured(t, tr, "http2 必须已挂到底层 http.Transport 上")
 }
 

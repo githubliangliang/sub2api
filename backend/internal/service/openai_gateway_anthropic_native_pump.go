@@ -20,7 +20,7 @@ var errAnthropicNativeStreamIdle = errors.New("stream data interval timeout")
 var errAnthropicNativeClientGone = errors.New("client gone")
 
 // anthropicNativeLineEvent 是行泵交付的单次读取结果：line 为一行 SSE 文本，
-// err 为 scanner 读错误（流自然结束时 next 返回 io.EOF，不经过本字段）。
+// err 为 scanner 读错误（流自然结束时 nextOrClientGone 返回 io.EOF，不经过本字段）。
 type anthropicNativeLineEvent struct {
 	line string
 	err  error
@@ -64,15 +64,10 @@ func newAnthropicNativeLinePump(scanner *bufio.Scanner, interval time.Duration) 
 	return p
 }
 
-// next 阻塞返回下一行。返回 io.EOF 表示上游正常收流；errAnthropicNativeStreamIdle
+// nextOrClientGone 阻塞返回下一行。返回 io.EOF 表示上游正常收流；errAnthropicNativeStreamIdle
 // 表示自交付上一行起已过 interval 且没有可交付的行；计时器到期时若已有缓冲的行，
 // 优先交付该行，调用方处理事件期间上游送达的数据不会被判为上游空闲。
-func (p *anthropicNativeLinePump) next() (string, error) {
-	return p.nextOrClientGone(nil)
-}
-
-// nextOrClientGone 与 next 相同，另在等待期间 clientGone 关闭时返回
-// errAnthropicNativeClientGone。clientGone 为 nil 时不监听。
+// 等待期间 clientGone 关闭时返回 errAnthropicNativeClientGone；nil 时不监听。
 func (p *anthropicNativeLinePump) nextOrClientGone(clientGone <-chan struct{}) (string, error) {
 	var timeoutCh <-chan time.Time
 	if p.timer != nil {
@@ -103,7 +98,7 @@ func (p *anthropicNativeLinePump) deliver(ev anthropicNativeLineEvent, ok bool) 
 }
 
 // enableInterval 在读间隔上限未启用时以 interval 启用，计时从调用时起算；
-// 已启用时不变。只能在调用 next 的 goroutine 中调用。
+// 已启用时不变。只能在调用 nextOrClientGone 的 goroutine 中调用。
 func (p *anthropicNativeLinePump) enableInterval(interval time.Duration) {
 	if p.timer != nil || interval <= 0 {
 		return

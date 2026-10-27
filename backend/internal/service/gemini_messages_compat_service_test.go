@@ -746,28 +746,35 @@ func TestCleanToolSchema_PreservesPropertyNamesAndDataWithoutMutation(t *testing
 	require.NoError(t, json.Unmarshal([]byte(input), &schema))
 	before, err := json.Marshal(schema)
 	require.NoError(t, err)
-	cleaned := cleanToolSchema(schema).(map[string]any)
+	requireObject := func(value any) map[string]any {
+		t.Helper()
+		object, ok := value.(map[string]any)
+		require.True(t, ok, "schema node must remain an object")
+		return object
+	}
+	cleaned := requireObject(cleanToolSchema(schema))
 	after, err := json.Marshal(schema)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "source schema must remain unchanged")
 	require.NotContains(t, cleaned, "$schema")
 	require.NotContains(t, cleaned, "examples")
-	properties := cleaned["properties"].(map[string]any)
-	require.Equal(t, []any{"property"}, properties["$schema"].(map[string]any)["enum"])
-	require.Equal(t, []any{"value"}, properties["const"].(map[string]any)["enum"])
-	require.Equal(t, float64(1), properties["examples"].(map[string]any)["minimum"])
+	properties := requireObject(cleaned["properties"])
+	require.Equal(t, []any{"property"}, requireObject(properties["$schema"])["enum"])
+	require.Equal(t, []any{"value"}, requireObject(properties["const"])["enum"])
+	require.Equal(t, float64(1), requireObject(properties["examples"])["minimum"])
 	require.Equal(t, schema["default"], cleaned["default"])
 	require.Equal(t, schema["customAnnotation"], cleaned["customAnnotation"])
-	branches := cleaned["anyOf"].([]any)
-	require.Equal(t, []any{"a"}, branches[0].(map[string]any)["enum"])
-	require.Equal(t, float64(1), branches[1].(map[string]any)["minimum"])
-	dependencies := cleaned["dependentSchemas"].(map[string]any)
-	require.Equal(t, []any{"dependency"}, dependencies["const"].(map[string]any)["enum"])
+	branches, ok := cleaned["anyOf"].([]any)
+	require.True(t, ok)
+	require.Equal(t, []any{"a"}, requireObject(branches[0])["enum"])
+	require.Equal(t, float64(1), requireObject(branches[1])["minimum"])
+	dependencies := requireObject(cleaned["dependentSchemas"])
+	require.Equal(t, []any{"dependency"}, requireObject(dependencies["const"])["enum"])
 
 	// Returned data values must also be copied, so callers can edit the cleaned
 	// result without changing the original tool declaration.
-	cleaned["default"].(map[string]any)["const"] = "changed"
-	require.Equal(t, "data", schema["default"].(map[string]any)["const"])
+	requireObject(cleaned["default"])["const"] = "changed"
+	require.Equal(t, "data", requireObject(schema["default"])["const"])
 }
 
 func TestConvertClaudeToolsToGeminiTools_PreservesWebSearchAlongsideFunctions(t *testing.T) {

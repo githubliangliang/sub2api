@@ -230,7 +230,9 @@ func TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits
 	// process rather than count those workers' allocations as sanitizer work.
 	const childEnv = "SUB2API_TEST_TOOL_SCHEMA_ALLOCS_CHILD"
 	if os.Getenv(childEnv) != "1" {
-		cmd := exec.Command(os.Args[0],
+		testBinary, err := os.Executable()
+		require.NoError(t, err)
+		cmd := exec.Command(testBinary,
 			"-test.run=^TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits$",
 			"-test.count=1", "-test.timeout=30s", "-test.v")
 		cmd.Env = append(os.Environ(), childEnv+"=1")

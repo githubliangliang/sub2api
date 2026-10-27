@@ -25,7 +25,8 @@ func TestStreamingThinkingSignatureWire(t *testing.T) {
 				var event map[string]any
 				require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event))
 				if event["type"] == "content_block_start" {
-					block := event["content_block"].(map[string]any)
+					block, ok := event["content_block"].(map[string]any)
+					require.True(t, ok)
 					if block["type"] == "thinking" {
 						require.Equal(t, "", block["thinking"])
 						require.Equal(t, "", block["signature"])

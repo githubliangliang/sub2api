@@ -59,7 +59,7 @@ func TestInstallAdminCredentialsAndExistingUsers(t *testing.T) {
 				require.NoError(t, initializeDatabase(cfg))
 				db, err := sql.Open("sqlite", buildSQLiteDSN(&cfg.Database))
 				require.NoError(t, err)
-				defer db.Close()
+				defer func() { require.NoError(t, db.Close()) }()
 				_, err = db.Exec(`INSERT INTO users (email, password_hash, role) VALUES ('existing@example.com', 'original-hash', ?)`, role)
 				require.NoError(t, err)
 				email, password = "invalid", "short"

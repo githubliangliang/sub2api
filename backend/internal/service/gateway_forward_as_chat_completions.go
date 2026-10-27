@@ -420,10 +420,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		// Reverse tool name mapping: fake → real, per-chunk bytes.Replace.
 		// c 可能持有请求侧注入的 ToolNameRewrite；无则仅做静态前缀还原。
 		out := string(reverseToolNamesIfPresent(c, []byte(sse)))
-		if !stream.writeFrame(c, out, anthropicCompatChatChunkStartsOutput(chunk)) {
-			return true
-		}
-		return false
+		return !stream.writeFrame(c, out, anthropicCompatChatChunkStartsOutput(chunk))
 	}
 
 	processAnthropicEvent := func(event *apicompat.AnthropicStreamEvent) {

@@ -79,7 +79,9 @@ func TestModerationSaveAndGroupDeleteSerializeSQLite(t *testing.T) {
 		t.Run(fmt.Sprintf("delete_first=%t", deleteFirst), func(t *testing.T) {
 			dsn := "file:" + filepath.Join(t.TempDir(), "groups.db") + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_time_format=sqlite"
 			repo, client := newGroupEntRepoSQLite(t, dsn)
-			repo.sql.(*sql.DB).SetMaxOpenConns(4)
+			sqlDB, ok := repo.sql.(*sql.DB)
+			require.True(t, ok)
+			sqlDB.SetMaxOpenConns(4)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			g := &service.Group{Name: "scope", Platform: service.PlatformOpenAI, Status: service.StatusActive}
@@ -90,7 +92,7 @@ func TestModerationSaveAndGroupDeleteSerializeSQLite(t *testing.T) {
 			require.NoError(t, settings.Set(ctx, service.SettingKeyContentModerationConfig, oldValue))
 			tx, err := client.Tx(ctx)
 			require.NoError(t, err)
-			defer tx.Rollback()
+			defer func() { _ = tx.Rollback() }()
 			txCtx := dbent.NewTxContext(ctx, tx)
 			if deleteFirst {
 				_, err = repo.DeleteCascade(txCtx, g.ID)

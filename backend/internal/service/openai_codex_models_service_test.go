@@ -1455,7 +1455,7 @@ func TestIsRetryableCodexModelsManifestTransportError(t *testing.T) {
 		},
 		{
 			name:      "typed HTTP2 GOAWAY",
-			err:       http2.GoAwayError{ErrCode: http2.ErrCodeNo},
+			err:       http2.GoAwayError{ErrCode: http2.ErrCodeNo}, //nolint:staticcheck // SA1019: verify legacy x/net errors remain retryable alongside stdlib errors.
 			retryable: true,
 		},
 		{

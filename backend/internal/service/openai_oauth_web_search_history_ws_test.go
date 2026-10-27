@@ -27,7 +27,7 @@ func TestOAuthWebSearchHistoryPassthroughTwoTurns(t *testing.T) {
 			defer server.Close()
 			payload := fmt.Sprintf(`{"type":"response.create","model":"gpt-5.5","instructions":"x","input":[{"type":"web_search_call","sequence":9007199254740993},{"type":"compaction_trigger"}],"tools":[],"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"%t"}}`, lite)
 			client := dialPassthroughLifecycleClientWithPayload(t, server, payload)
-			defer client.CloseNow()
+			defer func() { _ = client.CloseNow() }()
 			for turn := 1; turn <= 2; turn++ {
 				if turn > 1 {
 					require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(payload)))
