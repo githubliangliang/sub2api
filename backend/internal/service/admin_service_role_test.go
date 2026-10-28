@@ -4,8 +4,10 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -140,4 +142,30 @@ func TestAdminService_UpdateUser_PromoteDoesNotCountAdmins(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RoleAdmin, updated.Role)
 	require.Equal(t, 0, repo.listCalls, "升级路径不应触发管理员计数")
+}
+
+func TestAdminService_AdminGuardsAreClientErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name, reason string
+		input        *UpdateUserInput
+	}{
+		{"disable", "ADMIN_DISABLE_FORBIDDEN", &UpdateUserInput{Status: StatusDisabled}},
+		{"last admin demotion", "LAST_ADMIN_DEMOTE_FORBIDDEN", &UpdateUserInput{Role: RoleUser}},
+		{"delete", "ADMIN_DELETE_FORBIDDEN", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := &userRepoStub{user: &User{ID: 42, Email: "a@example.test", Role: RoleAdmin}}
+			repo := &roleGuardUserRepoStub{rpmUserRepoStub: &rpmUserRepoStub{userRepoStub: base}, adminTotal: 1}
+			svc := &adminServiceImpl{userRepo: repo}
+			var err error
+			if tc.input == nil {
+				err = svc.DeleteUser(context.Background(), 42)
+			} else {
+				_, err = svc.UpdateUser(context.Background(), 42, tc.input)
+			}
+			require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+			require.Equal(t, tc.reason, infraerrors.Reason(err))
+			require.Nil(t, repo.lastUpdated)
+		})
+	}
 }

@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tidwall/gjson"
 )
 
 func geminiStreamClientGone(c *gin.Context) bool {
@@ -66,32 +64,10 @@ func (w *geminiStreamClientWriter) Flush() {
 func observeGeminiStreamImages(c *gin.Context, payload []byte) {
 	observeGeminiImageOutputs(c, payload)
 	counter := geminiImageOutputCounterFromContext(c)
-	if counter == nil || !gjson.ValidBytes(payload) {
+	if counter == nil {
 		return
 	}
-	count := countGeminiInlineImageOutputs(payload)
-	gjson.GetBytes(payload, "candidates").ForEach(func(_, candidate gjson.Result) bool {
-		candidate.Get("content.parts").ForEach(func(_, part gjson.Result) bool {
-			file := part.Get("fileData")
-			if !file.Exists() {
-				file = part.Get("file_data")
-			}
-			mime := file.Get("mimeType").String()
-			if mime == "" {
-				mime = file.Get("mime_type").String()
-			}
-			uri := file.Get("fileUri").String()
-			if uri == "" {
-				uri = file.Get("file_uri").String()
-			}
-			if isGeminiInlineImageMIMEType(strings.ToLower(strings.TrimSpace(mime))) && strings.TrimSpace(uri) != "" {
-				count++
-			}
-			return true
-		})
-		return true
-	})
-	counter.streamCount = max(counter.streamCount, count)
+	counter.streamCount = max(counter.streamCount, countGeminiImageOutputs(payload))
 }
 
 func observedGeminiStreamImages(c *gin.Context) int {

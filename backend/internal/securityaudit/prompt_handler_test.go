@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -211,11 +213,38 @@ func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
 		{http.MethodGet, "/admin/prompt-audit/events?group_id=bad", nil, "prompt_audit_invalid_filter_id"},
 		{http.MethodGet, "/admin/prompt-audit/events?start_at=not-time", nil, "prompt_audit_invalid_time"},
 		{http.MethodGet, "/admin/prompt-audit/events?page=0", nil, "prompt_audit_invalid_pagination"},
+		{http.MethodGet, "/admin/prompt-audit/events?page=9223372036854775807", nil, "prompt_audit_invalid_pagination"},
 		{http.MethodPost, "/admin/prompt-audit/events/batch-delete", map[string]any{"ids": []int64{1, -2}}, "prompt_audit_invalid_event_id"},
 	} {
 		response := promptAdminRequest(t, router, tc.method, tc.path, tc.body)
 		require.Equalf(t, http.StatusBadRequest, response.Code, "%s %s", tc.method, tc.path)
 		require.Contains(t, response.Body.String(), tc.reason)
+	}
+}
+
+func TestPromptAdminRejectsOverflowingPagination(t *testing.T) {
+	for _, size := range []int{20, 21, 100} {
+		for _, page := range []int{math.MaxInt / size, math.MaxInt/size + 1} {
+			query := "/admin/prompt-audit/events?page=" + strconv.Itoa(page) + "&page_size=" + strconv.Itoa(size)
+			t.Run(query, func(t *testing.T) {
+				calls := 0
+				router := promptAdminRouter(&fakePromptAdminService{list: func(_ context.Context, _ EventFilter, gotPage, gotSize int) (*EventPage, error) {
+					calls++
+					require.Equal(t, page, gotPage)
+					require.Equal(t, size, gotSize)
+					return &EventPage{}, nil
+				}})
+				response := promptAdminRequest(t, router, http.MethodGet, query, nil)
+				if page > math.MaxInt/size {
+					require.Equal(t, http.StatusBadRequest, response.Code)
+					require.Contains(t, response.Body.String(), "prompt_audit_invalid_pagination")
+					require.Zero(t, calls)
+				} else {
+					require.Equal(t, http.StatusOK, response.Code)
+					require.Equal(t, 1, calls)
+				}
+			})
+		}
 	}
 }
 

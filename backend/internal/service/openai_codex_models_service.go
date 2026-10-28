@@ -1741,7 +1741,11 @@ func (s *OpenAIGatewayService) fetchCachedAPIKeyCodexModelsManifest(ctx context.
 
 func (s *OpenAIGatewayService) refreshCachedAPIKeyCodexModelsManifest(cacheKey string, request codexModelsManifestRequest) <-chan singleflight.Result {
 	return s.codexModelsManifestCache.refresh.DoChan(cacheKey, func() (any, error) {
-		cached, _ := s.codexModelsManifestCache.get(cacheKey, time.Now())
+		cached, state := s.codexModelsManifestCache.get(cacheKey, time.Now())
+		// A completed flight may have filled the cache after the caller's miss.
+		if state == codexModelsManifestCacheFresh {
+			return cached, nil
+		}
 		ifNoneMatch := ""
 		if cached != nil {
 			ifNoneMatch = cached.upstreamETag

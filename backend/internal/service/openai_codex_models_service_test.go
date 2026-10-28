@@ -2516,6 +2516,36 @@ func TestFetchCodexModelsManifestAPIKeyConcurrentRequestsShareRefresh(t *testing
 	}
 }
 
+func TestRefreshCachedAPIKeyCodexModelsManifest_RechecksFreshEntry(t *testing.T) {
+	var calls atomic.Int32
+	upstream := &codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		calls.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"models":[{"slug":"gpt-5.6"}]}`)),
+		}, nil
+	}}
+	s := newCodexModelsAPIKeyTestService(upstream)
+	request := codexModelsManifestRequest{
+		url: "https://upstream.example/v1/models", headers: make(http.Header),
+		accountID: 19, useAPIKeyUpstream: true,
+	}
+	key := buildCodexModelsManifestCacheKey(request)
+	_, state := s.codexModelsManifestCache.get(key, time.Now())
+	require.Equal(t, codexModelsManifestCacheMiss, state)
+	// Another flight finishes after this caller's miss but before its refresh.
+	first := <-s.refreshCachedAPIKeyCodexModelsManifest(key, request)
+	require.NoError(t, first.Err)
+	require.EqualValues(t, 1, calls.Load())
+	cached, state := s.codexModelsManifestCache.get(key, time.Now())
+	require.Equal(t, codexModelsManifestCacheFresh, state)
+	result := <-s.refreshCachedAPIKeyCodexModelsManifest(key, request)
+	require.NoError(t, result.Err)
+	require.EqualValues(t, 1, calls.Load(), "the caller entering after the fresh fill must fetch zero times")
+	require.Same(t, cached, result.Val)
+}
+
 func TestFetchCodexModelsManifestAPIKeyFreshCacheHandlesETagLocally(t *testing.T) {
 	var calls atomic.Int32
 	upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {

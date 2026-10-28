@@ -3,12 +3,15 @@
 package service
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +31,7 @@ func geminiImageResponse(parts string) string {
 	return `{"candidates":[{"content":{"role":"model","parts":[` + parts + `]},"finishReason":"STOP"}]}`
 }
 
-func TestCountGeminiInlineImageOutputs(t *testing.T) {
+func TestCountGeminiImageOutputs(t *testing.T) {
 	cases := []struct {
 		name    string
 		payload string
@@ -85,9 +88,72 @@ func TestCountGeminiInlineImageOutputs(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, countGeminiInlineImageOutputs([]byte(tc.payload)))
+			require.Equal(t, tc.want, countGeminiImageOutputs([]byte(tc.payload)))
 		})
 	}
+}
+
+func TestGeminiImageOutputs_FileReferences(t *testing.T) {
+	for _, tc := range []struct {
+		name, parts string
+		want        int
+	}{
+		{"camel file", `{"fileData":{"mimeType":"image/png","fileUri":"https://example.test/a.png"}}`, 1},
+		{"snake file", `{"file_data":{"mime_type":"image/jpeg","file_uri":"gs://bucket/a.jpg"}}`, 1},
+		{"mixed images", `{"inline_data":{"mime_type":"image/png","data":"YQ=="}},{"fileData":{"mimeType":"image/webp","fileUri":"gs://bucket/a.webp"}}`, 2},
+		{"one part multiple spellings", `{"inlineData":{"mimeType":"image/png","data":"YQ=="},"inline_data":{"mime_type":"image/png","data":"YQ=="},"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/a.png"},"file_data":{"mime_type":"image/png","file_uri":"gs://bucket/a.png"}}`, 1},
+		{"empty inline with valid file", `{"inlineData":{"mimeType":"image/png","data":""},"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/a.png"}}`, 1},
+		{"empty camel with valid snake", `{"fileData":{},"file_data":{"mime_type":"image/png","file_uri":"gs://bucket/a.png"}}`, 1},
+		{"uppercase mime", `{"fileData":{"mimeType":" IMAGE/PNG ","fileUri":"gs://bucket/a.png"}}`, 1},
+		{"non image mime", `{"fileData":{"mimeType":"application/pdf","fileUri":"gs://bucket/a.pdf"}}`, 0},
+		{"empty URI", `{"fileData":{"mimeType":"image/png","fileUri":"  "}}`, 0},
+		{"missing URI", `{"fileData":{"mimeType":"image/png"}}`, 0},
+		{"non string URI", `{"fileData":{"mimeType":"image/png","fileUri":123}}`, 0},
+		{"non string inline", `{"inlineData":{"mimeType":"image/png","data":123}}`, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, countGeminiImageOutputs([]byte(geminiImageResponse(tc.parts))))
+		})
+	}
+}
+
+func TestHandleNativeNonStreamingResponse_FileDataImageBilling(t *testing.T) {
+	c := newGeminiImageTestContext(t)
+	beginGeminiImageOutputObservation(c)
+	body := geminiImageResponse(`{"file_data":{"mime_type":"image/jpeg","file_uri":"https://example.test/one.jpg"}},{"fileData":{"mimeType":"image/png","fileUri":"https://example.test/two.png"}}`)
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}
+	_, err := (&GeminiMessagesCompatService{}).handleNativeNonStreamingResponse(c, resp, false)
+	require.NoError(t, err)
+	const model = "private-image-alias"
+	count := resolveGeminiImageCount(c, model, model)
+	require.Equal(t, 2, count)
+	groupID := int64(128)
+	svc := &GatewayService{
+		billingService: NewBillingService(&config.Config{}, nil),
+		resolver:       newOpenAIImageChannelPricingResolverForTest(t, groupID, model, 0.25),
+	}
+	cost := svc.calculateRecordUsageCost(context.Background(),
+		&ForwardResult{Model: model, ImageCount: count, ImageSize: "1K"},
+		&APIKey{GroupID: &groupID, Group: &Group{ID: groupID}}, model, 0.15, 1.0, &recordUsageOpts{})
+	require.NotNil(t, cost)
+	require.Equal(t, string(BillingModeImage), cost.BillingMode)
+	require.InDelta(t, 0.50, cost.TotalCost, 1e-12)
+}
+
+func TestHandleNativeStreamingResponse_FileDataCumulativeChunks(t *testing.T) {
+	c := newGeminiImageTestContext(t)
+	beginGeminiImageOutputObservation(c)
+	one := geminiImageResponse(`{"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/one.png"}}`)
+	two := geminiImageResponse(`{"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/one.png"}},{"file_data":{"mime_type":"image/jpeg","file_uri":"gs://bucket/two.jpg"}}`)
+	stream := "data: " + one + "\n\ndata: " + two + "\n\ndata: " + two + "\n\ndata: {\"usageMetadata\":{\"promptTokenCount\":9}}\n\n"
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}
+	_, err := (&GeminiMessagesCompatService{}).handleNativeStreamingResponse(c, resp, time.Now(), false)
+	require.NoError(t, err)
+	require.Equal(t, 2, resolveGeminiImageCount(c, "private-image-alias", "private-image-alias"))
+	require.Equal(t, 2, observedGeminiStreamImages(c), "completed and interrupted streams share the same part predicate")
+	beginGeminiImageOutputObservation(c)
+	require.Zero(t, observedGeminiImageOutputs(c))
+	require.Zero(t, observedGeminiStreamImages(c))
 }
 
 // 累积式 SSE 会把同一张图在后续 chunk 里整段重发，逐 chunk 累加会重复计费。

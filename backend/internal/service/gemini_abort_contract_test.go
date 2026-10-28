@@ -115,6 +115,9 @@ func TestGeminiAbortImagesRequireActualObservedParts(t *testing.T) {
 		}{
 			{"finished text is not an image", `{"text":"done"}`, 0},
 			{"observed file image", `{"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/image.png"}}`, 1},
+			{"inline and file in one part", `{"inlineData":{"mimeType":"image/png","data":"YQ=="},"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/image.png"}}`, 1},
+			{"multiple file images", `{"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/one.png"}},{"file_data":{"mime_type":"image/jpeg","file_uri":"gs://bucket/two.jpg"}}`, 2},
+			{"non string file URI", `{"fileData":{"mimeType":"image/png","fileUri":123}}`, 0},
 			{"empty file reference", `{"fileData":{"mimeType":"image/png","fileUri":""}}`, 0},
 		} {
 			t.Run(p.name+"/"+tc.name, func(t *testing.T) {
