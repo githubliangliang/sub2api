@@ -11,16 +11,21 @@ import (
 type AccountExpiryService struct {
 	accountRepo AccountRepository
 	interval    time.Duration
-	stopCh      chan struct{}
+	workerCtx   context.Context
+	workerStop  context.CancelFunc
+	lifecycleMu sync.Mutex
+	startOnce   sync.Once
 	stopOnce    sync.Once
 	wg          sync.WaitGroup
 }
 
 func NewAccountExpiryService(accountRepo AccountRepository, interval time.Duration) *AccountExpiryService {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &AccountExpiryService{
 		accountRepo: accountRepo,
 		interval:    interval,
-		stopCh:      make(chan struct{}),
+		workerCtx:   ctx,
+		workerStop:  cancel,
 	}
 }
 
@@ -28,22 +33,29 @@ func (s *AccountExpiryService) Start() {
 	if s == nil || s.accountRepo == nil || s.interval <= 0 {
 		return
 	}
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		ticker := time.NewTicker(s.interval)
-		defer ticker.Stop()
-
-		s.runOnce()
-		for {
-			select {
-			case <-ticker.C:
-				s.runOnce()
-			case <-s.stopCh:
-				return
-			}
+	s.startOnce.Do(func() {
+		s.lifecycleMu.Lock()
+		defer s.lifecycleMu.Unlock()
+		if s.workerCtx.Err() != nil {
+			return
 		}
-	}()
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			ticker := time.NewTicker(s.interval)
+			defer ticker.Stop()
+
+			s.runOnce()
+			for {
+				select {
+				case <-ticker.C:
+					s.runOnce()
+				case <-s.workerCtx.Done():
+					return
+				}
+			}
+		}()
+	})
 }
 
 func (s *AccountExpiryService) Stop() {
@@ -51,13 +63,18 @@ func (s *AccountExpiryService) Stop() {
 		return
 	}
 	s.stopOnce.Do(func() {
-		close(s.stopCh)
+		s.lifecycleMu.Lock()
+		s.workerStop()
+		s.lifecycleMu.Unlock()
 	})
 	s.wg.Wait()
 }
 
 func (s *AccountExpiryService) runOnce() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if s.workerCtx.Err() != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(s.workerCtx, 5*time.Second)
 	defer cancel()
 
 	updated, err := s.accountRepo.AutoPauseExpiredAccounts(ctx, time.Now())

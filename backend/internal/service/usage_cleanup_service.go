@@ -159,6 +159,9 @@ func (s *UsageCleanupService) runOnce() {
 	if svc == nil {
 		return
 	}
+	if svc.workerCtx != nil && svc.workerCtx.Err() != nil {
+		return
+	}
 	if !atomic.CompareAndSwapInt32(&svc.running, 0, 1) {
 		logger.LegacyPrintf("service.usage_cleanup", "[UsageCleanup] run_once skipped: already_running=true")
 		return

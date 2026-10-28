@@ -107,7 +107,7 @@ func (s *AuditLogService) ClearAll(ctx context.Context, trace *AuditLog) (int64,
 		return 0, fmt.Errorf("count audit logs: %w", err)
 	}
 	if err := s.repo.TruncateAll(ctx); err != nil {
-		return 0, fmt.Errorf("truncate audit logs: %w", err)
+		return 0, fmt.Errorf("clear audit logs: %w", err)
 	}
 
 	if trace != nil {

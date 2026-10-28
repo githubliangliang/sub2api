@@ -17,12 +17,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// skipSQLiteBackgroundJobs disables PG-only polling workers on SQLite personal deploys.
-// These jobs use FOR UPDATE / INTERVAL / COPY / ANY and only spam errors + burn CPU.
-func skipSQLiteBackgroundJobs(cfg *config.Config) bool {
-	return cfg != nil && cfg.Database.IsSQLite()
-}
-
 func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthClient, cfg *config.Config, redisClient *redis.Client) *GrokOAuthService {
 	svc := NewGrokOAuthService(proxyRepo, oauthClient, cfg)
 	// wire.go is depguard-exempt for redis; construct the Redis session store here.
@@ -324,18 +318,14 @@ func ProvideDashboardAggregationService(repo DashboardAggregationRepository, tim
 // ProvideUsageCleanupService 创建并启动使用记录清理任务服务
 func ProvideUsageCleanupService(repo UsageCleanupRepository, timingWheel *TimingWheelService, dashboardAgg *DashboardAggregationService, cfg *config.Config) *UsageCleanupService {
 	svc := NewUsageCleanupService(repo, timingWheel, dashboardAgg, cfg)
-	if !skipSQLiteBackgroundJobs(cfg) {
-		svc.Start()
-	}
+	svc.Start()
 	return svc
 }
 
 // ProvideAccountExpiryService creates and starts AccountExpiryService.
 func ProvideAccountExpiryService(accountRepo AccountRepository, cfg *config.Config) *AccountExpiryService {
 	svc := NewAccountExpiryService(accountRepo, time.Minute)
-	if !skipSQLiteBackgroundJobs(cfg) {
-		svc.Start()
-	}
+	svc.Start()
 	return svc
 }
 
@@ -416,7 +406,7 @@ func ProvideSchedulerSnapshotService(
 	cfg *config.Config,
 ) *SchedulerSnapshotService {
 	svc := NewSchedulerSnapshotService(cache, outboxRepo, accountRepo, groupRepo, cfg)
-	// 与其它 skipSQLiteBackgroundJobs 服务不同，快照 worker 必须在 SQLite 上照常
+	// 快照 worker 必须在 SQLite 上照常
 	// 启动：outbox poller 是管理端账号/分组变更传播到调度桶的唯一常规通道，
 	// 相关 SQL（ListAfterAndReleaseDedup / DeleteConsumedUpTo）全部为 SQLite 兼容
 	// 方言。跳过 Start 会让桶永久陈旧、outbox 行永不消费——滞留行的 dedup_key
@@ -580,9 +570,7 @@ func ProvideScheduledTestRunnerService(
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
 	svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg)
-	if !skipSQLiteBackgroundJobs(cfg) {
-		svc.Start()
-	}
+	svc.Start()
 	return svc
 }
 

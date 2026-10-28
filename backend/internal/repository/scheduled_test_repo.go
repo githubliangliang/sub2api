@@ -39,7 +39,7 @@ func (r *scheduledTestPlanRepository) ListByAccountID(ctx context.Context, accou
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, model_id, cron_expression, enabled, max_results, auto_recover, last_run_at, next_run_at, created_at, updated_at
 		FROM scheduled_test_plans WHERE account_id = $1
-		ORDER BY created_at DESC
+		ORDER BY julianday(created_at) DESC, id DESC
 	`, accountID)
 	if err != nil {
 		return nil, err
@@ -52,9 +52,9 @@ func (r *scheduledTestPlanRepository) ListDue(ctx context.Context, now time.Time
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, model_id, cron_expression, enabled, max_results, auto_recover, last_run_at, next_run_at, created_at, updated_at
 		FROM scheduled_test_plans
-		WHERE enabled = true AND next_run_at <= $1
-		ORDER BY next_run_at ASC
-	`, now)
+		WHERE enabled = true AND julianday(next_run_at) <= julianday($1)
+		ORDER BY julianday(next_run_at) ASC, id ASC
+	`, now.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, err
 	}
@@ -101,14 +101,7 @@ func (r *scheduledTestResultRepository) Create(ctx context.Context, result *serv
 		RETURNING id, plan_id, status, response_text, error_message, latency_ms, started_at, finished_at, created_at
 	`, result.PlanID, result.Status, result.ResponseText, result.ErrorMessage, result.LatencyMs, result.StartedAt, result.FinishedAt)
 
-	out := &service.ScheduledTestResult{}
-	if err := row.Scan(
-		&out.ID, &out.PlanID, &out.Status, &out.ResponseText, &out.ErrorMessage,
-		&out.LatencyMs, &out.StartedAt, &out.FinishedAt, &out.CreatedAt,
-	); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return scanScheduledTestResult(row)
 }
 
 func (r *scheduledTestResultRepository) ListByPlanID(ctx context.Context, planID int64, limit int) ([]*service.ScheduledTestResult, error) {
@@ -116,7 +109,7 @@ func (r *scheduledTestResultRepository) ListByPlanID(ctx context.Context, planID
 		SELECT id, plan_id, status, response_text, error_message, latency_ms, started_at, finished_at, created_at
 		FROM scheduled_test_results
 		WHERE plan_id = $1
-		ORDER BY created_at DESC
+		ORDER BY julianday(created_at) DESC, id DESC
 		LIMIT $2
 	`, planID, limit)
 	if err != nil {
@@ -126,11 +119,8 @@ func (r *scheduledTestResultRepository) ListByPlanID(ctx context.Context, planID
 
 	var results []*service.ScheduledTestResult
 	for rows.Next() {
-		r := &service.ScheduledTestResult{}
-		if err := rows.Scan(
-			&r.ID, &r.PlanID, &r.Status, &r.ResponseText, &r.ErrorMessage,
-			&r.LatencyMs, &r.StartedAt, &r.FinishedAt, &r.CreatedAt,
-		); err != nil {
+		r, err := scanScheduledTestResult(rows)
+		if err != nil {
 			return nil, err
 		}
 		results = append(results, r)
@@ -143,7 +133,7 @@ func (r *scheduledTestResultRepository) PruneOldResults(ctx context.Context, pla
 		DELETE FROM scheduled_test_results
 		WHERE id IN (
 			SELECT id FROM (
-				SELECT id, ROW_NUMBER() OVER (PARTITION BY plan_id ORDER BY created_at DESC) AS rn
+				SELECT id, ROW_NUMBER() OVER (PARTITION BY plan_id ORDER BY julianday(created_at) DESC, id DESC) AS rn
 				FROM scheduled_test_results
 				WHERE plan_id = $1
 			) ranked
@@ -161,13 +151,32 @@ type scannable interface {
 
 func scanPlan(row scannable) (*service.ScheduledTestPlan, error) {
 	p := &service.ScheduledTestPlan{}
+	var lastRunAt, nextRunAt, createdAt, updatedAt sqliteTime
 	if err := row.Scan(
 		&p.ID, &p.AccountID, &p.ModelID, &p.CronExpression, &p.Enabled, &p.MaxResults, &p.AutoRecover,
-		&p.LastRunAt, &p.NextRunAt, &p.CreatedAt, &p.UpdatedAt,
+		&lastRunAt, &nextRunAt, &createdAt, &updatedAt,
 	); err != nil {
 		return nil, err
 	}
+	if lastRunAt.Valid {
+		p.LastRunAt = &lastRunAt.Time
+	}
+	if nextRunAt.Valid {
+		p.NextRunAt = &nextRunAt.Time
+	}
+	p.CreatedAt, p.UpdatedAt = createdAt.Time, updatedAt.Time
 	return p, nil
+}
+
+func scanScheduledTestResult(row scannable) (*service.ScheduledTestResult, error) {
+	r := &service.ScheduledTestResult{}
+	var startedAt, finishedAt, createdAt sqliteTime
+	if err := row.Scan(&r.ID, &r.PlanID, &r.Status, &r.ResponseText, &r.ErrorMessage,
+		&r.LatencyMs, &startedAt, &finishedAt, &createdAt); err != nil {
+		return nil, err
+	}
+	r.StartedAt, r.FinishedAt, r.CreatedAt = startedAt.Time, finishedAt.Time, createdAt.Time
+	return r, nil
 }
 
 func scanPlans(rows *sql.Rows) ([]*service.ScheduledTestPlan, error) {

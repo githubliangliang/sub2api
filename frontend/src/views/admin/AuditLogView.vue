@@ -642,7 +642,7 @@ function cancelClearTotp() {
 }
 
 async function submitClear() {
-  if (clearTotpCode.value.length !== 6) return
+  if (clearing.value || clearTotpCode.value.length !== 6) return
   clearing.value = true
   try {
     const res = await adminAPI.audit.clear(clearTotpCode.value)

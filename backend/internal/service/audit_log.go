@@ -96,7 +96,7 @@ type AuditLogRepository interface {
 	List(ctx context.Context, filter *AuditLogFilter) (*AuditLogList, error)
 	GetByID(ctx context.Context, id int64) (*AuditLog, error)
 	Count(ctx context.Context) (int64, error)
-	// TruncateAll 全量清空（TRUNCATE），返回前需调用方自行 Count 记录行数。
+	// TruncateAll 全量清空并保留历史自增序列，调用方需先 Count 记录行数。
 	TruncateAll(ctx context.Context) error
 	// DeleteBefore 按保留期批量删除，返回本批删除行数（幂等，可多实例并发）。
 	DeleteBefore(ctx context.Context, cutoff time.Time, batchSize int) (int64, error)

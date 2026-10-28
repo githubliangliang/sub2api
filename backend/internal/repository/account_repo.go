@@ -2456,9 +2456,9 @@ func (r *accountRepository) AutoPauseExpiredAccounts(ctx context.Context, now ti
 			AND schedulable = TRUE
 			AND auto_pause_on_expired = TRUE
 			AND expires_at IS NOT NULL
-			AND expires_at <= $1
+			AND julianday(expires_at) <= julianday($1)
 		RETURNING id
-	`, now)
+	`, now.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return 0, err
 	}
@@ -2477,8 +2477,12 @@ func (r *accountRepository) AutoPauseExpiredAccounts(ctx context.Context, now ti
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
 
 	if len(accountIDs) > 0 {
+		r.syncSchedulerAccountSnapshots(ctx, accountIDs)
 		// 只刷新本次暂停的账号及其所属分组，避免少量账号到期触发所有调度桶重建。
 		payload := map[string]any{"account_ids": accountIDs}
 		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountBulkChanged, nil, nil, payload); err != nil {

@@ -172,6 +172,23 @@ func TestUsageCleanupRepositoryEntMarkResults(t *testing.T) {
 	require.Equal(t, "boom", *loaded2.ErrorMessage)
 }
 
+func TestUsageCleanupRepositoryEntCanceledStateRemainsTerminal(t *testing.T) {
+	repo, client := newUsageCleanupEntRepo(t)
+	ctx := context.Background()
+	task := &service.UsageCleanupTask{Status: service.UsageCleanupStatusRunning, CreatedBy: 12,
+		Filters: service.UsageCleanupFilters{StartTime: time.Now().UTC(), EndTime: time.Now().UTC().Add(time.Hour)}}
+	require.NoError(t, repo.CreateTask(ctx, task))
+	canceled, err := repo.CancelTask(ctx, task.ID, 7)
+	require.NoError(t, err)
+	require.True(t, canceled)
+	require.NoError(t, repo.MarkTaskSucceeded(ctx, task.ID, 4))
+	require.NoError(t, repo.MarkTaskFailed(ctx, task.ID, 4, "late worker error"))
+	loaded, err := client.UsageCleanupTask.Get(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, service.UsageCleanupStatusCanceled, loaded.Status)
+	require.EqualValues(t, 7, *loaded.CanceledBy)
+}
+
 func TestUsageCleanupRepositoryEntInvalidStatus(t *testing.T) {
 	repo, _ := newUsageCleanupEntRepo(t)
 

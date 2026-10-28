@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -20,9 +21,13 @@ type ScheduledTestRunnerService struct {
 	rateLimitSvc   *RateLimitService
 	cfg            *config.Config
 
-	cron      *cron.Cron
-	startOnce sync.Once
-	stopOnce  sync.Once
+	cron        *cron.Cron
+	startOnce   sync.Once
+	stopOnce    sync.Once
+	lifecycleMu sync.Mutex
+	workerCtx   context.Context
+	workerStop  context.CancelFunc
+	running     atomic.Bool
 }
 
 // NewScheduledTestRunnerService creates a new runner.
@@ -33,12 +38,15 @@ func NewScheduledTestRunnerService(
 	rateLimitSvc *RateLimitService,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &ScheduledTestRunnerService{
 		planRepo:       planRepo,
 		scheduledSvc:   scheduledSvc,
 		accountTestSvc: accountTestSvc,
 		rateLimitSvc:   rateLimitSvc,
 		cfg:            cfg,
+		workerCtx:      ctx,
+		workerStop:     cancel,
 	}
 }
 
@@ -48,6 +56,11 @@ func (s *ScheduledTestRunnerService) Start() {
 		return
 	}
 	s.startOnce.Do(func() {
+		s.lifecycleMu.Lock()
+		defer s.lifecycleMu.Unlock()
+		if s.workerCtx.Err() != nil {
+			return
+		}
 		loc := time.Local
 		if s.cfg != nil {
 			if parsed, err := time.LoadLocation(s.cfg.Timezone); err == nil && parsed != nil {
@@ -73,8 +86,12 @@ func (s *ScheduledTestRunnerService) Stop() {
 		return
 	}
 	s.stopOnce.Do(func() {
-		if s.cron != nil {
-			ctx := s.cron.Stop()
+		s.lifecycleMu.Lock()
+		s.workerStop()
+		c := s.cron
+		s.lifecycleMu.Unlock()
+		if c != nil {
+			ctx := c.Stop()
 			select {
 			case <-ctx.Done():
 			case <-time.After(3 * time.Second):
@@ -85,12 +102,28 @@ func (s *ScheduledTestRunnerService) Stop() {
 }
 
 func (s *ScheduledTestRunnerService) runScheduled() {
+	if !s.running.CompareAndSwap(false, true) {
+		return
+	}
+	defer s.running.Store(false)
 	// Delay 10s so execution lands at ~:10 of each minute instead of :00.
-	time.Sleep(10 * time.Second)
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-s.workerCtx.Done():
+		return
+	case <-timer.C:
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(s.workerCtx, 5*time.Minute)
 	defer cancel()
+	s.runDuePlans(ctx)
+}
 
+func (s *ScheduledTestRunnerService) runDuePlans(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	now := time.Now()
 	plans, err := s.planRepo.ListDue(ctx, now)
 	if err != nil {
@@ -105,9 +138,18 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 
 	sem := make(chan struct{}, scheduledTestDefaultMaxWorkers)
 	var wg sync.WaitGroup
+	defer wg.Wait()
 
 	for _, plan := range plans {
-		sem <- struct{}{}
+		select {
+		case <-ctx.Done():
+			return
+		case sem <- struct{}{}:
+		}
+		if ctx.Err() != nil {
+			<-sem
+			return
+		}
 		wg.Add(1)
 		go func(p *ScheduledTestPlan) {
 			defer wg.Done()
@@ -116,18 +158,24 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 		}(plan)
 	}
 
-	wg.Wait()
 }
 
 func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *ScheduledTestPlan) {
+	if ctx.Err() != nil {
+		return
+	}
 	result, err := s.accountTestSvc.RunTestBackground(ctx, plan.AccountID, plan.ModelID)
 	if err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d RunTestBackground error: %v", plan.ID, err)
 		return
 	}
+	if ctx.Err() != nil {
+		return
+	}
 
 	if err := s.scheduledSvc.SaveResult(ctx, plan.ID, plan.MaxResults, result); err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d SaveResult error: %v", plan.ID, err)
+		return
 	}
 
 	// Auto-recover account if test succeeded and auto_recover is enabled.

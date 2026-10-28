@@ -70,9 +70,7 @@ func (r *usageCleanupRepository) ListTasks(ctx context.Context, params paginatio
 		var filtersJSON []byte
 		var errMsg sql.NullString
 		var canceledBy sql.NullInt64
-		var canceledAt sql.NullTime
-		var startedAt sql.NullTime
-		var finishedAt sql.NullTime
+		var canceledAt, startedAt, finishedAt, createdAt, updatedAt sqliteTime
 		if err := rows.Scan(
 			&task.ID,
 			&task.Status,
@@ -84,14 +82,15 @@ func (r *usageCleanupRepository) ListTasks(ctx context.Context, params paginatio
 			&canceledAt,
 			&startedAt,
 			&finishedAt,
-			&task.CreatedAt,
-			&task.UpdatedAt,
+			&createdAt,
+			&updatedAt,
 		); err != nil {
 			return nil, nil, err
 		}
 		if err := json.Unmarshal(filtersJSON, &task.Filters); err != nil {
 			return nil, nil, fmt.Errorf("parse cleanup filters: %w", err)
 		}
+		task.CreatedAt, task.UpdatedAt = createdAt.Time, updatedAt.Time
 		if errMsg.Valid {
 			task.ErrorMsg = &errMsg.String
 		}
@@ -131,7 +130,7 @@ func (r *usageCleanupRepository) ClaimNextPendingTask(ctx context.Context, stale
 			SELECT id FROM usage_cleanup_tasks
 			WHERE status = $1 OR (
 				status = $2 AND started_at IS NOT NULL
-				AND started_at < datetime('now', '-' || $3 || ' seconds')
+				AND julianday(started_at) < julianday('now', '-' || $3 || ' seconds')
 			)
 			ORDER BY created_at ASC LIMIT 1
 		)
@@ -141,8 +140,7 @@ func (r *usageCleanupRepository) ClaimNextPendingTask(ctx context.Context, stale
 	var task service.UsageCleanupTask
 	var filtersJSON []byte
 	var errMsg sql.NullString
-	var startedAt sql.NullTime
-	var finishedAt sql.NullTime
+	var startedAt, finishedAt, createdAt, updatedAt sqliteTime
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
@@ -161,8 +159,8 @@ func (r *usageCleanupRepository) ClaimNextPendingTask(ctx context.Context, stale
 		&errMsg,
 		&startedAt,
 		&finishedAt,
-		&task.CreatedAt,
-		&task.UpdatedAt,
+		&createdAt,
+		&updatedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -172,6 +170,7 @@ func (r *usageCleanupRepository) ClaimNextPendingTask(ctx context.Context, stale
 	if err := json.Unmarshal(filtersJSON, &task.Filters); err != nil {
 		return nil, fmt.Errorf("parse cleanup filters: %w", err)
 	}
+	task.CreatedAt, task.UpdatedAt = createdAt.Time, updatedAt.Time
 	if errMsg.Valid {
 		task.ErrorMsg = &errMsg.String
 	}
@@ -252,7 +251,7 @@ func (r *usageCleanupRepository) MarkTaskSucceeded(ctx context.Context, taskID i
 			deleted_rows = $2,
 			finished_at = NOW(),
 			updated_at = NOW()
-		WHERE id = $3
+		WHERE id = $3 AND status = 'running'
 	`
 	_, err := r.sql.ExecContext(ctx, query, service.UsageCleanupStatusSucceeded, deletedRows, taskID)
 	return err
@@ -269,7 +268,7 @@ func (r *usageCleanupRepository) MarkTaskFailed(ctx context.Context, taskID int6
 			error_message = $3,
 			finished_at = NOW(),
 			updated_at = NOW()
-		WHERE id = $4
+		WHERE id = $4 AND status = 'running'
 	`
 	_, err := r.sql.ExecContext(ctx, query, service.UsageCleanupStatusFailed, deletedRows, errorMsg, taskID)
 	return err
@@ -408,9 +407,11 @@ func (r *usageCleanupRepository) createTaskWithSQL(ctx context.Context, task *se
 		) VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at, updated_at
 	`
-	if err := scanSingleRow(ctx, r.sql, query, []any{task.Status, filtersJSON, task.CreatedBy, task.DeletedRows}, &task.ID, &task.CreatedAt, &task.UpdatedAt); err != nil {
+	var createdAt, updatedAt sqliteTime
+	if err := scanSingleRow(ctx, r.sql, query, []any{task.Status, filtersJSON, task.CreatedBy, task.DeletedRows}, &task.ID, &createdAt, &updatedAt); err != nil {
 		return err
 	}
+	task.CreatedAt, task.UpdatedAt = createdAt.Time, updatedAt.Time
 	return nil
 }
 
@@ -493,7 +494,7 @@ func (r *usageCleanupRepository) markTaskSucceededWithEnt(ctx context.Context, t
 	client := clientFromContext(ctx, r.client)
 	now := time.Now()
 	_, err := client.UsageCleanupTask.Update().
-		Where(dbusagecleanuptask.IDEQ(taskID)).
+		Where(dbusagecleanuptask.IDEQ(taskID), dbusagecleanuptask.StatusEQ(service.UsageCleanupStatusRunning)).
 		SetStatus(service.UsageCleanupStatusSucceeded).
 		SetDeletedRows(deletedRows).
 		SetFinishedAt(now).
@@ -506,7 +507,7 @@ func (r *usageCleanupRepository) markTaskFailedWithEnt(ctx context.Context, task
 	client := clientFromContext(ctx, r.client)
 	now := time.Now()
 	_, err := client.UsageCleanupTask.Update().
-		Where(dbusagecleanuptask.IDEQ(taskID)).
+		Where(dbusagecleanuptask.IDEQ(taskID), dbusagecleanuptask.StatusEQ(service.UsageCleanupStatusRunning)).
 		SetStatus(service.UsageCleanupStatusFailed).
 		SetDeletedRows(deletedRows).
 		SetErrorMessage(errorMsg).

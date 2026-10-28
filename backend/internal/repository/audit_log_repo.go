@@ -311,7 +311,7 @@ func (r *auditLogRepository) TruncateAll(ctx context.Context) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("nil audit log repository")
 	}
-	_, err := r.db.ExecContext(ctx, "TRUNCATE TABLE audit_logs")
+	_, err := r.db.ExecContext(ctx, "DELETE FROM audit_logs")
 	return err
 }
 
