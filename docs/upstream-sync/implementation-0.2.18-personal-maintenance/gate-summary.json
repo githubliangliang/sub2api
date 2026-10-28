@@ -1,0 +1,152 @@
+{
+  "backend_test_packages": 54,
+  "frontend_passed": 2099,
+  "frontend_existing_skipped": 2,
+  "checks": {
+    "backend-unit-complete": {
+      "command": [
+        "rtk",
+        "proxy",
+        "go",
+        "test",
+        "-tags=unit",
+        "./..."
+      ],
+      "cwd": "backend",
+      "started_at": "2026-10-28T01:58:17.660271+00:00",
+      "elapsed_seconds": 221.421,
+      "exit_code": 0
+    },
+    "backend-build": {
+      "command": [
+        "rtk",
+        "proxy",
+        "go",
+        "build",
+        "-o",
+        "/tmp/sub2api-personal-maintenance/server",
+        "./cmd/server"
+      ],
+      "cwd": "backend",
+      "started_at": "2026-10-28T01:53:22.950281+00:00",
+      "elapsed_seconds": 4.967,
+      "exit_code": 0
+    },
+    "backend-lint-complete": {
+      "command": [
+        "rtk",
+        "proxy",
+        "golangci-lint",
+        "run",
+        "./..."
+      ],
+      "cwd": "backend",
+      "started_at": "2026-10-28T01:58:17.655274+00:00",
+      "elapsed_seconds": 53.651,
+      "exit_code": 0
+    },
+    "targeted-race-final": {
+      "command": [
+        "rtk",
+        "proxy",
+        "go",
+        "test",
+        "-race",
+        "-tags=unit",
+        "./internal/service",
+        "./internal/repository",
+        "./internal/handler",
+        "./internal/handler/admin",
+        "-run",
+        "TestAuditLogClear|TestUsageCleanup|TestAccountExpiry|TestAutoPauseExpiredAccounts|TestScheduledTest|TestModelMappingSignature|TestModelMappingCacheInvalidatesSameSizeMutation|TestIsSingleAccountRetry|TestSingleAccountRetryProbe|TestWithSingleAntigravityAccountGroupProbe|TestAntigravityRetryLoop_PreCheck|TestGeminiGroupRequestsDoNotReadAntigravityBucket|TestMessagesAnthropicGroupDoesNotReadAntigravityBucket|TestRateLimitService_RecoverAccountAfterSuccessfulTest|TestSQLiteTimeScanner",
+        "-count=1"
+      ],
+      "cwd": "backend",
+      "started_at": "2026-10-28T01:58:17.662214+00:00",
+      "elapsed_seconds": 67.169,
+      "exit_code": 0
+    },
+    "sqlite-migrations-and-quota": {
+      "command": [
+        "rtk",
+        "proxy",
+        "go",
+        "test",
+        "-tags=unit",
+        "./migrations",
+        "./internal/repository",
+        "-run",
+        "Test.*(Migration|Migrations|SQLiteDialect|UsageBilling|QuotaWindow|Quota.*SQLite|UserPlatformQuota)",
+        "-count=1"
+      ],
+      "cwd": "backend",
+      "started_at": "2026-10-28T01:55:05.831601+00:00",
+      "elapsed_seconds": 26.014,
+      "exit_code": 0
+    },
+    "frontend-tests": {
+      "command": [
+        "rtk",
+        "proxy",
+        "pnpm",
+        "run",
+        "test:run"
+      ],
+      "cwd": "frontend",
+      "started_at": "2026-10-28T01:49:52.305835+00:00",
+      "elapsed_seconds": 45.89,
+      "exit_code": 0
+    },
+    "frontend-typecheck": {
+      "command": [
+        "rtk",
+        "proxy",
+        "pnpm",
+        "run",
+        "typecheck"
+      ],
+      "cwd": "frontend",
+      "started_at": "2026-10-28T01:49:52.308558+00:00",
+      "elapsed_seconds": 54.461,
+      "exit_code": 0
+    },
+    "frontend-lint": {
+      "command": [
+        "rtk",
+        "proxy",
+        "pnpm",
+        "run",
+        "lint:check"
+      ],
+      "cwd": "frontend",
+      "started_at": "2026-10-28T01:49:52.308202+00:00",
+      "elapsed_seconds": 47.453,
+      "exit_code": 0
+    },
+    "frontend-build": {
+      "command": [
+        "rtk",
+        "proxy",
+        "pnpm",
+        "run",
+        "build"
+      ],
+      "cwd": "frontend",
+      "started_at": "2026-10-28T01:53:22.961886+00:00",
+      "elapsed_seconds": 43.277,
+      "exit_code": 0
+    },
+    "frontend-critical": {
+      "command": [
+        "rtk",
+        "proxy",
+        "make",
+        "test-frontend-critical"
+      ],
+      "cwd": ".",
+      "started_at": "2026-10-28T01:53:22.959089+00:00",
+      "elapsed_seconds": 7.014,
+      "exit_code": 0
+    }
+  }
+}

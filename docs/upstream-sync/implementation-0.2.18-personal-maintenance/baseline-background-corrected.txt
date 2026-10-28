@@ -1,0 +1,62 @@
+--- FAIL: TestUsageCleanupRepositorySQLiteLifecycle (0.13s)
+    --- FAIL: TestUsageCleanupRepositorySQLiteLifecycle/legacy_text (0.05s)
+        personal_background_sqlite_test.go:63: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:63
+            	Error:      	Received unexpected error:
+            	            	sql: Scan error on column index 1, name "created_at": unsupported Scan, storing driver.Value type string into type *time.Time
+            	Test:       	TestUsageCleanupRepositorySQLiteLifecycle/legacy_text
+--- FAIL: TestUsageCleanupRepositorySQLiteStaleAndCanceled (0.05s)
+    personal_background_sqlite_test.go:109: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:109
+        	Error:      	Expected value not to be nil.
+        	Test:       	TestUsageCleanupRepositorySQLiteStaleAndCanceled
+        	Messages:   	stale RFC3339 timestamps must be compared chronologically
+2026/10/28 09:07:49 [UsageCleanup] stopped
+2026/10/28 09:07:49 [TimingWheel] Stopped
+--- FAIL: TestUsageCleanupWorkerSQLiteResumesPending (4.04s)
+    personal_background_sqlite_test.go:145: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:145
+        	Error:      	Condition never satisfied
+        	Test:       	TestUsageCleanupWorkerSQLiteResumesPending
+--- FAIL: TestUsageCleanupRepositorySQLiteCanceledTerminalState (0.07s)
+    personal_background_sqlite_test.go:172: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:172
+        	Error:      	Not equal: 
+        	            	expected: "canceled"
+        	            	actual  : "failed"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-canceled
+        	            	+failed
+        	Test:       	TestUsageCleanupRepositorySQLiteCanceledTerminalState
+--- FAIL: TestScheduledTestRepositorySQLiteLifecycle (0.10s)
+    --- FAIL: TestScheduledTestRepositorySQLiteLifecycle/datetime (0.06s)
+        personal_background_sqlite_test.go:200: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:200
+            	Error:      	"[]" should have 1 item(s), but has 0
+            	Test:       	TestScheduledTestRepositorySQLiteLifecycle/datetime
+    --- FAIL: TestScheduledTestRepositorySQLiteLifecycle/legacy_text (0.05s)
+        personal_background_sqlite_test.go:187: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:187
+            	Error:      	Received unexpected error:
+            	            	sql: Scan error on column index 8, name "next_run_at": unsupported Scan, storing driver.Value type string into type *time.Time
+            	Test:       	TestScheduledTestRepositorySQLiteLifecycle/legacy_text
+--- FAIL: TestAccountExpirySQLiteFormatsAndEligibility (0.02s)
+    personal_background_sqlite_test.go:268: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:268
+        	Error:      	Not equal: 
+        	            	expected: int(4)
+        	            	actual  : int64(1)
+        	Test:       	TestAccountExpirySQLiteFormatsAndEligibility
+--- FAIL: TestAccountExpirySQLiteSnapshotRefresh (0.01s)
+    personal_background_sqlite_test.go:306: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/personal_background_sqlite_test.go:306
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestAccountExpirySQLiteSnapshotRefresh
+        	Messages:   	expiry must refresh the current account snapshot immediately
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/repository	4.454s
+FAIL

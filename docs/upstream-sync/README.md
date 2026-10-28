@@ -1,5 +1,13 @@
 # 上游合并指南
 
+用户选定个人维护（2026-10-28）已完成：[补充与patch sites](./PORTING-0.2.18-personal-maintenance.md) / [OpenSpec验收](../../openspec/changes/port-upstream-0.2.18-personal-maintenance/verification.md)。SQLite清理/到期暂停/定时测试恢复，操作日志“全部清理”SQL与Enter防重复提交修复；#8249延迟探测与#8250零分配签名实施。后端54包unit/build、四包race、SQLite迁移/quota/dedup、lint0 issues通过；前端2099通过/2既有跳过，typecheck/lint/build/critical通过。实现已提交至本地main为`b554bea554202e3008b99e3faa7a29420467f318`；VERSION1.1.20/Go1.27.3/迁移227/依赖/生成代码及历史冻结证据不变，未发布/部署/清理业务实例。[证据和哈希](./implementation-0.2.18-personal-maintenance/README.md)。
+
+- [x] 三个SQLite后台逐项审查、旧时间兼容、取消/停止/重叠与真实数据库验收。
+- [x] 操作日志SQLite清理、现场TOTP/权限/留痕和四项按钮事件回归。
+- [x] 两项轻量调度优化、消费者接入、前后benchmark、race和组合门禁。
+
+本次结论：时间扫描与比较分别验证；结果持久化失败不能恢复/推进；Enter需要方法防重入；夹具缺函数、旧参数mock和计数race先归因。其它按需项独立，支付排除。
+
 本 fork 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)，但 **git 历史已重写**（最早一条提交就是 SQLite 改造，和上游没有共同祖先）。因此 **不要** `git merge upstream/main`，按功能 cherry-pick / 手工移植。
 
 OpenSpec 整理（2026-10-24，含用户确认后的补充归档）：19 个已完成变更已归档，42 个主规格汇总 251 个非支付需求；归档后保留的历史活动变更为 0.2.0 第二档与 0.2.5 第二档。用户确认完成的四批通过各自 completion-record 关闭旧任务，并保留任务与验收原始快照。见[归档清单与保留原因](../../openspec/changes/archive/README.md)。冻结来源和原始证据保持原文。
