@@ -1,0 +1,168 @@
+2026/10/28 16:43:25 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAdminService_AdminGuardsAreClientErrors
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/disable
+    admin_service_role_test.go:166: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/admin_service_role_test.go:166
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestAdminService_AdminGuardsAreClientErrors/disable
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion
+    admin_service_role_test.go:166: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/admin_service_role_test.go:166
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/delete
+    admin_service_role_test.go:166: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/admin_service_role_test.go:166
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestAdminService_AdminGuardsAreClientErrors/delete
+--- FAIL: TestAdminService_AdminGuardsAreClientErrors (0.00s)
+    --- FAIL: TestAdminService_AdminGuardsAreClientErrors/disable (0.00s)
+    --- FAIL: TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion (0.00s)
+    --- FAIL: TestAdminService_AdminGuardsAreClientErrors/delete (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.017s
+=== RUN   TestUserHandler_AdminGuardsSQLite
+=== RUN   TestUserHandler_AdminGuardsSQLite/last_admin_demotion
+2026/10/29 00:43:26 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot demote the last admin user
+    user_guard_sqlite_test.go:74: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:74
+        	Error:      	Not equal: 
+        	            	expected: time.Date(2026, time.October, 29, 0, 43, 26, 379418730, time.Local)
+        	            	actual  : time.Date(2026, time.October, 29, 0, 43, 26, 379418730, time.Local)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(time.Time) 2026-10-29 00:43:26.37941873 +0800 CST m=+1.267721900
+        	            	+(time.Time) 2026-10-29 00:43:26.37941873 +0800 CST
+        	            	 
+        	Test:       	TestUserHandler_AdminGuardsSQLite/last_admin_demotion
+        	Messages:   	rejected actions must leave the row unchanged
+=== RUN   TestUserHandler_AdminGuardsSQLite/direct_disable
+2026/10/29 00:43:27 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot disable admin user
+    user_guard_sqlite_test.go:74: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:74
+        	Error:      	Not equal: 
+        	            	expected: time.Date(2026, time.October, 29, 0, 43, 27, 644049202, time.Local)
+        	            	actual  : time.Date(2026, time.October, 29, 0, 43, 27, 644049202, time.Local)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(time.Time) 2026-10-29 00:43:27.644049202 +0800 CST m=+2.532352372
+        	            	+(time.Time) 2026-10-29 00:43:27.644049202 +0800 CST
+        	            	 
+        	Test:       	TestUserHandler_AdminGuardsSQLite/direct_disable
+        	Messages:   	rejected actions must leave the row unchanged
+=== RUN   TestUserHandler_AdminGuardsSQLite/disable_with_another_admin
+2026/10/29 00:43:28 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot disable admin user
+    user_guard_sqlite_test.go:74: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:74
+        	Error:      	Not equal: 
+        	            	expected: time.Date(2026, time.October, 29, 0, 43, 28, 885621219, time.Local)
+        	            	actual  : time.Date(2026, time.October, 29, 0, 43, 28, 885621219, time.Local)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(time.Time) 2026-10-29 00:43:28.885621219 +0800 CST m=+3.773924389
+        	            	+(time.Time) 2026-10-29 00:43:28.885621219 +0800 CST
+        	            	 
+        	Test:       	TestUserHandler_AdminGuardsSQLite/disable_with_another_admin
+        	Messages:   	rejected actions must leave the row unchanged
+=== RUN   TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable
+2026/10/29 00:43:30 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot disable admin user
+    user_guard_sqlite_test.go:74: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:74
+        	Error:      	Not equal: 
+        	            	expected: time.Date(2026, time.October, 29, 0, 43, 30, 155948822, time.Local)
+        	            	actual  : time.Date(2026, time.October, 29, 0, 43, 30, 155948822, time.Local)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(time.Time) 2026-10-29 00:43:30.155948822 +0800 CST m=+5.044251993
+        	            	+(time.Time) 2026-10-29 00:43:30.155948822 +0800 CST
+        	            	 
+        	Test:       	TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable
+        	Messages:   	rejected actions must leave the row unchanged
+=== RUN   TestUserHandler_AdminGuardsSQLite/direct_delete
+2026/10/29 00:43:31 [ERROR] DELETE /api/v1/admin/users/1
+  Error: cannot delete admin user
+    user_guard_sqlite_test.go:74: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:74
+        	Error:      	Not equal: 
+        	            	expected: time.Date(2026, time.October, 29, 0, 43, 31, 454843778, time.Local)
+        	            	actual  : time.Date(2026, time.October, 29, 0, 43, 31, 454843778, time.Local)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(time.Time) 2026-10-29 00:43:31.454843778 +0800 CST m=+6.343146952
+        	            	+(time.Time) 2026-10-29 00:43:31.454843778 +0800 CST
+        	            	 
+        	Test:       	TestUserHandler_AdminGuardsSQLite/direct_delete
+        	Messages:   	rejected actions must leave the row unchanged
+=== RUN   TestUserHandler_AdminGuardsSQLite/delete_with_another_admin
+2026/10/29 00:43:32 [ERROR] DELETE /api/v1/admin/users/1
+  Error: cannot delete admin user
+    user_guard_sqlite_test.go:74: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:74
+        	Error:      	Not equal: 
+        	            	expected: time.Date(2026, time.October, 29, 0, 43, 32, 777055900, time.Local)
+        	            	actual  : time.Date(2026, time.October, 29, 0, 43, 32, 777055900, time.Local)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(time.Time) 2026-10-29 00:43:32.7770559 +0800 CST m=+7.665359070
+        	            	+(time.Time) 2026-10-29 00:43:32.7770559 +0800 CST
+        	            	 
+        	Test:       	TestUserHandler_AdminGuardsSQLite/delete_with_another_admin
+        	Messages:   	rejected actions must leave the row unchanged
+=== RUN   TestUserHandler_AdminGuardsSQLite/demotion_with_another_admin
+2026/10/29 00:43:34 audit: user role changed actor_admin_id=0 target_user_id=1 old_role=admin new_role=user
+=== RUN   TestUserHandler_AdminGuardsSQLite/database_write_failure
+    user_guard_sqlite_test.go:74: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:74
+        	Error:      	Not equal: 
+        	            	expected: time.Date(2026, time.October, 29, 0, 43, 35, 342969429, time.Local)
+        	            	actual  : time.Date(2026, time.October, 29, 0, 43, 35, 342969429, time.Local)
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(time.Time) 2026-10-29 00:43:35.342969429 +0800 CST m=+10.231272603
+        	            	+(time.Time) 2026-10-29 00:43:35.342969429 +0800 CST
+        	            	 
+        	Test:       	TestUserHandler_AdminGuardsSQLite/database_write_failure
+        	Messages:   	rejected actions must leave the row unchanged
+--- FAIL: TestUserHandler_AdminGuardsSQLite (10.23s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/last_admin_demotion (1.26s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/direct_disable (1.26s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/disable_with_another_admin (1.24s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable (1.27s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/direct_delete (1.30s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/delete_with_another_admin (1.32s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/demotion_with_another_admin (1.32s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/database_write_failure (1.25s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler/admin	10.243s
+FAIL

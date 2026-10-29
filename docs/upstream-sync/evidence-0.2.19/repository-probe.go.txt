@@ -1,0 +1,28 @@
+//go:build unit
+
+package repository
+
+import (
+	"context"
+	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/service"
+)
+
+func TestRelease019ProbeGrokStaleExtraOnSQLite(t *testing.T) {
+	_, client := newOllamaCloudUsageSQLiteRepository(t)
+	ctx := context.Background()
+	credentials := map[string]any{"access_token": "local-probe-token"}
+	current, err := client.Account.Create().SetName("local catalog probe").SetPlatform(service.PlatformGrok).
+		SetType(service.AccountTypeOAuth).SetCredentials(credentials).
+		SetExtra(map[string]any{"grok_observed_models": map[string]any{"models": []any{"new-model"}}, service.UpstreamModelMetadataExtraKey: map[string]any{"fresh": true}}).Save(ctx)
+	if err != nil { t.Fatal(err) }
+	stale := &service.Account{ID: current.ID, Name: current.Name, Platform: current.Platform, Type: current.Type,
+		Credentials: credentials, Extra: map[string]any{"grok_observed_models": map[string]any{"models": []any{"old-model"}}, service.UpstreamModelMetadataExtraKey: map[string]any{"fresh": false}}}
+	merged, err := lockAndMergeAccountProbeExtra(ctx, client, stale, nil, nil)
+	if err != nil { t.Fatal(err) }
+	models := merged["grok_observed_models"].(map[string]any)["models"].([]any)
+	if len(models) != 1 || models[0] != "old-model" { t.Fatalf("unexpected baseline models %v", models) }
+	if merged[service.UpstreamModelMetadataExtraKey].(map[string]any)["fresh"] != false { t.Fatal("baseline unexpectedly preserved fresh metadata") }
+	t.Log("DEFECT: real SQLite read sees new catalog, but ordinary account update merge selects stale form catalog and metadata")
+}

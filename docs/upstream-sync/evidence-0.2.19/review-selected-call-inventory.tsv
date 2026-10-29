@@ -1,0 +1,329 @@
+candidate	path	symbol	local_declarations	added_by_candidate	added_line
+PR8364	backend/internal/pkg/apicompat/anthropic_to_responses.go	IsGPT61SolModelSpelling	backend/internal/pkg/openai/constants.go:203	False	"if (openai.IsGPT61SolModelSpelling(req.Model) || openai.IsGPT61TerraModelSpelling(req.Model)) && req.OutputConfig != nil && req.OutputConfig.Effort == ""max"" && effort != ""none"" {"
+PR8364	backend/internal/pkg/apicompat/anthropic_to_responses.go	IsGPT61TerraModelSpelling		True	"if (openai.IsGPT61SolModelSpelling(req.Model) || openai.IsGPT61TerraModelSpelling(req.Model)) && req.OutputConfig != nil && req.OutputConfig.Effort == ""max"" && effort != ""none"" {"
+PR8364	backend/internal/pkg/openai/constants.go	IsGPT61TerraModelSpelling		True	func IsGPT61TerraModelSpelling(model string) bool {
+PR8364	backend/internal/pkg/openai/constants.go	CanonicalizeOpenAIModelAliasSpelling	backend/internal/pkg/openai/constants.go:102	False	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
+PR8364	backend/internal/pkg/openai/constants.go	CutPrefix		False	"suffix, ok := strings.CutPrefix(canonical, ""gpt-6.1-terra-"")"
+PR8364	backend/internal/pkg/openai/constants.go	RequiresResponsesForToolCalls		True	func RequiresResponsesForToolCalls(model string) bool {
+PR8364	backend/internal/pkg/openai/constants.go	IsGPT61SolModelSpelling	backend/internal/pkg/openai/constants.go:203	False	return IsGPT61SolModelSpelling(model) || IsGPT61TerraModelSpelling(model)
+PR8364	backend/internal/service/billing_service.go	IsGPT6SolOrLunaModelSpelling	backend/internal/pkg/openai/constants.go:184	False	CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
+PR8364	backend/internal/service/billing_service.go	IsGPT61SolModelSpelling	backend/internal/pkg/openai/constants.go:203	False	CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
+PR8364	backend/internal/service/billing_service.go	IsGPT61TerraModelSpelling		True	CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
+PR8364	backend/internal/service/billing_service.go	isOpenAIGPT56Model	backend/internal/service/openai_model_alias.go:96	False	usesCacheWritePremium := isOpenAIGPT56Model(normalized) || (openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized))
+PR8364	backend/internal/service/openai_codex_models_service.go	IsGPT61TerraModelSpelling		True	if openai.IsGPT61TerraModelSpelling(modelID) {
+PR8364	backend/internal/service/openai_codex_models_service.go	append		False	"levels = append([]configuredCodexReasoningLevel{{Effort: ""none"", Description: ""No reasoning""}}, levels...)"
+PR8364	backend/internal/service/openai_compat_model.go	IsGPT61TerraModelSpelling		True	if openai.IsGPT61TerraModelSpelling(model) {
+PR8364	backend/internal/service/openai_compat_model.go	IsGPT61SolModelSpelling	backend/internal/pkg/openai/constants.go:203	False	if req != nil && (openai.IsGPT61SolModelSpelling(req.Model) || openai.IsGPT61TerraModelSpelling(req.Model)) {
+PR8364	backend/internal/service/openai_compat_model.go	NormalizeOpenAICompatRequestedModel	backend/internal/service/openai_compat_model.go:9	False	baseModel := NormalizeOpenAICompatRequestedModel(req.Model)
+PR8364	backend/internal/service/openai_compat_model.go	CutPrefix		False	"if effort, ok := strings.CutPrefix(canonical, baseModel+""-""); ok && effort != ""openai-compact"" {"
+PR8364	backend/internal/service/openai_gateway_chat_completions_raw.go	RequiresResponsesForToolCalls		True	"if openai.RequiresResponsesForToolCalls(upstreamModel) && (len(gjson.GetBytes(body, ""tools"").Array()) > 0 || len(gjson.GetBytes(body, ""functions"").Array()) > 0) {"
+PR8364	backend/internal/service/openai_gateway_chat_completions_raw.go	len		False	"if openai.RequiresResponsesForToolCalls(upstreamModel) && (len(gjson.GetBytes(body, ""tools"").Array()) > 0 || len(gjson.GetBytes(body, ""functions"").Array()) > 0) {"
+PR8364	backend/internal/service/openai_gateway_chat_completions_raw.go	GetBytes		False	"if openai.RequiresResponsesForToolCalls(upstreamModel) && (len(gjson.GetBytes(body, ""tools"").Array()) > 0 || len(gjson.GetBytes(body, ""functions"").Array()) > 0) {"
+PR8364	backend/internal/service/openai_gateway_chat_completions_raw.go	Array		False	"if openai.RequiresResponsesForToolCalls(upstreamModel) && (len(gjson.GetBytes(body, ""tools"").Array()) > 0 || len(gjson.GetBytes(body, ""functions"").Array()) > 0) {"
+PR8364	backend/internal/service/openai_gateway_chat_completions_raw.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"err := fmt.Errorf(""%s requires Responses for tool calls; this account only supports Chat Completions"", normalizeKnownOpenAICodexModel(upstreamModel))"
+PR8364	backend/internal/service/openai_gateway_chat_completions_raw.go	normalizeKnownOpenAICodexModel	backend/internal/service/openai_model_alias.go:24	False	"err := fmt.Errorf(""%s requires Responses for tool calls; this account only supports Chat Completions"", normalizeKnownOpenAICodexModel(upstreamModel))"
+PR8364	backend/internal/service/openai_gateway_messages_chat_fallback.go	RequiresResponsesForToolCalls		True	if openai.RequiresResponsesForToolCalls(upstreamModel) && len(anthropicReq.Tools) > 0 {
+PR8364	backend/internal/service/openai_gateway_messages_chat_fallback.go	len		False	if openai.RequiresResponsesForToolCalls(upstreamModel) && len(anthropicReq.Tools) > 0 {
+PR8364	backend/internal/service/openai_gateway_messages_chat_fallback.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"err := fmt.Errorf(""%s requires Responses for tool calls; this account only supports Chat Completions"", normalizeKnownOpenAICodexModel(upstreamModel))"
+PR8364	backend/internal/service/openai_gateway_messages_chat_fallback.go	normalizeKnownOpenAICodexModel	backend/internal/service/openai_model_alias.go:24	False	"err := fmt.Errorf(""%s requires Responses for tool calls; this account only supports Chat Completions"", normalizeKnownOpenAICodexModel(upstreamModel))"
+PR8364	backend/internal/service/openai_gateway_responses_chat_fallback.go	RequiresResponsesForToolCalls		True	if openai.RequiresResponsesForToolCalls(upstreamModel) && len(effectiveTools) > 0 {
+PR8364	backend/internal/service/openai_gateway_responses_chat_fallback.go	len		False	if openai.RequiresResponsesForToolCalls(upstreamModel) && len(effectiveTools) > 0 {
+PR8364	backend/internal/service/openai_gateway_responses_chat_fallback.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"err := fmt.Errorf(""%s requires Responses for tool calls; this account only supports Chat Completions"", normalizeKnownOpenAICodexModel(upstreamModel))"
+PR8364	backend/internal/service/openai_gateway_responses_chat_fallback.go	normalizeKnownOpenAICodexModel	backend/internal/service/openai_model_alias.go:24	False	"err := fmt.Errorf(""%s requires Responses for tool calls; this account only supports Chat Completions"", normalizeKnownOpenAICodexModel(upstreamModel))"
+PR8364	backend/internal/service/openai_model_alias.go	IsGPT61TerraModelSpelling		True	if openai.IsGPT61TerraModelSpelling(normalized) {
+PR8364	backend/internal/service/openai_model_alias.go	isOpenAIGPT6AstraModel	backend/internal/service/openai_model_alias.go:114	False	return openai.IsGPT61TerraModelSpelling(model) || isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)
+PR8364	backend/internal/service/openai_model_alias.go	IsGPT6SolOrLunaModelSpelling	backend/internal/pkg/openai/constants.go:184	False	return openai.IsGPT61TerraModelSpelling(model) || isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)
+PR8364	backend/internal/service/openai_model_alias.go	IsGPT61SolModelSpelling	backend/internal/pkg/openai/constants.go:203	False	return openai.IsGPT61TerraModelSpelling(model) || isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)
+PR8364	backend/internal/service/pricing_service.go	IsGPT61TerraModelSpelling		True	if openai.IsGPT61TerraModelSpelling(model) {
+PR8339	backend/internal/handler/admin/account_handler.go	buildAccountResponseWithRuntime	backend/internal/handler/admin/account_handler.go:249	False	result := h.buildAccountResponseWithRuntime(c.Request.Context(), account)
+PR8339	backend/internal/handler/admin/account_handler.go	Context	backend/internal/service/concurrency_service.go:95	False	result := h.buildAccountResponseWithRuntime(c.Request.Context(), account)
+PR8339	backend/internal/handler/admin/account_handler.go	IsGrok	backend/internal/service/account.go:274	False	if h.accountTestService != nil && account != nil && account.IsGrok() {
+PR8339	backend/internal/handler/admin/account_handler.go	GetGrokModelDiagnostics		True	result.GrokModelDiagnostics = h.accountTestService.GetGrokModelDiagnostics(c.Request.Context(), account)
+PR8339	backend/internal/handler/admin/account_handler.go	Success	backend/internal/pkg/response/response.go:33	False	response.Success(c, result)
+PR8339	backend/internal/handler/admin/account_handler.go	GetAccount	backend/internal/handler/admin/account_codex_import_test.go:1044 | backend/internal/handler/admin/account_handler_available_models_test.go:24 | backend/internal/handler/admin/admin_service_stub_test.go:475 | backend/internal/handler/admin/batch_update_credentials_test.go:123	True	if latest, readErr := h.adminService.GetAccount(c.Request.Context(), account.ID); readErr == nil && latest != nil {
+PR8339	backend/internal/repository/account_repo.go	delete		False	delete(extra, key)
+PR8339	backend/internal/repository/account_repo.go	decodeAccountExtraJSON	backend/internal/repository/account_repo.go:698	False	value, ok, err := decodeAccountExtraJSON(raw)
+PR8339	backend/internal/repository/account_repo_grok_models.go	import		False	import (
+PR8339	backend/internal/repository/account_repo_grok_models.go	New	backend/internal/pkg/errors/errors.go:76 | backend/internal/pkg/redissession/store.go:22 | backend/internal/pkg/servertiming/collector.go:48	False	"var errGrokCatalogInvalidJSON = errors.New(""grok model catalog: invalid json"")"
+PR8339	backend/internal/repository/account_repo_grok_models.go	jsonb_set		False	SET extra = jsonb_set(COALESCE(extra, '{}'::jsonb), '{grok_observed_models}', $3::jsonb, true),
+PR8339	backend/internal/repository/account_repo_grok_models.go	COALESCE		False	SET extra = jsonb_set(COALESCE(extra, '{}'::jsonb), '{grok_observed_models}', $3::jsonb, true),
+PR8339	backend/internal/repository/account_repo_grok_models.go	NOW		False	updated_at = NOW()
+PR8339	backend/internal/repository/account_repo_grok_models.go	CompareAndSwapGrokObservedModels		True	func (r *accountRepository) CompareAndSwapGrokObservedModels(ctx context.Context, id int64, expected, next json.RawMessage) (bool, error) {
+PR8339	backend/internal/repository/account_repo_grok_models.go	accountTransactionScope		False	if scoped := r.accountTransactionScope(ctx); scoped != r {
+PR8339	backend/internal/repository/account_repo_grok_models.go	grokCatalogJSONArg		True	expectedArg, err := grokCatalogJSONArg(expected)
+PR8339	backend/internal/repository/account_repo_grok_models.go	clientFromContext	backend/internal/repository/error_translate.go:26	False	result, err := clientFromContext(ctx, r.client).ExecContext(ctx, compareAndSwapGrokObservedModelsSQL, id, expectedArg, nextArg)
+PR8339	backend/internal/repository/account_repo_grok_models.go	ExecContext	backend/ent/client.go:6855 | backend/ent/tx.go:330 | backend/internal/repository/account_repo_integration_test.go:84 | backend/internal/repository/account_repo_integration_test.go:97	False	result, err := clientFromContext(ctx, r.client).ExecContext(ctx, compareAndSwapGrokObservedModelsSQL, id, expectedArg, nextArg)
+PR8339	backend/internal/repository/account_repo_grok_models.go	RowsAffected	backend/internal/repository/account_repo_temp_unsched_test.go:397	False	affected, err := result.RowsAffected()
+PR8339	backend/internal/repository/account_repo_grok_models.go	TxFromContext	backend/ent/ent.go:91	False	if dbent.TxFromContext(ctx) == nil {
+PR8339	backend/internal/repository/account_repo_grok_models.go	syncSchedulerAccountSnapshot	backend/internal/repository/account_repo.go:1620	False	r.syncSchedulerAccountSnapshot(ctx, id)
+PR8339	backend/internal/repository/account_repo_grok_models.go	TrimSpace		False	trimmed := bytes.TrimSpace(raw)
+PR8339	backend/internal/repository/account_repo_grok_models.go	len		False	if len(trimmed) == 0 {
+PR8339	backend/internal/repository/account_repo_grok_models.go	Valid	backend/internal/service/channel_monitor_v2.go:543	False	if !json.Valid(trimmed) {
+PR8339	backend/internal/repository/account_repo_grok_models.go	string		False	return string(trimmed), nil
+PR8339	backend/internal/service/admin_account.go	delete		False	delete(normalizedExtra, grokObservedModelsExtraKey)
+PR8339	backend/internal/service/grok_model_catalog.go	import		False	import (
+PR8339	backend/internal/service/grok_model_catalog.go	const		False	const (
+PR8339	backend/internal/service/grok_model_catalog.go	var		False	var (
+PR8339	backend/internal/service/grok_model_catalog.go	New	backend/internal/pkg/errors/errors.go:76 | backend/internal/pkg/redissession/store.go:22 | backend/internal/pkg/servertiming/collector.go:48	False	"errGrokCatalogInvalidResponse    = errors.New(""grok catalog: invalid response"")"
+PR8339	backend/internal/service/grok_model_catalog.go	NewGrokCatalogScope		True	func NewGrokCatalogScope(accountID int64, accountType, modelsURL string) (*GrokCatalogScope, error) {
+PR8339	backend/internal/service/grok_model_catalog.go	Parse	backend/internal/pkg/proxyurl/parse.go:36	False	parsed, err := url.Parse(modelsURL)
+PR8339	backend/internal/service/grok_model_catalog.go	ToLower		False	scheme := strings.ToLower(parsed.Scheme)
+PR8339	backend/internal/service/grok_model_catalog.go	Hostname		False	"if parsed.Hostname() == """" || (scheme != ""http"" && scheme != ""https"") {"
+PR8339	backend/internal/service/grok_model_catalog.go	TrimRight		False	"endpoint := scheme + ""://"" + strings.ToLower(parsed.Host) + strings.TrimRight(parsed.EscapedPath(), ""/"")"
+PR8339	backend/internal/service/grok_model_catalog.go	EscapedPath		False	"endpoint := scheme + ""://"" + strings.ToLower(parsed.Host) + strings.TrimRight(parsed.EscapedPath(), ""/"")"
+PR8339	backend/internal/service/grok_model_catalog.go	grokCatalogFingerprint		True	Fingerprint: grokCatalogFingerprint(canonical, accountID, accountType),
+PR8339	backend/internal/service/grok_model_catalog.go	FormatInt		False	"payload := canonicalURL + ""\n"" + strconv.FormatInt(accountID, 10) + ""\n"" + accountType"
+PR8339	backend/internal/service/grok_model_catalog.go	Sum256		False	sum := sha256.Sum256([]byte(payload))
+PR8339	backend/internal/service/grok_model_catalog.go	byte		False	sum := sha256.Sum256([]byte(payload))
+PR8339	backend/internal/service/grok_model_catalog.go	EncodeToString		False	return hex.EncodeToString(sum[:])
+PR8339	backend/internal/service/grok_model_catalog.go	MergeGrokCatalogObservation		True	func MergeGrokCatalogObservation(previous *GrokObservedModelsSnapshot, observation GrokCatalogObservation) (*GrokObservedModelsSnapshot, bool, error) {
+PR8339	backend/internal/service/grok_model_catalog.go	validateGrokCatalogObservation		True	if err := validateGrokCatalogObservation(observation); err != nil {
+PR8339	backend/internal/service/grok_model_catalog.go	cloneGrokObservedSnapshot		True	next := cloneGrokObservedSnapshot(previous)
+PR8339	backend/internal/service/grok_model_catalog.go	shouldReplaceGrokCatalogAttempt		True	if shouldReplaceGrokCatalogAttempt(next.LastAttempt, started) {
+PR8339	backend/internal/service/grok_model_catalog.go	cloneGrokCatalogAttempt		True	next.LastAttempt = cloneGrokCatalogAttempt(&observation.Attempt)
+PR8339	backend/internal/service/grok_model_catalog.go	shouldReplaceGrokCatalogSuccess		True	if observation.Attempt.Status == grokCatalogStatusSuccess && shouldReplaceGrokCatalogSuccess(next, started) {
+PR8339	backend/internal/service/grok_model_catalog.go	applyGrokCatalogSuccess		True	applyGrokCatalogSuccess(next, observation)
+PR8339	backend/internal/service/grok_model_catalog.go	Before		False	if finished.Before(started) {
+PR8339	backend/internal/service/grok_model_catalog.go	grokCatalogHasModelID		True	if observation.Attempt.Scope == nil || !grokCatalogHasModelID(observation.Models) {
+PR8339	backend/internal/service/grok_model_catalog.go	TrimSpace		False	"if strings.TrimSpace(model) != """" {"
+PR8339	backend/internal/service/grok_model_catalog.go	After		False	return started.After(previous)
+PR8339	backend/internal/service/grok_model_catalog.go	append		False	dst.Models = append([]string(nil), observation.Models...)
+PR8339	backend/internal/service/grok_model_catalog.go	string		False	dst.Models = append([]string(nil), observation.Models...)
+PR8339	backend/internal/service/grok_model_catalog.go	cloneGrokCatalogScope		True	dst.Scope = cloneGrokCatalogScope(observation.Attempt.Scope)
+PR8339	backend/internal/service/grok_model_catalog.go	parseGrokCatalogModelIDs		True	func parseGrokCatalogModelIDs(body []byte) ([]string, error) {
+PR8339	backend/internal/service/grok_model_catalog.go	len		False	if len(body) == 0 || !json.Valid(body) {
+PR8339	backend/internal/service/grok_model_catalog.go	Valid	backend/internal/service/channel_monitor_v2.go:543	False	if len(body) == 0 || !json.Valid(body) {
+PR8339	backend/internal/service/grok_model_catalog.go	Unmarshal		False	if err := json.Unmarshal(body, &raw); err != nil {
+PR8339	backend/internal/service/grok_model_catalog.go	Equal		False	"if len(raw) == 0 || bytes.Equal(raw, []byte(""null"")) {"
+PR8339	backend/internal/service/grok_model_catalog.go	decodeGrokCatalogArray		True	items, err := decodeGrokCatalogArray(raw)
+PR8339	backend/internal/service/grok_model_catalog.go	grokCatalogIDsFromEntries		True	ids, err := grokCatalogIDsFromEntries(entries)
+PR8339	backend/internal/service/grok_model_catalog.go	make		False	models := make([]string, 0, len(entries))
+PR8339	backend/internal/service/grok_model_catalog.go	grokUpstreamModelEntryID	backend/internal/service/upstream_models.go:1464	False	models = append(models, grokUpstreamModelEntryID(entry))
+PR8339	backend/internal/service/grok_model_catalog.go	dedupeAndSortModelIDs	backend/internal/service/upstream_models.go:1497	False	return dedupeAndSortModelIDs(models), nil
+PR8339	backend/internal/service/grok_model_catalog_store.go	import		False	import (
+PR8339	backend/internal/service/grok_model_catalog_store.go	var		False	var (
+PR8339	backend/internal/service/grok_model_catalog_store.go	InternalServer	backend/internal/pkg/errors/types.go:74	False	errGrokCatalogSnapshotRepositoryUnavailable = infraerrors.InternalServer(
+PR8339	backend/internal/service/grok_model_catalog_store.go	New	backend/internal/pkg/errors/errors.go:76 | backend/internal/pkg/redissession/store.go:22 | backend/internal/pkg/servertiming/collector.go:48	False	"errGrokCatalogAccountMismatch  = errors.New(""grok model catalog account mismatch"")"
+PR8339	backend/internal/service/grok_model_catalog_store.go	CompareAndSwapGrokObservedModels		True	CompareAndSwapGrokObservedModels(ctx context.Context, id int64, expected, next json.RawMessage) (bool, error)
+PR8339	backend/internal/service/grok_model_catalog_store.go	PersistGrokCatalogObservation		True	func PersistGrokCatalogObservation(ctx context.Context, repo AccountRepository, accountID int64, observation GrokCatalogObservation) (*GrokObservedModelsSnapshot, error) {
+PR8339	backend/internal/service/grok_model_catalog_store.go	Err	backend/internal/service/openai_sse_json_documents.go:109	False	if err := ctx.Err(); err != nil {
+PR8339	backend/internal/service/grok_model_catalog_store.go	grokCatalogSnapshotRepository		True	cas, err := grokCatalogSnapshotRepository(repo)
+PR8339	backend/internal/service/grok_model_catalog_store.go	GetByID	backend/internal/handler/admin/account_handler.go:813 | backend/internal/handler/admin/account_ollama_cloud_usage_test.go:24 | backend/internal/handler/admin/announcement_handler.go:87 | backend/internal/handler/admin/announcement_handler_sort_test.go:30	True	account, err := repo.GetByID(ctx, accountID)
+PR8339	backend/internal/service/grok_model_catalog_store.go	parseGrokObservedModels	backend/internal/service/grok_observed_models.go:177	False	previous := parseGrokObservedModels(account.Extra)
+PR8339	backend/internal/service/grok_model_catalog_store.go	MergeGrokCatalogObservation		True	next, changed, err := MergeGrokCatalogObservation(previous, observation)
+PR8339	backend/internal/service/grok_model_catalog_store.go	Marshal		False	expectedJSON, err := json.Marshal(current)
+PR8339	backend/internal/service/grok_model_catalog_store.go	isNilGrokCatalogValue		True	if isNilGrokCatalogValue(repo) {
+PR8339	backend/internal/service/grok_model_catalog_store.go	ValueOf		False	rv := reflect.ValueOf(value)
+PR8339	backend/internal/service/grok_model_catalog_store.go	Kind		False	switch rv.Kind() {
+PR8339	backend/internal/service/grok_model_catalog_store.go	IsNil		False	return rv.IsNil()
+PR8339	backend/internal/service/grok_model_diagnostics.go	import		False	import (
+PR8339	backend/internal/service/grok_model_diagnostics.go	const		False	const (
+PR8339	backend/internal/service/grok_model_diagnostics.go	EvaluateGrokModelDiagnostics		True	func EvaluateGrokModelDiagnostics(account *Account, current *GrokCatalogScope, snapshot *GrokObservedModelsSnapshot, now time.Time) *GrokModelDiagnostics {
+PR8339	backend/internal/service/grok_model_diagnostics.go	append		False	diag.Models = append([]string{}, snapshot.Models...)
+PR8339	backend/internal/service/grok_model_diagnostics.go	TrimSpace		False	diag.FetchedAt = strings.TrimSpace(snapshot.FetchedAt)
+PR8339	backend/internal/service/grok_model_diagnostics.go	cloneGrokCatalogAttempt		True	diag.LastAttempt = cloneGrokCatalogAttempt(snapshot.LastAttempt)
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokModelDiagnosticState		True	state, fetched, haveFetched := grokModelDiagnosticState(current, snapshot, now)
+PR8339	backend/internal/service/grok_model_diagnostics.go	UTC		False	diag.ExpiresAt = fetched.UTC().Add(grokObservedModelsTTL).Format(time.RFC3339Nano)
+PR8339	backend/internal/service/grok_model_diagnostics.go	Add	backend/internal/handler/admin/account_codex_import.go:951	False	diag.ExpiresAt = fetched.UTC().Add(grokObservedModelsTTL).Format(time.RFC3339Nano)
+PR8339	backend/internal/service/grok_model_diagnostics.go	Format		False	diag.ExpiresAt = fetched.UTC().Add(grokObservedModelsTTL).Format(time.RFC3339Nano)
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokDiagnosticMappings		True	diag.Mappings = grokDiagnosticMappings(account, state, grokDiagnosticCatalogSet(diag.Models))
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokDiagnosticCatalogSet		True	diag.Mappings = grokDiagnosticMappings(account, state, grokDiagnosticCatalogSet(diag.Models))
+PR8339	backend/internal/service/grok_model_diagnostics.go	GetGrokModelDiagnostics		True	func (s *AccountTestService) GetGrokModelDiagnostics(ctx context.Context, account *Account) *GrokModelDiagnostics {
+PR8339	backend/internal/service/grok_model_diagnostics.go	IsGrok	backend/internal/service/account.go:274	False	if s == nil || account == nil || !account.IsGrok() {
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokModelDiagnosticsScope		True	return EvaluateGrokModelDiagnostics(account, s.grokModelDiagnosticsScope(ctx, account), parseGrokObservedModels(account.Extra), time.Now().UTC())
+PR8339	backend/internal/service/grok_model_diagnostics.go	parseGrokObservedModels	backend/internal/service/grok_observed_models.go:177	False	return EvaluateGrokModelDiagnostics(account, s.grokModelDiagnosticsScope(ctx, account), parseGrokObservedModels(account.Extra), time.Now().UTC())
+PR8339	backend/internal/service/grok_model_diagnostics.go	Now	backend/internal/pkg/timezone/timezone.go:64 | backend/internal/securityaudit/prompt_types.go:262 | backend/internal/securityaudit/prompt_worker_test.go:17 | backend/internal/securityaudit/prompt_worker_test.go:25	False	return EvaluateGrokModelDiagnostics(account, s.grokModelDiagnosticsScope(ctx, account), parseGrokObservedModels(account.Extra), time.Now().UTC())
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokModelDiagnosticsModelsURL		True	modelsURL, err := s.grokModelDiagnosticsModelsURL(ctx, account)
+PR8339	backend/internal/service/grok_model_diagnostics.go	NewGrokCatalogScope		True	scope, err := NewGrokCatalogScope(account.ID, account.Type, modelsURL)
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokModelDiagnosticsBaseURL		True	baseURL, err := s.grokModelDiagnosticsBaseURL(ctx, account)
+PR8339	backend/internal/service/grok_model_diagnostics.go	buildOpenAIModelsURL	backend/internal/service/upstream_models.go:1192	False	return buildOpenAIModelsURL(baseURL), nil
+PR8339	backend/internal/service/grok_model_diagnostics.go	GetCredential	backend/internal/service/account.go:342 | backend/internal/service/account_service.go:483	False	"baseURL := strings.TrimSpace(account.GetCredential(""base_url""))"
+PR8339	backend/internal/service/grok_model_diagnostics.go	validateUpstreamBaseURL	backend/internal/service/account_test_service.go:188 | backend/internal/service/gateway_upstream_request.go:974 | backend/internal/service/gemini_messages_compat_service.go:467 | backend/internal/service/openai_gateway_request_body.go:20	False	return s.validateUpstreamBaseURL(baseURL)
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokBaseURLValidator	backend/internal/service/grok_upstream_url.go:14	False	validator, err := grokBaseURLValidator(account, s.cfg)
+PR8339	backend/internal/service/grok_model_diagnostics.go	GetGrokBaseURL	backend/internal/service/account.go:1441	False	baseURL := account.GetGrokBaseURL()
+PR8339	backend/internal/service/grok_model_diagnostics.go	ResolveGrokBaseURL	backend/internal/service/setting_service.go:74	False	baseURL = s.settingService.ResolveGrokBaseURL(ctx, account)
+PR8339	backend/internal/service/grok_model_diagnostics.go	validator		False	return validator(baseURL)
+PR8339	backend/internal/service/grok_model_diagnostics.go	parseGrokCatalogTimestamp		True	if parsed, ok := parseGrokCatalogTimestamp(snapshot.FetchedAt); ok && !parsed.After(now) {
+PR8339	backend/internal/service/grok_model_diagnostics.go	After		False	if parsed, ok := parseGrokCatalogTimestamp(snapshot.FetchedAt); ok && !parsed.After(now) {
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokCatalogHasModelID		True	"if snapshot == nil || snapshot.Scope == nil || strings.TrimSpace(snapshot.Scope.Fingerprint) == """" || !grokCatalogHasModelID(snapshot.Models) {"
+PR8339	backend/internal/service/grok_model_diagnostics.go	Sub		False	if now.Sub(fetched) >= grokObservedModelsTTL {
+PR8339	backend/internal/service/grok_model_diagnostics.go	make		False	set := make(map[string]struct{}, len(models))
+PR8339	backend/internal/service/grok_model_diagnostics.go	len		False	set := make(map[string]struct{}, len(models))
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokDiagnosticObservedID		True	observed := grokDiagnosticObservedID(model)
+PR8339	backend/internal/service/grok_model_diagnostics.go	GetModelMapping	backend/internal/service/account.go:603	False	mapping := account.GetModelMapping()
+PR8339	backend/internal/service/grok_model_diagnostics.go	Strings	backend/ent/ent.go:380	False	sort.Strings(keys)
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokDiagnosticItem		True	items = append(items, grokDiagnosticItem(key, mapping[key], state, catalog))
+PR8339	backend/internal/service/grok_model_diagnostics.go	Contains		False	"if strings.Contains(requested, ""*"") || strings.Contains(target, ""*"") {"
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokDiagnosticIndependentCapability		True	if grokDiagnosticIndependentCapability(trimmed) {
+PR8339	backend/internal/service/grok_model_diagnostics.go	grokDiagnosticBareAlias		True	if grokDiagnosticBareAlias(trimmed) {
+PR8339	backend/internal/service/grok_model_diagnostics.go	IsGrokTextResponsesModelID	backend/internal/pkg/xai/models.go:284	False	case state == grokModelDiagnosticStateFresh && xai.IsGrokTextResponsesModelID(trimmed):
+PR8339	backend/internal/service/grok_model_diagnostics.go	ResolveGrokTextResponsesModelID	backend/internal/pkg/xai/models.go:292	False	return strings.TrimSpace(xai.ResolveGrokTextResponsesModelID(trimmed))
+PR8339	backend/internal/service/grok_model_diagnostics.go	ToLower		False	normalized := strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model)))
+PR8339	backend/internal/service/grok_model_diagnostics.go	StripGrokProviderPrefix	backend/internal/pkg/xai/models.go:231	False	normalized := strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model)))
+PR8339	backend/internal/service/grok_model_diagnostics.go	IsGrokImagineModel	backend/internal/pkg/xai/models.go:260	False	if xai.IsGrokImagineModel(normalized) {
+PR8339	backend/internal/service/grok_model_diagnostics.go	HasPrefix		False	"strings.HasPrefix(normalized, ""tts""),"
+PR8339	backend/internal/service/grok_observed_models.go	grokObservedModelsSyncLogFields		True	kind, statusCode := grokObservedModelsSyncLogFields(err)
+PR8339	backend/internal/service/grok_observed_models.go	Debug	backend/ent/client.go:232 | backend/ent/client.go:392	False	"slog.Debug(""grok_observed_models_sync_failed"","
+PR8339	backend/internal/service/grok_observed_models.go	Now	backend/internal/pkg/timezone/timezone.go:64 | backend/internal/securityaudit/prompt_types.go:262 | backend/internal/securityaudit/prompt_worker_test.go:17 | backend/internal/securityaudit/prompt_worker_test.go:25	False	started := time.Now().UTC()
+PR8339	backend/internal/service/grok_observed_models.go	UTC		False	started := time.Now().UTC()
+PR8339	backend/internal/service/grok_observed_models.go	prepareGrokObservedModelsRequest		True	req, proxyURL, err := s.prepareGrokObservedModelsRequest(ctx, account)
+PR8339	backend/internal/service/grok_observed_models.go	finishGrokObservedModelsAttempt		True	return s.finishGrokObservedModelsAttempt(ctx, account, nil, started, err)
+PR8339	backend/internal/service/grok_observed_models.go	grokCatalogScopeFromRequest		True	scope := grokCatalogScopeFromRequest(account, req)
+PR8339	backend/internal/service/grok_observed_models.go	grokObservedSnapshotFresh		True	if grokObservedSnapshotFresh(parseGrokObservedModels(account.Extra), scope, time.Now().UTC()) {
+PR8339	backend/internal/service/grok_observed_models.go	parseGrokObservedModels	backend/internal/service/grok_observed_models.go:177	False	if grokObservedSnapshotFresh(parseGrokObservedModels(account.Extra), scope, time.Now().UTC()) {
+PR8339	backend/internal/service/grok_observed_models.go	Do	backend/internal/handler/admin/account_handler_available_models_test.go:46 | backend/internal/handler/admin/grok_oauth_handler_test.go:64 | backend/internal/handler/gateway_session_release_test.go:39 | backend/internal/handler/gateway_websearch_personal_test.go:69	True	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+PR8339	backend/internal/service/grok_observed_models.go	newUpstreamModelSyncUpstreamError	backend/internal/service/upstream_models.go:184	False	"return s.finishGrokObservedModelsAttempt(ctx, account, req, started, newUpstreamModelSyncUpstreamError(""Failed to request upstream model list"", err))"
+PR8339	backend/internal/service/grok_observed_models.go	Close	backend/ent/client.go:404 | backend/ent/tx.go:306 | backend/internal/handler/gemini_stream_abort_sqlite_test.go:45 | backend/internal/pkg/servertiming/http_test.go:26	False	defer func() { _ = resp.Body.Close() }()
+PR8339	backend/internal/service/grok_observed_models.go	resolveModelsListReadLimit		False	limit := resolveModelsListReadLimit(s.cfg)
+PR8339	backend/internal/service/grok_observed_models.go	ReadAll		False	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+PR8339	backend/internal/service/grok_observed_models.go	LimitReader		False	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+PR8339	backend/internal/service/grok_observed_models.go	int64		False	if int64(len(body)) > limit {
+PR8339	backend/internal/service/grok_observed_models.go	len		False	if int64(len(body)) > limit {
+PR8339	backend/internal/service/grok_observed_models.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"return s.finishGrokObservedModelsAttempt(ctx, account, req, started, newUpstreamModelSyncUpstreamError(""Upstream model list response is too large"", fmt.Errorf(""response exceeds %d bytes"", limit)))"
+PR8339	backend/internal/service/grok_observed_models.go	Sprintf		False	"Message:    fmt.Sprintf(""Upstream model list request failed with HTTP %d"", resp.StatusCode),"
+PR8339	backend/internal/service/grok_observed_models.go	extractGrokModelIDsFromModelsBody	backend/internal/service/grok_observed_models.go:151	True	ids, err := extractGrokModelIDsFromModelsBody(body)
+PR8339	backend/internal/service/grok_observed_models.go	Is	backend/internal/pkg/errors/errors.go:47	False	if errors.Is(err, errGrokCatalogEmpty) {
+PR8339	backend/internal/service/grok_observed_models.go	buildGrokCatalogObservation		True	observation := buildGrokCatalogObservation(account, req, started, ids, nil)
+PR8339	backend/internal/service/grok_observed_models.go	saveGrokObservedObservation		True	if err := s.saveGrokObservedObservation(ctx, account, &observation); err != nil {
+PR8339	backend/internal/service/grok_observed_models.go	newUpstreamModelSyncInternalError	backend/internal/service/upstream_models.go:188	False	"return newUpstreamModelSyncInternalError(""Failed to save upstream model catalog"", err)"
+PR8339	backend/internal/service/grok_observed_models.go	newUpstreamModelSyncConfigError	backend/internal/service/upstream_models.go:176	False	"return nil, """", newUpstreamModelSyncConfigError(""No Grok access token is available"", nil)"
+PR8339	backend/internal/service/grok_observed_models.go	Warn		False	"slog.Warn(""grok model catalog observation was not saved"","
+PR8339	backend/internal/service/grok_observed_models.go	PersistGrokCatalogObservation		True	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, account.ID, *observation)
+PR8339	backend/internal/service/grok_observed_models.go	rememberGrokObservedSnapshot		True	rememberGrokObservedSnapshot(account, snap)
+PR8339	backend/internal/service/grok_observed_models.go	parseGrokCatalogModelIDs		True	return parseGrokCatalogModelIDs(body)
+PR8339	backend/internal/service/grok_observed_models.go	IsZero		False	if !started.IsZero() && finished.Before(started) {
+PR8339	backend/internal/service/grok_observed_models.go	Before		False	if !started.IsZero() && finished.Before(started) {
+PR8339	backend/internal/service/grok_observed_models.go	Format		False	StartedAt:  started.UTC().Format(time.RFC3339Nano),
+PR8339	backend/internal/service/grok_observed_models.go	append		False	return GrokCatalogObservation{Models: append([]string(nil), models...), Attempt: attempt}
+PR8339	backend/internal/service/grok_observed_models.go	string		False	return GrokCatalogObservation{Models: append([]string(nil), models...), Attempt: attempt}
+PR8339	backend/internal/service/grok_observed_models.go	grokCatalogErrorCode		True	attempt.ErrorCode = grokCatalogErrorCode(cause)
+PR8339	backend/internal/service/grok_observed_models.go	NewGrokCatalogScope		True	scope, err := NewGrokCatalogScope(account.ID, account.Type, req.URL.String())
+PR8339	backend/internal/service/grok_observed_models.go	String	backend/ent/account.go:474 | backend/ent/account/account.go:236 | backend/ent/accountgroup.go:157 | backend/ent/announcement.go:211	False	scope, err := NewGrokCatalogScope(account.ID, account.Type, req.URL.String())
+PR8339	backend/internal/service/grok_observed_models.go	As	backend/ent/ent.go:190	False	if errors.As(err, &syncErr) {
+PR8339	backend/internal/service/grok_observed_models.go	Contains		False	"case strings.Contains(syncErr.Message, ""too large""):"
+PR8339	backend/internal/service/grok_observed_models.go	TrimSpace		False	"if snap == nil || scope == nil || strings.TrimSpace(scope.Fingerprint) == """" || !grokCatalogHasModelID(snap.Models) {"
+PR8339	backend/internal/service/grok_observed_models.go	grokCatalogHasModelID		True	"if snap == nil || scope == nil || strings.TrimSpace(scope.Fingerprint) == """" || !grokCatalogHasModelID(snap.Models) {"
+PR8339	backend/internal/service/grok_observed_models.go	parseGrokCatalogTimestamp		True	fetched, ok := parseGrokCatalogTimestamp(snap.FetchedAt)
+PR8339	backend/internal/service/grok_observed_models.go	After		False	if !ok || fetched.After(now) {
+PR8339	backend/internal/service/grok_observed_models.go	Sub		False	return now.Sub(fetched) < grokObservedModelsTTL
+PR8339	backend/internal/service/grok_observed_models.go	Parse	backend/internal/pkg/proxyurl/parse.go:36	False	parsed, err := time.Parse(layout, strings.TrimSpace(value))
+PR8339	backend/internal/service/grok_observed_models.go	Marshal		False	raw, err := json.Marshal(snap)
+PR8339	backend/internal/service/grok_observed_models.go	Unmarshal		False	if err := json.Unmarshal(raw, &decoded); err != nil {
+PR8339	backend/internal/service/openai_gateway_chat_completions.go	readOpenAICompatBufferedTerminal	backend/internal/service/openai_gateway_messages.go:717	False	"finalResponse, usage, acc, priorModels, err := s.readOpenAICompatBufferedTerminal(resp, c, account, ""openai chat_completions buffered"", requestID)"
+PR8339	backend/internal/service/openai_gateway_chat_completions.go	apply	backend/internal/service/admin_service_update_balance_test.go:27	True	priorModels.apply(observer)
+PR8339	backend/internal/service/openai_gateway_grok.go	firstNonEmpty	backend/internal/handler/admin/setting_handler.go:42 | backend/internal/handler/auth_linuxdo_oauth.go:867 | backend/internal/pkg/xai/sso_device.go:491 | backend/internal/service/settings_view.go:4	False	"RequestID:                     firstNonEmpty(resp.Header.Get(""x-request-id""), resp.Header.Get(""xai-request-id"")),"
+PR8339	backend/internal/service/openai_gateway_grok.go	Get	backend/ent/client.go:629 | backend/ent/client.go:812 | backend/ent/client.go:1159 | backend/ent/client.go:1308	False	"RequestID:                     firstNonEmpty(resp.Header.Get(""x-request-id""), resp.Header.Get(""xai-request-id"")),"
+PR8339	backend/internal/service/openai_gateway_grok.go	observedUpstreamResponseModel	backend/internal/service/upstream_response_model.go:114	False	UpstreamResponseModel:         observedUpstreamResponseModel(c),
+PR8339	backend/internal/service/openai_gateway_grok.go	observedUpstreamResponseModelConflict	backend/internal/service/upstream_response_model.go:118	False	UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
+PR8339	backend/internal/service/openai_gateway_grok.go	Clone	backend/ent/account_query.go:388 | backend/ent/accountgroup_query.go:220 | backend/ent/announcement_query.go:270 | backend/ent/announcementread_query.go:293	False	ResponseHeaders:               resp.Header.Clone(),
+PR8339	backend/internal/service/openai_gateway_grok.go	Since		False	Duration:                      time.Since(startTime),
+PR8339	backend/internal/service/openai_gateway_messages.go	readOpenAICompatBufferedTerminal	backend/internal/service/openai_gateway_messages.go:717	False	"finalResponse, usage, acc, prior, err := s.readOpenAICompatBufferedTerminal(resp, c, account, ""openai messages buffered"", requestID)"
+PR8339	backend/internal/service/openai_gateway_messages.go	apply	backend/internal/service/admin_service_update_balance_test.go:27	True	prior.apply(observer)
+PR8339	backend/internal/service/openai_gateway_messages.go	openAICompatBufferedPriorModel		True	func openAICompatBufferedPriorModel(event *apicompat.ResponsesStreamEvent) (string, bool) {
+PR8339	backend/internal/service/openai_gateway_messages.go	isOpenAICompatResponsesTerminalEvent	backend/internal/service/openai_gateway_messages.go:673	False	if event == nil || event.Response == nil || isOpenAICompatResponsesTerminalEvent(event.Type) {
+PR8339	backend/internal/service/openai_gateway_messages.go	TrimSpace		False	model := strings.TrimSpace(event.Response.Model)
+PR8339	backend/internal/service/openai_gateway_messages.go	newOpenAICompatPriorModelAudit		True	func newOpenAICompatPriorModelAudit(account *Account) openAICompatPriorModelAudit {
+PR8339	backend/internal/service/openai_gateway_messages.go	IsGrok	backend/internal/service/account.go:274	False	return openAICompatPriorModelAudit{enabled: account != nil && account.IsGrok()}
+PR8339	backend/internal/service/openai_gateway_messages.go	record	backend/internal/pkg/servertiming/collector.go:110 | backend/internal/securityaudit/prompt_worker_test.go:93 | backend/internal/service/email_service_smtp_test.go:114 | backend/internal/service/invalid_auth_abuse_limiter.go:137	True	func (a *openAICompatPriorModelAudit) record(event *apicompat.ResponsesStreamEvent) {
+PR8339	backend/internal/service/openai_gateway_messages.go	Observe	backend/internal/pkg/servertiming/collector.go:134 | backend/internal/securityaudit/prompt_metrics.go:65 | backend/internal/service/openai_gateway_response_handling.go:1826 | backend/internal/service/openai_responses_created_at.go:40	False	a.observer.Observe(model, false)
+PR8339	backend/internal/service/openai_gateway_messages.go	New	backend/internal/pkg/errors/errors.go:76 | backend/internal/pkg/redissession/store.go:22 | backend/internal/pkg/servertiming/collector.go:48	False	"return nil, usage, acc, openAICompatPriorModelAudit{}, errors.New(""upstream response body is nil"")"
+PR8339	backend/internal/service/openai_gateway_messages.go	recordPrior		False	recordPrior(&event)
+PR8339	backend/internal/service/openai_gateway_messages.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"return nil, usage, acc, prior, fmt.Errorf(""stream data interval timeout"")"
+PR8339	backend/internal/service/upstream_models.go	fetchUpstreamModelListWithObservation		True	fetched, err := s.fetchUpstreamModelListWithObservation(ctx, account)
+PR8339	backend/internal/service/upstream_models.go	var		False	var (
+PR8339	backend/internal/service/upstream_models.go	keepGrokCatalogFailure		True	s.keepGrokCatalogFailure(ctx, account, grokObservation)
+PR8339	backend/internal/service/upstream_models.go	saveGrokCatalogObservation		True	if saveErr := s.saveGrokCatalogObservation(ctx, account, grokObservation); saveErr != nil {
+PR8339	backend/internal/service/upstream_models.go	newUpstreamModelSyncInternalError	backend/internal/service/upstream_models.go:188	False	"return nil, newUpstreamModelSyncInternalError(""Failed to save upstream model catalog"", saveErr)"
+PR8339	backend/internal/service/upstream_models.go	IsGrok	backend/internal/service/account.go:274	False	if account != nil && account.IsGrok() {
+PR8339	backend/internal/service/upstream_models.go	append		False	catalog.Warnings = append(catalog.Warnings, UpstreamModelSyncWarning{
+PR8339	backend/internal/service/upstream_models.go	Now	backend/internal/pkg/timezone/timezone.go:64 | backend/internal/securityaudit/prompt_types.go:262 | backend/internal/securityaudit/prompt_worker_test.go:17 | backend/internal/securityaudit/prompt_worker_test.go:25	False	started := time.Now().UTC()
+PR8339	backend/internal/service/upstream_models.go	UTC		False	started := time.Now().UTC()
+PR8339	backend/internal/service/upstream_models.go	fetchUpstreamModelListRequest		True	models, body, req, err := s.fetchUpstreamModelListRequest(ctx, account)
+PR8339	backend/internal/service/upstream_models.go	buildGrokCatalogObservation		True	observation := buildGrokCatalogObservation(account, req, started, models, err)
+PR8339	backend/internal/service/upstream_models.go	newUpstreamModelSyncConfigError	backend/internal/service/upstream_models.go:176	False	"return nil, nil, nil, newUpstreamModelSyncConfigError(""Account test service is not configured"", nil)"
+PR8339	backend/internal/service/upstream_models.go	fetchAntigravityOAuthUpstreamModels	backend/internal/service/upstream_models.go:1134	False	models, body, err := s.fetchAntigravityOAuthUpstreamModels(ctx, account)
+PR8339	backend/internal/service/upstream_models.go	Is	backend/internal/pkg/errors/errors.go:47	False	if account.IsGrok() && errors.Is(err, errGrokCatalogEmpty) {
+PR8339	backend/internal/service/upstream_models.go	newUpstreamModelSyncUpstreamError	backend/internal/service/upstream_models.go:184	False	"return nil, nil, req, newUpstreamModelSyncUpstreamError(""Upstream returned no supported models"", err)"
+PR8339	backend/internal/service/upstream_models.go	PersistGrokCatalogObservation		True	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, account.ID, *observation)
+PR8339	backend/internal/service/upstream_models.go	rememberGrokObservedSnapshot		True	rememberGrokObservedSnapshot(account, snap)
+PR8339	backend/internal/service/upstream_models.go	Warn		False	"slog.Warn(""grok model catalog observation was not saved"","
+PR8339	backend/internal/service/upstream_models.go	upstreamModelSyncAccountID	backend/internal/service/upstream_models.go:358	False	"""account_id"", upstreamModelSyncAccountID(account),"
+PR8339	backend/internal/service/upstream_models.go	upstreamModelSyncPlatform	backend/internal/service/upstream_models.go:365	False	"""platform"", upstreamModelSyncPlatform(account),"
+PR8339	backend/internal/service/upstream_models.go	parseGrokCatalogModelIDs		True	return parseGrokCatalogModelIDs(body)
+PR8377	backend/internal/service/gateway_billing_block.go	make		False	textUnits := make([]uint16, 0, 22)
+PR8377	backend/internal/service/gateway_billing_block.go	AppendRune		False	textUnits = utf16.AppendRune(textUnits, r)
+PR8377	backend/internal/service/gateway_billing_block.go	len		False	if len(textUnits) > indices[len(indices)-1] {
+PR8377	backend/internal/service/gateway_billing_block.go	append		False	chars = append(chars, textUnits[i])
+PR8377	backend/internal/service/gateway_billing_block.go	string		False	sample := string(utf16.Decode(chars))
+PR8377	backend/internal/service/gateway_billing_block.go	Decode	backend/internal/service/bedrock_stream.go:251 | backend/internal/service/openai_gateway_request_body.go:660	False	sample := string(utf16.Decode(chars))
+PR8377	backend/internal/service/gateway_billing_block.go	Sum256		False	sum := sha256.Sum256([]byte(fingerprintSalt + sample + version))
+PR8377	backend/internal/service/gateway_billing_block.go	byte		False	sum := sha256.Sum256([]byte(fingerprintSalt + sample + version))
+PR8326	backend/internal/service/gemini_image_output_accounting.go	countGeminiImageOutputs		True	if count := countGeminiImageOutputs(payload); count > counter.count {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	geminiPartIsImage		True	if geminiPartIsImage(part) {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	Get	backend/ent/client.go:629 | backend/ent/client.go:812 | backend/ent/client.go:1159 | backend/ent/client.go:1308	False	image := part.Get(key)
+PR8326	backend/internal/service/gemini_image_output_accounting.go	Exists		False	if !mimeType.Exists() {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	isGeminiInlineImageMIMEType	backend/internal/service/gemini_messages_compat_service.go:2952	False	if !isGeminiInlineImageMIMEType(strings.ToLower(strings.TrimSpace(mimeType.String()))) {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	ToLower		False	if !isGeminiInlineImageMIMEType(strings.ToLower(strings.TrimSpace(mimeType.String()))) {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	TrimSpace		False	if !isGeminiInlineImageMIMEType(strings.ToLower(strings.TrimSpace(mimeType.String()))) {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	String	backend/ent/account.go:474 | backend/ent/account/account.go:236 | backend/ent/accountgroup.go:157 | backend/ent/announcement.go:211	False	if !isGeminiInlineImageMIMEType(strings.ToLower(strings.TrimSpace(mimeType.String()))) {
+PR8354	backend/internal/service/openai_gateway_response_handling.go	Get	backend/ent/client.go:629 | backend/ent/client.go:812 | backend/ent/client.go:1159 | backend/ent/client.go:1308	False	"value.Get(""prompt_cache_hit_tokens""), // DeepSeek：prompt_tokens = hit + miss"
+PR8303	backend/internal/handler/admin/ops_dashboard_handler.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"return nil, fmt.Errorf(""invalid page"")"
+PR8303	backend/internal/pkg/pagination/pagination.go	import		False	import (
+PR8303	backend/internal/pkg/pagination/pagination.go	Limit	backend/ent/account_query.go:50 | backend/ent/accountgroup_query.go:42 | backend/ent/announcement_query.go:42 | backend/ent/announcementread_query.go:43	False	limit := p.Limit()
+PR8303	backend/internal/pkg/pagination/pagination.go	return		False	return (p.Page - 1) * limit
+PR8303	backend/internal/pkg/response/response.go	ParseUint		False	value, err := strconv.ParseUint(s, 10, strconv.IntSize-1)
+PR8303	backend/internal/pkg/response/response.go	int		False	return int(value), err
+PR8303	backend/internal/securityaudit/prompt_handler.go	ErrorFrom	backend/internal/pkg/response/response.go:82	False	"response.ErrorFrom(c, infraerrors.BadRequest(""prompt_audit_invalid_pagination"", ""分页参数无效""))"
+PR8303	backend/internal/securityaudit/prompt_handler.go	BadRequest	backend/internal/pkg/errors/types.go:8 | backend/internal/pkg/response/response.go:99	False	"response.ErrorFrom(c, infraerrors.BadRequest(""prompt_audit_invalid_pagination"", ""分页参数无效""))"
+PR8303	backend/internal/service/api_key_service.go	Offset	backend/ent/account_query.go:56 | backend/ent/accountgroup_query.go:48 | backend/ent/announcement_query.go:48 | backend/ent/announcementread_query.go:49	False	offset := params.Offset()
+PR8348	backend/internal/service/grok_media.go	ReadAll		False	data, err := io.ReadAll(part)
+PR8348	backend/internal/service/openai_images.go	ReadAll		False	data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize+1))
+PR8348	backend/internal/service/openai_images.go	LimitReader		False	data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize+1))
+PR8348	backend/internal/service/openai_images.go	len		False	if len(data) > openAIImageMaxUploadPartSize {
+PR8348	backend/internal/service/openai_images.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"return fmt.Errorf(""multipart field %q exceeds the %d MB per-part limit"", name, openAIImageMaxUploadPartSize>>20)"
+PR8348	backend/internal/service/openai_images_responses.go	make		False	uploadParts := make([]string, 0, len(parsed.Uploads))
+PR8348	backend/internal/service/openai_images_responses.go	len		False	uploadParts := make([]string, 0, len(parsed.Uploads))
+PR8348	backend/internal/service/openai_images_responses.go	append		False	"uploadParts = append(uploadParts, fmt.Sprintf(""%s:%d"", upload.ContentType, len(upload.Data)))"
+PR8348	backend/internal/service/openai_images_responses.go	Sprintf		False	"uploadParts = append(uploadParts, fmt.Sprintf(""%s:%d"", upload.ContentType, len(upload.Data)))"
+PR8362	backend/internal/pkg/antigravity/response_transformer.go	New	backend/internal/pkg/errors/errors.go:76 | backend/internal/pkg/redissession/store.go:22 | backend/internal/pkg/servertiming/collector.go:48	False	"var ErrMalformedFunctionCall = errors.New(""upstream returned MALFORMED_FUNCTION_CALL"")"
+PR8362	backend/internal/pkg/antigravity/response_transformer.go	len		False	"if len(v1Resp.Response.Candidates) > 0 && v1Resp.Response.Candidates[0].FinishReason == ""MALFORMED_FUNCTION_CALL"" {"
+PR8362	backend/internal/service/antigravity_gateway_compat.go	Is	backend/internal/pkg/errors/errors.go:47	False	if errors.Is(err, antigravity.ErrMalformedFunctionCall) {
+PR8362	backend/internal/service/antigravity_gateway_compat.go	writeAntigravityCompatError	backend/internal/service/antigravity_gateway_compat.go:507	False	"return s.writeAntigravityCompatError(c, http.StatusBadGateway, ""malformed_function_call"", err.Error())"
+PR8362	backend/internal/service/antigravity_gateway_compat.go	Error	backend/ent/ent.go:254 | backend/ent/ent.go:278 | backend/ent/ent.go:305 | backend/ent/ent.go:324	False	"return s.writeAntigravityCompatError(c, http.StatusBadGateway, ""malformed_function_call"", err.Error())"
+PR8362	backend/internal/service/antigravity_gateway_streaming.go	extractGeminiFinishReason	backend/internal/service/gemini_messages_compat_service.go:3209	False	"if extractGeminiFinishReason(parsed) == ""MALFORMED_FUNCTION_CALL"" {"
+PR8352	backend/internal/service/admin_user.go	BadRequest	backend/internal/pkg/errors/types.go:8 | backend/internal/pkg/response/response.go:99	False	"return infraerrors.BadRequest(""LAST_ADMIN_DEMOTE_FORBIDDEN"", ""cannot demote the last admin user"")"
+PR8390	backend/internal/service/channel_service.go	mergeWebSearchEmulationDimensions		True	channel.FeaturesConfig = mergeWebSearchEmulationDimensions(channel.FeaturesConfig, input.FeaturesConfig)
+PR8390	backend/internal/service/channel_service.go	platform		False	"// Why: the key is a map keyed by platform (""anthropic"", ""openai"", ...), but"
+PR8390	backend/internal/service/channel_service.go	platforms		False	// knows about a subset of platforms (the admin UI used to submit the anthropic
+PR8390	backend/internal/service/channel_service.go	len		False	if !present && len(current) > 0 {
+PR8390	backend/internal/service/channel_service.go	withWebSearchEmulationKey		True	return withWebSearchEmulationKey(incoming, current)
+PR8390	backend/internal/service/channel_service.go	make		False	merged := make(map[string]any, len(incomingDims)+len(current))
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	DeclaredModelIDs		True	if declared, err := h.geminiCompatService.DeclaredModelIDs(c.Request.Context(), apiKey.GroupID); err == nil && len(declared) > 0 {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	Context	backend/internal/service/concurrency_service.go:95	False	if declared, err := h.geminiCompatService.DeclaredModelIDs(c.Request.Context(), apiKey.GroupID); err == nil && len(declared) > 0 {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	len		False	if declared, err := h.geminiCompatService.DeclaredModelIDs(c.Request.Context(), apiKey.GroupID); err == nil && len(declared) > 0 {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	append		False	ids := append([]string{}, declared...)
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	Contains		False	if !slices.Contains(declared, id) {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	ModelAllowlistEnabled		False	if apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	FilterForListing		False	ids = apiKey.Group.ModelAllowlist.FilterForListing(ids)
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	make		False	declaredModels := make([]gemini.Model, 0, len(ids))
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	FallbackModel	backend/internal/pkg/gemini/models.go:53	False	declaredModels = append(declaredModels, gemini.FallbackModel(id))
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	JSON		False	c.JSON(http.StatusOK, gemini.ModelsListResponse{Models: declaredModels})
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	AntigravityGeminiModelIDs		False	if agModelIDs, agErr := h.geminiCompatService.AntigravityGeminiModelIDs(c.Request.Context(), apiKey.GroupID, true); agErr == nil {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	DeclaredModelsCover		True	if service.DeclaredModelsCover(declared, modelName) || service.DeclaredModelsCover(agModelIDs, modelName) {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	googleError	backend/internal/handler/gemini_v1beta_handler.go:715	False	"googleError(c, http.StatusNotFound, ""models/""+modelName+"" is not found"")"
+PR8395	backend/internal/service/account_test_service.go	geminiDefaultTestModel		True	func geminiDefaultTestModel(account *Account) string {
+PR8395	backend/internal/service/account_test_service.go	IsGeminiGoogleOne	backend/internal/service/account.go:328	False	if account.IsGeminiGoogleOne() {
+PR8395	backend/internal/service/antigravity_gateway_streaming.go	HasPrefix		False	"strings.HasPrefix(modelLower, ""gemini-3.1-flash-lite-image-"") ||"
+PR8395	backend/internal/service/gemini_models_endpoints.go	DeclaredModelIDs		True	func (s *GeminiMessagesCompatService) DeclaredModelIDs(ctx context.Context, groupID *int64) ([]string, error) {
+PR8395	backend/internal/service/gemini_models_endpoints.go	listSchedulableAccountsOnce	backend/internal/service/gemini_messages_compat_service.go:446	False	accounts, err := s.listSchedulableAccountsOnce(ctx, groupID, PlatformGemini, true)
+PR8395	backend/internal/service/gemini_models_endpoints.go	Errorf	backend/internal/pkg/errors/errors.go:92	False	"return nil, fmt.Errorf(""query accounts failed: %w"", err)"
+PR8395	backend/internal/service/gemini_models_endpoints.go	make		False	seen := make(map[string]struct{})
+PR8395	backend/internal/service/gemini_models_endpoints.go	GetModelMapping	backend/internal/service/account.go:603	False	mapping := accounts[i].GetModelMapping()
+PR8395	backend/internal/service/gemini_models_endpoints.go	len		False	if len(mapping) == 0 {
+PR8395	backend/internal/service/gemini_models_endpoints.go	append		False	models = append(models, model)
+PR8395	backend/internal/service/gemini_models_endpoints.go	Strings	backend/ent/ent.go:380	False	sort.Strings(models)
+PR8395	backend/internal/service/gemini_models_endpoints.go	DeclaredModelsCover		True	func DeclaredModelsCover(declared []string, model string) bool {
+PR8395	backend/internal/service/gemini_models_endpoints.go	normalizeRequestedModelForLookup	backend/internal/service/account.go:833	False	normalized := normalizeRequestedModelForLookup(PlatformGemini, model)
+PR8395	backend/internal/service/gemini_models_endpoints.go	matchWildcard	backend/internal/service/account.go:1099 | backend/internal/service/channel_service.go:396	False	if matchWildcard(pattern, model) || matchWildcard(pattern, normalized) {
+PR8373	backend/internal/service/openai_codex_models_service.go	get	backend/internal/service/openai_codex_models_service.go:1484	False	cached, state := s.openAIModelsCache.get(cacheKey, time.Now())
+PR8373	backend/internal/service/openai_codex_models_service.go	Now	backend/internal/pkg/timezone/timezone.go:64 | backend/internal/securityaudit/prompt_types.go:262 | backend/internal/securityaudit/prompt_worker_test.go:17 | backend/internal/securityaudit/prompt_worker_test.go:25	False	cached, state := s.openAIModelsCache.get(cacheKey, time.Now())

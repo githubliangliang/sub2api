@@ -1,5 +1,26 @@
 # 上游合并指南
 
+最新评估（2026-10-28）：[PORTING-0.2.19.md](./PORTING-0.2.19.md)，v0.2.18→v0.2.19，fork `49939fb2c` / VERSION1.1.20 / Go1.27.3 / SQLite227。50非merge、20PR+3直接提交，276文件先反后正A0/C203/X61/N12。建议第一档7簇、第二档6簇；用户选定GPT-6.1 Terra，仍为第三档、单独提案。评估时三份均未实施，评估证据保持当时的产品/版本/迁移/依赖值。[来源与基线证据](./evidence-0.2.19/MANIFEST.md)。
+
+第一档实施（2026-10-29）已完成：[OpenSpec验收](../../openspec/changes/port-upstream-0.2.19-tier1/verification.md) / [实际证据与哈希](./implementation-0.2.19-tier1/README.md)，26/26任务，提交本地main为`683354b2cdd2461dc581fa14158be09ef51de29b`。Claude UTF-16、Codex cache flight、共享cache-hit用量、Gemini file图片、Antigravity畸形工具、分页和管理员400保护七项完成；54包unit/build、8包race、SQLite迁移/quota/dedup、lint0 issues及OpenSpec通过。最终unit隔离测试子进程代理，SDK本地端点代理误匹配的控制证据已记录，相关验证码代码未改。VERSION1.1.20/Go1.27.3/迁移227、依赖/前端/生成代码不变；评估来源/第二档/Terra提案保持冻结，后两者仍未实施；未归档/发布/push/部署/操作业务实例数据。
+
+- [x] 冻结tag/HEAD、整PR覆盖和全部四态，复查3732产品哈希与原始证据。
+- [x] 23候选全部分档，优先Claude/Codex/Grok，真实缺陷、最小前置和旧完成/按需状态重述。
+- [x] 建立[第一档](../../openspec/changes/port-upstream-0.2.19-tier1/README.md)、[第二档](../../openspec/changes/port-upstream-0.2.19-tier2/README.md)、[用户选定Terra](../../openspec/changes/port-upstream-0.2.19-terra/README.md)三份OpenSpec，实施任务全部未勾选、verification实施证据槽全部空白。
+- [x] backend实际测试目录/10包定向及Terra邻近回归、61前端测试、SQLite与Grok缺陷probe、x/net隔离PoC/MVS可行性检查。
+- [x] 三提案严格校验、链接/来源/空实施槽与最终范围哈希核对。
+- [x] 实施第一档7簇并完成[实际验收](../../openspec/changes/port-upstream-0.2.19-tier1/verification.md)，26/26任务。
+- [ ] 实施第二档6簇并完成实际验收。
+- [ ] 实施已选定第三档Terra并完成实际验收。
+
+v0.2.19通用教训（[§9](./PORTING-0.2.19.md#9-本轮新增通用教训)）：
+
+- 缓存函数名不同不等于无此缺陷，沿实际消费者复现flight窗口。
+- 新CLEAN文件仍可能是PG CAS；单键观测必须与普通旧表单、外部事务和缓存发布一并验收。
+- 11行事务helper可复用已有边界，不引入未选定9000行授权能力；34行目录收集/匹配也不需要整344行模型端点系统。
+- 新模型要贯通effort/工具/metadata/价格/usage；来源占位created不是发布时间，用户选择第三档时保留原档位。
+- 安全依赖先量最小MVS；PoC、实际可达与利用性分开；当前audit与历史证据、评估PASS与修复验收分开。
+
 用户选定个人维护（2026-10-28）已完成：[补充与patch sites](./PORTING-0.2.18-personal-maintenance.md) / [OpenSpec验收](../../openspec/changes/port-upstream-0.2.18-personal-maintenance/verification.md)。SQLite清理/到期暂停/定时测试恢复，操作日志“全部清理”SQL与Enter防重复提交修复；#8249延迟探测与#8250零分配签名实施。后端54包unit/build、四包race、SQLite迁移/quota/dedup、lint0 issues通过；前端2099通过/2既有跳过，typecheck/lint/build/critical通过。实现已提交至本地main为`b554bea554202e3008b99e3faa7a29420467f318`；VERSION1.1.20/Go1.27.3/迁移227/依赖/生成代码及历史冻结证据不变，未发布/部署/清理业务实例。[证据和哈希](./implementation-0.2.18-personal-maintenance/README.md)。
 
 - [x] 三个SQLite后台逐项审查、旧时间兼容、取消/停止/重叠与真实数据库验收。
@@ -24,9 +45,9 @@ OpenSpec 整理（2026-10-24，含用户确认后的补充归档）：19 个已�
 
 最新实施教训：流服务返回部分结果后，还必须验证真实handler的队列溢出策略、请求字段快照与SQLite账本；目标Go补丁升级也可能改变导出格式，必要依赖前置须测最小版本并重扫安全记录。
 
-最新评估通用教训（[0.2.18 §9](./PORTING-0.2.18.md#9-新增通用教训)）：共享map先追生产所有权；混合PR按已有消费者拆分；fork可能已移动helper；小前置随消费者摘取但缺消费者仍不适用；断流验收同时看终态、用量和资源释放；当前audit与package级命中不能冒充修复或利用证明。
+v0.2.18评估通用教训（[0.2.18 §9](./PORTING-0.2.18.md#9-新增通用教训)）：共享map先追生产所有权；混合PR按已有消费者拆分；fork可能已移动helper；小前置随消费者摘取但缺消费者仍不适用；断流验收同时看终态、用量和资源释放；当前audit与package级命中不能冒充修复或利用证明。
 
-最新轮次检查清单（v0.2.18，实施补记2026-10-24）：
+v0.2.18历史检查清单（实施补记2026-10-24）：
 
 - [x] 冻结v0.2.16→v0.2.18与fork `873962ce7`：56非merge、35PR、8直接提交；312文件全体先反向后正向，A4/C170/X117/N21。
 - [x] 43候选全量分档、关键调用/缺前置量测、旧遗留重述和integration build tag核查。
@@ -51,6 +72,8 @@ v0.2.16历史检查清单：
 上一轮通用教训（[0.2.11 §9](./PORTING-0.2.11.md#9-新增通用结论)）：同区间可能撤换设计，按目标tag终态排名；CLEAN流处理补丁也可能提前提交HTTP响应；先核实simple模式是否实际启用；模型/套餐元数据与Ultrafast能力按行为拆；旧第四档只有可独立复用子集时，量出基座并明确记录提升范围。
 
 最新评估与历史清单如下。不同轮次可能修改相同文件，**不能假定互不冲突或直接并行应用**。
+
+- [PORTING-0.2.19.md](./PORTING-0.2.19.md) —— **评估完成；第一档7簇已实现并验收，第二档6簇和用户选定第三档Terra仍未实施**。50非merge、20PR+3直接提交，A0/C203/X61/N12；Claude/Codex/Grok优先。保留SQLite227、Go1.27.3、VERSION1.1.20；其它按需能力未选定、支付/缺消费者/PG-only排除。10包定向及邻近回归、61前端测试、隔离缺陷与MVS探针通过，旧遗留当前状态见§5。
 
 - [PORTING-0.2.18.md](./PORTING-0.2.18.md) —— **第一档6簇、第二档10簇已实现**。v0.2.17–v0.2.18，冻结评估为56非merge / 35PR / 8直接提交。第一档验收见[报告](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier1/verification.md)及[证据](./implementation-0.2.18-tier1/)。第二档含凭据隔离、Responses字段、Codex退休/容量/身份、Anthropic/Gemini断流结算、既有Antigravity/Vertex、图片下载及工具链安全维护，见[验收](../../openspec/changes/archive/2026-10-24-port-upstream-0.2.18-tier2/verification.md)与[证据](./implementation-0.2.18-tier2/)。第二档Go1.27.3需最小x/tools编译前置及强制传递依赖；follow-redirects精确1.16.1，[剩余依赖风险](./implementation-0.2.18-tier2/dependency-review.md)单列。新增能力暂缓，支付排除；最大迁移226；实施验收VERSION1.1.18保持历史值，发布文件已升1.1.19，见[发布说明](../releases/v1.1.19.md)。实现已提交`2b79ac320`，未部署业务实例；旧未合项见§5。
 
@@ -242,7 +265,7 @@ cd ../frontend && pnpm run typecheck && pnpm exec vitest run
 2. **迁移只增不改。** 已应用的 `*.sql` 改内容会 checksum 失败。个人环境可以删 `*.db` 重建，已有库不行。
 3. **上游新迁移先转 SQLite。** `backend/scripts/pg_sql_to_sqlite.py`，逐条对照 [第 5 节的转换速查](#5-pg--sqlite-转换速查)。PG 专属特性（分区、`trgm`、`plpgsql`、`COMMENT ON`、`CREATE EXTENSION`）改写成 SQLite，或继续 `SELECT 1` no-op。**动手前先看 5.1**——`$N` 占位符、`RETURNING`、`IS DISTINCT FROM`、窗口函数 `PARTITION BY` 等一大批构造 SQLite 本来就支持，改了纯属白费功夫还容易引 bug。
 4. **迁移编号以本仓库为准。** 上游文件名可能和这边已占用的序号冲突（例如上游 `221_group_model_pricing.sql`，这边 `221` 已是 affiliate）。
-5. **Go 版本。** CI 断言 `1.26.5`。上游升 Go，要同时改 `backend/go.mod` 和 workflow。
+5. **Go 版本。** 当前CI与 `backend/go.mod` 均为 `1.27.3`。上游升 Go，要同时改 go.mod 和 workflow；历史版本记录不回写。
 6. **前端用 pnpm。** 合了 `package.json` 必须提交 `frontend/pnpm-lock.yaml`。
 7. **改 interface / Ent schema 要改测试 stub，并 generate。**
 
@@ -260,7 +283,7 @@ go generate ./cmd/server     # 动了 wire.go
 
    遇到上游服务在 SQLite 上报错，正确顺序是：**先看错在哪一条 SQL** → 能改方言就改方言 → 确实是 PG 专属特性（`COPY`、分区、`plpgsql`、advisory lock）才考虑跳过。跳过时在代码里写清楚**跳过的是哪条 SQL**，不要只写「SQLite 不支持」。
 
-   目前仍被跳过的：`UsageCleanupService`、`AccountExpiryService`、`ScheduledTestRunnerService`。其中账号过期自动暂停被关意味着 `auto_pause_on_expired` 不生效——这几个都还没逐条核实过，动它们之前先验证各自的 SQL。
+   当前状态（2026-10-28）：`UsageCleanupService`、`AccountExpiryService`、`ScheduledTestRunnerService` 已逐SQL适配并恢复，旧TEXT扫描/混合时间比较、取消/停止/重叠和结果持久化已验收，见[个人维护证据](../../openspec/changes/port-upstream-0.2.18-personal-maintenance/verification.md)。下文事故记录及旧 `skipSQLiteBackgroundJobs` 名称是历史，不能再据此关闭服务。
 
 10. **`EnsureSQLiteAuxTables` 的 DDL 必须和迁移文件逐列一致。** 两边都是 `CREATE TABLE IF NOT EXISTS`，**谁先跑谁定型**，而 aux 表通常先跑。一旦列类型不一致，现网库以 aux 表为准，迁移文件里的定义完全是死的，看代码会被误导。
 

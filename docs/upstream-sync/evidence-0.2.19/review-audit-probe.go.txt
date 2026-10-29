@@ -1,0 +1,77 @@
+//go:build unit
+
+package service
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// These probes assert the frozen baseline defect, not the repaired behavior.
+func TestRelease019ReviewNativeGrokModelAudit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, streaming := range []bool{false, true} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		body := []byte(`{"model":"grok","input":"hi","stream":false}`)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+		response := `{"id":"resp_audit","model":"grok-4.7","status":"completed","output":[],"usage":{"input_tokens":2,"output_tokens":1}}`
+		contentType := "application/json"
+		if streaming {
+			response = "data: {\"type\":\"response.completed\",\"response\":" + response + "}\n\n"
+			contentType = "text/event-stream"
+		}
+		upstream := &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{contentType}},
+			Body: io.NopCloser(strings.NewReader(response)),
+		}}
+		account := &Account{ID: 19019, Platform: PlatformGrok, Type: AccountTypeAPIKey,
+			Credentials: map[string]any{"api_key": "synthetic-key", "base_url": "https://api.x.ai/v1"}}
+		result, err := (&OpenAIGatewayService{httpUpstream: upstream}).forwardGrokResponses(
+			context.Background(), c, account, body, "grok", streaming, time.Now())
+		if err != nil || result == nil {
+			t.Fatalf("fixture failed: result=%v, err=%v", result, err)
+		}
+		observed := observedUpstreamResponseModel(c)
+		if observed != "grok-4.7" || result.UpstreamResponseModel != "" {
+			t.Fatalf("unexpected baseline: observed=%q, returned=%q", observed, result.UpstreamResponseModel)
+		}
+		t.Logf("DEFECT: native Grok streaming=%v observed %q but returned no response-model audit field", streaming, observed)
+	}
+}
+
+func TestRelease019ReviewBufferedGrokModelConflict(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, messages := range []bool{false, true} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+		stream := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_audit\",\"model\":\"grok-4.6\"}}\n\n" +
+			"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_audit\",\"model\":\"grok-4.7\",\"status\":\"completed\",\"output\":[{\"id\":\"msg_audit\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ok\"}]}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}}\n\n"
+		response := &http.Response{StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:   io.NopCloser(strings.NewReader(stream))}
+		account := &Account{ID: 19020, Platform: PlatformGrok}
+		svc := &OpenAIGatewayService{}
+		var result *OpenAIForwardResult
+		var err error
+		if messages {
+			result, err = svc.handleAnthropicBufferedStreamingResponse(response, c, account, "grok", "grok-4.7", "grok-4.7", time.Now())
+		} else {
+			result, err = svc.handleChatBufferedStreamingResponse(response, c, account, "grok", "grok-4.7", "grok-4.7", time.Now())
+		}
+		if err != nil || result == nil {
+			t.Fatalf("fixture failed: result=%v, err=%v", result, err)
+		}
+		if result.UpstreamResponseModel != "grok-4.7" || result.UpstreamResponseModelConflict {
+			t.Fatalf("unexpected baseline: model=%q, conflict=%v", result.UpstreamResponseModel, result.UpstreamResponseModelConflict)
+		}
+		t.Logf("DEFECT: Grok buffered messages=%v discards the earlier 4.6 declaration and reports no conflict with terminal 4.7", messages)
+	}
+}

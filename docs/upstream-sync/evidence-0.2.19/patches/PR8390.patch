@@ -1,0 +1,345 @@
+diff --git a/backend/internal/service/channel_service.go b/backend/internal/service/channel_service.go
+index 85d640930..1473f3edf 100644
+--- a/backend/internal/service/channel_service.go
++++ b/backend/internal/service/channel_service.go
+@@ -973,7 +973,7 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
+ 		channel.BillingModelSource = input.BillingModelSource
+ 	}
+ 	if input.FeaturesConfig != nil {
+-		channel.FeaturesConfig = input.FeaturesConfig
++		channel.FeaturesConfig = mergeWebSearchEmulationDimensions(channel.FeaturesConfig, input.FeaturesConfig)
+ 	}
+ 	if input.ApplyPricingToAccountStats != nil {
+ 		channel.ApplyPricingToAccountStats = *input.ApplyPricingToAccountStats
+@@ -986,6 +986,65 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
+ 
+ // checkGroupConflicts 检查待关联的分组是否已属于其他渠道。
+ // channelID 为当前渠道 ID（Create 时传 0）。
++// mergeWebSearchEmulationDimensions keeps the per-platform dimensions of
++// features_config.web_search_emulation across channel updates.
++//
++// Why: the key is a map keyed by platform ("anthropic", "openai", ...), but
++// UpdateChannel replaces features_config as a whole block. A client that only
++// knows about a subset of platforms (the admin UI used to submit the anthropic
++// dimension only) therefore erased every other platform's setting on each save —
++// silently disabling web search emulation for openai/command_code/... channels.
++//
++// Rules:
++//   - key present in the request: request dimensions win, missing dimensions are
++//     inherited from the current value;
++//   - key absent from the request: the whole key is inherited, so clients that do
++//     not know the feature cannot wipe it;
++//   - explicit empty object {} or null: treated as "clear" and replaces the value.
++//
++// Other features_config keys keep the historical whole-block replacement
++// semantics. No generic deep merge is performed: nested objects are replaced as
++// a unit so deleting a dimension stays expressible.
++func mergeWebSearchEmulationDimensions(existing, incoming map[string]any) map[string]any {
++	if incoming == nil {
++		return nil
++	}
++	current, _ := existing[featureKeyWebSearchEmulation].(map[string]any)
++	rawIncoming, present := incoming[featureKeyWebSearchEmulation]
++	incomingDims, incomingIsMap := rawIncoming.(map[string]any)
++
++	if !present && len(current) > 0 {
++		return withWebSearchEmulationKey(incoming, current)
++	}
++	if !incomingIsMap || len(current) == 0 || len(incomingDims) == 0 {
++		return incoming
++	}
++
++	merged := make(map[string]any, len(incomingDims)+len(current))
++	for platform, value := range current {
++		merged[platform] = value
++	}
++	for platform, value := range incomingDims {
++		merged[platform] = value
++	}
++	return withWebSearchEmulationKey(incoming, merged)
++}
++
++// withWebSearchEmulationKey returns a copy of incoming whose
++// web_search_emulation key points at a copy of value.
++func withWebSearchEmulationKey(incoming, value map[string]any) map[string]any {
++	out := make(map[string]any, len(incoming)+1)
++	for key, item := range incoming {
++		out[key] = item
++	}
++	copied := make(map[string]any, len(value))
++	for platform, item := range value {
++		copied[platform] = item
++	}
++	out[featureKeyWebSearchEmulation] = copied
++	return out
++}
++
+ func (s *ChannelService) checkGroupConflicts(ctx context.Context, channelID int64, groupIDs []int64) error {
+ 	if len(groupIDs) == 0 {
+ 		return nil
+diff --git a/backend/internal/service/channel_websearch_merge_test.go b/backend/internal/service/channel_websearch_merge_test.go
+new file mode 100644
+index 000000000..e37d75062
+--- /dev/null
++++ b/backend/internal/service/channel_websearch_merge_test.go
+@@ -0,0 +1,130 @@
++package service
++
++import (
++	"context"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestMergeWebSearchEmulationDimensions_MissingDimensionsInherited(t *testing.T) {
++	existing := map[string]any{
++		featureKeyWebSearchEmulation: map[string]any{"openai": true, "command_code": true},
++	}
++	incoming := map[string]any{
++		featureKeyWebSearchEmulation: map[string]any{"anthropic": false},
++	}
++	merged := mergeWebSearchEmulationDimensions(existing, incoming)
++
++	dims, ok := merged[featureKeyWebSearchEmulation].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, false, dims["anthropic"])
++	require.Equal(t, true, dims["openai"])
++	require.Equal(t, true, dims["command_code"])
++}
++
++func TestMergeWebSearchEmulationDimensions_RequestValueWins(t *testing.T) {
++	existing := map[string]any{
++		featureKeyWebSearchEmulation: map[string]any{"openai": true},
++	}
++	incoming := map[string]any{
++		featureKeyWebSearchEmulation: map[string]any{"openai": false},
++	}
++	merged := mergeWebSearchEmulationDimensions(existing, incoming)
++
++	dims, ok := merged[featureKeyWebSearchEmulation].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, false, dims["openai"])
++}
++
++func TestMergeWebSearchEmulationDimensions_KeyAbsentInheritsWholeKey(t *testing.T) {
++	existing := map[string]any{
++		featureKeyWebSearchEmulation: map[string]any{"openai": true},
++		"bedrock_cc_compat":          map[string]any{"anthropic": true},
++	}
++	incoming := map[string]any{"other": 2}
++	merged := mergeWebSearchEmulationDimensions(existing, incoming)
++
++	dims, ok := merged[featureKeyWebSearchEmulation].(map[string]any)
++	require.True(t, ok, "clients that do not send the key must not erase it")
++	require.Equal(t, true, dims["openai"])
++	require.Equal(t, 2, merged["other"])
++
++	// The inherited value must be a copy: mutating the result must not modify
++	// the previous configuration.
++	dims["openai"] = false
++	existingDims, ok := existing[featureKeyWebSearchEmulation].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, true, existingDims["openai"])
++}
++
++func TestMergeWebSearchEmulationDimensions_KeyAbsentWithoutExistingIsNoop(t *testing.T) {
++	merged := mergeWebSearchEmulationDimensions(map[string]any{}, map[string]any{"other": 3})
++	_, ok := merged[featureKeyWebSearchEmulation]
++	require.False(t, ok)
++	require.Equal(t, 3, merged["other"])
++}
++
++func TestMergeWebSearchEmulationDimensions_EmptyObjectMeansClear(t *testing.T) {
++	existing := map[string]any{
++		featureKeyWebSearchEmulation: map[string]any{"openai": true},
++	}
++	merged := mergeWebSearchEmulationDimensions(existing, map[string]any{
++		featureKeyWebSearchEmulation: map[string]any{},
++	})
++	dims, ok := merged[featureKeyWebSearchEmulation].(map[string]any)
++	require.True(t, ok)
++	require.Empty(t, dims, "an explicit empty object must clear the value")
++}
++
++func TestMergeWebSearchEmulationDimensions_NilIncoming(t *testing.T) {
++	require.Nil(t, mergeWebSearchEmulationDimensions(map[string]any{featureKeyWebSearchEmulation: map[string]any{"openai": true}}, nil))
++}
++
++// Wiring-level: the merge must be applied by applyUpdateInput.
++func TestChannelService_ApplyUpdateInputMergesWebSearchEmulationDimensions(t *testing.T) {
++	svc := &ChannelService{}
++	channel := &Channel{
++		FeaturesConfig: map[string]any{
++			featureKeyWebSearchEmulation: map[string]any{"anthropic": false, "openai": true, "command_code": true},
++		},
++	}
++
++	require.NoError(t, svc.applyUpdateInput(context.Background(), channel, &UpdateChannelInput{
++		FeaturesConfig: map[string]any{
++			featureKeyWebSearchEmulation: map[string]any{"anthropic": false},
++		},
++	}))
++
++	dims, ok := channel.FeaturesConfig[featureKeyWebSearchEmulation].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, false, dims["anthropic"])
++	require.Equal(t, true, dims["openai"])
++	require.Equal(t, true, dims["command_code"])
++}
++
++func TestChannelService_ApplyUpdateInputInheritsWebSearchEmulationWhenKeyAbsent(t *testing.T) {
++	svc := &ChannelService{}
++	channel := &Channel{
++		FeaturesConfig: map[string]any{
++			featureKeyWebSearchEmulation: map[string]any{"openai": true, "command_code": true},
++			"bedrock_cc_compat":          map[string]any{"anthropic": true},
++		},
++	}
++
++	require.NoError(t, svc.applyUpdateInput(context.Background(), channel, &UpdateChannelInput{
++		FeaturesConfig: map[string]any{
++			"bedrock_cc_compat": map[string]any{"anthropic": false},
++		},
++	}))
++
++	dims, ok := channel.FeaturesConfig[featureKeyWebSearchEmulation].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, true, dims["openai"])
++	require.Equal(t, true, dims["command_code"])
++
++	// Other keys keep the historical whole-block replacement semantics.
++	bedrock, ok := channel.FeaturesConfig["bedrock_cc_compat"].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, false, bedrock["anthropic"])
++}
+diff --git a/frontend/src/i18n/locales/en/admin/channels.ts b/frontend/src/i18n/locales/en/admin/channels.ts
+index b0574f715..b065f1ed1 100644
+--- a/frontend/src/i18n/locales/en/admin/channels.ts
++++ b/frontend/src/i18n/locales/en/admin/channels.ts
+@@ -201,7 +201,7 @@ export default {
+         defaultVideoPrice: 'Default video price per second (fallback when no tier matches)',
+         platformConfig: 'Platform Configuration',
+         webSearchEmulation: 'Web Search Emulation',
+-        webSearchEmulationHint: '⚠️ When enabled, all accounts in this channel\'s Anthropic groups will intercept web_search requests. Use with caution.',
++        webSearchEmulationHint: '⚠️ When enabled, accounts of the matching platforms in this channel will intercept web_search requests. Use with caution.',
+         webSearchEmulationGlobalDisabled: 'Please enable the global switch first in Settings → Gateway → Web Search Emulation',
+         codexImageGenerationBridge: 'Codex Image Generation Bridge',
+         codexImageGenerationBridgeHint: 'When enabled, only non-Responses Lite Codex /responses text requests in OpenAI groups receive the hosted image_generation tool. The bridge does not inject tools for Responses Lite; local image_gen handling follows the client and account policy. Leave this off unless routed accounts support image generation.',
+diff --git a/frontend/src/i18n/locales/zh/admin/channels.ts b/frontend/src/i18n/locales/zh/admin/channels.ts
+index 592c3e63f..6e8b0df00 100644
+--- a/frontend/src/i18n/locales/zh/admin/channels.ts
++++ b/frontend/src/i18n/locales/zh/admin/channels.ts
+@@ -201,7 +201,7 @@ export default {
+         defaultVideoPrice: '默认视频每秒价格（未命中层级时使用）',
+         platformConfig: '平台配置',
+         webSearchEmulation: 'Web Search 模拟',
+-        webSearchEmulationHint: '⚠️ 开启后该渠道下所有 Anthropic 分组的账号将自动拦截 web_search 请求，请谨慎操作',
++        webSearchEmulationHint: '⚠️ 开启后该渠道下对应平台的账号将自动拦截 web_search 请求，请谨慎操作',
+         webSearchEmulationGlobalDisabled: '请先在系统设置 → 网关 → Web Search 模拟中启用全局开关',
+         codexImageGenerationBridge: 'Codex 图片生成桥接',
+         codexImageGenerationBridgeHint: '开启后，OpenAI 分组仅会为非 Responses Lite 的 Codex /responses 文本请求自动注入 hosted image_generation 工具。桥接不会为 Responses Lite 注入工具；本地 image_gen 的处理由客户端和账号策略决定。仅在路由账号支持图片生成时开启。',
+diff --git a/frontend/src/views/admin/ChannelsView.vue b/frontend/src/views/admin/ChannelsView.vue
+index bdb372b7f..7f1493466 100644
+--- a/frontend/src/views/admin/ChannelsView.vue
++++ b/frontend/src/views/admin/ChannelsView.vue
+@@ -324,8 +324,8 @@
+               </div>
+             </div>
+ 
+-            <!-- Web Search Emulation (Anthropic only, hidden when global disabled) -->
+-            <div v-if="section.platform === 'anthropic' && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
++            <!-- Web Search Emulation (platform whitelist, hidden when global disabled) -->
++            <div v-if="WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform) && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
+               <div class="flex items-center justify-between">
+                 <div>
+                   <label class="text-xs font-medium text-gray-700 dark:text-gray-300">
+@@ -659,6 +659,20 @@ const { t } = useI18n()
+ const appStore = useAppStore()
+ 
+ // Web Search global enabled state (loaded once on mount)
++// Platforms that support the account-level Web Search emulation toggle
++// (must stay in sync with the backend account-level whitelist in
++// backend/internal/service/account.go webSearchEmulationPlatformEnabled).
++// Both the rendering and the submit path use this set, so a platform added to
++// the backend whitelist automatically becomes configurable here.
++const WEB_SEARCH_EMULATION_PLATFORMS: ReadonlySet<string> = new Set([
++  'anthropic',
++  'openai',
++  'command_code',
++  'opencode_go',
++  'minimax',
++  'zhipu',
++])
++
+ const webSearchGlobalEnabled = ref(false)
+ async function loadWebSearchGlobalState() {
+   try {
+@@ -1150,15 +1164,13 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
+   }
+   const uniqueGroupIds = Array.from(new Set(group_ids))
+ 
+-  // Collect web_search_emulation (only anthropic platform supports it)
+-  // Always write the key so that disabling in the UI correctly sets platform to false,
+-  // rather than leaving a stale true value from the cloned features_config.
++  // Collect web_search_emulation（whitelist platforms only: the UI is the single
++  // source of truth, so every whitelisted section is written explicitly — false
++  // included — to avoid leaving a stale `true` behind for disabled sections）.
+   const wsEmulation: Record<string, boolean> = {}
+   for (const section of form.platforms) {
+-    if (!section.enabled) continue
+-    if (section.platform === 'anthropic') {
+-      wsEmulation[section.platform] = !!section.web_search_emulation
+-    }
++    if (!WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform)) continue
++    wsEmulation[section.platform] = section.enabled ? !!section.web_search_emulation : false
+   }
+   if (Object.keys(wsEmulation).length > 0) {
+     featuresConfig.web_search_emulation = wsEmulation
+diff --git a/frontend/src/views/admin/__tests__/ChannelsView.webSearchEmulation.spec.ts b/frontend/src/views/admin/__tests__/ChannelsView.webSearchEmulation.spec.ts
+new file mode 100644
+index 000000000..361838cc9
+--- /dev/null
++++ b/frontend/src/views/admin/__tests__/ChannelsView.webSearchEmulation.spec.ts
+@@ -0,0 +1,41 @@
++import { readFileSync } from 'node:fs'
++import { resolve } from 'node:path'
++import { describe, expect, it } from 'vitest'
++
++/**
++ * Regression guard for features_config.web_search_emulation:
++ * the channel editor used to render and submit the anthropic dimension only,
++ * so any UI save overwrote the other platform dimensions written by the API.
++ * Both sides must now follow the platform whitelist.
++ */
++describe('ChannelsView web_search_emulation platform whitelist', () => {
++  const source = readFileSync(resolve('src/views/admin/ChannelsView.vue'), 'utf8')
++  const zh = readFileSync(resolve('src/i18n/locales/zh/admin/channels.ts'), 'utf8')
++  const en = readFileSync(resolve('src/i18n/locales/en/admin/channels.ts'), 'utf8')
++
++  it('declares the whitelist aligned with the backend platform whitelist', () => {
++    expect(source).toContain('const WEB_SEARCH_EMULATION_PLATFORMS: ReadonlySet<string> = new Set([')
++    for (const platform of ['anthropic', 'openai', 'command_code', 'opencode_go', 'minimax', 'zhipu']) {
++      expect(source).toContain(`'${platform}',`)
++    }
++  })
++
++  it('renders the toggle for every whitelisted platform section', () => {
++    expect(source).toContain('WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform) && webSearchGlobalEnabled')
++    expect(source).not.toContain("section.platform === 'anthropic' && webSearchGlobalEnabled")
++  })
++
++  it('submits every whitelisted platform dimension on save', () => {
++    const block = source.match(/const wsEmulation[\s\S]*?delete featuresConfig\.web_search_emulation/)?.[0] ?? ''
++    expect(block).toContain('WEB_SEARCH_EMULATION_PLATFORMS.has(section.platform)')
++    expect(block).toContain('wsEmulation[section.platform] = section.enabled ? !!section.web_search_emulation : false')
++    expect(block).not.toContain("'anthropic'")
++  })
++
++  it('i18n hint no longer hardcodes Anthropic as the only platform', () => {
++    expect(zh).not.toContain('所有 Anthropic 分组的账号将自动拦截')
++    expect(en).not.toContain("Anthropic groups will intercept")
++    expect(zh).toContain('webSearchEmulationHint')
++    expect(en).toContain('webSearchEmulationHint')
++  })
++})

@@ -1,0 +1,147 @@
+diff --git a/backend/internal/pkg/antigravity/response_transformer.go b/backend/internal/pkg/antigravity/response_transformer.go
+index 03e26ac50..712234043 100644
+--- a/backend/internal/pkg/antigravity/response_transformer.go
++++ b/backend/internal/pkg/antigravity/response_transformer.go
+@@ -3,6 +3,7 @@ package antigravity
+ import (
+ 	"crypto/rand"
+ 	"encoding/json"
++	"errors"
+ 	"fmt"
+ 	"log"
+ 	"strings"
+@@ -10,6 +11,8 @@ import (
+ 	"time"
+ )
+ 
++var ErrMalformedFunctionCall = errors.New("upstream returned MALFORMED_FUNCTION_CALL")
++
+ // TransformGeminiToClaude 将 Gemini 响应转换为 Claude 格式（非流式）
+ func TransformGeminiToClaude(geminiResp []byte, originalModel string) ([]byte, *ClaudeUsage, error) {
+ 	// 解包 v1internal 响应
+@@ -34,6 +37,10 @@ func TransformGeminiToClaude(geminiResp []byte, originalModel string) ([]byte, *
+ 		v1Resp.ModelVersion = directResp.ModelVersion
+ 	}
+ 
++	if len(v1Resp.Response.Candidates) > 0 && v1Resp.Response.Candidates[0].FinishReason == "MALFORMED_FUNCTION_CALL" {
++		return nil, nil, ErrMalformedFunctionCall
++	}
++
+ 	// 使用处理器转换
+ 	processor := NewNonStreamingProcessor()
+ 	claudeResp := processor.Process(&v1Resp.Response, v1Resp.ResponseID, originalModel)
+diff --git a/backend/internal/pkg/antigravity/response_transformer_malformed_test.go b/backend/internal/pkg/antigravity/response_transformer_malformed_test.go
+new file mode 100644
+index 000000000..84616e603
+--- /dev/null
++++ b/backend/internal/pkg/antigravity/response_transformer_malformed_test.go
+@@ -0,0 +1,18 @@
++package antigravity
++
++import (
++	"errors"
++	"testing"
++)
++
++func TestMalformedFunctionCallTransform(t *testing.T) {
++	for _, body := range []string{
++		`{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL","content":{"parts":[{"thoughtSignature":"test-signature"}]}}]}`,
++		`{"response":{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}}`,
++	} {
++		response, _, err := TransformGeminiToClaude([]byte(body), "test-model")
++		if !errors.Is(err, ErrMalformedFunctionCall) || response != nil {
++			t.Fatalf("expected malformed call error without successful response: %s %v", response, err)
++		}
++	}
++}
+diff --git a/backend/internal/service/antigravity_gateway_compat.go b/backend/internal/service/antigravity_gateway_compat.go
+index 286967544..f4e041adc 100644
+--- a/backend/internal/service/antigravity_gateway_compat.go
++++ b/backend/internal/service/antigravity_gateway_compat.go
+@@ -606,6 +606,9 @@ func (s *AntigravityGatewayService) mapAntigravityCompatCollectionError(c *gin.C
+ 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+ 		return err
+ 	}
++	if errors.Is(err, antigravity.ErrMalformedFunctionCall) {
++		return s.writeAntigravityCompatError(c, http.StatusBadGateway, "malformed_function_call", err.Error())
++	}
+ 	if strings.Contains(err.Error(), "stream data interval timeout") {
+ 		return s.writeAntigravityCompatError(c, http.StatusBadGateway, "upstream_timeout", "Upstream stream data interval timeout")
+ 	}
+diff --git a/backend/internal/service/antigravity_gateway_nonstream_malformed_test.go b/backend/internal/service/antigravity_gateway_nonstream_malformed_test.go
+new file mode 100644
+index 000000000..3f4a7c0d6
+--- /dev/null
++++ b/backend/internal/service/antigravity_gateway_nonstream_malformed_test.go
+@@ -0,0 +1,55 @@
++package service
++
++import (
++	"io"
++	"net/http"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestAntigravityMalformedFunctionCallNonStreaming(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, tc := range []struct {
++		name   string
++		frames string
++		status int
++	}{
++		{"signature only", `data: {"response":{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL","content":{"parts":[{"thoughtSignature":"test-signature"}]}}]}}` + "\n\n", http.StatusBadGateway},
++		{"error after parts", `data: {"response":{"candidates":[{"content":{"parts":[{"functionCall":{"name":"read","args":{}}}]}}]}}` + "\n\n" + `data: {"response":{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}}` + "\n\n", http.StatusBadGateway},
++		{"error before usage", `data: {"response":{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}}` + "\n\n" + `data: {"response":{"usageMetadata":{"promptTokenCount":1}}}` + "\n\n", http.StatusBadGateway},
++		{"normal tool", `data: {"response":{"candidates":[{"finishReason":"STOP","content":{"parts":[{"functionCall":{"name":"read","args":{}}}]}}]}}` + "\n\n", http.StatusOK},
++		{"normal text", `data: {"response":{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"hello"}]}}]}}` + "\n\n", http.StatusOK},
++	} {
++		for _, protocol := range []string{"responses", "chat"} {
++			t.Run(protocol+"/"+tc.name, func(t *testing.T) {
++				svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, nil)
++				c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/responses", nil)
++				resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(tc.frames))}
++				handle := svc.handleResponsesNonStreamingFromAntigravity
++				if protocol == "chat" {
++					handle = svc.handleChatCompletionsNonStreamingFromAntigravity
++				}
++				_, err := handle(c, resp, time.Now(), "test-model")
++				require.Equal(t, tc.status, recorder.Code)
++				if tc.status == http.StatusBadGateway {
++					require.Error(t, err)
++					require.Contains(t, recorder.Body.String(), `"type":"malformed_function_call"`)
++					require.Contains(t, recorder.Body.String(), "MALFORMED_FUNCTION_CALL")
++					require.NotContains(t, recorder.Body.String(), `"status":"completed"`)
++				} else {
++					require.NoError(t, err)
++					if protocol == "responses" {
++						require.Contains(t, recorder.Body.String(), `"status":"completed"`)
++					} else {
++						require.Contains(t, recorder.Body.String(), `"choices"`)
++					}
++				}
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/antigravity_gateway_streaming.go b/backend/internal/service/antigravity_gateway_streaming.go
+index 58d5b9ce4..75b0bd5a7 100644
+--- a/backend/internal/service/antigravity_gateway_streaming.go
++++ b/backend/internal/service/antigravity_gateway_streaming.go
+@@ -850,6 +850,11 @@ func (s *AntigravityGatewayService) collectClaudeStreamResponse(c *gin.Context,
+ 				continue
+ 			}
+ 
++			// 最后的错误帧可能没有 parts，必须在聚合选择前保留失败原因。
++			if extractGeminiFinishReason(parsed) == "MALFORMED_FUNCTION_CALL" {
++				return nil, nil, antigravity.ErrMalformedFunctionCall
++			}
++
+ 			last = parsed
+ 
+ 			// 保留最后一个有 parts 的响应，并收集所有 parts

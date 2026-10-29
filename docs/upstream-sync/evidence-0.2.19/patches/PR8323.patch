@@ -1,0 +1,1748 @@
+diff --git a/backend/ent/group.go b/backend/ent/group.go
+index 747a09d1a..f6f54735d 100644
+--- a/backend/ent/group.go
++++ b/backend/ent/group.go
+@@ -64,6 +64,8 @@ type Group struct {
+ 	AllowImageGeneration bool `json:"allow_image_generation,omitempty"`
+ 	// 是否允许该分组使用批量图片生成能力
+ 	AllowBatchImageGeneration bool `json:"allow_batch_image_generation,omitempty"`
++	// 图片生成是否按实际出图张数计费
++	ImageCountBilling bool `json:"image_count_billing,omitempty"`
+ 	// 图片生成是否使用独立倍率；false 表示共享分组有效倍率
+ 	ImageRateIndependent bool `json:"image_rate_independent,omitempty"`
+ 	// 图片生成独立倍率，仅 image_rate_independent=true 时生效
+@@ -262,7 +264,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
+ 		switch columns[i] {
+ 		case group.FieldI18n, group.FieldVideoModelPrices, group.FieldModelPricing, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelAllowlist, group.FieldCodexModelsManifestConfig, group.FieldReasoningEffortMappings:
+ 			values[i] = new([]byte)
+-		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
++		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageCountBilling, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
+ 			values[i] = new(sql.NullBool)
+ 		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
+ 			values[i] = new(sql.NullFloat64)
+@@ -433,6 +435,12 @@ func (_m *Group) assignValues(columns []string, values []any) error {
+ 			} else if value.Valid {
+ 				_m.AllowBatchImageGeneration = value.Bool
+ 			}
++		case group.FieldImageCountBilling:
++			if value, ok := values[i].(*sql.NullBool); !ok {
++				return fmt.Errorf("unexpected type %T for field image_count_billing", values[i])
++			} else if value.Valid {
++				_m.ImageCountBilling = value.Bool
++			}
+ 		case group.FieldImageRateIndependent:
+ 			if value, ok := values[i].(*sql.NullBool); !ok {
+ 				return fmt.Errorf("unexpected type %T for field image_rate_independent", values[i])
+@@ -886,6 +894,9 @@ func (_m *Group) String() string {
+ 	builder.WriteString("allow_batch_image_generation=")
+ 	builder.WriteString(fmt.Sprintf("%v", _m.AllowBatchImageGeneration))
+ 	builder.WriteString(", ")
++	builder.WriteString("image_count_billing=")
++	builder.WriteString(fmt.Sprintf("%v", _m.ImageCountBilling))
++	builder.WriteString(", ")
+ 	builder.WriteString("image_rate_independent=")
+ 	builder.WriteString(fmt.Sprintf("%v", _m.ImageRateIndependent))
+ 	builder.WriteString(", ")
+diff --git a/backend/ent/group/group.go b/backend/ent/group/group.go
+index cf3feeb6c..5e265e6c3 100644
+--- a/backend/ent/group/group.go
++++ b/backend/ent/group/group.go
+@@ -60,6 +60,8 @@ const (
+ 	FieldAllowImageGeneration = "allow_image_generation"
+ 	// FieldAllowBatchImageGeneration holds the string denoting the allow_batch_image_generation field in the database.
+ 	FieldAllowBatchImageGeneration = "allow_batch_image_generation"
++	// FieldImageCountBilling holds the string denoting the image_count_billing field in the database.
++	FieldImageCountBilling = "image_count_billing"
+ 	// FieldImageRateIndependent holds the string denoting the image_rate_independent field in the database.
+ 	FieldImageRateIndependent = "image_rate_independent"
+ 	// FieldImageRateMultiplier holds the string denoting the image_rate_multiplier field in the database.
+@@ -247,6 +249,7 @@ var Columns = []string{
+ 	FieldDefaultValidityDays,
+ 	FieldAllowImageGeneration,
+ 	FieldAllowBatchImageGeneration,
++	FieldImageCountBilling,
+ 	FieldImageRateIndependent,
+ 	FieldImageRateMultiplier,
+ 	FieldImagePrice1k,
+@@ -367,6 +370,8 @@ var (
+ 	DefaultAllowImageGeneration bool
+ 	// DefaultAllowBatchImageGeneration holds the default value on creation for the "allow_batch_image_generation" field.
+ 	DefaultAllowBatchImageGeneration bool
++	// DefaultImageCountBilling holds the default value on creation for the "image_count_billing" field.
++	DefaultImageCountBilling bool
+ 	// DefaultImageRateIndependent holds the default value on creation for the "image_rate_independent" field.
+ 	DefaultImageRateIndependent bool
+ 	// DefaultImageRateMultiplier holds the default value on creation for the "image_rate_multiplier" field.
+@@ -554,6 +559,11 @@ func ByAllowBatchImageGeneration(opts ...sql.OrderTermOption) OrderOption {
+ 	return sql.OrderByField(FieldAllowBatchImageGeneration, opts...).ToFunc()
+ }
+ 
++// ByImageCountBilling orders the results by the image_count_billing field.
++func ByImageCountBilling(opts ...sql.OrderTermOption) OrderOption {
++	return sql.OrderByField(FieldImageCountBilling, opts...).ToFunc()
++}
++
+ // ByImageRateIndependent orders the results by the image_rate_independent field.
+ func ByImageRateIndependent(opts ...sql.OrderTermOption) OrderOption {
+ 	return sql.OrderByField(FieldImageRateIndependent, opts...).ToFunc()
+diff --git a/backend/ent/group/where.go b/backend/ent/group/where.go
+index 149f2da8a..967965aa2 100644
+--- a/backend/ent/group/where.go
++++ b/backend/ent/group/where.go
+@@ -160,6 +160,11 @@ func AllowBatchImageGeneration(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldEQ(FieldAllowBatchImageGeneration, v))
+ }
+ 
++// ImageCountBilling applies equality check predicate on the "image_count_billing" field. It's identical to ImageCountBillingEQ.
++func ImageCountBilling(v bool) predicate.Group {
++	return predicate.Group(sql.FieldEQ(FieldImageCountBilling, v))
++}
++
+ // ImageRateIndependent applies equality check predicate on the "image_rate_independent" field. It's identical to ImageRateIndependentEQ.
+ func ImageRateIndependent(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldEQ(FieldImageRateIndependent, v))
+@@ -1325,6 +1330,16 @@ func AllowBatchImageGenerationNEQ(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldNEQ(FieldAllowBatchImageGeneration, v))
+ }
+ 
++// ImageCountBillingEQ applies the EQ predicate on the "image_count_billing" field.
++func ImageCountBillingEQ(v bool) predicate.Group {
++	return predicate.Group(sql.FieldEQ(FieldImageCountBilling, v))
++}
++
++// ImageCountBillingNEQ applies the NEQ predicate on the "image_count_billing" field.
++func ImageCountBillingNEQ(v bool) predicate.Group {
++	return predicate.Group(sql.FieldNEQ(FieldImageCountBilling, v))
++}
++
+ // ImageRateIndependentEQ applies the EQ predicate on the "image_rate_independent" field.
+ func ImageRateIndependentEQ(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldEQ(FieldImageRateIndependent, v))
+diff --git a/backend/ent/group_create.go b/backend/ent/group_create.go
+index d2a3a0d0e..12b585c67 100644
+--- a/backend/ent/group_create.go
++++ b/backend/ent/group_create.go
+@@ -322,6 +322,20 @@ func (_c *GroupCreate) SetNillableAllowBatchImageGeneration(v *bool) *GroupCreat
+ 	return _c
+ }
+ 
++// SetImageCountBilling sets the "image_count_billing" field.
++func (_c *GroupCreate) SetImageCountBilling(v bool) *GroupCreate {
++	_c.mutation.SetImageCountBilling(v)
++	return _c
++}
++
++// SetNillableImageCountBilling sets the "image_count_billing" field if the given value is not nil.
++func (_c *GroupCreate) SetNillableImageCountBilling(v *bool) *GroupCreate {
++	if v != nil {
++		_c.SetImageCountBilling(*v)
++	}
++	return _c
++}
++
+ // SetImageRateIndependent sets the "image_rate_independent" field.
+ func (_c *GroupCreate) SetImageRateIndependent(v bool) *GroupCreate {
+ 	_c.mutation.SetImageRateIndependent(v)
+@@ -1105,6 +1119,10 @@ func (_c *GroupCreate) defaults() error {
+ 		v := group.DefaultAllowBatchImageGeneration
+ 		_c.mutation.SetAllowBatchImageGeneration(v)
+ 	}
++	if _, ok := _c.mutation.ImageCountBilling(); !ok {
++		v := group.DefaultImageCountBilling
++		_c.mutation.SetImageCountBilling(v)
++	}
+ 	if _, ok := _c.mutation.ImageRateIndependent(); !ok {
+ 		v := group.DefaultImageRateIndependent
+ 		_c.mutation.SetImageRateIndependent(v)
+@@ -1309,6 +1327,9 @@ func (_c *GroupCreate) check() error {
+ 	if _, ok := _c.mutation.AllowBatchImageGeneration(); !ok {
+ 		return &ValidationError{Name: "allow_batch_image_generation", err: errors.New(`ent: missing required field "Group.allow_batch_image_generation"`)}
+ 	}
++	if _, ok := _c.mutation.ImageCountBilling(); !ok {
++		return &ValidationError{Name: "image_count_billing", err: errors.New(`ent: missing required field "Group.image_count_billing"`)}
++	}
+ 	if _, ok := _c.mutation.ImageRateIndependent(); !ok {
+ 		return &ValidationError{Name: "image_rate_independent", err: errors.New(`ent: missing required field "Group.image_rate_independent"`)}
+ 	}
+@@ -1546,6 +1567,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
+ 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
+ 		_node.AllowBatchImageGeneration = value
+ 	}
++	if value, ok := _c.mutation.ImageCountBilling(); ok {
++		_spec.SetField(group.FieldImageCountBilling, field.TypeBool, value)
++		_node.ImageCountBilling = value
++	}
+ 	if value, ok := _c.mutation.ImageRateIndependent(); ok {
+ 		_spec.SetField(group.FieldImageRateIndependent, field.TypeBool, value)
+ 		_node.ImageRateIndependent = value
+@@ -2188,6 +2213,18 @@ func (u *GroupUpsert) UpdateAllowBatchImageGeneration() *GroupUpsert {
+ 	return u
+ }
+ 
++// SetImageCountBilling sets the "image_count_billing" field.
++func (u *GroupUpsert) SetImageCountBilling(v bool) *GroupUpsert {
++	u.Set(group.FieldImageCountBilling, v)
++	return u
++}
++
++// UpdateImageCountBilling sets the "image_count_billing" field to the value that was provided on create.
++func (u *GroupUpsert) UpdateImageCountBilling() *GroupUpsert {
++	u.SetExcluded(group.FieldImageCountBilling)
++	return u
++}
++
+ // SetImageRateIndependent sets the "image_rate_independent" field.
+ func (u *GroupUpsert) SetImageRateIndependent(v bool) *GroupUpsert {
+ 	u.Set(group.FieldImageRateIndependent, v)
+@@ -3355,6 +3392,20 @@ func (u *GroupUpsertOne) UpdateAllowBatchImageGeneration() *GroupUpsertOne {
+ 	})
+ }
+ 
++// SetImageCountBilling sets the "image_count_billing" field.
++func (u *GroupUpsertOne) SetImageCountBilling(v bool) *GroupUpsertOne {
++	return u.Update(func(s *GroupUpsert) {
++		s.SetImageCountBilling(v)
++	})
++}
++
++// UpdateImageCountBilling sets the "image_count_billing" field to the value that was provided on create.
++func (u *GroupUpsertOne) UpdateImageCountBilling() *GroupUpsertOne {
++	return u.Update(func(s *GroupUpsert) {
++		s.UpdateImageCountBilling()
++	})
++}
++
+ // SetImageRateIndependent sets the "image_rate_independent" field.
+ func (u *GroupUpsertOne) SetImageRateIndependent(v bool) *GroupUpsertOne {
+ 	return u.Update(func(s *GroupUpsert) {
+@@ -4815,6 +4866,20 @@ func (u *GroupUpsertBulk) UpdateAllowBatchImageGeneration() *GroupUpsertBulk {
+ 	})
+ }
+ 
++// SetImageCountBilling sets the "image_count_billing" field.
++func (u *GroupUpsertBulk) SetImageCountBilling(v bool) *GroupUpsertBulk {
++	return u.Update(func(s *GroupUpsert) {
++		s.SetImageCountBilling(v)
++	})
++}
++
++// UpdateImageCountBilling sets the "image_count_billing" field to the value that was provided on create.
++func (u *GroupUpsertBulk) UpdateImageCountBilling() *GroupUpsertBulk {
++	return u.Update(func(s *GroupUpsert) {
++		s.UpdateImageCountBilling()
++	})
++}
++
+ // SetImageRateIndependent sets the "image_rate_independent" field.
+ func (u *GroupUpsertBulk) SetImageRateIndependent(v bool) *GroupUpsertBulk {
+ 	return u.Update(func(s *GroupUpsert) {
+diff --git a/backend/ent/group_update.go b/backend/ent/group_update.go
+index d4d8b8572..732c2a7c7 100644
+--- a/backend/ent/group_update.go
++++ b/backend/ent/group_update.go
+@@ -373,6 +373,20 @@ func (_u *GroupUpdate) SetNillableAllowBatchImageGeneration(v *bool) *GroupUpdat
+ 	return _u
+ }
+ 
++// SetImageCountBilling sets the "image_count_billing" field.
++func (_u *GroupUpdate) SetImageCountBilling(v bool) *GroupUpdate {
++	_u.mutation.SetImageCountBilling(v)
++	return _u
++}
++
++// SetNillableImageCountBilling sets the "image_count_billing" field if the given value is not nil.
++func (_u *GroupUpdate) SetNillableImageCountBilling(v *bool) *GroupUpdate {
++	if v != nil {
++		_u.SetImageCountBilling(*v)
++	}
++	return _u
++}
++
+ // SetImageRateIndependent sets the "image_rate_independent" field.
+ func (_u *GroupUpdate) SetImageRateIndependent(v bool) *GroupUpdate {
+ 	_u.mutation.SetImageRateIndependent(v)
+@@ -1665,6 +1679,9 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+ 	if value, ok := _u.mutation.AllowBatchImageGeneration(); ok {
+ 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
+ 	}
++	if value, ok := _u.mutation.ImageCountBilling(); ok {
++		_spec.SetField(group.FieldImageCountBilling, field.TypeBool, value)
++	}
+ 	if value, ok := _u.mutation.ImageRateIndependent(); ok {
+ 		_spec.SetField(group.FieldImageRateIndependent, field.TypeBool, value)
+ 	}
+@@ -2576,6 +2593,20 @@ func (_u *GroupUpdateOne) SetNillableAllowBatchImageGeneration(v *bool) *GroupUp
+ 	return _u
+ }
+ 
++// SetImageCountBilling sets the "image_count_billing" field.
++func (_u *GroupUpdateOne) SetImageCountBilling(v bool) *GroupUpdateOne {
++	_u.mutation.SetImageCountBilling(v)
++	return _u
++}
++
++// SetNillableImageCountBilling sets the "image_count_billing" field if the given value is not nil.
++func (_u *GroupUpdateOne) SetNillableImageCountBilling(v *bool) *GroupUpdateOne {
++	if v != nil {
++		_u.SetImageCountBilling(*v)
++	}
++	return _u
++}
++
+ // SetImageRateIndependent sets the "image_rate_independent" field.
+ func (_u *GroupUpdateOne) SetImageRateIndependent(v bool) *GroupUpdateOne {
+ 	_u.mutation.SetImageRateIndependent(v)
+@@ -3898,6 +3929,9 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
+ 	if value, ok := _u.mutation.AllowBatchImageGeneration(); ok {
+ 		_spec.SetField(group.FieldAllowBatchImageGeneration, field.TypeBool, value)
+ 	}
++	if value, ok := _u.mutation.ImageCountBilling(); ok {
++		_spec.SetField(group.FieldImageCountBilling, field.TypeBool, value)
++	}
+ 	if value, ok := _u.mutation.ImageRateIndependent(); ok {
+ 		_spec.SetField(group.FieldImageRateIndependent, field.TypeBool, value)
+ 	}
+diff --git a/backend/ent/migrate/schema.go b/backend/ent/migrate/schema.go
+index f12c75839..18c3fa9b7 100644
+--- a/backend/ent/migrate/schema.go
++++ b/backend/ent/migrate/schema.go
+@@ -925,6 +925,7 @@ var (
+ 		{Name: "default_validity_days", Type: field.TypeInt, Default: 30},
+ 		{Name: "allow_image_generation", Type: field.TypeBool, Default: false},
+ 		{Name: "allow_batch_image_generation", Type: field.TypeBool, Default: false},
++		{Name: "image_count_billing", Type: field.TypeBool, Default: false},
+ 		{Name: "image_rate_independent", Type: field.TypeBool, Default: false},
+ 		{Name: "image_rate_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+ 		{Name: "image_price_1k", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+@@ -1005,7 +1006,7 @@ var (
+ 			{
+ 				Name:    "group_sort_order",
+ 				Unique:  false,
+-				Columns: []*schema.Column{GroupsColumns[50]},
++				Columns: []*schema.Column{GroupsColumns[51]},
+ 			},
+ 			{
+ 				Name:    "idx_groups_duplicate_operation_id_active",
+diff --git a/backend/ent/mutation.go b/backend/ent/mutation.go
+index b4442aef4..9f6a50b1a 100644
+--- a/backend/ent/mutation.go
++++ b/backend/ent/mutation.go
+@@ -22109,6 +22109,7 @@ type GroupMutation struct {
+ 	adddefault_validity_days                *int
+ 	allow_image_generation                  *bool
+ 	allow_batch_image_generation            *bool
++	image_count_billing                     *bool
+ 	image_rate_independent                  *bool
+ 	image_rate_multiplier                   *float64
+ 	addimage_rate_multiplier                *float64
+@@ -23293,6 +23294,42 @@ func (m *GroupMutation) ResetAllowBatchImageGeneration() {
+ 	m.allow_batch_image_generation = nil
+ }
+ 
++// SetImageCountBilling sets the "image_count_billing" field.
++func (m *GroupMutation) SetImageCountBilling(b bool) {
++	m.image_count_billing = &b
++}
++
++// ImageCountBilling returns the value of the "image_count_billing" field in the mutation.
++func (m *GroupMutation) ImageCountBilling() (r bool, exists bool) {
++	v := m.image_count_billing
++	if v == nil {
++		return
++	}
++	return *v, true
++}
++
++// OldImageCountBilling returns the old "image_count_billing" field's value of the Group entity.
++// If the Group object wasn't provided to the builder, the object is fetched from the database.
++// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
++func (m *GroupMutation) OldImageCountBilling(ctx context.Context) (v bool, err error) {
++	if !m.op.Is(OpUpdateOne) {
++		return v, errors.New("OldImageCountBilling is only allowed on UpdateOne operations")
++	}
++	if m.id == nil || m.oldValue == nil {
++		return v, errors.New("OldImageCountBilling requires an ID field in the mutation")
++	}
++	oldValue, err := m.oldValue(ctx)
++	if err != nil {
++		return v, fmt.Errorf("querying old value for OldImageCountBilling: %w", err)
++	}
++	return oldValue.ImageCountBilling, nil
++}
++
++// ResetImageCountBilling resets all changes to the "image_count_billing" field.
++func (m *GroupMutation) ResetImageCountBilling() {
++	m.image_count_billing = nil
++}
++
+ // SetImageRateIndependent sets the "image_rate_independent" field.
+ func (m *GroupMutation) SetImageRateIndependent(b bool) {
+ 	m.image_rate_independent = &b
+@@ -25958,7 +25995,7 @@ func (m *GroupMutation) Type() string {
+ // order to get all numeric fields that were incremented/decremented, call
+ // AddedFields().
+ func (m *GroupMutation) Fields() []string {
+-	fields := make([]string, 0, 67)
++	fields := make([]string, 0, 68)
+ 	if m.created_at != nil {
+ 		fields = append(fields, group.FieldCreatedAt)
+ 	}
+@@ -26025,6 +26062,9 @@ func (m *GroupMutation) Fields() []string {
+ 	if m.allow_batch_image_generation != nil {
+ 		fields = append(fields, group.FieldAllowBatchImageGeneration)
+ 	}
++	if m.image_count_billing != nil {
++		fields = append(fields, group.FieldImageCountBilling)
++	}
+ 	if m.image_rate_independent != nil {
+ 		fields = append(fields, group.FieldImageRateIndependent)
+ 	}
+@@ -26212,6 +26252,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
+ 		return m.AllowImageGeneration()
+ 	case group.FieldAllowBatchImageGeneration:
+ 		return m.AllowBatchImageGeneration()
++	case group.FieldImageCountBilling:
++		return m.ImageCountBilling()
+ 	case group.FieldImageRateIndependent:
+ 		return m.ImageRateIndependent()
+ 	case group.FieldImageRateMultiplier:
+@@ -26355,6 +26397,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
+ 		return m.OldAllowImageGeneration(ctx)
+ 	case group.FieldAllowBatchImageGeneration:
+ 		return m.OldAllowBatchImageGeneration(ctx)
++	case group.FieldImageCountBilling:
++		return m.OldImageCountBilling(ctx)
+ 	case group.FieldImageRateIndependent:
+ 		return m.OldImageRateIndependent(ctx)
+ 	case group.FieldImageRateMultiplier:
+@@ -26608,6 +26652,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
+ 		}
+ 		m.SetAllowBatchImageGeneration(v)
+ 		return nil
++	case group.FieldImageCountBilling:
++		v, ok := value.(bool)
++		if !ok {
++			return fmt.Errorf("unexpected type %T for field %s", value, name)
++		}
++		m.SetImageCountBilling(v)
++		return nil
+ 	case group.FieldImageRateIndependent:
+ 		v, ok := value.(bool)
+ 		if !ok {
+@@ -27500,6 +27551,9 @@ func (m *GroupMutation) ResetField(name string) error {
+ 	case group.FieldAllowBatchImageGeneration:
+ 		m.ResetAllowBatchImageGeneration()
+ 		return nil
++	case group.FieldImageCountBilling:
++		m.ResetImageCountBilling()
++		return nil
+ 	case group.FieldImageRateIndependent:
+ 		m.ResetImageRateIndependent()
+ 		return nil
+diff --git a/backend/ent/runtime/runtime.go b/backend/ent/runtime/runtime.go
+index d36bddb44..394f22211 100644
+--- a/backend/ent/runtime/runtime.go
++++ b/backend/ent/runtime/runtime.go
+@@ -1103,142 +1103,146 @@ func init() {
+ 	groupDescAllowBatchImageGeneration := groupFields[18].Descriptor()
+ 	// group.DefaultAllowBatchImageGeneration holds the default value on creation for the allow_batch_image_generation field.
+ 	group.DefaultAllowBatchImageGeneration = groupDescAllowBatchImageGeneration.Default.(bool)
++	// groupDescImageCountBilling is the schema descriptor for image_count_billing field.
++	groupDescImageCountBilling := groupFields[19].Descriptor()
++	// group.DefaultImageCountBilling holds the default value on creation for the image_count_billing field.
++	group.DefaultImageCountBilling = groupDescImageCountBilling.Default.(bool)
+ 	// groupDescImageRateIndependent is the schema descriptor for image_rate_independent field.
+-	groupDescImageRateIndependent := groupFields[19].Descriptor()
++	groupDescImageRateIndependent := groupFields[20].Descriptor()
+ 	// group.DefaultImageRateIndependent holds the default value on creation for the image_rate_independent field.
+ 	group.DefaultImageRateIndependent = groupDescImageRateIndependent.Default.(bool)
+ 	// groupDescImageRateMultiplier is the schema descriptor for image_rate_multiplier field.
+-	groupDescImageRateMultiplier := groupFields[20].Descriptor()
++	groupDescImageRateMultiplier := groupFields[21].Descriptor()
+ 	// group.DefaultImageRateMultiplier holds the default value on creation for the image_rate_multiplier field.
+ 	group.DefaultImageRateMultiplier = groupDescImageRateMultiplier.Default.(float64)
+ 	// groupDescBatchImageDiscountMultiplier is the schema descriptor for batch_image_discount_multiplier field.
+-	groupDescBatchImageDiscountMultiplier := groupFields[24].Descriptor()
++	groupDescBatchImageDiscountMultiplier := groupFields[25].Descriptor()
+ 	// group.DefaultBatchImageDiscountMultiplier holds the default value on creation for the batch_image_discount_multiplier field.
+ 	group.DefaultBatchImageDiscountMultiplier = groupDescBatchImageDiscountMultiplier.Default.(float64)
+ 	// groupDescBatchImageHoldMultiplier is the schema descriptor for batch_image_hold_multiplier field.
+-	groupDescBatchImageHoldMultiplier := groupFields[25].Descriptor()
++	groupDescBatchImageHoldMultiplier := groupFields[26].Descriptor()
+ 	// group.DefaultBatchImageHoldMultiplier holds the default value on creation for the batch_image_hold_multiplier field.
+ 	group.DefaultBatchImageHoldMultiplier = groupDescBatchImageHoldMultiplier.Default.(float64)
+ 	// groupDescVideoRateIndependent is the schema descriptor for video_rate_independent field.
+-	groupDescVideoRateIndependent := groupFields[26].Descriptor()
++	groupDescVideoRateIndependent := groupFields[27].Descriptor()
+ 	// group.DefaultVideoRateIndependent holds the default value on creation for the video_rate_independent field.
+ 	group.DefaultVideoRateIndependent = groupDescVideoRateIndependent.Default.(bool)
+ 	// groupDescVideoRateMultiplier is the schema descriptor for video_rate_multiplier field.
+-	groupDescVideoRateMultiplier := groupFields[27].Descriptor()
++	groupDescVideoRateMultiplier := groupFields[28].Descriptor()
+ 	// group.DefaultVideoRateMultiplier holds the default value on creation for the video_rate_multiplier field.
+ 	group.DefaultVideoRateMultiplier = groupDescVideoRateMultiplier.Default.(float64)
+ 	// groupDescSearchPricePer1k is the schema descriptor for search_price_per_1k field.
+-	groupDescSearchPricePer1k := groupFields[33].Descriptor()
++	groupDescSearchPricePer1k := groupFields[34].Descriptor()
+ 	// group.SearchPricePer1kValidator is a validator for the "search_price_per_1k" field. It is called by the builders before save.
+ 	group.SearchPricePer1kValidator = groupDescSearchPricePer1k.Validators[0].(func(float64) error)
+ 	// groupDescAudioRealtimePricePerMin is the schema descriptor for audio_realtime_price_per_min field.
+-	groupDescAudioRealtimePricePerMin := groupFields[34].Descriptor()
++	groupDescAudioRealtimePricePerMin := groupFields[35].Descriptor()
+ 	// group.AudioRealtimePricePerMinValidator is a validator for the "audio_realtime_price_per_min" field. It is called by the builders before save.
+ 	group.AudioRealtimePricePerMinValidator = groupDescAudioRealtimePricePerMin.Validators[0].(func(float64) error)
+ 	// groupDescAudioTtsPricePerMillionChars is the schema descriptor for audio_tts_price_per_million_chars field.
+-	groupDescAudioTtsPricePerMillionChars := groupFields[35].Descriptor()
++	groupDescAudioTtsPricePerMillionChars := groupFields[36].Descriptor()
+ 	// group.AudioTtsPricePerMillionCharsValidator is a validator for the "audio_tts_price_per_million_chars" field. It is called by the builders before save.
+ 	group.AudioTtsPricePerMillionCharsValidator = groupDescAudioTtsPricePerMillionChars.Validators[0].(func(float64) error)
+ 	// groupDescAudioSttPricePerHour is the schema descriptor for audio_stt_price_per_hour field.
+-	groupDescAudioSttPricePerHour := groupFields[36].Descriptor()
++	groupDescAudioSttPricePerHour := groupFields[37].Descriptor()
+ 	// group.AudioSttPricePerHourValidator is a validator for the "audio_stt_price_per_hour" field. It is called by the builders before save.
+ 	group.AudioSttPricePerHourValidator = groupDescAudioSttPricePerHour.Validators[0].(func(float64) error)
+ 	// groupDescLongContextPricingEnabled is the schema descriptor for long_context_pricing_enabled field.
+-	groupDescLongContextPricingEnabled := groupFields[37].Descriptor()
++	groupDescLongContextPricingEnabled := groupFields[38].Descriptor()
+ 	// group.DefaultLongContextPricingEnabled holds the default value on creation for the long_context_pricing_enabled field.
+ 	group.DefaultLongContextPricingEnabled = groupDescLongContextPricingEnabled.Default.(bool)
+ 	// groupDescClaudeCodeOnly is the schema descriptor for claude_code_only field.
+-	groupDescClaudeCodeOnly := groupFields[39].Descriptor()
++	groupDescClaudeCodeOnly := groupFields[40].Descriptor()
+ 	// group.DefaultClaudeCodeOnly holds the default value on creation for the claude_code_only field.
+ 	group.DefaultClaudeCodeOnly = groupDescClaudeCodeOnly.Default.(bool)
+ 	// groupDescModelRoutingEnabled is the schema descriptor for model_routing_enabled field.
+-	groupDescModelRoutingEnabled := groupFields[43].Descriptor()
++	groupDescModelRoutingEnabled := groupFields[44].Descriptor()
+ 	// group.DefaultModelRoutingEnabled holds the default value on creation for the model_routing_enabled field.
+ 	group.DefaultModelRoutingEnabled = groupDescModelRoutingEnabled.Default.(bool)
+ 	// groupDescMcpXMLInject is the schema descriptor for mcp_xml_inject field.
+-	groupDescMcpXMLInject := groupFields[44].Descriptor()
++	groupDescMcpXMLInject := groupFields[45].Descriptor()
+ 	// group.DefaultMcpXMLInject holds the default value on creation for the mcp_xml_inject field.
+ 	group.DefaultMcpXMLInject = groupDescMcpXMLInject.Default.(bool)
+ 	// groupDescSupportedModelScopes is the schema descriptor for supported_model_scopes field.
+-	groupDescSupportedModelScopes := groupFields[45].Descriptor()
++	groupDescSupportedModelScopes := groupFields[46].Descriptor()
+ 	// group.DefaultSupportedModelScopes holds the default value on creation for the supported_model_scopes field.
+ 	group.DefaultSupportedModelScopes = groupDescSupportedModelScopes.Default.([]string)
+ 	// groupDescSortOrder is the schema descriptor for sort_order field.
+-	groupDescSortOrder := groupFields[46].Descriptor()
++	groupDescSortOrder := groupFields[47].Descriptor()
+ 	// group.DefaultSortOrder holds the default value on creation for the sort_order field.
+ 	group.DefaultSortOrder = groupDescSortOrder.Default.(int)
+ 	// groupDescAllowMessagesDispatch is the schema descriptor for allow_messages_dispatch field.
+-	groupDescAllowMessagesDispatch := groupFields[47].Descriptor()
++	groupDescAllowMessagesDispatch := groupFields[48].Descriptor()
+ 	// group.DefaultAllowMessagesDispatch holds the default value on creation for the allow_messages_dispatch field.
+ 	group.DefaultAllowMessagesDispatch = groupDescAllowMessagesDispatch.Default.(bool)
+ 	// groupDescAllowLive is the schema descriptor for allow_live field.
+-	groupDescAllowLive := groupFields[48].Descriptor()
++	groupDescAllowLive := groupFields[49].Descriptor()
+ 	// group.DefaultAllowLive holds the default value on creation for the allow_live field.
+ 	group.DefaultAllowLive = groupDescAllowLive.Default.(bool)
+ 	// groupDescForceOpenaiFast is the schema descriptor for force_openai_fast field.
+-	groupDescForceOpenaiFast := groupFields[49].Descriptor()
++	groupDescForceOpenaiFast := groupFields[50].Descriptor()
+ 	// group.DefaultForceOpenaiFast holds the default value on creation for the force_openai_fast field.
+ 	group.DefaultForceOpenaiFast = groupDescForceOpenaiFast.Default.(bool)
+ 	// groupDescFreeOpenaiFast is the schema descriptor for free_openai_fast field.
+-	groupDescFreeOpenaiFast := groupFields[50].Descriptor()
++	groupDescFreeOpenaiFast := groupFields[51].Descriptor()
+ 	// group.DefaultFreeOpenaiFast holds the default value on creation for the free_openai_fast field.
+ 	group.DefaultFreeOpenaiFast = groupDescFreeOpenaiFast.Default.(bool)
+ 	// groupDescRequireOauthOnly is the schema descriptor for require_oauth_only field.
+-	groupDescRequireOauthOnly := groupFields[51].Descriptor()
++	groupDescRequireOauthOnly := groupFields[52].Descriptor()
+ 	// group.DefaultRequireOauthOnly holds the default value on creation for the require_oauth_only field.
+ 	group.DefaultRequireOauthOnly = groupDescRequireOauthOnly.Default.(bool)
+ 	// groupDescRequirePrivacySet is the schema descriptor for require_privacy_set field.
+-	groupDescRequirePrivacySet := groupFields[52].Descriptor()
++	groupDescRequirePrivacySet := groupFields[53].Descriptor()
+ 	// group.DefaultRequirePrivacySet holds the default value on creation for the require_privacy_set field.
+ 	group.DefaultRequirePrivacySet = groupDescRequirePrivacySet.Default.(bool)
+ 	// groupDescDefaultMappedModel is the schema descriptor for default_mapped_model field.
+-	groupDescDefaultMappedModel := groupFields[53].Descriptor()
++	groupDescDefaultMappedModel := groupFields[54].Descriptor()
+ 	// group.DefaultDefaultMappedModel holds the default value on creation for the default_mapped_model field.
+ 	group.DefaultDefaultMappedModel = groupDescDefaultMappedModel.Default.(string)
+ 	// group.DefaultMappedModelValidator is a validator for the "default_mapped_model" field. It is called by the builders before save.
+ 	group.DefaultMappedModelValidator = groupDescDefaultMappedModel.Validators[0].(func(string) error)
+ 	// groupDescMessagesDispatchModelConfig is the schema descriptor for messages_dispatch_model_config field.
+-	groupDescMessagesDispatchModelConfig := groupFields[54].Descriptor()
++	groupDescMessagesDispatchModelConfig := groupFields[55].Descriptor()
+ 	// group.DefaultMessagesDispatchModelConfig holds the default value on creation for the messages_dispatch_model_config field.
+ 	group.DefaultMessagesDispatchModelConfig = groupDescMessagesDispatchModelConfig.Default.(domain.OpenAIMessagesDispatchModelConfig)
+ 	// groupDescModelAllowlist is the schema descriptor for model_allowlist field.
+-	groupDescModelAllowlist := groupFields[55].Descriptor()
++	groupDescModelAllowlist := groupFields[56].Descriptor()
+ 	// group.DefaultModelAllowlist holds the default value on creation for the model_allowlist field.
+ 	group.DefaultModelAllowlist = groupDescModelAllowlist.Default.(domain.GroupModelAllowlist)
+ 	// groupDescCodexModelsManifestConfig is the schema descriptor for codex_models_manifest_config field.
+-	groupDescCodexModelsManifestConfig := groupFields[56].Descriptor()
++	groupDescCodexModelsManifestConfig := groupFields[57].Descriptor()
+ 	// group.DefaultCodexModelsManifestConfig holds the default value on creation for the codex_models_manifest_config field.
+ 	group.DefaultCodexModelsManifestConfig = groupDescCodexModelsManifestConfig.Default.(domain.GroupCodexModelsManifestConfig)
+ 	// groupDescRpmLimit is the schema descriptor for rpm_limit field.
+-	groupDescRpmLimit := groupFields[57].Descriptor()
++	groupDescRpmLimit := groupFields[58].Descriptor()
+ 	// group.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
+ 	group.DefaultRpmLimit = groupDescRpmLimit.Default.(int)
+ 	// groupDescMaxReasoningEffort is the schema descriptor for max_reasoning_effort field.
+-	groupDescMaxReasoningEffort := groupFields[58].Descriptor()
++	groupDescMaxReasoningEffort := groupFields[59].Descriptor()
+ 	// group.DefaultMaxReasoningEffort holds the default value on creation for the max_reasoning_effort field.
+ 	group.DefaultMaxReasoningEffort = groupDescMaxReasoningEffort.Default.(string)
+ 	// group.MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
+ 	group.MaxReasoningEffortValidator = groupDescMaxReasoningEffort.Validators[0].(func(string) error)
+ 	// groupDescMaxReasoningEffortOverLimit is the schema descriptor for max_reasoning_effort_over_limit field.
+-	groupDescMaxReasoningEffortOverLimit := groupFields[59].Descriptor()
++	groupDescMaxReasoningEffortOverLimit := groupFields[60].Descriptor()
+ 	// group.DefaultMaxReasoningEffortOverLimit holds the default value on creation for the max_reasoning_effort_over_limit field.
+ 	group.DefaultMaxReasoningEffortOverLimit = groupDescMaxReasoningEffortOverLimit.Default.(string)
+ 	// group.MaxReasoningEffortOverLimitValidator is a validator for the "max_reasoning_effort_over_limit" field. It is called by the builders before save.
+ 	group.MaxReasoningEffortOverLimitValidator = groupDescMaxReasoningEffortOverLimit.Validators[0].(func(string) error)
+ 	// groupDescReasoningEffortMappings is the schema descriptor for reasoning_effort_mappings field.
+-	groupDescReasoningEffortMappings := groupFields[60].Descriptor()
++	groupDescReasoningEffortMappings := groupFields[61].Descriptor()
+ 	// group.DefaultReasoningEffortMappings holds the default value on creation for the reasoning_effort_mappings field.
+ 	group.DefaultReasoningEffortMappings = groupDescReasoningEffortMappings.Default.([]domain.ReasoningEffortMapping)
+ 	// groupDescProfitControlEnabled is the schema descriptor for profit_control_enabled field.
+-	groupDescProfitControlEnabled := groupFields[61].Descriptor()
++	groupDescProfitControlEnabled := groupFields[62].Descriptor()
+ 	// group.DefaultProfitControlEnabled holds the default value on creation for the profit_control_enabled field.
+ 	group.DefaultProfitControlEnabled = groupDescProfitControlEnabled.Default.(bool)
+ 	// groupDescProfitMinMargin is the schema descriptor for profit_min_margin field.
+-	groupDescProfitMinMargin := groupFields[62].Descriptor()
++	groupDescProfitMinMargin := groupFields[63].Descriptor()
+ 	// group.DefaultProfitMinMargin holds the default value on creation for the profit_min_margin field.
+ 	group.DefaultProfitMinMargin = groupDescProfitMinMargin.Default.(float64)
+ 	// groupDescProfitSafetyBuffer is the schema descriptor for profit_safety_buffer field.
+-	groupDescProfitSafetyBuffer := groupFields[63].Descriptor()
++	groupDescProfitSafetyBuffer := groupFields[64].Descriptor()
+ 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
+ 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
+ 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
+diff --git a/backend/ent/schema/group.go b/backend/ent/schema/group.go
+index 48222c69c..e84c38829 100644
+--- a/backend/ent/schema/group.go
++++ b/backend/ent/schema/group.go
+@@ -109,6 +109,9 @@ func (Group) Fields() []ent.Field {
+ 		field.Bool("allow_batch_image_generation").
+ 			Default(false).
+ 			Comment("是否允许该分组使用批量图片生成能力"),
++		field.Bool("image_count_billing").
++			Default(false).
++			Comment("图片生成是否按实际出图张数计费"),
+ 		field.Bool("image_rate_independent").
+ 			Default(false).
+ 			Comment("图片生成是否使用独立倍率；false 表示共享分组有效倍率"),
+diff --git a/backend/internal/handler/admin/group_handler.go b/backend/internal/handler/admin/group_handler.go
+index 4fed4b2bb..a5388afdc 100644
+--- a/backend/internal/handler/admin/group_handler.go
++++ b/backend/internal/handler/admin/group_handler.go
+@@ -200,6 +200,7 @@ type CreateGroupRequest struct {
+ 	// 图片生成计费配置（antigravity 和 gemini 平台使用，负数表示清除配置）
+ 	AllowImageGeneration            bool                          `json:"allow_image_generation"`
+ 	AllowBatchImageGeneration       bool                          `json:"allow_batch_image_generation"`
++	ImageCountBilling               bool                          `json:"image_count_billing"`
+ 	ImageRateIndependent            bool                          `json:"image_rate_independent"`
+ 	ImageRateMultiplier             *float64                      `json:"image_rate_multiplier"`
+ 	BatchImageDiscountMultiplier    *float64                      `json:"batch_image_discount_multiplier"`
+@@ -276,6 +277,7 @@ type UpdateGroupRequest struct {
+ 	// 图片生成计费配置（antigravity 和 gemini 平台使用，负数表示清除配置）
+ 	AllowImageGeneration            *bool                         `json:"allow_image_generation"`
+ 	AllowBatchImageGeneration       *bool                         `json:"allow_batch_image_generation"`
++	ImageCountBilling               *bool                         `json:"image_count_billing"`
+ 	ImageRateIndependent            *bool                         `json:"image_rate_independent"`
+ 	ImageRateMultiplier             *float64                      `json:"image_rate_multiplier"`
+ 	BatchImageDiscountMultiplier    *float64                      `json:"batch_image_discount_multiplier"`
+@@ -681,6 +683,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
+ 		ModelPricing:                    req.ModelPricing,
+ 		AllowImageGeneration:            req.AllowImageGeneration,
+ 		AllowBatchImageGeneration:       req.AllowBatchImageGeneration,
++		ImageCountBilling:               req.ImageCountBilling,
+ 		ImageRateIndependent:            req.ImageRateIndependent,
+ 		ImageRateMultiplier:             req.ImageRateMultiplier,
+ 		BatchImageDiscountMultiplier:    req.BatchImageDiscountMultiplier,
+@@ -828,6 +831,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
+ 		ModelPricing:                    req.ModelPricing,
+ 		AllowImageGeneration:            req.AllowImageGeneration,
+ 		AllowBatchImageGeneration:       req.AllowBatchImageGeneration,
++		ImageCountBilling:               req.ImageCountBilling,
+ 		ImageRateIndependent:            req.ImageRateIndependent,
+ 		ImageRateMultiplier:             req.ImageRateMultiplier,
+ 		BatchImageDiscountMultiplier:    req.BatchImageDiscountMultiplier,
+diff --git a/backend/internal/handler/dto/mappers.go b/backend/internal/handler/dto/mappers.go
+index a84d493e5..5c2410ff2 100644
+--- a/backend/internal/handler/dto/mappers.go
++++ b/backend/internal/handler/dto/mappers.go
+@@ -194,6 +194,7 @@ func groupFromServiceBase(g *service.Group) Group {
+ 		LongContextPricingEnabled:       g.LongContextPricingEnabled,
+ 		AllowImageGeneration:            g.AllowImageGeneration,
+ 		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
++		ImageCountBilling:               g.ImageCountBilling,
+ 		ImageRateIndependent:            g.ImageRateIndependent,
+ 		ImageRateMultiplier:             g.ImageRateMultiplier,
+ 		BatchImageDiscountMultiplier:    g.BatchImageDiscountMultiplier,
+diff --git a/backend/internal/handler/dto/types.go b/backend/internal/handler/dto/types.go
+index 1c79cc49c..f24a4a3ac 100644
+--- a/backend/internal/handler/dto/types.go
++++ b/backend/internal/handler/dto/types.go
+@@ -112,6 +112,7 @@ type Group struct {
+ 	// 图片生成计费配置（仅 antigravity 平台使用）
+ 	AllowImageGeneration         bool    `json:"allow_image_generation"`
+ 	AllowBatchImageGeneration    bool    `json:"allow_batch_image_generation"`
++	ImageCountBilling            bool    `json:"image_count_billing"`
+ 	ImageRateIndependent         bool    `json:"image_rate_independent"`
+ 	ImageRateMultiplier          float64 `json:"image_rate_multiplier"`
+ 	BatchImageDiscountMultiplier float64 `json:"batch_image_discount_multiplier"`
+diff --git a/backend/internal/repository/api_key_repo.go b/backend/internal/repository/api_key_repo.go
+index cc47f5e62..d2a8a83f1 100644
+--- a/backend/internal/repository/api_key_repo.go
++++ b/backend/internal/repository/api_key_repo.go
+@@ -183,6 +183,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
+ 				group.FieldMonthlyLimitUsd,
+ 				group.FieldAllowImageGeneration,
+ 				group.FieldAllowBatchImageGeneration,
++				group.FieldImageCountBilling,
+ 				group.FieldImageRateIndependent,
+ 				group.FieldImageRateMultiplier,
+ 				group.FieldImagePrice1k,
+@@ -992,6 +993,7 @@ func groupEntityToService(g *dbent.Group) *service.Group {
+ 		MonthlyLimitUSD:                 g.MonthlyLimitUsd,
+ 		AllowImageGeneration:            g.AllowImageGeneration,
+ 		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
++		ImageCountBilling:               g.ImageCountBilling,
+ 		ImageRateIndependent:            g.ImageRateIndependent,
+ 		ImageRateMultiplier:             g.ImageRateMultiplier,
+ 		ImagePrice1K:                    g.ImagePrice1k,
+diff --git a/backend/internal/repository/group_repo.go b/backend/internal/repository/group_repo.go
+index 3f619ba9b..cd8bfe756 100644
+--- a/backend/internal/repository/group_repo.go
++++ b/backend/internal/repository/group_repo.go
+@@ -108,6 +108,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
+ 		SetNillableMonthlyLimitUsd(groupIn.MonthlyLimitUSD).
+ 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
+ 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
++		SetImageCountBilling(groupIn.ImageCountBilling).
+ 		SetImageRateIndependent(groupIn.ImageRateIndependent).
+ 		SetImageRateMultiplier(groupIn.ImageRateMultiplier).
+ 		SetNillableImagePrice1k(groupIn.ImagePrice1K).
+@@ -299,6 +300,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
+ 		SetNillableMonthlyLimitUsd(groupIn.MonthlyLimitUSD).
+ 		SetAllowImageGeneration(groupIn.AllowImageGeneration).
+ 		SetAllowBatchImageGeneration(groupIn.AllowBatchImageGeneration).
++		SetImageCountBilling(groupIn.ImageCountBilling).
+ 		SetImageRateIndependent(groupIn.ImageRateIndependent).
+ 		SetImageRateMultiplier(groupIn.ImageRateMultiplier).
+ 		SetNillableImagePrice1k(groupIn.ImagePrice1K).
+diff --git a/backend/internal/server/api_contract_test.go b/backend/internal/server/api_contract_test.go
+index 5f9033d77..4e3efb5cf 100644
+--- a/backend/internal/server/api_contract_test.go
++++ b/backend/internal/server/api_contract_test.go
+@@ -378,6 +378,7 @@ func TestAPIContracts(t *testing.T) {
+ 						"audio_realtime_price_per_min": null,
+ 						"allow_image_generation": false,
+ 						"allow_batch_image_generation": false,
++						"image_count_billing": false,
+ 						"batch_image_discount_multiplier": 0,
+ 						"batch_image_hold_multiplier": 0,
+ 						"image_rate_independent": false,
+diff --git a/backend/internal/service/admin_group.go b/backend/internal/service/admin_group.go
+index f2c06a9a8..68bbfca90 100644
+--- a/backend/internal/service/admin_group.go
++++ b/backend/internal/service/admin_group.go
+@@ -534,6 +534,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
+ 
+ 	allowImageGeneration := input.AllowImageGeneration || DefaultAllowImageGenerationForPlatform(platform)
+ 	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && platform == PlatformGemini
++	imageCountBilling := input.ImageCountBilling && allowImageGeneration &&
++		(platform == PlatformComposite || platform == PlatformOpenAI)
+ 
+ 	// 如果指定了复制账号的源分组，先获取账号 ID 列表
+ 	var accountIDsToCopy []int64
+@@ -589,6 +591,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
+ 		ModelPricing:                    modelPricing,
+ 		AllowImageGeneration:            allowImageGeneration,
+ 		AllowBatchImageGeneration:       allowBatchImageGeneration,
++		ImageCountBilling:               imageCountBilling,
+ 		ImageRateIndependent:            input.ImageRateIndependent,
+ 		ImageRateMultiplier:             imageRateMultiplier,
+ 		BatchImageDiscountMultiplier:    batchImageDiscountMultiplier,
+@@ -845,6 +848,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
+ 	if !group.AllowImageGeneration || group.Platform != PlatformGemini {
+ 		group.AllowBatchImageGeneration = false
+ 	}
++	if input.ImageCountBilling != nil {
++		group.ImageCountBilling = *input.ImageCountBilling
++	}
++	if !group.AllowImageGeneration || (group.Platform != PlatformComposite && group.Platform != PlatformOpenAI) {
++		group.ImageCountBilling = false
++	}
+ 	if input.ImageRateIndependent != nil {
+ 		group.ImageRateIndependent = *input.ImageRateIndependent
+ 	}
+diff --git a/backend/internal/service/admin_group_duplicate.go b/backend/internal/service/admin_group_duplicate.go
+index b31a4ab33..9e7ea9333 100644
+--- a/backend/internal/service/admin_group_duplicate.go
++++ b/backend/internal/service/admin_group_duplicate.go
+@@ -117,6 +117,7 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
+ 		DefaultValidityDays:             source.DefaultValidityDays,
+ 		AllowImageGeneration:            source.AllowImageGeneration,
+ 		AllowBatchImageGeneration:       source.AllowBatchImageGeneration,
++		ImageCountBilling:               source.ImageCountBilling,
+ 		ImageRateIndependent:            source.ImageRateIndependent,
+ 		ImageRateMultiplier:             source.ImageRateMultiplier,
+ 		ImagePrice1K:                    cloneGroupValuePointer(source.ImagePrice1K),
+diff --git a/backend/internal/service/admin_service.go b/backend/internal/service/admin_service.go
+index 7b2d23164..89ae03f07 100644
+--- a/backend/internal/service/admin_service.go
++++ b/backend/internal/service/admin_service.go
+@@ -248,6 +248,7 @@ type CreateGroupInput struct {
+ 	// 图片生成计费配置（仅 antigravity 平台使用）
+ 	AllowImageGeneration         bool
+ 	AllowBatchImageGeneration    bool
++	ImageCountBilling            bool
+ 	ImageRateIndependent         bool
+ 	ImageRateMultiplier          *float64
+ 	BatchImageDiscountMultiplier *float64
+@@ -330,6 +331,7 @@ type UpdateGroupInput struct {
+ 	// 图片生成计费配置（仅 antigravity 平台使用）
+ 	AllowImageGeneration         *bool
+ 	AllowBatchImageGeneration    *bool
++	ImageCountBilling            *bool
+ 	ImageRateIndependent         *bool
+ 	ImageRateMultiplier          *float64
+ 	BatchImageDiscountMultiplier *float64
+diff --git a/backend/internal/service/antigravity_gateway_gemini.go b/backend/internal/service/antigravity_gateway_gemini.go
+index 0d12fe775..5a409a96a 100644
+--- a/backend/internal/service/antigravity_gateway_gemini.go
++++ b/backend/internal/service/antigravity_gateway_gemini.go
+@@ -470,6 +470,7 @@ handleSuccess:
+ 		Duration:                      time.Since(startTime),
+ 		FirstTokenMs:                  firstTokenMs,
+ 		ClientDisconnect:              clientDisconnect,
++		ImageEndpoint:                 imageCount > 0,
+ 		ImageCount:                    imageCount,
+ 		ImageSize:                     imageSize,
+ 		ImageInputSize:                imageInputSize,
+diff --git a/backend/internal/service/api_key_auth_cache.go b/backend/internal/service/api_key_auth_cache.go
+index 474c0d85f..bf66fa0c2 100644
+--- a/backend/internal/service/api_key_auth_cache.go
++++ b/backend/internal/service/api_key_auth_cache.go
+@@ -69,6 +69,7 @@ type APIKeyAuthGroupSnapshot struct {
+ 	MonthlyLimitUSD                 *float64                      `json:"monthly_limit_usd,omitempty"`
+ 	AllowImageGeneration            bool                          `json:"allow_image_generation"`
+ 	AllowBatchImageGeneration       bool                          `json:"allow_batch_image_generation"`
++	ImageCountBilling               bool                          `json:"image_count_billing"`
+ 	ImageRateIndependent            bool                          `json:"image_rate_independent"`
+ 	ImageRateMultiplier             float64                       `json:"image_rate_multiplier"`
+ 	ImagePrice1K                    *float64                      `json:"image_price_1k,omitempty"`
+diff --git a/backend/internal/service/api_key_auth_cache_impl.go b/backend/internal/service/api_key_auth_cache_impl.go
+index 836edbb2b..cb2ade94b 100644
+--- a/backend/internal/service/api_key_auth_cache_impl.go
++++ b/backend/internal/service/api_key_auth_cache_impl.go
+@@ -14,7 +14,7 @@ import (
+ 	"github.com/dgraph-io/ristretto"
+ )
+ 
+-const apiKeyAuthSnapshotVersion = 24 // v24: group model_allowlist field (renamed from models_list_config, enforcing semantics)
++const apiKeyAuthSnapshotVersion = 25 // v25: group image_count_billing switch (per-image billing on image endpoints)
+ 
+ type apiKeyAuthCacheConfig struct {
+ 	l1Size        int
+@@ -391,6 +391,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey)
+ 			MonthlyLimitUSD:                 apiKey.Group.MonthlyLimitUSD,
+ 			AllowImageGeneration:            apiKey.Group.AllowImageGeneration,
+ 			AllowBatchImageGeneration:       apiKey.Group.AllowBatchImageGeneration,
++			ImageCountBilling:               apiKey.Group.ImageCountBilling,
+ 			ImageRateIndependent:            apiKey.Group.ImageRateIndependent,
+ 			ImageRateMultiplier:             apiKey.Group.ImageRateMultiplier,
+ 			ImagePrice1K:                    apiKey.Group.ImagePrice1K,
+@@ -493,6 +494,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
+ 			MonthlyLimitUSD:                 snapshot.Group.MonthlyLimitUSD,
+ 			AllowImageGeneration:            snapshot.Group.AllowImageGeneration,
+ 			AllowBatchImageGeneration:       snapshot.Group.AllowBatchImageGeneration,
++			ImageCountBilling:               snapshot.Group.ImageCountBilling,
+ 			ImageRateIndependent:            snapshot.Group.ImageRateIndependent,
+ 			ImageRateMultiplier:             snapshot.Group.ImageRateMultiplier,
+ 			ImagePrice1K:                    snapshot.Group.ImagePrice1K,
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index 2dbec0cca..e6e813100 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -642,7 +642,11 @@ type ForwardResult struct {
+ 	ServiceTier *string
+ 
+ 	// 图片生成计费字段（图片生成模型使用）
+-	ImageCount         int    // 生成的图片数量
++	ImageCount int // 生成的图片数量
++	// ImageEndpoint 标记请求来自专用图片端点（/v1/images/*、图片模型端点）。
++	// 分组 image_count_billing 开关只对这类请求生效，混合的 Responses/Chat/WS
++	// 请求带图片工具时仍按 token 计费。
++	ImageEndpoint      bool
+ 	ImageSize          string // 最终计费尺寸 "1K", "2K", "4K"
+ 	ImageInputSize     string // 请求中的原始图片尺寸
+ 	ImageOutputSize    string // 上游响应中的图片尺寸
+diff --git a/backend/internal/service/gateway_usage_billing.go b/backend/internal/service/gateway_usage_billing.go
+index 580ca81dc..0ece86cd3 100644
+--- a/backend/internal/service/gateway_usage_billing.go
++++ b/backend/internal/service/gateway_usage_billing.go
+@@ -1020,10 +1020,13 @@ func (s *GatewayService) calculateRecordUsageCost(
+ 	imageMultiplier float64,
+ 	pricingAt time.Time,
+ ) *CostBreakdown {
+-	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费
++	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费。
++	// 分组按张计费开关只对专用图片端点生效，混合请求仍按 token 计费。
+ 	if result.ImageCount > 0 {
+-		if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
+-			return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt)
++		if !imageCountBillingApplies(apiKey, result.ImageEndpoint) {
++			if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
++				return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt)
++			}
+ 		}
+ 		return s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier)
+ 	}
+@@ -1168,8 +1171,12 @@ func (s *GatewayService) calculateImageCost(
+ 	multiplier float64,
+ ) *CostBreakdown {
+ 	sizeTier := NormalizeImageBillingTierOrDefault(result.ImageSize)
++	forcePerImage := imageCountBillingApplies(apiKey, result.ImageEndpoint)
+ 	resolved := s.resolveChannelPricing(ctx, billingModel, apiKey)
+-	if resolved != nil && resolved.Source == PricingSourceGroup {
++	// 分组定价只有按次/图片模式才能按张结算。token 模式缺少 token 输入时会算出
++	// $0，必须回落到分组图片价或默认图片价，避免开关开启后图片完全免费。
++	if resolved != nil && resolved.Source == PricingSourceGroup &&
++		(resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage) {
+ 		gid := apiKey.Group.ID
+ 		cost, err := s.billingService.CalculateCostUnified(CostInput{
+ 			Ctx: ctx, Model: billingModel, GroupID: &gid, Group: apiKey.Group,
+@@ -1191,25 +1198,52 @@ func (s *GatewayService) calculateImageCost(
+ 			OutputTokens:      result.Usage.OutputTokens,
+ 			ImageOutputTokens: result.Usage.ImageOutputTokens,
+ 		}
+-		gid := apiKey.Group.ID
+-		cost, err := s.billingService.CalculateCostUnified(CostInput{
+-			Ctx:             ctx,
+-			Model:           billingModel,
+-			GroupID:         &gid,
+-			Group:           apiKey.Group,
+-			Tokens:          tokens,
+-			RequestCount:    result.ImageCount,
+-			SizeTier:        sizeTier,
+-			ReasoningEffort: optionalStringValue(result.ReasoningEffort),
+-			RateMultiplier:  multiplier,
+-			Resolver:        s.resolver,
+-			Resolved:        resolved,
+-		})
+-		if err != nil {
+-			logger.LegacyPrintf("service.gateway", "Calculate image token cost failed: %v", err)
+-			return &CostBreakdown{ActualCost: 0}
++		switch {
++		case resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage:
++			// 按次/图片模式按请求张数结算。Tokens 不参与计价，但尺寸档未命中时
++			// calculatePerRequestCost 要用它匹配按上下文分档的单价，不能省略。
++			gid := apiKey.Group.ID
++			cost, err := s.billingService.CalculateCostUnified(CostInput{
++				Ctx:             ctx,
++				Model:           billingModel,
++				GroupID:         &gid,
++				Group:           apiKey.Group,
++				Tokens:          tokens,
++				RequestCount:    result.ImageCount,
++				SizeTier:        sizeTier,
++				ReasoningEffort: optionalStringValue(result.ReasoningEffort),
++				RateMultiplier:  multiplier,
++				Resolver:        s.resolver,
++				Resolved:        resolved,
++			})
++			if err != nil {
++				logger.LegacyPrintf("service.gateway", "Calculate image channel cost failed: %v", err)
++				return &CostBreakdown{ActualCost: 0}
++			}
++			return cost
++		case !forcePerImage:
++			// token 模式且开关未强制按张：保持原 token 计费。
++			gid := apiKey.Group.ID
++			cost, err := s.billingService.CalculateCostUnified(CostInput{
++				Ctx:             ctx,
++				Model:           billingModel,
++				GroupID:         &gid,
++				Group:           apiKey.Group,
++				Tokens:          tokens,
++				RequestCount:    result.ImageCount,
++				SizeTier:        sizeTier,
++				ReasoningEffort: optionalStringValue(result.ReasoningEffort),
++				RateMultiplier:  multiplier,
++				Resolver:        s.resolver,
++				Resolved:        resolved,
++			})
++			if err != nil {
++				logger.LegacyPrintf("service.gateway", "Calculate image token cost failed: %v", err)
++				return &CostBreakdown{ActualCost: 0}
++			}
++			return cost
+ 		}
+-		return cost
++		// token 模式 + 开关强制按张：跳过 token 分支，落到下面的按张计费。
+ 	}
+ 
+ 	return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
+diff --git a/backend/internal/service/gemini_chat_completions_compat_service.go b/backend/internal/service/gemini_chat_completions_compat_service.go
+index 02dcc073f..0f5417e8a 100644
+--- a/backend/internal/service/gemini_chat_completions_compat_service.go
++++ b/backend/internal/service/gemini_chat_completions_compat_service.go
+@@ -309,6 +309,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+ 		Duration:         time.Since(startTime),
+ 		FirstTokenMs:     firstTokenMs,
+ 		ReasoningEffort:  reasoningEffort,
++		ImageEndpoint:    imageCount > 0,
+ 		ImageCount:       imageCount,
+ 		ImageSize:        imageSize,
+ 		ImageInputSize:   imageInputSize,
+diff --git a/backend/internal/service/gemini_messages_compat_service.go b/backend/internal/service/gemini_messages_compat_service.go
+index b4ca7607a..40fd16baf 100644
+--- a/backend/internal/service/gemini_messages_compat_service.go
++++ b/backend/internal/service/gemini_messages_compat_service.go
+@@ -1074,6 +1074,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+ 		FirstTokenMs:                  firstTokenMs,
+ 		ReasoningEffort:               extractGeminiReasoningEffortFromBody(geminiReq),
+ 		ClientDisconnect:              clientDisconnect,
++		ImageEndpoint:                 imageCount > 0,
+ 		ImageCount:                    imageCount,
+ 		ImageSize:                     imageSize,
+ 		ImageInputSize:                imageInputSize,
+@@ -1609,6 +1610,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+ 		Duration:                      time.Since(startTime),
+ 		FirstTokenMs:                  firstTokenMs,
+ 		ClientDisconnect:              clientDisconnect,
++		ImageEndpoint:                 imageCount > 0,
+ 		ImageCount:                    imageCount,
+ 		ImageSize:                     imageSize,
+ 		ImageInputSize:                imageInputSize,
+diff --git a/backend/internal/service/grok_media.go b/backend/internal/service/grok_media.go
+index b73972ae5..f8a41c707 100644
+--- a/backend/internal/service/grok_media.go
++++ b/backend/internal/service/grok_media.go
+@@ -786,6 +786,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
+ 		UpstreamModel:        upstreamModel,
+ 		ResponseHeaders:      resp.Header.Clone(),
+ 		Duration:             time.Since(startTime),
++		ImageEndpoint:        usage.ImageCount > 0,
+ 		ImageCount:           usage.ImageCount,
+ 		ImageSize:            usage.ImageSize,
+ 		ImageInputSize:       usage.ImageInputSize,
+diff --git a/backend/internal/service/group.go b/backend/internal/service/group.go
+index 0489fe35c..bcaa3a045 100644
+--- a/backend/internal/service/group.go
++++ b/backend/internal/service/group.go
+@@ -44,6 +44,7 @@ type Group struct {
+ 	// 图片生成计费配置（antigravity 和 gemini 平台使用）
+ 	AllowImageGeneration         bool
+ 	AllowBatchImageGeneration    bool
++	ImageCountBilling            bool
+ 	ImageRateIndependent         bool
+ 	ImageRateMultiplier          float64
+ 	ImagePrice1K                 *float64
+diff --git a/backend/internal/service/group_service.go b/backend/internal/service/group_service.go
+index c46cbf4db..d7c97e265 100644
+--- a/backend/internal/service/group_service.go
++++ b/backend/internal/service/group_service.go
+@@ -73,6 +73,7 @@ type CreateGroupRequest struct {
+ 	RateMultiplier       float64  `json:"rate_multiplier"`
+ 	IsExclusive          bool     `json:"is_exclusive"`
+ 	AllowImageGeneration bool     `json:"allow_image_generation"`
++	ImageCountBilling    bool     `json:"image_count_billing"`
+ 	ImageRateIndependent bool     `json:"image_rate_independent"`
+ 	ImageRateMultiplier  *float64 `json:"image_rate_multiplier"`
+ }
+@@ -85,6 +86,7 @@ type UpdateGroupRequest struct {
+ 	IsExclusive          *bool    `json:"is_exclusive"`
+ 	Status               *string  `json:"status"`
+ 	AllowImageGeneration *bool    `json:"allow_image_generation"`
++	ImageCountBilling    *bool    `json:"image_count_billing"`
+ 	ImageRateIndependent *bool    `json:"image_rate_independent"`
+ 	ImageRateMultiplier  *float64 `json:"image_rate_multiplier"`
+ }
+@@ -105,6 +107,11 @@ func NewGroupService(groupRepo GroupRepository, authCacheInvalidator APIKeyAuthC
+ 
+ // Create 创建分组
+ func (s *GroupService) Create(ctx context.Context, req CreateGroupRequest) (*Group, error) {
++	// 该入口固定创建 Anthropic 分组，而按张计费只支持 composite / openai 平台，
++	// 必须拒绝，避免写入永远不生效的开关。
++	if req.ImageCountBilling {
++		return nil, fmt.Errorf("image_count_billing is only supported for composite or openai groups with image generation enabled")
++	}
+ 	imageRateMultiplier := 1.0
+ 	if req.ImageRateMultiplier != nil {
+ 		if *req.ImageRateMultiplier < 0 {
+@@ -131,6 +138,7 @@ func (s *GroupService) Create(ctx context.Context, req CreateGroupRequest) (*Gro
+ 		Status:               StatusActive,
+ 		SubscriptionType:     SubscriptionTypeStandard,
+ 		AllowImageGeneration: req.AllowImageGeneration,
++		ImageCountBilling:    req.ImageCountBilling,
+ 		ImageRateIndependent: req.ImageRateIndependent,
+ 		ImageRateMultiplier:  imageRateMultiplier,
+ 	}
+@@ -207,6 +215,16 @@ func (s *GroupService) Update(ctx context.Context, id int64, req UpdateGroupRequ
+ 	if req.AllowImageGeneration != nil {
+ 		group.AllowImageGeneration = *req.AllowImageGeneration
+ 	}
++	if req.ImageCountBilling != nil {
++		if *req.ImageCountBilling &&
++			(!group.AllowImageGeneration || (group.Platform != PlatformComposite && group.Platform != PlatformOpenAI)) {
++			return nil, fmt.Errorf("image_count_billing requires image generation enabled on composite or openai groups")
++		}
++		group.ImageCountBilling = *req.ImageCountBilling
++	}
++	if !group.AllowImageGeneration || (group.Platform != PlatformComposite && group.Platform != PlatformOpenAI) {
++		group.ImageCountBilling = false
++	}
+ 	if req.ImageRateIndependent != nil {
+ 		group.ImageRateIndependent = *req.ImageRateIndependent
+ 	}
+diff --git a/backend/internal/service/image_billing_count.go b/backend/internal/service/image_billing_count.go
+new file mode 100644
+index 000000000..21520289e
+--- /dev/null
++++ b/backend/internal/service/image_billing_count.go
+@@ -0,0 +1,20 @@
++package service
++
++// resolveBillableImageCount 决定一次图片请求按几张计费。
++//
++// 官方多图响应没有 n 字段，只以响应体 data/output 中实际返回的图片为准。
++// 解析不到张数时：
++//   - 分组开启按张计费：按 1 张兜底，避免已成功出图的请求完全漏计；
++//   - 未开启：保持原口径（流式 0 张、非流式回退请求 n），不能因为开关之外的原因多扣。
++func resolveBillableImageCount(reported, requested int, fallbackToOne bool) int {
++	if reported > 0 {
++		return reported
++	}
++	if fallbackToOne {
++		return 1
++	}
++	if requested > 0 {
++		return requested
++	}
++	return 0
++}
+diff --git a/backend/internal/service/image_billing_count_test.go b/backend/internal/service/image_billing_count_test.go
+new file mode 100644
+index 000000000..e6fdf4bd9
+--- /dev/null
++++ b/backend/internal/service/image_billing_count_test.go
+@@ -0,0 +1,47 @@
++package service
++
++import "testing"
++
++func TestResolveBillableImageCount(t *testing.T) {
++	tests := []struct {
++		name          string
++		reported      int
++		requested     int
++		fallbackToOne bool
++		want          int
++	}{
++		{name: "实际返回多张", reported: 3, requested: 5, want: 3},
++		{name: "开关开启兜底一张", reported: 0, requested: 3, fallbackToOne: true, want: 1},
++		{name: "开关关闭保留请求 n", reported: 0, requested: 3, want: 3},
++		{name: "流式开关关闭保持 0", reported: 0, requested: 0, want: 0},
++		{name: "非法负数开关关闭保持 n", reported: -1, requested: 2, want: 2},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			if got := resolveBillableImageCount(tt.reported, tt.requested, tt.fallbackToOne); got != tt.want {
++				t.Fatalf("resolveBillableImageCount(%d, %d, %v) = %d, want %d", tt.reported, tt.requested, tt.fallbackToOne, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestCountOpenAIImageOutputs_OfficialMultiImageResponse(t *testing.T) {
++	body := []byte(`{
++		"created": 1792815229,
++		"data": [
++			{"generation_id": "b235a66f-decc-444a-9689-4be8a322a6d0", "url": "https://images.example/a.png"},
++			{"generation_id": "de2ccab0-ab61-46bb-9e7b-879af4837dee", "url": "https://images.example/b.png"},
++			{"generation_id": "18817363-3449-4217-ba6f-9019ef7fd760", "url": "https://images.example/c.png"}
++		],
++		"usage": {"input_tokens": 54, "output_tokens": 586, "total_tokens": 640},
++		"size": "1024x1024",
++		"quality": "low"
++	}`)
++
++	if got := countOpenAIResponseImageOutputsFromJSONBytes(body); got != 3 {
++		t.Fatalf("countOpenAIResponseImageOutputsFromJSONBytes() = %d, want 3", got)
++	}
++	if got := resolveBillableImageCount(countOpenAIResponseImageOutputsFromJSONBytes(body), 1, false); got != 3 {
++		t.Fatalf("resolveBillableImageCount() = %d, want 3", got)
++	}
++}
+diff --git a/backend/internal/service/image_count_billing_switch_test.go b/backend/internal/service/image_count_billing_switch_test.go
+new file mode 100644
+index 000000000..31864fe78
+--- /dev/null
++++ b/backend/internal/service/image_count_billing_switch_test.go
+@@ -0,0 +1,224 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++func boolPtrForImageBillingTest(v bool) *bool { return &v }
++
++func TestImageCountBillingApplies(t *testing.T) {
++	enabled := &APIKey{Group: &Group{ImageCountBilling: true}}
++	disabled := &APIKey{Group: &Group{ImageCountBilling: false}}
++
++	require.True(t, imageCountBillingApplies(enabled, true))
++	require.False(t, imageCountBillingApplies(enabled, false), "混合请求不能受开关影响")
++	require.False(t, imageCountBillingApplies(disabled, true))
++	require.False(t, imageCountBillingApplies(nil, true))
++}
++
++// F1：composite 分组配置了 token 定价又开启按张计费时，图片不能按 $0 结算。
++func TestCalculateRecordUsageCost_ImageCountBillingGroupTokenPricing(t *testing.T) {
++	groupID := int64(901)
++	model := "gpt-image-2"
++	resolver := newOpenAITokenImageChannelPricingResolverForTest(t, groupID, model)
++	group := &Group{
++		ID:                   groupID,
++		Platform:             PlatformComposite,
++		Status:               StatusActive,
++		Hydrated:             true,
++		AllowImageGeneration: true,
++		ImageCountBilling:    true,
++		ImagePrice1K:         f64p(0.5),
++		ModelPricing: []ChannelModelPricing{{
++			Models:      []string{model},
++			BillingMode: BillingModeToken,
++			InputPrice:  f64p(3e-6),
++			OutputPrice: f64p(15e-6),
++		}},
++	}
++	apiKey := &APIKey{ID: 1, GroupID: &groupID, Group: group}
++	svc := &GatewayService{billingService: resolver.billingService, resolver: resolver}
++
++	cost := svc.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model: model, ImageCount: 2, ImageSize: "1K", ImageEndpoint: true,
++		Usage: ClaudeUsage{InputTokens: 1000, OutputTokens: 1000},
++	}, apiKey, model, 1, 1, time.Time{})
++
++	require.NotNil(t, cost)
++	require.InDelta(t, 1.0, cost.TotalCost, 1e-12, "应回落分组图片价，而不是 token 定价的 $0")
++	require.Equal(t, string(BillingModeImage), cost.BillingMode)
++}
++
++// F3：渠道 token 定价 + 开关开启时必须强制按张计费，与 OpenAI 流水线一致。
++func TestCalculateRecordUsageCost_ImageCountBillingChannelTokenPricing(t *testing.T) {
++	groupID := int64(902)
++	model := "gpt-image-2"
++	resolver := newOpenAITokenImageChannelPricingResolverForTest(t, groupID, model)
++	group := &Group{
++		ID:                   groupID,
++		Platform:             PlatformOpenAI,
++		Status:               StatusActive,
++		Hydrated:             true,
++		AllowImageGeneration: true,
++		ImageCountBilling:    true,
++		ImagePrice1K:         f64p(0.4),
++	}
++	apiKey := &APIKey{ID: 2, GroupID: &groupID, Group: group}
++	svc := &GatewayService{billingService: resolver.billingService, resolver: resolver}
++
++	cost := svc.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model: model, ImageCount: 2, ImageSize: "1K", ImageEndpoint: true,
++		Usage: ClaudeUsage{InputTokens: 1_000_000, OutputTokens: 10_000},
++	}, apiKey, model, 1, 1, time.Time{})
++
++	require.NotNil(t, cost)
++	require.InDelta(t, 0.8, cost.TotalCost, 1e-12)
++	require.Equal(t, string(BillingModeImage), cost.BillingMode)
++}
++
++// F4：开关只作用于图片端点，混合请求仍按 token 计费。
++func TestCalculateRecordUsageCost_ImageCountBillingIgnoresMixedRequests(t *testing.T) {
++	groupID := int64(903)
++	model := "gpt-image-2"
++	resolver := newOpenAITokenImageChannelPricingResolverForTest(t, groupID, model)
++	group := &Group{
++		ID:                   groupID,
++		Platform:             PlatformComposite,
++		Status:               StatusActive,
++		Hydrated:             true,
++		AllowImageGeneration: true,
++		ImageCountBilling:    true,
++		ImagePrice1K:         f64p(0.4),
++	}
++	apiKey := &APIKey{ID: 3, GroupID: &groupID, Group: group}
++	svc := &GatewayService{billingService: resolver.billingService, resolver: resolver}
++
++	cost := svc.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model: model, ImageCount: 1, ImageSize: "1K", ImageEndpoint: false,
++		Usage: ClaudeUsage{InputTokens: 1_000_000, OutputTokens: 10_000},
++	}, apiKey, model, 1, 1, time.Time{})
++
++	require.NotNil(t, cost)
++	require.Equal(t, string(BillingModeToken), cost.BillingMode)
++	require.Greater(t, cost.TotalCost, 0.0)
++}
++
++func TestCalculateOpenAIRecordUsageCost_ImageCountBillingIgnoresMixedRequests(t *testing.T) {
++	groupID := int64(904)
++	model := "gpt-image-2"
++	resolver := newOpenAITokenImageChannelPricingResolverForTest(t, groupID, model)
++	group := &Group{
++		ID:                   groupID,
++		Platform:             PlatformOpenAI,
++		Status:               StatusActive,
++		Hydrated:             true,
++		AllowImageGeneration: true,
++		ImageCountBilling:    true,
++		ImagePrice1K:         f64p(0.4),
++	}
++	apiKey := &APIKey{ID: 4, GroupID: &groupID, Group: group}
++	svc := &OpenAIGatewayService{billingService: resolver.billingService, resolver: resolver}
++
++	cost, err := svc.calculateOpenAIRecordUsageCost(context.Background(), &OpenAIForwardResult{
++		Model: model, ImageCount: 1, ImageSize: "1K", ImageEndpoint: false,
++	}, apiKey, []string{model}, 1, 1, 1, 1,
++		UsageTokens{InputTokens: 1_000_000, OutputTokens: 10_000},
++		"", nil, false, time.Time{})
++
++	require.NoError(t, err)
++	require.NotNil(t, cost)
++	require.Equal(t, string(BillingModeToken), cost.BillingMode)
++	require.Greater(t, cost.TotalCost, 0.0)
++}
++
++func TestGroupService_ImageCountBillingValidation(t *testing.T) {
++	ctx := context.Background()
++
++	t.Run("创建入口固定 anthropic 平台，拒绝开关", func(t *testing.T) {
++		svc := NewGroupService(nil, nil)
++		_, err := svc.Create(ctx, CreateGroupRequest{Name: "g", ImageCountBilling: true})
++		require.ErrorContains(t, err, "image_count_billing")
++	})
++
++	t.Run("更新时未开启图片生成则拒绝", func(t *testing.T) {
++		repo := &groupRepoStubForAdmin{getByID: &Group{
++			ID: 1, Platform: PlatformComposite, AllowImageGeneration: false,
++		}}
++		svc := NewGroupService(repo, nil)
++		_, err := svc.Update(ctx, 1, UpdateGroupRequest{ImageCountBilling: boolPtrForImageBillingTest(true)})
++		require.ErrorContains(t, err, "image_count_billing")
++	})
++
++	t.Run("更新时不支持的平台拒绝", func(t *testing.T) {
++		repo := &groupRepoStubForAdmin{getByID: &Group{
++			ID: 2, Platform: PlatformAnthropic, AllowImageGeneration: true,
++		}}
++		svc := NewGroupService(repo, nil)
++		_, err := svc.Update(ctx, 2, UpdateGroupRequest{ImageCountBilling: boolPtrForImageBillingTest(true)})
++		require.ErrorContains(t, err, "image_count_billing")
++	})
++
++	t.Run("合法开启", func(t *testing.T) {
++		repo := &groupRepoStubForAdmin{getByID: &Group{
++			ID: 3, Platform: PlatformComposite, AllowImageGeneration: true,
++		}}
++		svc := NewGroupService(repo, nil)
++		updated, err := svc.Update(ctx, 3, UpdateGroupRequest{ImageCountBilling: boolPtrForImageBillingTest(true)})
++		require.NoError(t, err)
++		require.True(t, updated.ImageCountBilling)
++	})
++
++	t.Run("关闭图片生成时自动清理开关", func(t *testing.T) {
++		repo := &groupRepoStubForAdmin{getByID: &Group{
++			ID: 4, Platform: PlatformComposite, AllowImageGeneration: false, ImageCountBilling: true,
++		}}
++		svc := NewGroupService(repo, nil)
++		updated, err := svc.Update(ctx, 4, UpdateGroupRequest{})
++		require.NoError(t, err)
++		require.False(t, updated.ImageCountBilling)
++	})
++}
++
++// 渠道按次定价只配置按上下文分档（无尺寸档）时，尺寸档未命中，必须用 token
++// 上下文匹配档位；漏传 Tokens 会让档位永不命中而按 $0 结算。与开关无关。
++func TestCalculateRecordUsageCost_ChannelPerRequestContextTierUsesTokens(t *testing.T) {
++	for _, switchOn := range []bool{false, true} {
++		groupID := int64(905)
++		model := "gemini-3-pro-image"
++		resolver := newOpenAITokenImageChannelPricingResolverForTest(t, groupID, model)
++		cached, ok := resolver.channelService.cache.Load().(*channelCache)
++		require.True(t, ok)
++		maxTokens := 1000
++		cached.pricingByGroupModel[channelModelKey{groupID: groupID, model: model}] = &ChannelModelPricing{
++			BillingMode: BillingModePerRequest,
++			Intervals: []PricingInterval{
++				{MinTokens: 0, MaxTokens: &maxTokens, PerRequestPrice: f64p(0.1)},
++				{MinTokens: 1000, PerRequestPrice: f64p(0.3)},
++			},
++		}
++		group := &Group{
++			ID:                   groupID,
++			Platform:             PlatformComposite,
++			Status:               StatusActive,
++			Hydrated:             true,
++			AllowImageGeneration: true,
++			ImageCountBilling:    switchOn,
++		}
++		apiKey := &APIKey{ID: 5, GroupID: &groupID, Group: group}
++		svc := &GatewayService{billingService: resolver.billingService, resolver: resolver}
++
++		cost := svc.calculateRecordUsageCost(context.Background(), &ForwardResult{
++			Model: model, ImageCount: 2, ImageSize: "1K", ImageEndpoint: true,
++			Usage: ClaudeUsage{InputTokens: 5000, OutputTokens: 100},
++		}, apiKey, model, 1, 1, time.Time{})
++
++		require.NotNil(t, cost)
++		require.InDelta(t, 0.6, cost.TotalCost, 1e-12, "switch=%v: 应按上下文档 0.3 × 2 张结算", switchOn)
++	}
++}
+diff --git a/backend/internal/service/media_price_config.go b/backend/internal/service/media_price_config.go
+index 53d63c97a..5ddbbbc6d 100644
+--- a/backend/internal/service/media_price_config.go
++++ b/backend/internal/service/media_price_config.go
+@@ -1,5 +1,17 @@
+ package service
+ 
++// imageCountBillingEnabled 表示该分组强制按实际出图张数计费，即使渠道是 token 计费。
++func imageCountBillingEnabled(apiKey *APIKey) bool {
++	return apiKey != nil && apiKey.Group != nil && apiKey.Group.ImageCountBilling
++}
++
++// imageCountBillingApplies 判断分组按张计费开关是否作用于本次请求。
++// 开关只影响专用图片端点；混合的 Responses/Chat/WS 请求即使带图片工具，
++// 也必须保留 token 计费，避免整条请求被按图片单价结算而丢失文本 token 费用。
++func imageCountBillingApplies(apiKey *APIKey, imageEndpoint bool) bool {
++	return imageEndpoint && imageCountBillingEnabled(apiKey)
++}
++
+ func imagePriceConfigFromAPIKey(apiKey *APIKey) *ImagePriceConfig {
+ 	if apiKey == nil || apiKey.Group == nil {
+ 		return nil
+diff --git a/backend/internal/service/openai_gateway_service.go b/backend/internal/service/openai_gateway_service.go
+index a29ff0d1c..1084c824a 100644
+--- a/backend/internal/service/openai_gateway_service.go
++++ b/backend/internal/service/openai_gateway_service.go
+@@ -278,14 +278,17 @@ type OpenAIForwardResult struct {
+ 	FirstTokenMs          *int
+ 	ClientDisconnect      bool
+ 	ImageCount            int
+-	ImageSize             string
+-	ImageInputSize        string
+-	ImageOutputSize       string
+-	ImageOutputSizes      []string
+-	ImageSizeSource       string
+-	ImageSizeBreakdown    map[string]int
+-	VideoCount            int
+-	VideoResolution       string
++	// ImageEndpoint 标记请求来自专用图片端点；分组 image_count_billing 开关
++	// 只对这类请求生效，混合 Responses/Chat/WS 请求仍按 token 计费。
++	ImageEndpoint      bool
++	ImageSize          string
++	ImageInputSize     string
++	ImageOutputSize    string
++	ImageOutputSizes   []string
++	ImageSizeSource    string
++	ImageSizeBreakdown map[string]int
++	VideoCount         int
++	VideoResolution    string
+ 	// VideoDurationSeconds 是提交时请求的生成时长（xAI 按输出秒数计费），已归一化到 1-15 秒。
+ 	VideoDurationSeconds int
+ 	// WebSearchCalls 是 Codex alpha/search 网页搜索调用次数（每次成功请求为 1）。
+diff --git a/backend/internal/service/openai_gateway_usage.go b/backend/internal/service/openai_gateway_usage.go
+index ce2e276a7..f3ff6e491 100644
+--- a/backend/internal/service/openai_gateway_usage.go
++++ b/backend/internal/service/openai_gateway_usage.go
+@@ -619,7 +619,11 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
+ 	}
+ 
+ 	if result != nil && result.ImageCount > 0 {
+-		// 渠道定价为 token 计费时走 token 路径，否则走图片计费
++		// 分组显式开启按张计费且来自图片端点时强制走图片计费；否则渠道 token 定价优先。
++		// 混合的 Responses/Chat/WS 请求即使产出了图片，也不能因开关丢失文本 token 费用。
++		if imageCountBillingApplies(apiKey, result.ImageEndpoint) {
++			return s.calculateOpenAIImageCost(ctx, billingModel, apiKey, result, imageMultiplier), nil
++		}
+ 		if resolved := s.resolveOpenAIChannelPricing(ctx, billingModel, apiKey); resolved == nil || resolved.Mode != BillingModeToken {
+ 			return s.calculateOpenAIImageCost(ctx, billingModel, apiKey, result, imageMultiplier), nil
+ 		}
+diff --git a/backend/internal/service/openai_images.go b/backend/internal/service/openai_images.go
+index e3d60085f..962e9ce24 100644
+--- a/backend/internal/service/openai_images.go
++++ b/backend/internal/service/openai_images.go
+@@ -741,7 +741,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+ 	defer func() { _ = resp.Body.Close() }()
+ 
+ 	var usage OpenAIUsage
+-	imageCount := parsed.N
++	var imageCount int
+ 	var firstTokenMs *int
+ 	if parsed.Stream && isEventStreamResponse(resp.Header) {
+ 		streamUsage, streamCount, streamSizes, ttft, err := s.handleOpenAIImagesStreamingResponse(resp, c, startTime, nil)
+@@ -757,6 +757,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+ 					ResponseHeaders:  resp.Header.Clone(),
+ 					Duration:         time.Since(startTime),
+ 					FirstTokenMs:     ttft,
++					ImageEndpoint:    true,
+ 					ImageCount:       streamCount,
+ 					ImageSize:        parsed.SizeTier,
+ 					ImageInputSize:   parsed.Size,
+@@ -766,7 +767,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+ 			return nil, err
+ 		}
+ 		usage = streamUsage
+-		imageCount = streamCount
++		imageCount = resolveBillableImageCount(streamCount, 0, imageCountBillingEnabled(getAPIKeyFromContext(c)))
+ 		imageOutputSizes := streamSizes
+ 		firstTokenMs = ttft
+ 		return &OpenAIForwardResult{
+@@ -779,6 +780,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+ 			ResponseHeaders:  resp.Header.Clone(),
+ 			Duration:         time.Since(startTime),
+ 			FirstTokenMs:     firstTokenMs,
++			ImageEndpoint:    true,
+ 			ImageCount:       imageCount,
+ 			ImageSize:        parsed.SizeTier,
+ 			ImageInputSize:   parsed.Size,
+@@ -790,9 +792,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+ 			return nil, err
+ 		}
+ 		usage = nonStreamUsage
+-		if nonStreamCount > 0 {
+-			imageCount = nonStreamCount
+-		}
++		imageCount = resolveBillableImageCount(nonStreamCount, parsed.N, imageCountBillingEnabled(getAPIKeyFromContext(c)))
+ 		return &OpenAIForwardResult{
+ 			RequestID:        resp.Header.Get("x-request-id"),
+ 			UpstreamHeaders:  resp.Header,
+@@ -803,6 +803,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+ 			ResponseHeaders:  resp.Header.Clone(),
+ 			Duration:         time.Since(startTime),
+ 			FirstTokenMs:     firstTokenMs,
++			ImageEndpoint:    true,
+ 			ImageCount:       imageCount,
+ 			ImageSize:        parsed.SizeTier,
+ 			ImageInputSize:   parsed.Size,
+diff --git a/backend/internal/service/openai_images_responses.go b/backend/internal/service/openai_images_responses.go
+index 51bc32d6f..25724620f 100644
+--- a/backend/internal/service/openai_images_responses.go
++++ b/backend/internal/service/openai_images_responses.go
+@@ -1955,6 +1955,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+ 					ResponseHeaders:               resp.Header.Clone(),
+ 					Duration:                      time.Since(startTime),
+ 					FirstTokenMs:                  firstTokenMs,
++					ImageEndpoint:                 true,
+ 					ImageCount:                    imageCount,
+ 					ImageSize:                     parsed.SizeTier,
+ 					ImageInputSize:                parsed.Size,
+@@ -1991,9 +1992,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+ 			)
+ 		}
+ 	}
+-	if imageCount <= 0 {
+-		imageCount = parsed.N
+-	}
++	imageCount = resolveBillableImageCount(imageCount, parsed.N, imageCountBillingEnabled(getAPIKeyFromContext(c)))
+ 	return &OpenAIForwardResult{
+ 		RequestID:                     resp.Header.Get("x-request-id"),
+ 		UpstreamHeaders:               resp.Header,
+@@ -2007,6 +2006,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+ 		ResponseHeaders:               resp.Header.Clone(),
+ 		Duration:                      time.Since(startTime),
+ 		FirstTokenMs:                  firstTokenMs,
++		ImageEndpoint:                 true,
+ 		ImageCount:                    imageCount,
+ 		ImageSize:                     parsed.SizeTier,
+ 		ImageInputSize:                parsed.Size,
+diff --git a/backend/migrations/248_group_image_count_billing.sql b/backend/migrations/248_group_image_count_billing.sql
+new file mode 100644
+index 000000000..f9e6cd9f2
+--- /dev/null
++++ b/backend/migrations/248_group_image_count_billing.sql
+@@ -0,0 +1,5 @@
++-- 分组级按张计费开关：仅 OpenAI 与 Composite 分组使用。
++ALTER TABLE groups
++    ADD COLUMN IF NOT EXISTS image_count_billing BOOLEAN NOT NULL DEFAULT false;
++
++COMMENT ON COLUMN groups.image_count_billing IS '图片生成是否按实际出图张数计费';
+diff --git a/frontend/src/i18n/locales/en/admin/overview.ts b/frontend/src/i18n/locales/en/admin/overview.ts
+index 1b79627bd..8faf063f2 100644
+--- a/frontend/src/i18n/locales/en/admin/overview.ts
++++ b/frontend/src/i18n/locales/en/admin/overview.ts
+@@ -1078,6 +1078,7 @@ export default {
+         description: 'Configure image generation access and base image prices. Leave empty to use default prices.',
+         allowImageGeneration: 'Allow image generation for this group',
+         allowBatchImageGeneration: 'Allow batch image generation for this group',
++        perImageBilling: 'Bill per generated image',
+         independentMultiplier: 'Use independent image multiplier',
+         imageMultiplier: 'Image multiplier',
+         batchDiscountMultiplier: 'Batch image discount',
+diff --git a/frontend/src/i18n/locales/zh/admin/overview.ts b/frontend/src/i18n/locales/zh/admin/overview.ts
+index 9088319bc..9b84e772e 100644
+--- a/frontend/src/i18n/locales/zh/admin/overview.ts
++++ b/frontend/src/i18n/locales/zh/admin/overview.ts
+@@ -1075,6 +1075,7 @@ export default {
+         description: '配置图片生成能力和图片基础单价，留空则使用默认价格',
+         allowImageGeneration: '允许当前分组生图',
+         allowBatchImageGeneration: '允许当前分组批量生图',
++        perImageBilling: '按张计费',
+         independentMultiplier: '生图倍率独立',
+         imageMultiplier: '生图独立倍率',
+         batchDiscountMultiplier: '批量生图折扣倍率',
+diff --git a/frontend/src/types/index.ts b/frontend/src/types/index.ts
+index 1eac972ce..9bc17a8dd 100644
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -594,6 +594,7 @@ export interface Group {
+   // 图片生成计费配置
+   allow_image_generation: boolean
+   allow_batch_image_generation: boolean
++  image_count_billing: boolean
+   image_rate_independent: boolean
+   image_rate_multiplier: number
+   batch_image_discount_multiplier: number
+@@ -819,6 +820,7 @@ export interface CreateGroupRequest {
+   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
+   allow_image_generation?: boolean
+   allow_batch_image_generation?: boolean
++  image_count_billing?: boolean
+   image_rate_independent?: boolean
+   image_rate_multiplier?: number
+   batch_image_discount_multiplier?: number
+@@ -886,6 +888,7 @@ export interface UpdateGroupRequest {
+   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
+   allow_image_generation?: boolean
+   allow_batch_image_generation?: boolean
++  image_count_billing?: boolean
+   image_rate_independent?: boolean
+   image_rate_multiplier?: number
+   batch_image_discount_multiplier?: number
+diff --git a/frontend/src/views/admin/GroupsView.vue b/frontend/src/views/admin/GroupsView.vue
+index 8572f7b0b..516441b82 100644
+--- a/frontend/src/views/admin/GroupsView.vue
++++ b/frontend/src/views/admin/GroupsView.vue
+@@ -919,6 +919,20 @@
+               />
+               {{ t(imagePricingI18nKey(createForm.platform, "independentMultiplier")) }}
+             </label>
++            <label
++              v-if="
++                createForm.allow_image_generation &&
++                (createForm.platform === 'composite' || createForm.platform === 'openai')
++              "
++              class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
++            >
++              <input
++                v-model="createForm.image_count_billing"
++                type="checkbox"
++                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
++              />
++              {{ t("admin.groups.imagePricing.perImageBilling") }}
++            </label>
+           </div>
+           <div
+             v-if="createForm.image_rate_independent"
+@@ -2559,6 +2573,20 @@
+               />
+               {{ t(imagePricingI18nKey(editForm.platform, "independentMultiplier")) }}
+             </label>
++            <label
++              v-if="
++                editForm.allow_image_generation &&
++                (editForm.platform === 'composite' || editForm.platform === 'openai')
++              "
++              class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
++            >
++              <input
++                v-model="editForm.image_count_billing"
++                type="checkbox"
++                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
++              />
++              {{ t("admin.groups.imagePricing.perImageBilling") }}
++            </label>
+           </div>
+           <div
+             v-if="editForm.image_rate_independent"
+@@ -4959,6 +4987,7 @@ const createForm = reactive({
+   // 图片生成计费配置
+   allow_image_generation: false,
+   allow_batch_image_generation: false,
++  image_count_billing: false,
+   image_rate_independent: false,
+   image_rate_multiplier: 1,
+   batch_image_discount_multiplier: 0.5,
+@@ -5325,6 +5354,7 @@ const editForm = reactive({
+   // 图片生成计费配置
+   allow_image_generation: false,
+   allow_batch_image_generation: false,
++  image_count_billing: false,
+   image_rate_independent: false,
+   image_rate_multiplier: 1,
+   batch_image_discount_multiplier: 0.5,
+@@ -5388,6 +5418,7 @@ type ImagePricingFormState = {
+   platform: GroupPlatform;
+   allow_image_generation: boolean;
+   allow_batch_image_generation: boolean;
++  image_count_billing: boolean;
+   rate_multiplier: number;
+   image_rate_independent: boolean;
+   image_rate_multiplier: number;
+@@ -5534,7 +5565,12 @@ const editWebSearchFinalPricePreview = computed(() =>
+ const resetDisabledBatchImagePricing = (
+   form: Pick<
+     ImagePricingFormState,
+-    "platform" | "allow_image_generation" | "allow_batch_image_generation" | "batch_image_discount_multiplier" | "batch_image_hold_multiplier"
++    | "platform"
++    | "allow_image_generation"
++    | "allow_batch_image_generation"
++    | "image_count_billing"
++    | "batch_image_discount_multiplier"
++    | "batch_image_hold_multiplier"
+   >,
+ ) => {
+   if (form.platform !== "gemini" || !form.allow_image_generation) {
+@@ -5544,6 +5580,12 @@ const resetDisabledBatchImagePricing = (
+     form.batch_image_discount_multiplier = 0.5;
+     form.batch_image_hold_multiplier = 0.6;
+   }
++  if (
++    !form.allow_image_generation ||
++    (form.platform !== "composite" && form.platform !== "openai")
++  ) {
++    form.image_count_billing = false;
++  }
+ };
+ 
+ // 根据分组类型返回不同的删除确认消息
+@@ -5783,6 +5825,7 @@ const closeCreateModal = () => {
+   createForm.monthly_limit_usd = null;
+   createForm.allow_image_generation = false;
+   createForm.allow_batch_image_generation = false;
++  createForm.image_count_billing = false;
+   createForm.image_rate_independent = false;
+   createForm.image_rate_multiplier = 1;
+   createForm.batch_image_discount_multiplier = 0.5;
+@@ -6078,6 +6121,7 @@ const handleEdit = async (group: AdminGroup) => {
+   editForm.allow_image_generation = group.allow_image_generation ?? false;
+   editForm.allow_batch_image_generation =
+     group.allow_batch_image_generation ?? false;
++  editForm.image_count_billing = group.image_count_billing ?? false;
+   editForm.image_rate_independent = group.image_rate_independent ?? false;
+   editForm.image_rate_multiplier = group.image_rate_multiplier ?? 1;
+   editForm.batch_image_discount_multiplier =

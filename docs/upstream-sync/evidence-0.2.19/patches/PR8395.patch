@@ -1,0 +1,543 @@
+diff --git a/backend/internal/handler/gateway_models_test.go b/backend/internal/handler/gateway_models_test.go
+index 3724973da..27daa74f8 100644
+--- a/backend/internal/handler/gateway_models_test.go
++++ b/backend/internal/handler/gateway_models_test.go
+@@ -559,7 +559,7 @@ func TestGatewayModels_GeminiGroupFallsBackToGeminiModels(t *testing.T) {
+ 	var got gatewayModelsResponseForTest
+ 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+ 	require.Equal(t, "list", got.Object)
+-	require.Contains(t, modelIDsForTest(got.Data), "gemini-2.5-flash")
++	require.Contains(t, modelIDsForTest(got.Data), "gemini-3.5-flash")
+ 	require.NotContains(t, modelIDsForTest(got.Data), "claude-sonnet-4-6")
+ }
+ 
+diff --git a/backend/internal/handler/gemini_mixed_models_test.go b/backend/internal/handler/gemini_mixed_models_test.go
+index 6a0e2c2eb..3f5ed0140 100644
+--- a/backend/internal/handler/gemini_mixed_models_test.go
++++ b/backend/internal/handler/gemini_mixed_models_test.go
+@@ -102,7 +102,7 @@ func TestGeminiNativeModelsMergesNativeUpstream(t *testing.T) {
+ 		expectedNative string
+ 	}{
+ 		{"native", 200, `{"models":[{"name":"models/gemini-native","inputTokenLimit":123}],"nextPageToken":"next"}`, "models/gemini-native"},
+-		{"scope fallback", 403, `{"error":"insufficient authentication scopes"}`, "models/gemini-2.5-pro"},
++		{"scope fallback", 403, `{"error":"insufficient authentication scopes"}`, "models/gemini-3.5-flash"},
+ 		{"upstream error", 429, `{"error":"rate limited"}`, ""},
+ 	} {
+ 		t.Run(tt.name, func(t *testing.T) {
+@@ -134,3 +134,109 @@ func TestGeminiNativeModelsMergesNativeUpstream(t *testing.T) {
+ 		})
+ 	}
+ }
++
++type geminiModelsUpstreamCounter struct {
++	service.HTTPUpstream
++	calls int
++}
++
++func (u *geminiModelsUpstreamCounter) Do(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
++	u.calls++
++	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"models":[{"name":"gemini-4-argon-high"}]}`))}, nil
++}
++
++type geminiDeclaredModelsFixture struct {
++	t        *testing.T
++	groupID  int64
++	handler  *GatewayHandler
++	upstream *geminiModelsUpstreamCounter
++}
++
++func newGeminiDeclaredModelsFixture(t *testing.T, accounts []service.Account) *geminiDeclaredModelsFixture {
++	groupID := int64(47)
++	repo := &geminiAllowlistAccountRepoStub{gatewayModelsAccountRepoStub: gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{groupID: accounts}}}
++	upstream := &geminiModelsUpstreamCounter{}
++	return &geminiDeclaredModelsFixture{
++		t:        t,
++		groupID:  groupID,
++		handler:  &GatewayHandler{geminiCompatService: service.NewGeminiMessagesCompatService(repo, nil, nil, nil, nil, nil, upstream, nil, &config.Config{})},
++		upstream: upstream,
++	}
++}
++
++func (f *geminiDeclaredModelsFixture) context(path, model string, allowlist service.GroupModelAllowlist) (*gin.Context, *httptest.ResponseRecorder) {
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodGet, path, nil)
++	if model != "" {
++		c.Params = gin.Params{{Key: "model", Value: model}}
++	}
++	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{GroupID: &f.groupID, Group: &service.Group{ID: f.groupID, Platform: service.PlatformGemini, ModelAllowlist: allowlist}})
++	return c, rec
++}
++
++func (f *geminiDeclaredModelsFixture) list(allowlist service.GroupModelAllowlist) []string {
++	c, rec := f.context("/v1beta/models", "", allowlist)
++	f.handler.GeminiV1BetaListModels(c)
++	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
++	var got gemini.ModelsListResponse
++	require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &got))
++	names := []string{}
++	for _, model := range got.Models {
++		names = append(names, model.Name)
++	}
++	return names
++}
++
++func (f *geminiDeclaredModelsFixture) get(model string) *httptest.ResponseRecorder {
++	c, rec := f.context("/v1beta/models/"+model, model, service.GroupModelAllowlist{})
++	f.handler.GeminiV1BetaGetModel(c)
++	return rec
++}
++
++// 分组内 Gemini 账号都声明了 model_mapping 时，列表与详情都按声明的模型应答，不透传选中账号的上游列表。
++func TestGeminiNativeModelsUsesDeclaredMappings(t *testing.T) {
++	f := newGeminiDeclaredModelsFixture(t, []service.Account{
++		{ID: 1, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Priority: 10, Credentials: map[string]any{"api_key": "a", "model_mapping": map[string]any{"gemini-4-argon": "gemini-4-argon"}}},
++		{ID: 2, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Priority: 11, Credentials: map[string]any{"api_key": "b", "model_mapping": map[string]any{"gemini-2.5-flash": "gemini-2.5-flash", "gemini-3.1-pro-preview": "gemini-3.1-pro-preview", "gemini-3.8-*": "gemini-3.8-flash"}}},
++		{ID: 3, Platform: service.PlatformAntigravity, Extra: map[string]any{"mixed_scheduling": true}, Credentials: map[string]any{"model_mapping": map[string]any{"gemini-synced-custom": "gemini-3.8-flash-high"}}},
++	})
++
++	names := f.list(service.GroupModelAllowlist{})
++	require.Subset(t, names, []string{"models/gemini-2.5-flash", "models/gemini-3.1-pro-preview", "models/gemini-3.8-*", "models/gemini-4-argon", "models/gemini-synced-custom"})
++	require.NotContains(t, names, "models/gemini-4-argon-high")
++
++	// 白名单与 /v1/models 同口径：通配符映射键展开为白名单中的具体模型。
++	require.Equal(t, []string{"models/gemini-2.5-flash", "models/gemini-3.8-flash", "models/gemini-synced-custom"},
++		f.list(service.GroupModelAllowlist{Enabled: true, Models: []string{"gemini-2.5-flash", "gemini-3.8-flash", "gemini-synced-custom"}}))
++
++	for model, status := range map[string]int{
++		"gemini-4-argon":                     http.StatusOK,
++		"gemini-3.8-flash":                   http.StatusOK,
++		"gemini-3.1-pro-preview-customtools": http.StatusOK,
++		"gemini-synced-custom":               http.StatusOK,
++		"gemini-4-argon-high":                http.StatusNotFound,
++	} {
++		rec := f.get(model)
++		require.Equal(t, status, rec.Code, model+": "+rec.Body.String())
++		if status == http.StatusOK {
++			require.JSONEq(t, `{"name":"models/`+model+`","supportedGenerationMethods":["generateContent","streamGenerateContent"]}`, rec.Body.String())
++		} else {
++			require.Contains(t, rec.Body.String(), "models/"+model+" is not found")
++		}
++	}
++	require.Zero(t, f.upstream.calls)
++}
++
++// 分组内有 Gemini 账号未配置映射（接受任意模型）时，模型接口仍由选中账号的上游应答。
++func TestGeminiNativeModelsUnmappedAccountKeepsUpstream(t *testing.T) {
++	f := newGeminiDeclaredModelsFixture(t, []service.Account{
++		{ID: 1, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Priority: 10, Credentials: map[string]any{"api_key": "a", "model_mapping": map[string]any{"gemini-4-argon": "gemini-4-argon"}}},
++		{ID: 2, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Priority: 11, Credentials: map[string]any{"api_key": "b"}},
++	})
++
++	require.Equal(t, []string{"gemini-4-argon-high"}, f.list(service.GroupModelAllowlist{}))
++	rec := f.get("gemini-2.5-pro")
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++	require.Equal(t, 2, f.upstream.calls)
++}
+diff --git a/backend/internal/handler/gemini_v1beta_handler.go b/backend/internal/handler/gemini_v1beta_handler.go
+index c15d212a3..3c8c34bb5 100644
+--- a/backend/internal/handler/gemini_v1beta_handler.go
++++ b/backend/internal/handler/gemini_v1beta_handler.go
+@@ -9,6 +9,7 @@ import (
+ 	"errors"
+ 	"net/http"
+ 	"regexp"
++	"slices"
+ 	"strconv"
+ 	"strings"
+ 
+@@ -76,6 +77,25 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
+ 		return
+ 	}
+ 
++	// 分组内 Gemini 账号都声明了 model_mapping 时，列表与 /v1/models 同源（含白名单口径），不透传单个账号的上游列表。
++	if declared, err := h.geminiCompatService.DeclaredModelIDs(c.Request.Context(), apiKey.GroupID); err == nil && len(declared) > 0 {
++		ids := append([]string{}, declared...)
++		for _, id := range agModelIDs {
++			if !slices.Contains(declared, id) {
++				ids = append(ids, id)
++			}
++		}
++		if apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
++			ids = apiKey.Group.ModelAllowlist.FilterForListing(ids)
++		}
++		declaredModels := make([]gemini.Model, 0, len(ids))
++		for _, id := range ids {
++			declaredModels = append(declaredModels, gemini.FallbackModel(id))
++		}
++		c.JSON(http.StatusOK, gemini.ModelsListResponse{Models: declaredModels})
++		return
++	}
++
+ 	account, err := h.geminiCompatService.SelectAccountForModelsEndpoints(c.Request.Context(), apiKey.GroupID)
+ 	if err != nil {
+ 		if len(agModels) > 0 {
+@@ -259,6 +279,18 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
+ 		return
+ 	}
+ 
++	// 分组内 Gemini 账号都声明了 model_mapping 时，按列表接口的同一来源判断模型是否存在。
++	if declared, err := h.geminiCompatService.DeclaredModelIDs(c.Request.Context(), apiKey.GroupID); err == nil && len(declared) > 0 {
++		if agModelIDs, agErr := h.geminiCompatService.AntigravityGeminiModelIDs(c.Request.Context(), apiKey.GroupID, true); agErr == nil {
++			if service.DeclaredModelsCover(declared, modelName) || service.DeclaredModelsCover(agModelIDs, modelName) {
++				c.JSON(http.StatusOK, gemini.FallbackModel(modelName))
++				return
++			}
++			googleError(c, http.StatusNotFound, "models/"+modelName+" is not found")
++			return
++		}
++	}
++
+ 	account, err := h.geminiCompatService.SelectAccountForModelsEndpoints(c.Request.Context(), apiKey.GroupID)
+ 	if err != nil {
+ 		// 没有 gemini 账户，检查是否有 antigravity 账户可用
+diff --git a/backend/internal/pkg/gemini/models.go b/backend/internal/pkg/gemini/models.go
+index 1d38fc990..7e4066c00 100644
+--- a/backend/internal/pkg/gemini/models.go
++++ b/backend/internal/pkg/gemini/models.go
+@@ -18,16 +18,22 @@ type ModelsListResponse struct {
+ func DefaultModels() []Model {
+ 	methods := []string{"generateContent", "streamGenerateContent"}
+ 	return []Model{
+-		{Name: "models/gemini-2.0-flash", SupportedGenerationMethods: methods},
+-		{Name: "models/gemini-2.5-flash", SupportedGenerationMethods: methods},
+-		{Name: "models/gemini-2.5-flash-image", SupportedGenerationMethods: methods},
+-		{Name: "models/gemini-2.5-pro", SupportedGenerationMethods: methods},
+-		{Name: "models/gemini-3.5-flash", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.1-flash-image", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.1-flash-image-preview", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.1-flash-lite-image", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3-pro-image", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3-pro-image-preview", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3-flash", SupportedGenerationMethods: methods},
+ 		{Name: "models/gemini-3-flash-preview", SupportedGenerationMethods: methods},
+-		{Name: "models/gemini-3-pro-preview", SupportedGenerationMethods: methods},
+ 		{Name: "models/gemini-3.1-pro-preview", SupportedGenerationMethods: methods},
+ 		{Name: "models/gemini-3.1-pro-preview-customtools", SupportedGenerationMethods: methods},
+-		{Name: "models/gemini-3.1-flash-image", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.1-flash-lite", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.1-flash-lite-preview", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.5-flash", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.5-flash-lite", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.6-flash", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.7-flash", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-3.8-flash", SupportedGenerationMethods: methods},
+ 		{Name: "models/gemini-4-argon", SupportedGenerationMethods: methods},
+ 	}
+ }
+diff --git a/backend/internal/pkg/gemini/models_test.go b/backend/internal/pkg/gemini/models_test.go
+index 1d20c0e62..a85ecb20e 100644
+--- a/backend/internal/pkg/gemini/models_test.go
++++ b/backend/internal/pkg/gemini/models_test.go
+@@ -12,7 +12,7 @@ func TestDefaultModels_ContainsFallbackCatalogModels(t *testing.T) {
+ 	}
+ 
+ 	required := []string{
+-		"models/gemini-2.5-flash-image",
++		"models/gemini-3-pro-image",
+ 		"models/gemini-3.1-pro-preview-customtools",
+ 		"models/gemini-3.1-flash-image",
+ 	}
+diff --git a/backend/internal/pkg/geminicli/models.go b/backend/internal/pkg/geminicli/models.go
+index 4e2fa55bb..6fe3a5f36 100644
+--- a/backend/internal/pkg/geminicli/models.go
++++ b/backend/internal/pkg/geminicli/models.go
+@@ -11,15 +11,22 @@ type Model struct {
+ 
+ // DefaultModels is the curated Gemini model list used by the admin UI "test account" flow.
+ var DefaultModels = []Model{
+-	{ID: "gemini-2.0-flash", Type: "model", DisplayName: "Gemini 2.0 Flash", CreatedAt: ""},
+-	{ID: "gemini-2.5-flash", Type: "model", DisplayName: "Gemini 2.5 Flash", CreatedAt: ""},
+-	{ID: "gemini-2.5-flash-image", Type: "model", DisplayName: "Gemini 2.5 Flash Image", CreatedAt: ""},
+-	{ID: "gemini-2.5-pro", Type: "model", DisplayName: "Gemini 2.5 Pro", CreatedAt: ""},
+-	{ID: "gemini-3.5-flash", Type: "model", DisplayName: "Gemini 3.5 Flash", CreatedAt: ""},
++	{ID: "gemini-3.1-flash-image", Type: "model", DisplayName: "Gemini 3.1 Flash Image", CreatedAt: ""},
++	{ID: "gemini-3.1-flash-image-preview", Type: "model", DisplayName: "Gemini 3.1 Flash Image Preview", CreatedAt: ""},
++	{ID: "gemini-3.1-flash-lite-image", Type: "model", DisplayName: "Gemini 3.1 Flash Lite Image", CreatedAt: ""},
++	{ID: "gemini-3-pro-image", Type: "model", DisplayName: "Gemini 3 Pro Image", CreatedAt: ""},
++	{ID: "gemini-3-pro-image-preview", Type: "model", DisplayName: "Gemini 3 Pro Image Preview", CreatedAt: ""},
++	{ID: "gemini-3-flash", Type: "model", DisplayName: "Gemini 3 Flash", CreatedAt: ""},
+ 	{ID: "gemini-3-flash-preview", Type: "model", DisplayName: "Gemini 3 Flash Preview", CreatedAt: ""},
+-	{ID: "gemini-3-pro-preview", Type: "model", DisplayName: "Gemini 3 Pro Preview", CreatedAt: ""},
+ 	{ID: "gemini-3.1-pro-preview", Type: "model", DisplayName: "Gemini 3.1 Pro Preview", CreatedAt: ""},
+-	{ID: "gemini-3.1-flash-image", Type: "model", DisplayName: "Gemini 3.1 Flash Image", CreatedAt: ""},
++	{ID: "gemini-3.1-pro-preview-customtools", Type: "model", DisplayName: "Gemini 3.1 Pro Preview Custom Tools", CreatedAt: ""},
++	{ID: "gemini-3.1-flash-lite", Type: "model", DisplayName: "Gemini 3.1 Flash Lite", CreatedAt: ""},
++	{ID: "gemini-3.1-flash-lite-preview", Type: "model", DisplayName: "Gemini 3.1 Flash Lite Preview", CreatedAt: ""},
++	{ID: "gemini-3.5-flash", Type: "model", DisplayName: "Gemini 3.5 Flash", CreatedAt: ""},
++	{ID: "gemini-3.5-flash-lite", Type: "model", DisplayName: "Gemini 3.5 Flash Lite", CreatedAt: ""},
++	{ID: "gemini-3.6-flash", Type: "model", DisplayName: "Gemini 3.6 Flash", CreatedAt: ""},
++	{ID: "gemini-3.7-flash", Type: "model", DisplayName: "Gemini 3.7 Flash", CreatedAt: ""},
++	{ID: "gemini-3.8-flash", Type: "model", DisplayName: "Gemini 3.8 Flash", CreatedAt: ""},
+ 	{ID: "gemini-4-argon", Type: "model", DisplayName: "Gemini 4 Argon", CreatedAt: ""},
+ }
+ 
+@@ -43,4 +50,4 @@ func GoogleOneModelMapping() map[string]string {
+ }
+ 
+ // DefaultTestModel is the default model to preselect in test flows.
+-const DefaultTestModel = "gemini-2.0-flash"
++const DefaultTestModel = "gemini-3.5-flash"
+diff --git a/backend/internal/pkg/geminicli/models_test.go b/backend/internal/pkg/geminicli/models_test.go
+index e0cb57941..7ef2647fa 100644
+--- a/backend/internal/pkg/geminicli/models_test.go
++++ b/backend/internal/pkg/geminicli/models_test.go
+@@ -11,8 +11,9 @@ func TestDefaultModels_ContainsImageModels(t *testing.T) {
+ 	}
+ 
+ 	required := []string{
+-		"gemini-2.5-flash-image",
+ 		"gemini-3.1-flash-image",
++		"gemini-3-pro-image",
++		DefaultTestModel,
+ 	}
+ 
+ 	for _, id := range required {
+diff --git a/backend/internal/service/account_test_service.go b/backend/internal/service/account_test_service.go
+index 210033179..6f970eb0f 100644
+--- a/backend/internal/service/account_test_service.go
++++ b/backend/internal/service/account_test_service.go
+@@ -2382,6 +2382,14 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
+ 	}
+ }
+ 
++// geminiDefaultTestModel 返回 Gemini 连接测试未指定模型时使用的模型；Google One 账号只能使用其保守模型集。
++func geminiDefaultTestModel(account *Account) string {
++	if account.IsGeminiGoogleOne() {
++		return geminicli.GoogleOneModels[0].ID
++	}
++	return geminicli.DefaultTestModel
++}
++
+ // testGeminiAccountConnection tests a Gemini account's connection
+ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
+ 	ctx := c.Request.Context()
+@@ -2389,7 +2397,7 @@ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account
+ 	// Determine the model to use
+ 	testModelID := modelID
+ 	if testModelID == "" {
+-		testModelID = geminicli.DefaultTestModel
++		testModelID = geminiDefaultTestModel(account)
+ 	}
+ 
+ 	// For static upstream credentials with model mapping, map the model
+diff --git a/backend/internal/service/account_test_service_gemini_test.go b/backend/internal/service/account_test_service_gemini_test.go
+index f38264a21..16492c4cf 100644
+--- a/backend/internal/service/account_test_service_gemini_test.go
++++ b/backend/internal/service/account_test_service_gemini_test.go
+@@ -7,6 +7,7 @@ import (
+ 	"strings"
+ 	"testing"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/stretchr/testify/require"
+ )
+@@ -57,3 +58,14 @@ func TestProcessGeminiStream_EmitsImageEvent(t *testing.T) {
+ 	require.Contains(t, body, "\"image_url\":\"data:image/png;base64,QUJD\"")
+ 	require.Contains(t, body, "\"mime_type\":\"image/png\"")
+ }
++
++func TestGeminiDefaultTestModel(t *testing.T) {
++	t.Parallel()
++
++	googleOne := &Account{Platform: PlatformGemini, Type: AccountTypeOAuth, Credentials: map[string]any{"oauth_type": "google_one"}}
++	require.Equal(t, geminicli.GoogleOneModels[0].ID, geminiDefaultTestModel(googleOne))
++	require.Contains(t, googleOne.GetModelMapping(), geminiDefaultTestModel(googleOne))
++
++	apiKey := &Account{Platform: PlatformGemini, Type: AccountTypeAPIKey}
++	require.Equal(t, geminicli.DefaultTestModel, geminiDefaultTestModel(apiKey))
++}
+diff --git a/backend/internal/service/antigravity_gateway_streaming.go b/backend/internal/service/antigravity_gateway_streaming.go
+index 75b0bd5a7..e02541ed0 100644
+--- a/backend/internal/service/antigravity_gateway_streaming.go
++++ b/backend/internal/service/antigravity_gateway_streaming.go
+@@ -1165,7 +1165,7 @@ func (s *AntigravityGatewayService) extractImageInputSize(body []byte) string {
+ }
+ 
+ // isImageGenerationModel 判断模型是否为图片生成模型
+-// 支持的模型：gemini-3.1-flash-image, gemini-3-pro-image, gemini-2.5-flash-image 等
++// 支持的模型：gemini-3.1-flash-image, gemini-3.1-flash-lite-image, gemini-3-pro-image, gemini-2.5-flash-image 等
+ func isImageGenerationModel(model string) bool {
+ 	modelLower := strings.ToLower(model)
+ 	// 移除 models/ 前缀
+@@ -1175,6 +1175,8 @@ func isImageGenerationModel(model string) bool {
+ 	return modelLower == "gemini-3.1-flash-image" ||
+ 		modelLower == "gemini-3.1-flash-image-preview" ||
+ 		strings.HasPrefix(modelLower, "gemini-3.1-flash-image-") ||
++		modelLower == "gemini-3.1-flash-lite-image" ||
++		strings.HasPrefix(modelLower, "gemini-3.1-flash-lite-image-") ||
+ 		modelLower == "gemini-3-pro-image" ||
+ 		modelLower == "gemini-3-pro-image-preview" ||
+ 		strings.HasPrefix(modelLower, "gemini-3-pro-image-") ||
+diff --git a/backend/internal/service/antigravity_image_test.go b/backend/internal/service/antigravity_image_test.go
+index 76269dd3c..11029785b 100644
+--- a/backend/internal/service/antigravity_image_test.go
++++ b/backend/internal/service/antigravity_image_test.go
+@@ -21,6 +21,13 @@ func TestIsImageGenerationModel_GeminiFlashImage(t *testing.T) {
+ 	require.True(t, isImageGenerationModel("gemini-2.5-flash-image-preview"))
+ }
+ 
++// TestIsImageGenerationModel_GeminiFlashLiteImage 测试 gemini-3.1-flash-lite-image 识别
++func TestIsImageGenerationModel_GeminiFlashLiteImage(t *testing.T) {
++	require.True(t, isImageGenerationModel("gemini-3.1-flash-lite-image"))
++	require.True(t, isImageGenerationModel("models/gemini-3.1-flash-lite-image"))
++	require.False(t, isImageGenerationModel("gemini-3.1-flash-lite"))
++}
++
+ // TestIsImageGenerationModel_RegularModel 测试普通模型不被识别为图片模型
+ func TestIsImageGenerationModel_RegularModel(t *testing.T) {
+ 	require.False(t, isImageGenerationModel("claude-3-opus"))
+diff --git a/backend/internal/service/gemini_models_endpoints.go b/backend/internal/service/gemini_models_endpoints.go
+index 02f3b985a..34a86444d 100644
+--- a/backend/internal/service/gemini_models_endpoints.go
++++ b/backend/internal/service/gemini_models_endpoints.go
+@@ -8,6 +8,7 @@ import (
+ 	"io"
+ 	"net/http"
+ 	"slices"
++	"sort"
+ 	"strings"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
+@@ -23,6 +24,47 @@ import (
+ // errGeminiModelsUpstreamStatus 在 Vertex 分页读取遇到非 2xx 时中止分页，原始响应由调用方另行保存。
+ var errGeminiModelsUpstreamStatus = errors.New("upstream model list returned non-2xx status")
+ 
++// DeclaredModelIDs 在分组内每个可调度 Gemini 账号都有生效的 model_mapping（含 Google One 的默认映射）时，
++// 返回这些映射键的并集（去重排序，通配符键原样保留）。有账号未配置映射时该账号接受任意模型，返回空，
++// 模型接口由选中账号的上游应答。
++func (s *GeminiMessagesCompatService) DeclaredModelIDs(ctx context.Context, groupID *int64) ([]string, error) {
++	accounts, err := s.listSchedulableAccountsOnce(ctx, groupID, PlatformGemini, true)
++	if err != nil {
++		return nil, fmt.Errorf("query accounts failed: %w", err)
++	}
++	seen := make(map[string]struct{})
++	for i := range accounts {
++		if accounts[i].Platform != PlatformGemini {
++			continue
++		}
++		mapping := accounts[i].GetModelMapping()
++		if len(mapping) == 0 {
++			return nil, nil
++		}
++		for model := range mapping {
++			seen[model] = struct{}{}
++		}
++	}
++	models := make([]string, 0, len(seen))
++	for model := range seen {
++		models = append(models, model)
++	}
++	sort.Strings(models)
++	return models, nil
++}
++
++// DeclaredModelsCover 判断声明的模型中是否有条目覆盖 model：键末尾的 * 按前缀匹配，
++// 模型别名按请求路径查映射时的规则归一后再比较。
++func DeclaredModelsCover(declared []string, model string) bool {
++	normalized := normalizeRequestedModelForLookup(PlatformGemini, model)
++	for _, pattern := range declared {
++		if matchWildcard(pattern, model) || matchWildcard(pattern, normalized) {
++			return true
++		}
++	}
++	return false
++}
++
+ // SelectAccountForModelsEndpoints 为模型列表与模型详情接口选择账号。
+ //
+ // 优先级：
+@@ -35,7 +77,7 @@ var errGeminiModelsUpstreamStatus = errors.New("upstream model list returned non
+ //  7. Vertex API Key 账号（列表接口不接受 API Key，只能返回内置列表）
+ //
+ // Vertex 账号排在所有 AI Studio 兼容账号之后，混合分组始终由 AI Studio 兼容账号应答。
+-// 同级账号按 priority、最近使用时间挑选。
++// 同级账号按 priority、最近使用时间挑选。DeclaredModelIDs 非空时模型接口按声明的模型应答，不经过选号。
+ func (s *GeminiMessagesCompatService) SelectAccountForModelsEndpoints(ctx context.Context, groupID *int64) (*Account, error) {
+ 	accounts, err := s.listSchedulableAccountsOnce(ctx, groupID, PlatformGemini, true)
+ 	if err != nil {
+diff --git a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+index 8dea0f9a3..4b1e44546 100644
+--- a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
++++ b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+@@ -154,10 +154,22 @@ describe('useModelWhitelist', () => {
+   it('gemini 模型列表包含原生生图模型', () => {
+     const models = getModelsByPlatform('gemini')
+ 
+-    expect(models).toContain('gemini-2.5-flash-image')
+     expect(models).toContain('gemini-3.1-flash-image')
+-    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-2.0-flash'))
+-    expect(models.indexOf('gemini-2.5-flash-image')).toBeLessThan(models.indexOf('gemini-2.5-flash'))
++    expect(models).toContain('gemini-3-pro-image')
++    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-3-flash'))
++    expect(models.indexOf('gemini-3-pro-image')).toBeLessThan(models.indexOf('gemini-3.5-flash'))
++  })
++
++  it('gemini 模型列表不含已停用的 2.x 模型与 Antigravity 档位别名', () => {
++    const models = getModelsByPlatform('gemini')
++
++    for (const model of ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-image', 'gemini-3-pro-preview']) {
++      expect(models).not.toContain(model)
++    }
++    for (const model of ['gemini-3.1-pro', 'gemini-3.1-pro-high', 'gemini-3.1-pro-low']) {
++      expect(models).not.toContain(model)
++    }
++    expect(models).toContain('gemini-3.8-flash')
+   })
+ 
+   it('antigravity 模型列表会把新的 Gemini 图片模型排在前面', () => {
+diff --git a/frontend/src/composables/useModelWhitelist.ts b/frontend/src/composables/useModelWhitelist.ts
+index efb7a5fd9..00cf9e16e 100644
+--- a/frontend/src/composables/useModelWhitelist.ts
++++ b/frontend/src/composables/useModelWhitelist.ts
+@@ -51,13 +51,21 @@ const geminiModels = [
+   // Keep in sync with backend curated Gemini lists.
+   // This list is intentionally conservative (models commonly available across OAuth/API key).
+   'gemini-3.1-flash-image',
+-  'gemini-2.5-flash-image',
+-  'gemini-2.0-flash',
+-  'gemini-2.5-flash',
+-  'gemini-2.5-pro',
+-  'gemini-3.5-flash',
++  'gemini-3.1-flash-image-preview',
++  'gemini-3.1-flash-lite-image',
++  'gemini-3-pro-image',
++  'gemini-3-pro-image-preview',
++  'gemini-3-flash',
+   'gemini-3-flash-preview',
+-  'gemini-3-pro-preview',
++  'gemini-3.1-pro-preview',
++  'gemini-3.1-pro-preview-customtools',
++  'gemini-3.1-flash-lite',
++  'gemini-3.1-flash-lite-preview',
++  'gemini-3.5-flash',
++  'gemini-3.5-flash-lite',
++  'gemini-3.6-flash',
++  'gemini-3.7-flash',
++  'gemini-3.8-flash',
+   'gemini-4-argon'
+ ]
+ 
+@@ -284,10 +292,11 @@ const perplexityModels = [
+ ]
+ 
+ // 所有模型（去重）
+-const allModelsList: string[] = [
++const allModelsList: string[] = Array.from(new Set([
+   ...openaiModels,
+   ...claudeModels,
+   ...geminiModels,
++  ...antigravityModels,
+   ...zhipuModels,
+   ...qwenModels,
+   ...deepseekModels,
+@@ -303,7 +312,7 @@ const allModelsList: string[] = [
+   ...sparkModels,
+   ...hunyuanModels,
+   ...perplexityModels
+-]
++]))
+ 
+ // 转换为下拉选项格式
+ export const allModels = allModelsList.map(m => ({ value: m, label: m }))

@@ -1,0 +1,479 @@
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit
+=== RUN   TestPaginationParamsOffsetDoesNotOverflow
+=== PAUSE TestPaginationParamsOffsetDoesNotOverflow
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/normal_values
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/normal_values
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps
+=== CONT  TestPaginationParamsOffsetDoesNotOverflow
+    pagination_test.go:118: Offset() for Page=9223372036854775807, PageSize=-9223372036854775808 = -40, want 0 <= offset <= MaxInt-20
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page
+--- FAIL: TestPaginationParamsOffsetDoesNotOverflow (0.00s)
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates
+=== NAME  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates
+    pagination_test.go:102: Offset() for Page=9223372036854775807, PageSize=1000 = -2000, want 9223372036854774000
+=== NAME  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates
+    pagination_test.go:102: Offset() for Page=9223372036854775807, PageSize=21 = 9223372036854775766, want 9223372036854775779
+=== NAME  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates
+    pagination_test.go:102: Offset() for Page=9223372036854775807, PageSize=20 = -40, want 9223372036854775780
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/normal_values
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates
+    pagination_test.go:102: Offset() for Page=461168601842738791, PageSize=20 = 9223372036854775800, want 9223372036854775780
+--- FAIL: TestPaginationParamsOffsetUsesNormalizedLimit (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps (0.00s)
+    --- FAIL: TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates (0.00s)
+    --- FAIL: TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/normal_values (0.00s)
+    --- FAIL: TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates (0.00s)
+    --- FAIL: TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/pkg/pagination	0.002s
+=== RUN   TestParsePagination
+=== RUN   TestParsePagination/无参数_使用默认值
+=== RUN   TestParsePagination/仅指定page
+=== RUN   TestParsePagination/仅指定page_size
+=== RUN   TestParsePagination/同时指定page和page_size
+=== RUN   TestParsePagination/使用limit代替page_size
+=== RUN   TestParsePagination/page_size优先于limit
+=== RUN   TestParsePagination/page为0_使用默认值
+=== RUN   TestParsePagination/page_size超过1000_使用默认值
+=== RUN   TestParsePagination/page_size恰好1000_有效
+=== RUN   TestParsePagination/page为非数字_使用默认值
+=== RUN   TestParsePagination/page_size为非数字_使用默认值
+=== RUN   TestParsePagination/limit为非数字_使用默认值
+=== RUN   TestParsePagination/page_size为0_使用默认值
+=== RUN   TestParsePagination/limit为0_使用默认值
+=== RUN   TestParsePagination/大页码
+=== RUN   TestParsePagination/page_size为1_最小有效值
+=== RUN   TestParsePagination/混合数字和字母的page
+=== RUN   TestParsePagination/limit超过1000_使用默认值
+=== RUN   TestParsePagination/page为MaxInt_钳制到不溢出的上限
+    response_test.go:759: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:759
+        	Error:      	Not equal: 
+        	            	expected: 461168601842738790
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePagination/page为MaxInt_钳制到不溢出的上限
+        	Messages:   	page 不符合预期
+=== RUN   TestParsePagination/page为MaxInt且page_size为1000_钳制到不溢出的上限
+    response_test.go:759: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:759
+        	Error:      	Not equal: 
+        	            	expected: 9223372036854775
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePagination/page为MaxInt且page_size为1000_钳制到不溢出的上限
+        	Messages:   	page 不符合预期
+=== RUN   TestParsePagination/page恰好在上限_有效
+=== RUN   TestParsePagination/page刚超过上限_钳制
+    response_test.go:759: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:759
+        	Error:      	Not equal: 
+        	            	expected: 461168601842738790
+        	            	actual  : 461168601842738791
+        	Test:       	TestParsePagination/page刚超过上限_钳制
+        	Messages:   	page 不符合预期
+=== RUN   TestParsePagination/page超过MaxInt_使用默认值
+=== RUN   TestParsePagination/page超过uint64范围_不能回绕为2
+    response_test.go:759: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:759
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 2
+        	Test:       	TestParsePagination/page超过uint64范围_不能回绕为2
+        	Messages:   	page 不符合预期
+=== RUN   TestParsePagination/page_size超过uint64范围_不能回绕为21
+    response_test.go:760: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:760
+        	Error:      	Not equal: 
+        	            	expected: 20
+        	            	actual  : 21
+        	Test:       	TestParsePagination/page_size超过uint64范围_不能回绕为21
+        	Messages:   	pageSize 不符合预期
+=== RUN   TestParsePagination/limit超过uint64范围_不能回绕为21
+    response_test.go:760: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:760
+        	Error:      	Not equal: 
+        	            	expected: 20
+        	            	actual  : 21
+        	Test:       	TestParsePagination/limit超过uint64范围_不能回绕为21
+        	Messages:   	pageSize 不符合预期
+=== RUN   TestParsePagination/超长数字_使用默认值
+--- FAIL: TestParsePagination (0.00s)
+    --- PASS: TestParsePagination/无参数_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/仅指定page (0.00s)
+    --- PASS: TestParsePagination/仅指定page_size (0.00s)
+    --- PASS: TestParsePagination/同时指定page和page_size (0.00s)
+    --- PASS: TestParsePagination/使用limit代替page_size (0.00s)
+    --- PASS: TestParsePagination/page_size优先于limit (0.00s)
+    --- PASS: TestParsePagination/page为0_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size超过1000_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size恰好1000_有效 (0.00s)
+    --- PASS: TestParsePagination/page为非数字_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size为非数字_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/limit为非数字_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size为0_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/limit为0_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/大页码 (0.00s)
+    --- PASS: TestParsePagination/page_size为1_最小有效值 (0.00s)
+    --- PASS: TestParsePagination/混合数字和字母的page (0.00s)
+    --- PASS: TestParsePagination/limit超过1000_使用默认值 (0.00s)
+    --- FAIL: TestParsePagination/page为MaxInt_钳制到不溢出的上限 (0.00s)
+    --- FAIL: TestParsePagination/page为MaxInt且page_size为1000_钳制到不溢出的上限 (0.00s)
+    --- PASS: TestParsePagination/page恰好在上限_有效 (0.00s)
+    --- FAIL: TestParsePagination/page刚超过上限_钳制 (0.00s)
+    --- PASS: TestParsePagination/page超过MaxInt_使用默认值 (0.00s)
+    --- FAIL: TestParsePagination/page超过uint64范围_不能回绕为2 (0.00s)
+    --- FAIL: TestParsePagination/page_size超过uint64范围_不能回绕为21 (0.00s)
+    --- FAIL: TestParsePagination/limit超过uint64范围_不能回绕为21 (0.00s)
+    --- PASS: TestParsePagination/超长数字_使用默认值 (0.00s)
+=== RUN   TestParsePaginationBoundariesAndResponse
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775806&page_size=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1#01
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387902&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387903&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=2
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 4611686018427387903
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387904&page_size=2
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 4611686018427387903
+        	            	actual  : 4611686018427387904
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=4611686018427387904&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258601&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258602&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=3
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 3074457345618258602
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258603&page_size=3
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 3074457345618258602
+        	            	actual  : 3074457345618258603
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=3074457345618258603&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738789&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738790&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=20
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 461168601842738790
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738791&page_size=20
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 461168601842738790
+        	            	actual  : 461168601842738791
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=461168601842738791&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179799&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179800&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=21
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 439208192231179800
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179801&page_size=21
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 439208192231179800
+        	            	actual  : 439208192231179801
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=439208192231179801&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496271&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496272&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=999
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9232604641496272
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496273&page_size=999
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9232604641496272
+        	            	actual  : 9232604641496273
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9232604641496273&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854774&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1000
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9223372036854775
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854776&page_size=1000
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9223372036854775
+        	            	actual  : 9223372036854776
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854776&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775806&limit=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1#01
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387902&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387903&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=2
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 4611686018427387903
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387904&limit=2
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 4611686018427387903
+        	            	actual  : 4611686018427387904
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=4611686018427387904&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258601&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258602&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=3
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 3074457345618258602
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258603&limit=3
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 3074457345618258602
+        	            	actual  : 3074457345618258603
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=3074457345618258603&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738789&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738790&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=20
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 461168601842738790
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738791&limit=20
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 461168601842738790
+        	            	actual  : 461168601842738791
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=461168601842738791&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179799&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179800&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=21
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 439208192231179800
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179801&limit=21
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 439208192231179800
+        	            	actual  : 439208192231179801
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=439208192231179801&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496271&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496272&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=999
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9232604641496272
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496273&limit=999
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9232604641496272
+        	            	actual  : 9232604641496273
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9232604641496273&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854774&limit=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775&limit=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1000
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9223372036854775
+        	            	actual  : 9223372036854775807
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854776&limit=1000
+    response_test.go:779: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:779
+        	Error:      	Not equal: 
+        	            	expected: 9223372036854775
+        	            	actual  : 9223372036854776
+        	Test:       	TestParsePaginationBoundariesAndResponse/page=9223372036854776&limit=1000
+--- FAIL: TestParsePaginationBoundariesAndResponse (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775806&page_size=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1#01 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387902&page_size=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387903&page_size=2 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=2 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=4611686018427387904&page_size=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258601&page_size=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258602&page_size=3 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=3 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=3074457345618258603&page_size=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738789&page_size=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738790&page_size=20 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=20 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=461168601842738791&page_size=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179799&page_size=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179800&page_size=21 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=21 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=439208192231179801&page_size=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496271&page_size=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496272&page_size=999 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=999 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9232604641496273&page_size=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854774&page_size=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775&page_size=1000 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1000 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854776&page_size=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775806&limit=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1#01 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387902&limit=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387903&limit=2 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=2 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=4611686018427387904&limit=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258601&limit=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258602&limit=3 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=3 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=3074457345618258603&limit=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738789&limit=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738790&limit=20 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=20 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=461168601842738791&limit=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179799&limit=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179800&limit=21 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=21 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=439208192231179801&limit=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496271&limit=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496272&limit=999 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=999 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9232604641496273&limit=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854774&limit=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775&limit=1000 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1000 (0.00s)
+    --- FAIL: TestParsePaginationBoundariesAndResponse/page=9223372036854776&limit=1000 (0.00s)
+=== RUN   Test_parseInt
+=== RUN   Test_parseInt/正常数字
+=== RUN   Test_parseInt/零
+=== RUN   Test_parseInt/单个数字
+=== RUN   Test_parseInt/大数字
+=== RUN   Test_parseInt/包含字母_返回0
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/包含字母_返回0
+=== RUN   Test_parseInt/数字开头接字母_返回0
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/数字开头接字母_返回0
+=== RUN   Test_parseInt/包含负号_返回0
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/包含负号_返回0
+=== RUN   Test_parseInt/包含小数点_返回0
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/包含小数点_返回0
+=== RUN   Test_parseInt/包含空格_返回0
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/包含空格_返回0
+=== RUN   Test_parseInt/空字符串
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/空字符串
+=== RUN   Test_parseInt/前导零_有效
+=== RUN   Test_parseInt/正号_无效
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/正号_无效
+=== RUN   Test_parseInt/MaxInt_有效
+=== RUN   Test_parseInt/超过MaxInt_返回范围错误
+    response_test.go:891: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/response/response_test.go:891
+        	Error:      	An error is expected but got nil.
+        	Test:       	Test_parseInt/超过MaxInt_返回范围错误
+--- FAIL: Test_parseInt (0.00s)
+    --- PASS: Test_parseInt/正常数字 (0.00s)
+    --- PASS: Test_parseInt/零 (0.00s)
+    --- PASS: Test_parseInt/单个数字 (0.00s)
+    --- PASS: Test_parseInt/大数字 (0.00s)
+    --- FAIL: Test_parseInt/包含字母_返回0 (0.00s)
+    --- FAIL: Test_parseInt/数字开头接字母_返回0 (0.00s)
+    --- FAIL: Test_parseInt/包含负号_返回0 (0.00s)
+    --- FAIL: Test_parseInt/包含小数点_返回0 (0.00s)
+    --- FAIL: Test_parseInt/包含空格_返回0 (0.00s)
+    --- FAIL: Test_parseInt/空字符串 (0.00s)
+    --- PASS: Test_parseInt/前导零_有效 (0.00s)
+    --- FAIL: Test_parseInt/正号_无效 (0.00s)
+    --- PASS: Test_parseInt/MaxInt_有效 (0.00s)
+    --- FAIL: Test_parseInt/超过MaxInt_返回范围错误 (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/pkg/response	0.012s
+FAIL	github.com/Wei-Shaw/sub2api/internal/service [build failed]
+FAIL	github.com/Wei-Shaw/sub2api/internal/repository [build failed]
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler/admin [build failed]
+FAIL	github.com/Wei-Shaw/sub2api/internal/securityaudit [build failed]
+FAIL

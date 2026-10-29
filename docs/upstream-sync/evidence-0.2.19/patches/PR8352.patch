@@ -1,0 +1,65 @@
+diff --git a/backend/internal/service/admin_service_role_test.go b/backend/internal/service/admin_service_role_test.go
+index 956b7fae1..86fe8eee4 100644
+--- a/backend/internal/service/admin_service_role_test.go
++++ b/backend/internal/service/admin_service_role_test.go
+@@ -4,8 +4,10 @@ package service
+ 
+ import (
+ 	"context"
++	"net/http"
+ 	"testing"
+ 
++	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+ 	"github.com/stretchr/testify/require"
+ )
+@@ -141,3 +143,18 @@ func TestAdminService_UpdateUser_PromoteDoesNotCountAdmins(t *testing.T) {
+ 	require.Equal(t, RoleAdmin, updated.Role)
+ 	require.Equal(t, 0, repo.listCalls, "升级路径不应触发管理员计数")
+ }
++
++func TestAdminService_UpdateUser_AdminGuardsAreClientErrors(t *testing.T) {
++	base := &userRepoStub{user: &User{ID: 42, Email: "a@example.com", Role: RoleAdmin}}
++	repo := &roleGuardUserRepoStub{rpmUserRepoStub: &rpmUserRepoStub{userRepoStub: base}, adminTotal: 1}
++	svc := &adminServiceImpl{userRepo: repo, redeemCodeRepo: &redeemRepoStub{}}
++
++	_, err := svc.UpdateUser(context.Background(), 42, &UpdateUserInput{Status: StatusDisabled})
++	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
++	require.Equal(t, "ADMIN_DISABLE_FORBIDDEN", infraerrors.Reason(err))
++
++	_, err = svc.UpdateUser(context.Background(), 42, &UpdateUserInput{Role: RoleUser})
++	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
++	require.Equal(t, "LAST_ADMIN_DEMOTE_FORBIDDEN", infraerrors.Reason(err))
++	require.Nil(t, repo.lastUpdated)
++}
+diff --git a/backend/internal/service/admin_user.go b/backend/internal/service/admin_user.go
+index 12f71f96a..653a5d62d 100644
+--- a/backend/internal/service/admin_user.go
++++ b/backend/internal/service/admin_user.go
+@@ -172,7 +172,7 @@ func (s *adminServiceImpl) ensureNotLastAdmin(ctx context.Context) error {
+ 		return fmt.Errorf("count admin users: %w", err)
+ 	}
+ 	if result == nil || result.Total <= 1 {
+-		return errors.New("cannot demote the last admin user")
++		return infraerrors.BadRequest("LAST_ADMIN_DEMOTE_FORBIDDEN", "cannot demote the last admin user")
+ 	}
+ 	return nil
+ }
+@@ -211,7 +211,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
+ 
+ 	// Protect admin users: cannot disable admin accounts
+ 	if user.Role == "admin" && input.Status == "disabled" {
+-		return nil, errors.New("cannot disable admin user")
++		return nil, infraerrors.BadRequest("ADMIN_DISABLE_FORBIDDEN", "cannot disable admin user; change the role to user first")
+ 	}
+ 
+ 	oldConcurrency := user.Concurrency
+@@ -363,7 +363,7 @@ func (s *adminServiceImpl) DeleteUser(ctx context.Context, id int64) error {
+ 		return err
+ 	}
+ 	if user.Role == "admin" {
+-		return errors.New("cannot delete admin user")
++		return infraerrors.BadRequest("ADMIN_DELETE_FORBIDDEN", "cannot delete admin user; change the role to user first")
+ 	}
+ 
+ 	apiKeys, err := s.listUserAPIKeysForDeletion(ctx, id)

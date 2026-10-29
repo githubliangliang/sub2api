@@ -1,0 +1,583 @@
+diff --git a/backend/internal/pkg/apicompat/anthropic_to_responses.go b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+index a54ca9413..c27e44553 100644
+--- a/backend/internal/pkg/apicompat/anthropic_to_responses.go
++++ b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+@@ -68,7 +68,7 @@ func AnthropicToResponsesWithMinOutputTokens(req *AnthropicRequest, minOutputTok
+ 
+ 	// An explicit thinking disable takes precedence over output_config.effort.
+ 	effort := anthropicReasoningEffort(req)
+-	if openai.IsGPT61SolModelSpelling(req.Model) && req.OutputConfig != nil && req.OutputConfig.Effort == "max" && effort != "none" {
++	if (openai.IsGPT61SolModelSpelling(req.Model) || openai.IsGPT61TerraModelSpelling(req.Model)) && req.OutputConfig != nil && req.OutputConfig.Effort == "max" && effort != "none" {
+ 		effort = "max"
+ 	}
+ 	out.Reasoning = &ResponsesReasoning{
+diff --git a/backend/internal/pkg/openai/constants.go b/backend/internal/pkg/openai/constants.go
+index 8c1d7c957..f213459ec 100644
+--- a/backend/internal/pkg/openai/constants.go
++++ b/backend/internal/pkg/openai/constants.go
+@@ -25,6 +25,7 @@ var DefaultModels = []Model{
+ 	{ID: "gpt-5.6", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 (Sol)"},
+ 	{ID: "gpt-5.6-terra", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Terra"},
+ 	{ID: "gpt-5.6-luna", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Luna"},
++	{ID: "gpt-6.1-terra", Object: "model", Created: 1704067200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Terra"},
+ 	{ID: "gpt-6.1-sol", Object: "model", Created: 1790640000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Sol"},
+ 	{ID: "gpt-6-sol", Object: "model", Created: 1790035200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Sol"},
+ 	{ID: "gpt-6-luna", Object: "model", Created: 1790035200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6 Luna"},
+@@ -216,6 +217,27 @@ func IsGPT61SolModelSpelling(model string) bool {
+ 	}
+ }
+ 
++func IsGPT61TerraModelSpelling(model string) bool {
++	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
++	if canonical == "gpt-6.1-terra" {
++		return true
++	}
++	suffix, ok := strings.CutPrefix(canonical, "gpt-6.1-terra-")
++	if !ok {
++		return false
++	}
++	switch suffix {
++	case "none", "low", "medium", "high", "xhigh", "max", "openai-compact":
++		return true
++	default:
++		return false
++	}
++}
++
++func RequiresResponsesForToolCalls(model string) bool {
++	return IsGPT61SolModelSpelling(model) || IsGPT61TerraModelSpelling(model)
++}
++
+ // ValidateGPT61SolReasoningEffort rejects disabled reasoning instead of silently
+ // increasing the client's requested effort on compatibility paths.
+ func ValidateGPT61SolReasoningEffort(model, effort string) error {
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index bd639ebfa..43bad9439 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -591,6 +591,20 @@ func (s *BillingService) initFallbackPricing() {
+ 	}
+ 
+ 	// GPT-6 Sol/Luna official rates, 2026-09-22.
++	s.fallbackPrices["gpt-6.1-terra"] = &ModelPricing{
++		InputPricePerToken:                 1e-6,
++		InputPricePerTokenPriority:         2e-6,
++		OutputPricePerToken:                5e-6,
++		OutputPricePerTokenPriority:        10e-6,
++		CacheCreationPricePerToken:         1.25e-6,
++		CacheCreationPricePerTokenPriority: 2.5e-6,
++		CacheReadPricePerToken:             0.05e-6,
++		CacheReadPricePerTokenPriority:     0.1e-6,
++		CacheCreationPriceExplicit:         true,
++		LongContextInputThreshold:          272_000,
++		LongContextInputMultiplier:         2,
++		LongContextOutputMultiplier:        1.5,
++	}
+ 	s.fallbackPrices["gpt-6.1-sol"] = &ModelPricing{
+ 		InputPricePerToken:                 2e-6,
+ 		InputPricePerTokenPriority:         4e-6,
+@@ -1256,7 +1270,7 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+ 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
+ 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
+ 		switch normalized {
+-		case "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
++		case "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
+ 			return s.fallbackPrices[normalized]
+ 		case "gpt-6-astra":
+ 			return s.fallbackPrices["gpt-6-astra"]
+@@ -1432,7 +1446,7 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
+ 				InputPricePerTokenPriority:         litellmPricing.InputCostPerTokenPriority,
+ 				OutputPricePerToken:                litellmPricing.OutputCostPerToken,
+ 				OutputPricePerTokenPriority:        litellmPricing.OutputCostPerTokenPriority,
+-				CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
++				CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
+ 				CacheCreationPricePerToken:         litellmPricing.CacheCreationInputTokenCost,
+ 				CacheCreationPricePerTokenPriority: litellmPricing.CacheCreationInputTokenCostPriority,
+ 				CacheReadPricePerToken:             litellmPricing.CacheReadInputTokenCost,
+@@ -1952,7 +1966,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+ 		return &cloned
+ 	}
+ 	normalized := normalizeKnownOpenAICodexModel(model)
+-	usesCacheWritePremium := isOpenAIGPT56Model(normalized) || (openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized))
++	usesCacheWritePremium := isOpenAIGPT56Model(normalized) || (openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized))
+ 	needsCacheCreationPolicy := usesCacheWritePremium && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
+ 		(pricing.InputPricePerTokenPriority > 0 && pricing.CacheCreationPricePerTokenPriority <= 0))
+ 	fastRatio := openAIModelFastPricingRatio(normalized)
+@@ -1978,7 +1992,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+ 	}
+ 	if fastRatio > 0 {
+ 		enforceOpenAIFastPricingRatio(&cloned, fastRatio)
+-		if (openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized)) && cloned.CacheCreationPriceExplicit {
++		if (openai.IsGPT6SolOrLunaModelSpelling(normalized) || openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized)) && cloned.CacheCreationPriceExplicit {
+ 			cloned.CacheCreationPricePerTokenPriority = cloned.CacheCreationPricePerToken * fastRatio
+ 		}
+ 	}
+@@ -1990,7 +2004,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+ // 档的模型（如 gpt-5.5-pro、gpt-5.4-mini/nano）返回 0。
+ func openAIModelFastPricingRatio(normalized string) float64 {
+ 	switch normalized {
+-	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
++	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
+ 		return 2.0
+ 	case "gpt-5.5":
+ 		return 2.5
+diff --git a/backend/internal/service/billing_service_test.go b/backend/internal/service/billing_service_test.go
+index d02c942cb..cb68489b4 100644
+--- a/backend/internal/service/billing_service_test.go
++++ b/backend/internal/service/billing_service_test.go
+@@ -2049,6 +2049,8 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
+ 			input, output, write, read float64
+ 		}{
+ 			{"gpt-6.1-sol", 2e-6, 10e-6, 2.5e-6, 0.1e-6},
++			{"gpt-6.1-terra", 1e-6, 5e-6, 1.25e-6, 0.05e-6},
++			{"openai/gpt-6.1-terra-max", 1e-6, 5e-6, 1.25e-6, 0.05e-6},
+ 			{"gpt-6-sol", 2e-6, 10e-6, 2.5e-6, 0.2e-6},
+ 			{"gpt-6-luna", 0.1e-6, 0.5e-6, 0.125e-6, 0.01e-6},
+ 		} {
+diff --git a/backend/internal/service/openai_codex_models_service.go b/backend/internal/service/openai_codex_models_service.go
+index 61c4d5d44..4f810cc6b 100644
+--- a/backend/internal/service/openai_codex_models_service.go
++++ b/backend/internal/service/openai_codex_models_service.go
+@@ -649,6 +649,9 @@ func configuredCodexGPTReasoningLevels(modelID string) []configuredCodexReasonin
+ 			Description: "Maximum reasoning with automatic task delegation",
+ 		})
+ 	}
++	if openai.IsGPT61TerraModelSpelling(modelID) {
++		levels = append([]configuredCodexReasoningLevel{{Effort: "none", Description: "No reasoning"}}, levels...)
++	}
+ 	return levels
+ }
+ 
+diff --git a/backend/internal/service/openai_codex_transform.go b/backend/internal/service/openai_codex_transform.go
+index 220358f1e..f4b33dbab 100644
+--- a/backend/internal/service/openai_codex_transform.go
++++ b/backend/internal/service/openai_codex_transform.go
+@@ -11,6 +11,7 @@ import (
+ )
+ 
+ var codexModelMap = map[string]string{
++	"gpt-6.1-terra":        "gpt-6.1-terra",
+ 	"gpt-6.1-sol":          "gpt-6.1-sol",
+ 	"gpt-6-sol":            "gpt-6-sol",
+ 	"gpt-6-luna":           "gpt-6-luna",
+@@ -63,6 +64,7 @@ var codexVersionModelPrefixes = []struct {
+ 	prefix string
+ 	target string
+ }{
++	{prefix: "gpt-6.1-terra", target: "gpt-6.1-terra"},
+ 	{prefix: "gpt-6.1-sol", target: "gpt-6.1-sol"},
+ 	{prefix: "gpt-6-sol", target: "gpt-6-sol"},
+ 	{prefix: "gpt-6-luna", target: "gpt-6-luna"},
+diff --git a/backend/internal/service/openai_compat_model.go b/backend/internal/service/openai_compat_model.go
+index 19a6fb072..8f4a2585b 100644
+--- a/backend/internal/service/openai_compat_model.go
++++ b/backend/internal/service/openai_compat_model.go
+@@ -8,6 +8,9 @@ import (
+ )
+ 
+ func NormalizeOpenAICompatRequestedModel(model string) string {
++	if openai.IsGPT61TerraModelSpelling(model) {
++		return "gpt-6.1-terra"
++	}
+ 	if openai.IsGPT61SolModelSpelling(model) {
+ 		return "gpt-6.1-sol"
+ 	}
+@@ -24,10 +27,11 @@ func NormalizeOpenAICompatRequestedModel(model string) string {
+ }
+ 
+ func applyOpenAICompatModelNormalization(req *apicompat.AnthropicRequest) {
+-	if req != nil && openai.IsGPT61SolModelSpelling(req.Model) {
++	if req != nil && (openai.IsGPT61SolModelSpelling(req.Model) || openai.IsGPT61TerraModelSpelling(req.Model)) {
+ 		canonical := openai.CanonicalizeOpenAIModelAliasSpelling(req.Model)
+-		if effort, ok := strings.CutPrefix(canonical, "gpt-6.1-sol-"); ok && effort != "openai-compact" {
+-			req.Model = "gpt-6.1-sol"
++		baseModel := NormalizeOpenAICompatRequestedModel(req.Model)
++		if effort, ok := strings.CutPrefix(canonical, baseModel+"-"); ok && effort != "openai-compact" {
++			req.Model = baseModel
+ 			if req.OutputConfig == nil {
+ 				req.OutputConfig = &apicompat.AnthropicOutputConfig{}
+ 			}
+diff --git a/backend/internal/service/openai_gateway_chat_completions_raw.go b/backend/internal/service/openai_gateway_chat_completions_raw.go
+index 98fa8c4a0..6943f519e 100644
+--- a/backend/internal/service/openai_gateway_chat_completions_raw.go
++++ b/backend/internal/service/openai_gateway_chat_completions_raw.go
+@@ -95,8 +95,8 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
+ 		// anchored to the client's stable conversation prefix.
+ 		grokCacheIdentity = resolveGrokCacheIdentity(c, body, "", upstreamModel)
+ 	}
+-	if openai.IsGPT61SolModelSpelling(upstreamModel) && (len(gjson.GetBytes(body, "tools").Array()) > 0 || len(gjson.GetBytes(body, "functions").Array()) > 0) {
+-		err := fmt.Errorf("gpt-6.1-sol requires Responses for tool calls; this account only supports Chat Completions")
++	if openai.RequiresResponsesForToolCalls(upstreamModel) && (len(gjson.GetBytes(body, "tools").Array()) > 0 || len(gjson.GetBytes(body, "functions").Array()) > 0) {
++		err := fmt.Errorf("%s requires Responses for tool calls; this account only supports Chat Completions", normalizeKnownOpenAICodexModel(upstreamModel))
+ 		writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 		return nil, err
+ 	}
+diff --git a/backend/internal/service/openai_gateway_messages_chat_fallback.go b/backend/internal/service/openai_gateway_messages_chat_fallback.go
+index d12918a3b..59a70dd19 100644
+--- a/backend/internal/service/openai_gateway_messages_chat_fallback.go
++++ b/backend/internal/service/openai_gateway_messages_chat_fallback.go
+@@ -67,8 +67,8 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
+ 		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 		return nil, err
+ 	}
+-	if openai.IsGPT61SolModelSpelling(upstreamModel) && len(anthropicReq.Tools) > 0 {
+-		err := fmt.Errorf("gpt-6.1-sol requires Responses for tool calls; this account only supports Chat Completions")
++	if openai.RequiresResponsesForToolCalls(upstreamModel) && len(anthropicReq.Tools) > 0 {
++		err := fmt.Errorf("%s requires Responses for tool calls; this account only supports Chat Completions", normalizeKnownOpenAICodexModel(upstreamModel))
+ 		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 		return nil, err
+ 	}
+diff --git a/backend/internal/service/openai_gateway_responses_chat_fallback.go b/backend/internal/service/openai_gateway_responses_chat_fallback.go
+index 184e3152d..ad4e65e05 100644
+--- a/backend/internal/service/openai_gateway_responses_chat_fallback.go
++++ b/backend/internal/service/openai_gateway_responses_chat_fallback.go
+@@ -75,8 +75,8 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
+ 		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 		return nil, err
+ 	}
+-	if openai.IsGPT61SolModelSpelling(upstreamModel) && len(effectiveTools) > 0 {
+-		err := fmt.Errorf("gpt-6.1-sol requires Responses for tool calls; this account only supports Chat Completions")
++	if openai.RequiresResponsesForToolCalls(upstreamModel) && len(effectiveTools) > 0 {
++		err := fmt.Errorf("%s requires Responses for tool calls; this account only supports Chat Completions", normalizeKnownOpenAICodexModel(upstreamModel))
+ 		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 		return nil, err
+ 	}
+diff --git a/backend/internal/service/openai_gpt61_terra_test.go b/backend/internal/service/openai_gpt61_terra_test.go
+new file mode 100644
+index 000000000..1a8877478
+--- /dev/null
++++ b/backend/internal/service/openai_gpt61_terra_test.go
+@@ -0,0 +1,142 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestGPT61TerraIdentityAndEffort(t *testing.T) {
++	require.Contains(t, openai.DefaultModelIDs(), "gpt-6.1-terra")
++	require.Equal(t, "gpt-5.6-sol", openai.DefaultModelIDs()[0])
++	require.Equal(t, "gpt-5.4", openai.DefaultTestModel)
++	for _, effort := range []string{"none", "low", "medium", "high", "xhigh", "max"} {
++		model := "openai/GPT-6.1-Terra-" + effort
++		require.True(t, openai.IsGPT61TerraModelSpelling(model))
++		require.False(t, openai.IsGPT61SolModelSpelling(model))
++		require.Equal(t, "gpt-6.1-terra", normalizeCodexModel(model))
++		require.Equal(t, "gpt-6.1-terra", normalizeKnownOpenAICodexModel(model))
++		require.Equal(t, "gpt-6.1-terra", NormalizeOpenAICompatRequestedModel(model))
++		require.Equal(t, effort, normalizeOpenAIReasoningEffortForModel(effort, model))
++		request := &apicompat.AnthropicRequest{Model: model}
++		applyOpenAICompatModelNormalization(request)
++		require.Equal(t, "gpt-6.1-terra", request.Model)
++		require.Equal(t, effort, request.OutputConfig.Effort)
++		require.Equal(t, effort, openAICompatAnthropicReasoningEffort(request, request.Model, effort))
++		converted, err := apicompat.AnthropicToResponses(request)
++		require.NoError(t, err)
++		require.Equal(t, effort, converted.Reasoning.Effort)
++		chatConverted, err := apicompat.ChatCompletionsToResponses(&apicompat.ChatCompletionsRequest{
++			Model: "gpt-6.1-terra", ReasoningEffort: effort,
++			Tools: []apicompat.ChatTool{{Type: "function", Function: &apicompat.ChatFunction{Name: "lookup"}}},
++		})
++		require.NoError(t, err)
++		require.Equal(t, "gpt-6.1-terra", chatConverted.Model)
++		require.Equal(t, effort, chatConverted.Reasoning.Effort)
++		require.Len(t, chatConverted.Tools, 1)
++		require.NoError(t, validateGPT61SolCompatRequest([]byte(`{"reasoning":{"effort":"`+effort+`"}}`), model))
++	}
++	for _, model := range []string{"gpt-6.1-terra", "gpt-6.1-terra-openai-compact", "openai/gpt_6.1_terra"} {
++		require.Equal(t, "gpt-6.1-terra", normalizeKnownOpenAICodexModel(model))
++	}
++	for _, model := range []string{"gpt-6.1-sol", "gpt-5.6-terra", "gpt-6.1-terra-pro", "gpt-6.1-terra-ultra", "gpt-6.1-terra-minimal"} {
++		require.False(t, openai.IsGPT61TerraModelSpelling(model))
++	}
++	descriptor := newConfiguredCodexModelDescriptor("gpt-6.1-terra")
++	require.Equal(t, "medium", *descriptor.DefaultReasoningLevel)
++	var efforts []string
++	for _, level := range descriptor.SupportedReasoningLevels {
++		efforts = append(efforts, level.Effort)
++	}
++	require.Equal(t, []string{"none", "low", "medium", "high", "xhigh", "max"}, efforts)
++	require.Empty(t, descriptor.officialMetadata)
++	converted, err := apicompat.AnthropicToResponses(&apicompat.AnthropicRequest{Model: "gpt-6.1-terra"})
++	require.NoError(t, err)
++	require.Equal(t, "medium", converted.Reasoning.Effort)
++}
++
++func TestGPT61TerraAccountDiscoveryPreservesCatalog(t *testing.T) {
++	for _, catalog := range []string{`{"data":[{"id":"gpt-6.1-terra","owned_by":"openai"}]}`, `{"data":[]}`} {
++		gateway := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
++			return ordinaryModelsUpstreamResponse(catalog), nil
++		}})
++		service := &AccountTestService{openaiGatewayService: gateway}
++		account := newCodexModelsAPIKeyTestAccount("https://models.example/v1")
++		before, err := gateway.FetchOpenAIModelsList(context.Background(), account)
++		require.NoError(t, err)
++		models, err := service.FetchOpenAIAccountModels(context.Background(), account)
++		require.NoError(t, err)
++		if catalog == `{"data":[]}` {
++			require.Empty(t, models)
++		} else {
++			require.Len(t, models, 1)
++			require.Equal(t, "gpt-6.1-terra", models[0].ID)
++			require.Equal(t, "GPT-6.1 Terra", models[0].DisplayName)
++		}
++		after, err := gateway.FetchOpenAIModelsList(context.Background(), account)
++		require.NoError(t, err)
++		require.Equal(t, before.Body, after.Body)
++	}
++}
++
++func TestGPT61TerraManifestUsesUpstreamCapabilities(t *testing.T) {
++	account := Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
++	reasoning := true
++	account.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{Models: map[string]UpstreamModelMetadata{
++		"gpt-6.1-terra": {ID: "gpt-6.1-terra", Reasoning: &reasoning, DefaultReasoningLevel: "high", SupportedReasoningLevels: []string{"high"}, InputModalities: []string{"text"}, ContextWindow: 100000},
++	}})
++	service := &GatewayService{accountRepo: codexModelsVisibilityAccountRepo{byGroup: map[int64][]Account{1: {account}}}}
++	body, err := service.BuildCodexModelsManifestForGroup(context.Background(), &Group{ID: 1, Platform: PlatformOpenAI}, "", []string{"gpt-6.1-terra"})
++	require.NoError(t, err)
++	models := decodeCodexManifestModels(t, body)
++	require.Len(t, models, 1)
++	require.Equal(t, []any{"text"}, models[0]["input_modalities"])
++	require.Equal(t, []string{"high"}, effortsFromManifestModel(t, models[0]))
++	require.Equal(t, float64(100000), models[0]["context_window"])
++}
++
++func TestGPT61TerraChatFallbackRejectsTools(t *testing.T) {
++	for _, protocol := range []string{"chat", "responses", "messages"} {
++		for _, toolField := range []string{`"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object"}}}]`, `"functions":[{"name":"lookup","parameters":{"type":"object"}}]`} {
++			if protocol != "chat" && strings.HasPrefix(toolField, `"functions"`) {
++				continue
++			}
++			body := `{"model":"public","reasoning_effort":"none","messages":[{"role":"user","content":"hi"}],"input":"hi","max_tokens":100,` + toolField + `}`
++			if protocol == "responses" {
++				body = `{"model":"public","input":"hi","tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]}`
++			}
++			if protocol == "messages" {
++				body = `{"model":"public","max_tokens":100,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"lookup","input_schema":{"type":"object"}}]}`
++			}
++			t.Run(protocol+toolField, func(t *testing.T) {
++				recorder := httptest.NewRecorder()
++				ginContext, _ := gin.CreateTestContext(recorder)
++				ginContext.Request = httptest.NewRequest(http.MethodPost, "/v1/"+protocol, strings.NewReader(body))
++				account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"model_mapping": map[string]any{"public": "gpt-6.1-terra"}}}
++				service := &OpenAIGatewayService{cfg: &config.Config{}}
++				var err error
++				switch protocol {
++				case "chat":
++					_, err = service.forwardAsRawChatCompletions(context.Background(), ginContext, account, []byte(body), "")
++				case "responses":
++					_, err = service.forwardResponsesViaRawChatCompletions(context.Background(), ginContext, account, []byte(body), time.Now())
++				case "messages":
++					_, err = service.forwardAnthropicViaRawChatCompletions(context.Background(), ginContext, account, []byte(body), "")
++				}
++				require.ErrorContains(t, err, "gpt-6.1-terra requires Responses")
++				require.Equal(t, http.StatusBadRequest, recorder.Code)
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/openai_model_alias.go b/backend/internal/service/openai_model_alias.go
+index dd822b2f4..8a8a01a2f 100644
+--- a/backend/internal/service/openai_model_alias.go
++++ b/backend/internal/service/openai_model_alias.go
+@@ -37,6 +37,9 @@ func normalizeKnownOpenAICodexModel(model string) string {
+ 		}
+ 	}
+ 
++	if openai.IsGPT61TerraModelSpelling(normalized) {
++		return "gpt-6.1-terra"
++	}
+ 	if openai.IsGPT61SolModelSpelling(normalized) {
+ 		return "gpt-6.1-sol"
+ 	}
+@@ -163,5 +166,5 @@ func firstUsageBillingModel(candidates []string) string {
+ }
+ 
+ func isOpenAIGPT6Model(model string) bool {
+-	return isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)
++	return openai.IsGPT61TerraModelSpelling(model) || isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)
+ }
+diff --git a/backend/internal/service/pricing_service.go b/backend/internal/service/pricing_service.go
+index 6b8c6e066..08f7f9d6b 100644
+--- a/backend/internal/service/pricing_service.go
++++ b/backend/internal/service/pricing_service.go
+@@ -74,6 +74,23 @@ var (
+ 		Mode:                                "chat",
+ 		SupportsPromptCaching:               true,
+ 	}
++	openAIGPT61TerraFallbackPricing = &LiteLLMModelPricing{
++		InputCostPerToken:                   1e-6,
++		InputCostPerTokenPriority:           2e-6,
++		OutputCostPerToken:                  5e-6,
++		OutputCostPerTokenPriority:          10e-6,
++		CacheCreationInputTokenCost:         1.25e-6,
++		CacheCreationInputTokenCostPriority: 2.5e-6,
++		CacheReadInputTokenCost:             0.05e-6,
++		CacheReadInputTokenCostPriority:     0.1e-6,
++		LongContextInputTokenThreshold:      272_000,
++		LongContextInputCostMultiplier:      2,
++		LongContextOutputCostMultiplier:     1.5,
++		SupportsServiceTier:                 true,
++		LiteLLMProvider:                     "openai",
++		Mode:                                "chat",
++		SupportsPromptCaching:               true,
++	}
+ 	openAIGPT61SolFallbackPricing = &LiteLLMModelPricing{
+ 		InputCostPerToken:                   2e-6,
+ 		InputCostPerTokenPriority:           4e-6,
+@@ -1583,6 +1600,12 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
+ 		}
+ 	}
+ 
++	if openai.IsGPT61TerraModelSpelling(model) {
++		if pricing, ok := s.pricingData["gpt-6.1-terra"]; ok {
++			return pricing
++		}
++		return openAIGPT61TerraFallbackPricing
++	}
+ 	if openai.IsGPT61SolModelSpelling(model) {
+ 		if pricing, ok := s.pricingData["gpt-6.1-sol"]; ok {
+ 			return pricing
+diff --git a/backend/resources/model-pricing/model_prices_and_context_window.json b/backend/resources/model-pricing/model_prices_and_context_window.json
+index c9a5c3fb4..cd1e84434 100644
+--- a/backend/resources/model-pricing/model_prices_and_context_window.json
++++ b/backend/resources/model-pricing/model_prices_and_context_window.json
+@@ -1,4 +1,49 @@
+ {
++  "gpt-6.1-terra": {
++    "cache_creation_input_token_cost": 1.25e-06,
++    "cache_read_input_token_cost": 5e-08,
++    "input_cost_per_token": 1e-06,
++    "output_cost_per_token": 5e-06,
++    "cache_creation_input_token_cost_priority": 2.5e-06,
++    "cache_creation_input_token_cost_flex": 6.25e-07,
++    "cache_creation_input_token_cost_batches": 6.25e-07,
++    "cache_read_input_token_cost_priority": 1e-07,
++    "cache_read_input_token_cost_flex": 2.5e-08,
++    "cache_read_input_token_cost_batches": 2.5e-08,
++    "input_cost_per_token_priority": 2e-06,
++    "input_cost_per_token_flex": 5e-07,
++    "input_cost_per_token_batches": 5e-07,
++    "output_cost_per_token_priority": 1e-05,
++    "output_cost_per_token_flex": 2.5e-06,
++    "output_cost_per_token_batches": 2.5e-06,
++    "long_context_input_token_threshold": 272000,
++    "long_context_input_cost_multiplier": 2,
++    "long_context_output_cost_multiplier": 1.5,
++    "litellm_provider": "openai",
++    "mode": "chat",
++    "max_input_tokens": 922000,
++    "max_output_tokens": 128000,
++    "max_tokens": 128000,
++    "context_window": 1050000,
++    "supported_endpoints": [
++      "/v1/chat/completions",
++      "/v1/responses",
++      "/v1/batch"
++    ],
++    "supported_modalities": [
++      "text",
++      "image"
++    ],
++    "supported_output_modalities": [
++      "text"
++    ],
++    "supports_function_calling": true,
++    "supports_none_reasoning_effort": true,
++    "supports_xhigh_reasoning_effort": true,
++    "supports_reasoning": true,
++    "supports_prompt_caching": true,
++    "supports_service_tier": true
++  },
+   "gpt-6.1-sol": {
+     "cache_creation_input_token_cost": 2.5e-06,
+     "cache_creation_input_token_cost_batches": 1.25e-06,
+diff --git a/frontend/src/components/keys/UseKeyModal.vue b/frontend/src/components/keys/UseKeyModal.vue
+index e0dece4ea..c0dfa1afd 100644
+--- a/frontend/src/components/keys/UseKeyModal.vue
++++ b/frontend/src/components/keys/UseKeyModal.vue
+@@ -1477,6 +1477,12 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
+         max: {}
+       }
+     },
++    'gpt-6.1-terra': {
++      name: 'GPT-6.1 Terra',
++      limit: { context: 1050000, output: 128000 },
++      options: { store: false },
++      variants: { none: {}, low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
++    },
+     'gpt-6.1-sol': {
+       name: 'GPT-6.1 Sol',
+       limit: {
+diff --git a/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts b/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
+index 0550d4b4a..34adf3fb9 100644
+--- a/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
++++ b/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
+@@ -722,6 +722,12 @@ describe('UseKeyModal', () => {
+     }
+     expect(models['gpt-5.6'].name).toBe('GPT-5.6 (Sol)')
+     expect(models['gpt-6.1-sol'].variants).not.toHaveProperty('none')
++    expect(models['gpt-6.1-terra']).toEqual({
++      name: 'GPT-6.1 Terra',
++      limit: { context: 1050000, output: 128000 },
++      options: { store: false },
++      variants: { none: {}, low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
++    })
+     expect(models['gpt-6-sol'].variants).toHaveProperty('none')
+     expect(models['gpt-6-luna'].limit).toEqual({ context: 1050000, output: 128000 })
+     expect(models['gpt-6']).toEqual({
+diff --git a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+index 97d132b1a..8dea0f9a3 100644
+--- a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
++++ b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+@@ -47,6 +47,7 @@ describe('useModelWhitelist', () => {
+     expect(models).toContain('gpt-6')
+     expect(models).toContain('gpt-6-astra')
+     expect(models).toContain('gpt-6.1-sol')
++    expect(models).toContain('gpt-6.1-terra')
+     expect(models).toContain('gpt-6-sol')
+     expect(models).toContain('gpt-6-luna')
+   })
+@@ -54,6 +55,7 @@ describe('useModelWhitelist', () => {
+   it('openai 预设映射包含 GPT-6 别名和 Astra', () => {
+     expect(getPresetMappingsByPlatform('openai')).toEqual(expect.arrayContaining([
+       expect.objectContaining({ label: 'GPT-6.1 Sol', from: 'gpt-6.1-sol', to: 'gpt-6.1-sol' }),
++      expect.objectContaining({ label: 'GPT-6.1 Terra', from: 'gpt-6.1-terra', to: 'gpt-6.1-terra' }),
+       expect.objectContaining({ label: 'GPT-6', from: 'gpt-6', to: 'gpt-6' }),
+       expect.objectContaining({ label: 'GPT-6 Astra', from: 'gpt-6-astra', to: 'gpt-6-astra' })
+     ]))
+diff --git a/frontend/src/composables/useModelWhitelist.ts b/frontend/src/composables/useModelWhitelist.ts
+index cf1db7315..efb7a5fd9 100644
+--- a/frontend/src/composables/useModelWhitelist.ts
++++ b/frontend/src/composables/useModelWhitelist.ts
+@@ -12,7 +12,7 @@ const openaiModels = [
+ 	// GPT-5.6 系列
+   'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+   // GPT-6 系列
+-  'gpt-6', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna',
++  'gpt-6', 'gpt-6-astra', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-6-luna',
+   // GPT-5.5 系列
+   'gpt-5.5',
+   // GPT-5.4 系列
+@@ -342,6 +342,7 @@ const openaiPresetMappings = [
+   { label: 'GPT-5.2', from: 'gpt-5.2', to: 'gpt-5.2', color: 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400' },
+   { label: 'GPT-6', from: 'gpt-6', to: 'gpt-6', color: 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400' },
+   { label: 'GPT-5.6', from: 'gpt-5.6', to: 'gpt-5.6', color: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400' },
++  { label: 'GPT-6.1 Terra', from: 'gpt-6.1-terra', to: 'gpt-6.1-terra', color: 'bg-lime-100 text-lime-700 hover:bg-lime-200 dark:bg-lime-900/30 dark:text-lime-400' },
+   { label: 'GPT-6.1 Sol', from: 'gpt-6.1-sol', to: 'gpt-6.1-sol', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
+   { label: 'GPT-6 Sol', from: 'gpt-6-sol', to: 'gpt-6-sol', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
+   { label: 'GPT-5.6 Sol', from: 'gpt-5.6-sol', to: 'gpt-5.6-sol', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },

@@ -1,0 +1,93 @@
+{
+  "checked_at_utc": "2026-10-28T15:13:16.922891+00:00",
+  "sources": [
+    {
+      "url": "https://api.github.com/repos/Wei-Shaw/sub2api/releases/latest",
+      "data": {
+        "id": 426513773,
+        "tag_name": "v0.2.19",
+        "name": "Sub2API 0.2.19",
+        "published_at": "2026-10-28T10:16:00Z",
+        "created_at": "2026-10-28T10:08:28Z",
+        "html_url": "https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.19",
+        "draft": false,
+        "prerelease": false,
+        "body": "> AI API Gateway Platform - 将 AI 订阅配额分发和管理\n\n新增按操作与资源范围授权的管理员 API Key；OpenAI / Composite 分组支持按实际出图张数计费，并新增 GPT-6.1 Terra 模型支持。\n\n## 新增功能\n\n- 管理员 API Key：可按操作和资源范围授权，支持过期时间和 IP 白名单；只保存不可逆摘要，撤销记录保留用于审计\n- 按张计费：OpenAI 和 Composite 分组新增「按张计费」开关（默认关闭），一次生成多张图时按上游实际返回的张数计费，只对专用图片端点生效\n- OpenAI：支持 GPT-6.1 Terra 模型\n- Gemini：同账号重试次数可通过 gateway.max_same_account_retries_gemini 配置（默认 4，范围 0–10）\n- Grok：管理端新增账号模型目录诊断，可查看来源、可信状态和与本地映射的差异；手动同步和后台观察统一使用同一套解析规则\n\n## 优化改进\n\n- Gemini：刷新默认模型列表，移除已停用的 2.0/2.5 系列和 3-pro-preview；连接测试默认模型改为 gemini-3.5-flash\n- Gemini：分组内账号都配置了模型映射时，/v1beta/models 列表和详情按声明的模型返回，与 /v1/models 口径一致\n- Gemini：绑定显式缓存的请求在池模式上游网关账号上，按配置在同一账号重试\n- 国产 Coding Plan 账号遇到请求频率型 429 时改为秒级冷却，不再停调到 5h 窗口结束\n- 模型列表刷新在并发冷启动时不再重复请求上游\n- Grok：原生 Responses 和各转换路径都会记录上游原始响应模型，便于审计\n\n## Bug 修复\n\n- 修复 Gemini 以 fileData 形式返回的图片未计费的问题\n- 修复渠道按次计费的图片档位丢失 token 用量的问题\n- 修复 DeepSeek V4 Pro 在 9 月 14 日之后定价失效的问题\n- 修复 DeepSeek prompt_cache_hit_tokens 未计为缓存读取的问题\n- 修复 OpenCode 转发 DeepSeek 时 developer 角色导致 422 的问题\n- 修复 Antigravity 非流式畸形工具调用返回空成功响应的问题\n- 修复超大 multipart 图片上传被静默截断的问题，现在直接拒绝\n- 修复分页参数过大时偏移量溢出导致 500 的问题\n- 修复管理员保护规则校验返回 500 的问题，现返回 400\n- 修复保存渠道时覆盖 web_search_emulation 平台维度的问题\n- 修复模型广场分组模型定价被图片兜底档位覆盖的问题\n- 修复 Grok 模型目录快照被失败请求、乱序请求或旧表单覆盖的问题\n\n## 升级指南\n\n- 本版本包含数据库迁移 247（scoped_admin_api_keys 表）和 248（groups.image_count_billing 列），启动时会自动执行\n- Gemini 默认模型列表已移除 2.x 系列；仍需使用这些模型的账号请自行在白名单或模型映射中配置\n\n\n\n---\n\n## 📥 Installation\n\n**Docker:**\n```bash\n# Docker Hub\ndocker pull weishaw/sub2api:0.2.19\n\n# GitHub Container Registry\ndocker pull ghcr.io/wei-shaw/sub2api:0.2.19\n```\n\n**One-line install (Linux):**\n```bash\ncurl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash\n```\n\n**Manual download:**\nDownload the appropriate archive for your platform from the assets below.\n\n## 📚 Documentation\n\n- [GitHub Repository](https://github.com/Wei-Shaw/sub2api)\n- [Installation Guide](https://github.com/Wei-Shaw/sub2api/blob/main/deploy/README.md)\n\n"
+      }
+    },
+    {
+      "url": "https://vuln.go.dev/ID/GO-2026-6860.json",
+      "data": {
+        "schema_version": "1.3.1",
+        "id": "GO-2026-6860",
+        "modified": "2026-10-27T21:16:18Z",
+        "published": "2026-10-27T21:16:18Z",
+        "aliases": [
+          "CVE-2026-78661"
+        ],
+        "summary": "Avoid quadratic complexity when coalescing text nodes in html in golang.org/x/net",
+        "details": "When coalescing adjacent text nodes in addText and fosterParent, appending to an existing TextNode's Data via string concatenation (n.Data += text) reallocated and copied the accumulated string on every token. Inputs containing many short text runs separated by ignored end tags (such as \"a</x>\") caused O(n^2) allocations and byte copies.\n\nAccumulate coalesced text in per-node byte slices during parsing and materialize Data strings once at the end of parse.",
+        "affected": [
+          {
+            "package": {
+              "name": "golang.org/x/net",
+              "ecosystem": "Go"
+            },
+            "ranges": [
+              {
+                "type": "SEMVER",
+                "events": [
+                  {
+                    "introduced": "0"
+                  },
+                  {
+                    "fixed": "0.62.0"
+                  }
+                ]
+              }
+            ],
+            "ecosystem_specific": {
+              "imports": [
+                {
+                  "path": "golang.org/x/net/html",
+                  "symbols": [
+                    "Parse",
+                    "ParseFragment",
+                    "ParseFragmentWithOptions",
+                    "ParseWithOptions",
+                    "parser.addText",
+                    "parser.fosterParent",
+                    "parser.parse"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "references": [
+          {
+            "type": "FIX",
+            "url": "https://go.dev/cl/849365"
+          },
+          {
+            "type": "REPORT",
+            "url": "https://go.dev/issue/82224"
+          },
+          {
+            "type": "WEB",
+            "url": "https://groups.google.com/g/golang-announce/c/sqrs2vTx_Xs"
+          }
+        ],
+        "credits": [
+          {
+            "name": "Markus Magnuson"
+          }
+        ],
+        "database_specific": {
+          "url": "https://pkg.go.dev/vuln/GO-2026-6860",
+          "review_status": "REVIEWED"
+        }
+      }
+    }
+  ]
+}

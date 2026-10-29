@@ -1,0 +1,252 @@
+diff --git a/backend/internal/handler/gemini_cached_content_bound_retry_test.go b/backend/internal/handler/gemini_cached_content_bound_retry_test.go
+new file mode 100644
+index 000000000..6220f12e5
+--- /dev/null
++++ b/backend/internal/handler/gemini_cached_content_bound_retry_test.go
+@@ -0,0 +1,120 @@
++//go:build unit
++
++package handler
++
++import (
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++const (
++	boundRetryUpstream429 = `{"error":{"code":429,"message":"Resource exhausted. Please try again later.","status":"RESOURCE_EXHAUSTED"}}`
++	boundRetryUpstream502 = `{"error":{"code":502,"message":"Upstream service temporarily unavailable","status":"UNAVAILABLE"}}`
++)
++
++// boundRetryUpstream 前 failures 次请求返回 failStatus（默认 429），之后返回成功的生成响应。
++type boundRetryUpstream struct {
++	service.HTTPUpstream
++	mu         sync.Mutex
++	failures   int
++	failStatus int
++	bodies     []string
++}
++
++func (u *boundRetryUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
++	raw, _ := io.ReadAll(req.Body)
++	u.mu.Lock()
++	u.bodies = append(u.bodies, string(raw))
++	n := len(u.bodies)
++	u.mu.Unlock()
++	header := http.Header{"Content-Type": []string{"application/json"}}
++	if n <= u.failures {
++		if u.failStatus == http.StatusBadGateway {
++			return &http.Response{StatusCode: http.StatusBadGateway, Header: header, Body: io.NopCloser(strings.NewReader(boundRetryUpstream502))}, nil
++		}
++		return &http.Response{StatusCode: http.StatusTooManyRequests, Header: header, Body: io.NopCloser(strings.NewReader(boundRetryUpstream429))}, nil
++	}
++	body := `{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}],` +
++		`"usageMetadata":{"promptTokenCount":10,"cachedContentTokenCount":8,"candidatesTokenCount":1,"totalTokenCount":11}}`
++	return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(body))}, nil
++}
++
++func (u *boundRetryUpstream) requestBodies() []string {
++	u.mu.Lock()
++	defer u.mu.Unlock()
++	return append([]string(nil), u.bodies...)
++}
++
++// newBoundRetryEnv 构造绑定在池模式上游网关账号 900 上的显式缓存，账号对 retryCodes 同账号重试 2 次。
++func newBoundRetryEnv(t *testing.T, upstream *boundRetryUpstream, retryCodes ...int) *cachedBillingEnv {
++	t.Helper()
++	env := newCachedBillingEnv(t, 500, 900)
++	creds := env.accounts[900].Credentials
++	creds["base_url"] = "https://gw.example.com"
++	creds[service.GeminiExplicitCacheUpstreamCredentialKey] = true
++	creds["pool_mode"] = true
++	creds["pool_mode_retry_count"] = float64(2)
++	codes := make([]any, 0, len(retryCodes))
++	for _, code := range retryCodes {
++		codes = append(codes, float64(code))
++	}
++	creds["pool_mode_retry_status_codes"] = codes
++	env.seed(time.Now().Add(time.Hour))
++
++	env.h.geminiCompatService = service.NewGeminiMessagesCompatService(&cachedBillingAccountRepo{accounts: env.accounts},
++		nil, nil, nil, nil, nil, upstream, nil, &config.Config{})
++	return env
++}
++
++func (e *cachedBillingEnv) generateWithCache() *httptest.ResponseRecorder {
++	return e.serve(http.MethodPost, "/v1beta/models/gemini-2.5-pro:generateContent",
++		`{"cachedContent":"cachedContents/abc","contents":[{"role":"user","parts":[{"text":"hi"}]}]}`,
++		gin.Params{{Key: "modelAction", Value: "/gemini-2.5-pro:generateContent"}}, e.h.GeminiV1BetaModels)
++}
++
++func TestGeminiV1BetaModels_BoundCachePoolModeRetriesUpstream429(t *testing.T) {
++	upstream := &boundRetryUpstream{failures: 1}
++	env := newBoundRetryEnv(t, upstream, 429)
++
++	rec := env.generateWithCache()
++
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++	bodies := upstream.requestBodies()
++	require.Len(t, bodies, 2, "429 后在持有缓存的账号上重试一次")
++	for _, body := range bodies {
++		require.Contains(t, body, `"cachedContents/up1"`, "每次重试都引用上游缓存名")
++	}
++}
++
++func TestGeminiV1BetaModels_BoundCacheRetryExhaustedPassesThroughUpstream429(t *testing.T) {
++	upstream := &boundRetryUpstream{failures: 10}
++	env := newBoundRetryEnv(t, upstream, 429)
++
++	rec := env.generateWithCache()
++
++	require.Len(t, upstream.requestBodies(), 3, "首发 + pool_mode_retry_count 次同账号重试")
++	require.Equal(t, http.StatusTooManyRequests, rec.Code)
++	require.JSONEq(t, boundRetryUpstream429, rec.Body.String(), "重试用尽后原样回写上游网关的响应")
++}
++
++// 502 在池模式重试状态码内时同样同账号重试；用尽后原样回写，不按空响应临时封禁本账号。
++func TestGeminiV1BetaModels_BoundCacheRetryExhaustedOn502KeepsAccountSchedulable(t *testing.T) {
++	upstream := &boundRetryUpstream{failures: 10, failStatus: http.StatusBadGateway}
++	env := newBoundRetryEnv(t, upstream, 429, 502)
++
++	rec := env.generateWithCache()
++
++	require.Len(t, upstream.requestBodies(), 3)
++	require.Equal(t, http.StatusBadGateway, rec.Code)
++	require.JSONEq(t, boundRetryUpstream502, rec.Body.String())
++}
+diff --git a/backend/internal/service/gemini_cached_content.go b/backend/internal/service/gemini_cached_content.go
+index bc1a3353d..95264148d 100644
+--- a/backend/internal/service/gemini_cached_content.go
++++ b/backend/internal/service/gemini_cached_content.go
+@@ -277,7 +277,7 @@ func geminiCachedContentBoundFromContext(ctx context.Context) bool {
+ }
+ 
+ // isGeminiBoundCacheUpstreamPassthrough 判断绑定缓存的请求在上游网关账号上收到的错误是否只反映
+-// 上游持有缓存的那个账号的状态（429 / 5xx），不应据此限流或重试本账号。
++// 上游持有缓存的那个账号的状态（429 / 5xx），不应据此限流或封禁本账号。
+ func isGeminiBoundCacheUpstreamPassthrough(ctx context.Context, account *Account, statusCode int) bool {
+ 	if statusCode != http.StatusTooManyRequests && statusCode < http.StatusInternalServerError {
+ 		return false
+diff --git a/backend/internal/service/gemini_cached_content_hardening_test.go b/backend/internal/service/gemini_cached_content_hardening_test.go
+index f93b9424a..965df5b48 100644
+--- a/backend/internal/service/gemini_cached_content_hardening_test.go
++++ b/backend/internal/service/gemini_cached_content_hardening_test.go
+@@ -295,6 +295,55 @@ func TestGeminiForwardNative_BoundCacheUpstreamGatewayErrorsSkipAccountPenalty(t
+ 	}
+ }
+ 
++func TestGeminiForwardNative_BoundCacheUpstreamGatewayErrorsRetryablePerPoolModeCodes(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, tt := range []struct {
++		status    int
++		retryable bool
++	}{
++		{status: http.StatusTooManyRequests, retryable: true},
++		{status: http.StatusServiceUnavailable, retryable: false},
++	} {
++		t.Run(http.StatusText(tt.status), func(t *testing.T) {
++			body := fmt.Sprintf(`{"error":{"code":%d,"message":"Resource exhausted. Please try again later.","status":"RESOURCE_EXHAUSTED"}}`, tt.status)
++			svc, httpStub, _ := newGeminiCachedContentTestService(tt.status, body)
++			repo := &geminiBoundCacheRateLimitRepo{}
++			svc.accountRepo = repo
++			svc.rateLimitService = NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
++			account := &Account{ID: 712, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{
++				"api_key": "k", "base_url": "https://gw.example.com", "explicit_cache_upstream": true,
++				"pool_mode": true, "pool_mode_retry_count": float64(2), "pool_mode_retry_status_codes": []any{float64(429)},
++			}}
++			c, _ := newGeminiNativeTestContext(t)
++
++			_, err := svc.ForwardNative(WithGeminiCachedContentBound(context.Background()), c, account,
++				"gemini-3.8-flash", "generateContent", false, []byte(geminiCachedContentRequestBody))
++
++			var failoverErr *UpstreamFailoverError
++			require.True(t, errors.As(err, &failoverErr))
++			require.True(t, failoverErr.BoundUpstreamPassthrough, "重试用尽后仍由 handler 原样回写")
++			require.Equal(t, tt.retryable, failoverErr.RetryableOnSameAccount, "按池模式重试状态码决定同账号重试")
++			require.Equal(t, tt.retryable, failoverErr.RequestScopedTransient, "重试用尽不临时封禁本账号")
++			require.Equal(t, 1, httpStub.calls, "同账号重试由 handler 执行")
++			require.Zero(t, repo.rateLimitedCalls)
++			require.Zero(t, repo.tempCalls)
++			require.Zero(t, repo.setErrCalls)
++
++			raw, ok := c.Get(OpsUpstreamErrorsKey)
++			if !tt.retryable {
++				require.False(t, ok, "不可重试时不登记上游事件，由耗尽处理写 ops")
++				return
++			}
++			require.True(t, ok)
++			events, ok := raw.([]*OpsUpstreamErrorEvent)
++			require.True(t, ok)
++			require.Len(t, events, 1, "每次尝试登记一个上游事件，重试成功时 ops 记为恢复")
++			require.Equal(t, tt.status, events[0].UpstreamStatusCode)
++			require.Equal(t, "retry", events[0].Kind, "同账号重试不计入换号次数")
++		})
++	}
++}
++
+ type fixedChargeCacheStub struct {
+ 	billingCacheWorkerStub
+ 	balance float64
+diff --git a/backend/internal/service/gemini_messages_compat_service.go b/backend/internal/service/gemini_messages_compat_service.go
+index e87fd21b9..6f4edef96 100644
+--- a/backend/internal/service/gemini_messages_compat_service.go
++++ b/backend/internal/service/gemini_messages_compat_service.go
+@@ -1418,9 +1418,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+ 		if isGeminiCachedContentNotFound(resp.StatusCode, respBody) {
+ 			return nil, s.writeGeminiCachedContentNotFound(c, account, resp, respBody, requestID, isOAuth)
+ 		}
+-		// 上游网关的限流 / 不可用只针对其持有缓存的账号：不改本账号状态，交由绑定请求的耗尽处理透传。
++		// 上游网关的限流 / 不可用只针对其持有缓存的账号：不改本账号状态，按池模式配置同账号重试，用尽后透传。
+ 		if isGeminiBoundCacheUpstreamPassthrough(ctx, account, resp.StatusCode) {
+-			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, BoundUpstreamPassthrough: true}
++			return nil, s.boundCacheUpstreamPassthroughError(c, account, resp.StatusCode, respBody, requestID)
+ 		}
+ 		// Best-effort fallback for OAuth tokens missing AI Studio scopes when calling countTokens.
+ 		// This avoids Gemini SDKs failing hard during preflight token counting.
+@@ -1741,6 +1741,36 @@ func (s *GeminiMessagesCompatService) skippedErrorPolicyFailoverError(c *gin.Con
+ 	}
+ }
+ 
++// boundCacheUpstreamPassthroughError 构造绑定显式缓存的请求在上游网关账号上收到 429 / 5xx 时的 failover 错误。
++// 缓存只存在于该账号，handler 不换号；池模式账号对 pool_mode_retry_status_codes 内的状态码按 pool_mode_retry_count
++// 同账号重试，用尽或不可重试时原样回写上游响应。故障在上游网关持有缓存的账号上，与本账号健康无关，
++// 因此可重试的错误标为请求级瞬时故障：重试用尽也不临时封禁本账号。可重试时每次尝试登记一条 retry 事件，
++// 重试成功的请求在 ops 记为恢复。
++func (s *GeminiMessagesCompatService) boundCacheUpstreamPassthroughError(c *gin.Context, account *Account, statusCode int, respBody []byte, upstreamRequestID string) *UpstreamFailoverError {
++	retryable := account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode)
++	if retryable {
++		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
++			ProxyID:            opsUpstreamProxyID(account),
++			ProxyName:          opsUpstreamProxyName(account),
++			Platform:           account.Platform,
++			AccountID:          account.ID,
++			AccountName:        account.Name,
++			UpstreamStatusCode: statusCode,
++			UpstreamRequestID:  upstreamRequestID,
++			Kind:               "retry",
++			Message:            sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody))),
++			Detail:             s.upstreamErrorDetail(respBody),
++		})
++	}
++	return &UpstreamFailoverError{
++		StatusCode:               statusCode,
++		ResponseBody:             respBody,
++		BoundUpstreamPassthrough: true,
++		RetryableOnSameAccount:   retryable,
++		RequestScopedTransient:   retryable,
++	}
++}
++
+ // geminiCustomCodeSkippedClientMessage 自定义错误码未命中时对客户端隐藏上游细节的固定文案，
+ // 与 OpenAI 网关路径同场景的文案一致。
+ const geminiCustomCodeSkippedClientMessage = "Upstream gateway error"

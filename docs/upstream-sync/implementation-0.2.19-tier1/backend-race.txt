@@ -1,0 +1,1218 @@
+2026/10/28 17:05:46 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_KeyNotFound
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_KeyNotFound (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_NilGroupID_NoOp
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_NilGroupID_NoOp (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_Unbind
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_Unbind (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_BindActiveGroup
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_BindActiveGroup (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_SameGroup_Idempotent
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_SameGroup_Idempotent (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_GroupNotFound
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_GroupNotFound (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_GroupNotActive
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_GroupNotActive (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_UpdateFails
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_UpdateFails (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_NegativeGroupID
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_NegativeGroupID (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_PointerIsolation
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_PointerIsolation (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_NilCacheInvalidator
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_NilCacheInvalidator (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_ExclusiveGroup_AddsAllowedGroup
+2026/10/28 17:05:46 Warning: entClient is nil, skipping transaction protection for exclusive group binding
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_ExclusiveGroup_AddsAllowedGroup (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_NonExclusiveGroup_NoAllowedGroupUpdate
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_NonExclusiveGroup_NoAllowedGroupUpdate (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_Blocked
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_Blocked (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_RequiresRepo
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_RequiresRepo (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_AllowsActiveSubscription
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_AllowsActiveSubscription (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_ExclusiveGroup_AllowedGroupAddFails_ReturnsError
+2026/10/28 17:05:46 Warning: entClient is nil, skipping transaction protection for exclusive group binding
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_ExclusiveGroup_AllowedGroupAddFails_ReturnsError (0.00s)
+=== RUN   TestAdminService_AdminUpdateAPIKeyGroupID_Unbind_NoAllowedGroupUpdate
+--- PASS: TestAdminService_AdminUpdateAPIKeyGroupID_Unbind_NoAllowedGroupUpdate (0.00s)
+=== RUN   TestAdminService_DeleteUser_AdminGuard
+--- PASS: TestAdminService_DeleteUser_AdminGuard (0.00s)
+=== RUN   TestAdminService_CreateUser_WithAdminRole
+2026/10/28 17:05:47 audit: admin user created actor_admin_id=0 target_user_id=30
+--- PASS: TestAdminService_CreateUser_WithAdminRole (0.68s)
+=== RUN   TestAdminService_CreateUser_DefaultsToUserRole
+--- PASS: TestAdminService_CreateUser_DefaultsToUserRole (0.68s)
+=== RUN   TestAdminService_CreateUser_InvalidRoleRejected
+--- PASS: TestAdminService_CreateUser_InvalidRoleRejected (0.00s)
+=== RUN   TestAdminService_UpdateUser_PromoteToAdmin
+2026/10/28 17:05:48 audit: user role changed actor_admin_id=0 target_user_id=42 old_role=user new_role=admin
+--- PASS: TestAdminService_UpdateUser_PromoteToAdmin (0.00s)
+=== RUN   TestAdminService_UpdateUser_RoleOmittedKeepsExisting
+--- PASS: TestAdminService_UpdateUser_RoleOmittedKeepsExisting (0.00s)
+=== RUN   TestAdminService_UpdateUser_InvalidRoleRejected
+--- PASS: TestAdminService_UpdateUser_InvalidRoleRejected (0.00s)
+=== RUN   TestAdminService_UpdateUser_DemoteLastAdminRejected
+--- PASS: TestAdminService_UpdateUser_DemoteLastAdminRejected (0.00s)
+=== RUN   TestAdminService_UpdateUser_DemoteAdminAllowedWhenOthersExist
+2026/10/28 17:05:48 audit: user role changed actor_admin_id=0 target_user_id=42 old_role=admin new_role=user
+--- PASS: TestAdminService_UpdateUser_DemoteAdminAllowedWhenOthersExist (0.00s)
+=== RUN   TestAdminService_UpdateUser_PromoteDoesNotCountAdmins
+2026/10/28 17:05:48 audit: user role changed actor_admin_id=0 target_user_id=42 old_role=user new_role=admin
+--- PASS: TestAdminService_UpdateUser_PromoteDoesNotCountAdmins (0.00s)
+=== RUN   TestAdminService_AdminGuardsAreClientErrors
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/disable
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/delete
+--- PASS: TestAdminService_AdminGuardsAreClientErrors (0.00s)
+    --- PASS: TestAdminService_AdminGuardsAreClientErrors/disable (0.00s)
+    --- PASS: TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion (0.00s)
+    --- PASS: TestAdminService_AdminGuardsAreClientErrors/delete (0.00s)
+=== RUN   TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate
+=== RUN   TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/disabled_by_default
+=== RUN   TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/enabled_add
+=== RUN   TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/enabled_set_increase
+=== RUN   TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/enabled_subtract
+--- PASS: TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate (0.00s)
+    --- PASS: TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/disabled_by_default (0.00s)
+    --- PASS: TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/enabled_add (0.00s)
+    --- PASS: TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/enabled_set_increase (0.00s)
+    --- PASS: TestAdminService_UpdateUserBalance_AdminRechargeAffiliateRebate/enabled_subtract (0.00s)
+=== RUN   TestAntigravityCompatOAuthUsesNativeTokenAndRoute
+=== RUN   TestAntigravityCompatOAuthUsesNativeTokenAndRoute/chat_completions
+=== RUN   TestAntigravityCompatOAuthUsesNativeTokenAndRoute/responses
+--- PASS: TestAntigravityCompatOAuthUsesNativeTokenAndRoute (0.00s)
+    --- PASS: TestAntigravityCompatOAuthUsesNativeTokenAndRoute/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatOAuthUsesNativeTokenAndRoute/responses (0.00s)
+=== RUN   TestAntigravityCompatRejectsUnsupportedAccountType
+=== RUN   TestAntigravityCompatRejectsUnsupportedAccountType/chat_completions_upstream
+=== RUN   TestAntigravityCompatRejectsUnsupportedAccountType/responses_setup_token
+--- PASS: TestAntigravityCompatRejectsUnsupportedAccountType (0.00s)
+    --- PASS: TestAntigravityCompatRejectsUnsupportedAccountType/chat_completions_upstream (0.00s)
+    --- PASS: TestAntigravityCompatRejectsUnsupportedAccountType/responses_setup_token (0.00s)
+=== RUN   TestAntigravityCompatChatMixedBuiltInToolsPreferClientFunctions
+2026/10/28 17:05:48 [antigravity] dropping built-in tools (web_search/code_execution) because client function tools are present; Antigravity v1internal rejects the mix
+--- PASS: TestAntigravityCompatChatMixedBuiltInToolsPreferClientFunctions (0.00s)
+=== RUN   TestAntigravityCompatResponsesCodexWebSearchMixedWithFunctionsDropsBuiltins
+2026/10/28 17:05:48 [antigravity] dropping built-in tools (web_search/code_execution) because client function tools are present; Antigravity v1internal rejects the mix
+--- PASS: TestAntigravityCompatResponsesCodexWebSearchMixedWithFunctionsDropsBuiltins (0.00s)
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/legacy_max_tokens_below_bridge_floor
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/max_completion_tokens_takes_precedence
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/max_tokens_at_safe_ceiling_is_preserved
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/max_tokens_above_safe_ceiling_is_clamped
+=== RUN   TestAntigravityCompatPreservesChatTokenLimit/precedence_applies_before_clamping
+--- PASS: TestAntigravityCompatPreservesChatTokenLimit (0.01s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/legacy_max_tokens_below_bridge_floor (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/max_completion_tokens_takes_precedence (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/max_tokens_at_safe_ceiling_is_preserved (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/max_tokens_above_safe_ceiling_is_clamped (0.00s)
+    --- PASS: TestAntigravityCompatPreservesChatTokenLimit/precedence_applies_before_clamping (0.00s)
+=== RUN   TestAntigravityCompatRoutesByMappedModelFamily
+=== RUN   TestAntigravityCompatRoutesByMappedModelFamily/gemini-3.1-pro-high
+=== RUN   TestAntigravityCompatRoutesByMappedModelFamily/claude-sonnet-4-5
+--- PASS: TestAntigravityCompatRoutesByMappedModelFamily (0.00s)
+    --- PASS: TestAntigravityCompatRoutesByMappedModelFamily/gemini-3.1-pro-high (0.00s)
+    --- PASS: TestAntigravityCompatRoutesByMappedModelFamily/claude-sonnet-4-5 (0.00s)
+=== RUN   TestAntigravityCompatUnauthorizedIsCredentialFailure
+--- PASS: TestAntigravityCompatUnauthorizedIsCredentialFailure (0.00s)
+=== RUN   TestAntigravityCompatEmptyStreamTriggersFailover
+=== RUN   TestAntigravityCompatEmptyStreamTriggersFailover/chat_completions
+2026/10/28 17:05:48 Empty Antigravity compatibility stream, triggering failover
+=== RUN   TestAntigravityCompatEmptyStreamTriggersFailover/responses
+2026/10/28 17:05:48 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatEmptyStreamTriggersFailover (0.00s)
+    --- PASS: TestAntigravityCompatEmptyStreamTriggersFailover/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatEmptyStreamTriggersFailover/responses (0.00s)
+=== RUN   TestAntigravityCompatUsageOnlyStreamTriggersFailover
+=== RUN   TestAntigravityCompatUsageOnlyStreamTriggersFailover/chat_completions
+2026/10/28 17:05:48 Empty Antigravity compatibility stream, triggering failover
+=== RUN   TestAntigravityCompatUsageOnlyStreamTriggersFailover/responses
+2026/10/28 17:05:48 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatUsageOnlyStreamTriggersFailover (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyStreamTriggersFailover/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyStreamTriggersFailover/responses (0.00s)
+=== RUN   TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover
+=== RUN   TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/chat_completions
+2026/10/28 17:05:48 [antigravity-Forward] warning: empty stream response (claude non-stream), triggering failover
+=== RUN   TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/responses
+2026/10/28 17:05:48 [antigravity-Forward] warning: empty stream response (claude non-stream), triggering failover
+--- PASS: TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatUsageOnlyNonStreamingTriggersFailover/responses (0.00s)
+=== RUN   TestAntigravityCompatChatStreamMapsToolCallAndUsage
+--- PASS: TestAntigravityCompatChatStreamMapsToolCallAndUsage (0.00s)
+=== RUN   TestAntigravityCompatFirstEventTimeoutTriggersFailover
+2026/10/28 17:05:49 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatFirstEventTimeoutTriggersFailover (1.00s)
+=== RUN   TestAntigravityCompatClientDisconnectDrainsUsage
+2026/10/28 17:05:49 Client disconnected during streaming (antigravity chat completions stream), continuing to drain upstream for billing
+--- PASS: TestAntigravityCompatClientDisconnectDrainsUsage (0.00s)
+=== RUN   TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame
+--- PASS: TestAntigravityCompatStreamErrorCommitsSingleTerminalFrame (0.00s)
+=== RUN   TestAntigravityCompatKeepaliveAfterFirstEvent
+--- PASS: TestAntigravityCompatKeepaliveAfterFirstEvent (1.20s)
+=== RUN   TestAntigravityCompatHandlerPreContentKeepalive
+=== RUN   TestAntigravityCompatHandlerPreContentKeepalive/silent_chat
+=== RUN   TestAntigravityCompatHandlerPreContentKeepalive/signature-only_responses
+--- PASS: TestAntigravityCompatHandlerPreContentKeepalive (0.40s)
+    --- PASS: TestAntigravityCompatHandlerPreContentKeepalive/silent_chat (0.20s)
+    --- PASS: TestAntigravityCompatHandlerPreContentKeepalive/signature-only_responses (0.20s)
+=== RUN   TestAntigravityCompatPreContentKeepalive
+=== RUN   TestAntigravityCompatPreContentKeepalive/chat_completions
+=== RUN   TestAntigravityCompatPreContentKeepalive/responses
+--- PASS: TestAntigravityCompatPreContentKeepalive (0.00s)
+    --- PASS: TestAntigravityCompatPreContentKeepalive/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatPreContentKeepalive/responses (0.00s)
+=== RUN   TestAntigravityCompatHandlerRepeatsPreContentKeepalive
+--- PASS: TestAntigravityCompatHandlerRepeatsPreContentKeepalive (0.06s)
+=== RUN   TestAntigravityCompatHandlerPreContentDeadlineWithCommentOnlyStream
+--- PASS: TestAntigravityCompatHandlerPreContentDeadlineWithCommentOnlyStream (0.10s)
+=== RUN   TestAntigravityCompatExpiredPreContentDeadlineDoesNotCommit
+2026/10/28 17:05:50 Empty Antigravity compatibility stream, triggering failover
+--- PASS: TestAntigravityCompatExpiredPreContentDeadlineDoesNotCommit (0.00s)
+=== RUN   TestAntigravityCompatHandlerErrorsAfterPreContentPing
+=== RUN   TestAntigravityCompatHandlerErrorsAfterPreContentPing/read_error
+=== RUN   TestAntigravityCompatHandlerErrorsAfterPreContentPing/timeout
+--- PASS: TestAntigravityCompatHandlerErrorsAfterPreContentPing (0.02s)
+    --- PASS: TestAntigravityCompatHandlerErrorsAfterPreContentPing/read_error (0.02s)
+    --- PASS: TestAntigravityCompatHandlerErrorsAfterPreContentPing/timeout (0.01s)
+=== RUN   TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError
+=== RUN   TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/chat_completions
+=== RUN   TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/responses
+--- PASS: TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError (0.00s)
+    --- PASS: TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/chat_completions (0.00s)
+    --- PASS: TestAntigravityCompatEmptyAfterKeepaliveReportsStreamError/responses (0.00s)
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/responses/signature_only
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/chat/signature_only
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/messages/signature_only
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/responses/direct_frame
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/chat/direct_frame
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/messages/direct_frame
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/responses/error_after_tool
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/chat/error_after_tool
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/messages/error_after_tool
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/responses/error_after_text_and_usage
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/chat/error_after_text_and_usage
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/messages/error_after_text_and_usage
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/responses/error_before_usage
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/chat/error_before_usage
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/messages/error_before_usage
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/responses/normal_tool
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/chat/normal_tool
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/messages/normal_tool
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/responses/normal_text
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/chat/normal_text
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming/messages/normal_text
+--- PASS: TestAntigravityMalformedFunctionCallNonStreaming (0.01s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/responses/signature_only (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/chat/signature_only (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/messages/signature_only (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/responses/direct_frame (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/chat/direct_frame (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/messages/direct_frame (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/responses/error_after_tool (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/chat/error_after_tool (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/messages/error_after_tool (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/responses/error_after_text_and_usage (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/chat/error_after_text_and_usage (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/messages/error_after_text_and_usage (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/responses/error_before_usage (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/chat/error_before_usage (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/messages/error_before_usage (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/responses/normal_tool (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/chat/normal_tool (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/messages/normal_tool (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/responses/normal_text (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/chat/normal_text (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming/messages/normal_text (0.00s)
+=== RUN   TestAntigravityNonStreamingCollection_PreservesCancellation
+=== RUN   TestAntigravityNonStreamingCollection_PreservesCancellation/responses/context_canceled
+=== RUN   TestAntigravityNonStreamingCollection_PreservesCancellation/chat/context_canceled
+=== RUN   TestAntigravityNonStreamingCollection_PreservesCancellation/messages/context_canceled
+=== RUN   TestAntigravityNonStreamingCollection_PreservesCancellation/responses/context_deadline_exceeded
+=== RUN   TestAntigravityNonStreamingCollection_PreservesCancellation/chat/context_deadline_exceeded
+=== RUN   TestAntigravityNonStreamingCollection_PreservesCancellation/messages/context_deadline_exceeded
+--- PASS: TestAntigravityNonStreamingCollection_PreservesCancellation (0.00s)
+    --- PASS: TestAntigravityNonStreamingCollection_PreservesCancellation/responses/context_canceled (0.00s)
+    --- PASS: TestAntigravityNonStreamingCollection_PreservesCancellation/chat/context_canceled (0.00s)
+    --- PASS: TestAntigravityNonStreamingCollection_PreservesCancellation/messages/context_canceled (0.00s)
+    --- PASS: TestAntigravityNonStreamingCollection_PreservesCancellation/responses/context_deadline_exceeded (0.00s)
+    --- PASS: TestAntigravityNonStreamingCollection_PreservesCancellation/chat/context_deadline_exceeded (0.00s)
+    --- PASS: TestAntigravityNonStreamingCollection_PreservesCancellation/messages/context_deadline_exceeded (0.00s)
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming_ClosesLiveUpstream
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming_ClosesLiveUpstream/chat
+=== RUN   TestAntigravityMalformedFunctionCallNonStreaming_ClosesLiveUpstream/responses
+--- PASS: TestAntigravityMalformedFunctionCallNonStreaming_ClosesLiveUpstream (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming_ClosesLiveUpstream/chat (0.00s)
+    --- PASS: TestAntigravityMalformedFunctionCallNonStreaming_ClosesLiveUpstream/responses (0.00s)
+=== RUN   TestAntigravityCompatTransportError_ClientDisconnectWrites499
+--- PASS: TestAntigravityCompatTransportError_ClientDisconnectWrites499 (0.00s)
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/empty/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/empty/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/text_block
+--- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16 (0.02s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/empty/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/empty/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/string (0.01s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/text_block (0.01s)
+=== RUN   TestClaudeOAuthSystemPromptTemplate_UnicodeFingerprint
+--- PASS: TestClaudeOAuthSystemPromptTemplate_UnicodeFingerprint (0.00s)
+=== RUN   TestSyncBillingHeaderVersion
+=== RUN   TestSyncBillingHeaderVersion/replaces_cc_version_and_recomputes_message-derived_suffix
+=== RUN   TestSyncBillingHeaderVersion/no_billing_header_in_system
+=== RUN   TestSyncBillingHeaderVersion/no_system_field
+=== RUN   TestSyncBillingHeaderVersion/user-agent_without_version
+=== RUN   TestSyncBillingHeaderVersion/empty_user-agent
+=== RUN   TestSyncBillingHeaderVersion/version_already_matches
+--- PASS: TestSyncBillingHeaderVersion (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion/replaces_cc_version_and_recomputes_message-derived_suffix (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion/no_billing_header_in_system (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion/no_system_field (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion/user-agent_without_version (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion/empty_user-agent (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion/version_already_matches (0.00s)
+=== RUN   TestSyncBillingHeaderVersion_RecomputesSuffixAndIsIdempotent
+--- PASS: TestSyncBillingHeaderVersion_RecomputesSuffixAndIsIdempotent (0.00s)
+=== RUN   TestSyncBillingHeaderVersion_UnicodeSuffix
+=== RUN   TestSyncBillingHeaderVersion_UnicodeSuffix/2.1.81.df2
+=== RUN   TestSyncBillingHeaderVersion_UnicodeSuffix/2.1.283.000
+=== RUN   TestSyncBillingHeaderVersion_UnicodeSuffix/2.1.283.c7e
+--- PASS: TestSyncBillingHeaderVersion_UnicodeSuffix (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion_UnicodeSuffix/2.1.81.df2 (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion_UnicodeSuffix/2.1.283.000 (0.00s)
+    --- PASS: TestSyncBillingHeaderVersion_UnicodeSuffix/2.1.283.c7e (0.00s)
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/mimic_overrides_cached_version
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/mimic_without_identity
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/mimic_with_fingerprint_disabled
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/passthrough_uses_cached_version
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/mimic_overrides_cached_version
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/mimic_without_identity
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/mimic_with_fingerprint_disabled
+=== RUN   TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/passthrough_uses_cached_version
+--- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/mimic_overrides_cached_version (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/mimic_without_identity (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/mimic_with_fingerprint_disabled (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/messages/passthrough_uses_cached_version (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/mimic_overrides_cached_version (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/mimic_without_identity (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/mimic_with_fingerprint_disabled (0.00s)
+    --- PASS: TestBuildOAuthRequest_BillingMatchesWireUserAgent/count_tokens/passthrough_uses_cached_version (0.00s)
+=== RUN   TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation
+=== RUN   TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation/native
+=== RUN   TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation/messages
+=== RUN   TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation/chat
+--- PASS: TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation (0.00s)
+    --- PASS: TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation/native (0.00s)
+    --- PASS: TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation/messages (0.00s)
+    --- PASS: TestGeminiAbortDoesNotMisclassifyLiveUpstreamCancellation/chat (0.00s)
+=== RUN   TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine
+=== RUN   TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine/native
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+=== RUN   TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine/messages
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+=== RUN   TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine/chat
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=false
+--- PASS: TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine (0.00s)
+    --- PASS: TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine/native (0.00s)
+    --- PASS: TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine/messages (0.00s)
+    --- PASS: TestGeminiAbortIgnoresEvenValidJSONOnErroredResidualLine/chat (0.00s)
+=== RUN   TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage
+=== RUN   TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage/native
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+=== RUN   TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage/messages
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+=== RUN   TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage/chat
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=false
+--- PASS: TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage (0.00s)
+    --- PASS: TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage/native (0.00s)
+    --- PASS: TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage/messages (0.00s)
+    --- PASS: TestGeminiAbortWriteFailureKeepsOnlyObservedFrameUsage/chat (0.00s)
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/native/finished_text_is_not_an_image
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/native/observed_file_image
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/native/inline_and_file_in_one_part
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/native/multiple_file_images
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/native/non_string_file_URI
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/native/empty_file_reference
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/messages/finished_text_is_not_an_image
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/messages/observed_file_image
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/messages/inline_and_file_in_one_part
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/messages/multiple_file_images
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/messages/non_string_file_URI
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/messages/empty_file_reference
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/chat/finished_text_is_not_an_image
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/chat/observed_file_image
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/chat/inline_and_file_in_one_part
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/chat/multiple_file_images
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/chat/non_string_file_URI
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+=== RUN   TestGeminiAbortImagesRequireActualObservedParts/chat/empty_file_reference
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+--- PASS: TestGeminiAbortImagesRequireActualObservedParts (0.01s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/native/finished_text_is_not_an_image (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/native/observed_file_image (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/native/inline_and_file_in_one_part (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/native/multiple_file_images (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/native/non_string_file_URI (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/native/empty_file_reference (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/messages/finished_text_is_not_an_image (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/messages/observed_file_image (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/messages/inline_and_file_in_one_part (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/messages/multiple_file_images (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/messages/non_string_file_URI (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/messages/empty_file_reference (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/chat/finished_text_is_not_an_image (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/chat/observed_file_image (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/chat/inline_and_file_in_one_part (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/chat/multiple_file_images (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/chat/non_string_file_URI (0.00s)
+    --- PASS: TestGeminiAbortImagesRequireActualObservedParts/chat/empty_file_reference (0.00s)
+=== RUN   TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess
+=== RUN   TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess/native
+=== RUN   TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess/messages
+=== RUN   TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess/chat
+--- PASS: TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess (0.00s)
+    --- PASS: TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess/native (0.00s)
+    --- PASS: TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess/messages (0.00s)
+    --- PASS: TestGeminiAbortWriteFailureWithoutUsageIsNotSuccess/chat (0.00s)
+=== RUN   TestGeminiAbortObservedImageWithoutTokenUsageIsBillable
+=== RUN   TestGeminiAbortObservedImageWithoutTokenUsageIsBillable/native
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+=== RUN   TestGeminiAbortObservedImageWithoutTokenUsageIsBillable/messages
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+=== RUN   TestGeminiAbortObservedImageWithoutTokenUsageIsBillable/chat
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=false
+--- PASS: TestGeminiAbortObservedImageWithoutTokenUsageIsBillable (0.00s)
+    --- PASS: TestGeminiAbortObservedImageWithoutTokenUsageIsBillable/native (0.00s)
+    --- PASS: TestGeminiAbortObservedImageWithoutTokenUsageIsBillable/messages (0.00s)
+    --- PASS: TestGeminiAbortObservedImageWithoutTokenUsageIsBillable/chat (0.00s)
+=== RUN   TestCountGeminiImageOutputs
+=== RUN   TestCountGeminiImageOutputs/camelCase_inlineData
+=== RUN   TestCountGeminiImageOutputs/snake_case_inline_data
+=== RUN   TestCountGeminiImageOutputs/text_and_image_mixed
+=== RUN   TestCountGeminiImageOutputs/multiple_images
+=== RUN   TestCountGeminiImageOutputs/uppercase_mime_type
+=== RUN   TestCountGeminiImageOutputs/text_only
+=== RUN   TestCountGeminiImageOutputs/non_image_mime_type
+=== RUN   TestCountGeminiImageOutputs/empty_data_is_not_billable
+=== RUN   TestCountGeminiImageOutputs/empty_payload
+=== RUN   TestCountGeminiImageOutputs/invalid_json
+=== RUN   TestCountGeminiImageOutputs/error_response
+--- PASS: TestCountGeminiImageOutputs (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/camelCase_inlineData (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/snake_case_inline_data (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/text_and_image_mixed (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/multiple_images (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/uppercase_mime_type (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/text_only (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/non_image_mime_type (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/empty_data_is_not_billable (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/empty_payload (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/invalid_json (0.00s)
+    --- PASS: TestCountGeminiImageOutputs/error_response (0.00s)
+=== RUN   TestGeminiImageOutputs_FileReferences
+=== RUN   TestGeminiImageOutputs_FileReferences/camel_file
+=== RUN   TestGeminiImageOutputs_FileReferences/snake_file
+=== RUN   TestGeminiImageOutputs_FileReferences/mixed_images
+=== RUN   TestGeminiImageOutputs_FileReferences/one_part_multiple_spellings
+=== RUN   TestGeminiImageOutputs_FileReferences/empty_inline_with_valid_file
+=== RUN   TestGeminiImageOutputs_FileReferences/empty_camel_with_valid_snake
+=== RUN   TestGeminiImageOutputs_FileReferences/uppercase_mime
+=== RUN   TestGeminiImageOutputs_FileReferences/non_image_mime
+=== RUN   TestGeminiImageOutputs_FileReferences/empty_URI
+=== RUN   TestGeminiImageOutputs_FileReferences/missing_URI
+=== RUN   TestGeminiImageOutputs_FileReferences/non_string_URI
+=== RUN   TestGeminiImageOutputs_FileReferences/non_string_inline
+--- PASS: TestGeminiImageOutputs_FileReferences (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/camel_file (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/snake_file (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/mixed_images (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/one_part_multiple_spellings (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/empty_inline_with_valid_file (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/empty_camel_with_valid_snake (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/uppercase_mime (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/non_image_mime (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/empty_URI (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/missing_URI (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/non_string_URI (0.00s)
+    --- PASS: TestGeminiImageOutputs_FileReferences/non_string_inline (0.00s)
+=== RUN   TestHandleNativeNonStreamingResponse_FileDataImageBilling
+--- PASS: TestHandleNativeNonStreamingResponse_FileDataImageBilling (0.00s)
+=== RUN   TestHandleNativeStreamingResponse_FileDataCumulativeChunks
+--- PASS: TestHandleNativeStreamingResponse_FileDataCumulativeChunks (0.00s)
+=== RUN   TestObserveGeminiImageOutputs_CumulativeChunksDoNotDoubleCount
+--- PASS: TestObserveGeminiImageOutputs_CumulativeChunksDoNotDoubleCount (0.00s)
+=== RUN   TestObserveGeminiImageOutputs_KeepsLargestChunk
+--- PASS: TestObserveGeminiImageOutputs_KeepsLargestChunk (0.00s)
+=== RUN   TestResolveGeminiImageCount
+=== RUN   TestResolveGeminiImageCount/custom_model_name_bills_by_observed_images
+=== RUN   TestResolveGeminiImageCount/falls_back_to_requested_model_name
+=== RUN   TestResolveGeminiImageCount/falls_back_to_mapped_upstream_model_name
+=== RUN   TestResolveGeminiImageCount/text_model_stays_unbilled
+=== RUN   TestResolveGeminiImageCount/no_counter_on_context_degrades_to_name_heuristic
+--- PASS: TestResolveGeminiImageCount (0.00s)
+    --- PASS: TestResolveGeminiImageCount/custom_model_name_bills_by_observed_images (0.00s)
+    --- PASS: TestResolveGeminiImageCount/falls_back_to_requested_model_name (0.00s)
+    --- PASS: TestResolveGeminiImageCount/falls_back_to_mapped_upstream_model_name (0.00s)
+    --- PASS: TestResolveGeminiImageCount/text_model_stays_unbilled (0.00s)
+    --- PASS: TestResolveGeminiImageCount/no_counter_on_context_degrades_to_name_heuristic (0.00s)
+=== RUN   TestHandleNativeNonStreamingResponse_FeedsImageCounter
+--- PASS: TestHandleNativeNonStreamingResponse_FeedsImageCounter (0.00s)
+=== RUN   TestGeminiForwardNative_ClientDisconnectAfterFinalChunkBillsCollectedUsage
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+--- PASS: TestGeminiForwardNative_ClientDisconnectAfterFinalChunkBillsCollectedUsage (0.00s)
+=== RUN   TestGeminiForwardNative_ClientDisconnectWithoutUsageStaysUnbilled
+--- PASS: TestGeminiForwardNative_ClientDisconnectWithoutUsageStaysUnbilled (0.00s)
+=== RUN   TestGeminiForwardNative_ClientDisconnectBillsOnlyDeliveredImages
+=== RUN   TestGeminiForwardNative_ClientDisconnectBillsOnlyDeliveredImages/image_delivered_before_disconnect
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiForwardNative_ClientDisconnectBillsOnlyDeliveredImages/disconnect_before_the_image_arrives
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+--- PASS: TestGeminiForwardNative_ClientDisconnectBillsOnlyDeliveredImages (0.00s)
+    --- PASS: TestGeminiForwardNative_ClientDisconnectBillsOnlyDeliveredImages/image_delivered_before_disconnect (0.00s)
+    --- PASS: TestGeminiForwardNative_ClientDisconnectBillsOnlyDeliveredImages/disconnect_before_the_image_arrives (0.00s)
+=== RUN   TestGeminiCompatForward_ClientDisconnectAfterFinalChunkBillsCollectedUsage
+=== RUN   TestGeminiCompatForward_ClientDisconnectAfterFinalChunkBillsCollectedUsage/client_gone
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+=== RUN   TestGeminiCompatForward_ClientDisconnectAfterFinalChunkBillsCollectedUsage/upstream_read_error_with_live_client
+--- PASS: TestGeminiCompatForward_ClientDisconnectAfterFinalChunkBillsCollectedUsage (0.00s)
+    --- PASS: TestGeminiCompatForward_ClientDisconnectAfterFinalChunkBillsCollectedUsage/client_gone (0.00s)
+    --- PASS: TestGeminiCompatForward_ClientDisconnectAfterFinalChunkBillsCollectedUsage/upstream_read_error_with_live_client (0.00s)
+=== RUN   TestGeminiForwardAsChatCompletions_ClientDisconnectAfterFinalChunkBillsCollectedUsage
+=== RUN   TestGeminiForwardAsChatCompletions_ClientDisconnectAfterFinalChunkBillsCollectedUsage/client_gone
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+=== RUN   TestGeminiForwardAsChatCompletions_ClientDisconnectAfterFinalChunkBillsCollectedUsage/client_gone_before_usage
+--- PASS: TestGeminiForwardAsChatCompletions_ClientDisconnectAfterFinalChunkBillsCollectedUsage (0.00s)
+    --- PASS: TestGeminiForwardAsChatCompletions_ClientDisconnectAfterFinalChunkBillsCollectedUsage/client_gone (0.00s)
+    --- PASS: TestGeminiForwardAsChatCompletions_ClientDisconnectAfterFinalChunkBillsCollectedUsage/client_gone_before_usage (0.00s)
+=== RUN   TestGeminiForwardNative_ClientDisconnectAfterFinishCountsObservedFileImage
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=true
+--- PASS: TestGeminiForwardNative_ClientDisconnectAfterFinishCountsObservedFileImage (0.00s)
+=== RUN   TestGeminiForwardNative_ClientDisconnectIgnoresTruncatedTrailingLine
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+--- PASS: TestGeminiForwardNative_ClientDisconnectIgnoresTruncatedTrailingLine (0.00s)
+=== RUN   TestGeminiForwardAsChatCompletions_ClientDisconnectImageCount
+=== RUN   TestGeminiForwardAsChatCompletions_ClientDisconnectImageCount/disconnect_before_finish_bills_no_image
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=false
+=== RUN   TestGeminiForwardAsChatCompletions_ClientDisconnectImageCount/disconnect_after_finish_keeps_completed-request_image_count
+2026/10/28 17:05:50 [Gemini] chat client disconnected; stream_finished=true
+--- PASS: TestGeminiForwardAsChatCompletions_ClientDisconnectImageCount (0.00s)
+    --- PASS: TestGeminiForwardAsChatCompletions_ClientDisconnectImageCount/disconnect_before_finish_bills_no_image (0.00s)
+    --- PASS: TestGeminiForwardAsChatCompletions_ClientDisconnectImageCount/disconnect_after_finish_keeps_completed-request_image_count (0.00s)
+=== RUN   TestGeminiCompatForward_ClientDisconnectCountsObservedImages
+2026/10/28 17:05:50 [Gemini] client disconnected; stream_finished=false
+--- PASS: TestGeminiCompatForward_ClientDisconnectCountsObservedImages (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyCustomUpstream
+--- PASS: TestFetchCodexModelsManifestAPIKeyCustomUpstream (0.01s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyCompleteBodyWithoutUpstreamETagUsesFinalBodyETag
+--- PASS: TestFetchCodexModelsManifestAPIKeyCompleteBodyWithoutUpstreamETagUsesFinalBodyETag (0.02s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyConvertsStandardOpenAIModelList
+--- PASS: TestFetchCodexModelsManifestAPIKeyConvertsStandardOpenAIModelList (0.01s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyDisablesResponsesLiteForAffectedModels
+--- PASS: TestFetchCodexModelsManifestAPIKeyDisablesResponsesLiteForAffectedModels (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyDoesNotCacheInvalidEnvelope
+--- PASS: TestFetchCodexModelsManifestAPIKeyDoesNotCacheInvalidEnvelope (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeySharedRefreshSurvivesCallerCancellation
+--- PASS: TestFetchCodexModelsManifestAPIKeySharedRefreshSurvivesCallerCancellation (0.05s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyConcurrentRequestsShareRefresh
+--- PASS: TestFetchCodexModelsManifestAPIKeyConcurrentRequestsShareRefresh (0.05s)
+=== RUN   TestRefreshCachedAPIKeyCodexModelsManifest_RechecksFreshEntry
+--- PASS: TestRefreshCachedAPIKeyCodexModelsManifest_RechecksFreshEntry (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyFreshCacheHandlesETagLocally
+--- PASS: TestFetchCodexModelsManifestAPIKeyFreshCacheHandlesETagLocally (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyCacheSurvivesClientMutation
+--- PASS: TestFetchCodexModelsManifestAPIKeyCacheSurvivesClientMutation (0.04s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyCacheKeyIsolatesRequestIdentity
+--- PASS: TestFetchCodexModelsManifestAPIKeyCacheKeyIsolatesRequestIdentity (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyCacheBoundsEntriesAndBodySize
+--- PASS: TestFetchCodexModelsManifestAPIKeyCacheBoundsEntriesAndBodySize (0.50s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyServesStaleWhileRefreshing
+--- PASS: TestFetchCodexModelsManifestAPIKeyServesStaleWhileRefreshing (0.01s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyRevalidatesStaleETag
+--- PASS: TestFetchCodexModelsManifestAPIKeyRevalidatesStaleETag (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyColdCacheHandlesNotModifiedLocally
+--- PASS: TestFetchCodexModelsManifestAPIKeyColdCacheHandlesNotModifiedLocally (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyDoesNotCacheUnexpectedColdNotModified
+--- PASS: TestFetchCodexModelsManifestAPIKeyDoesNotCacheUnexpectedColdNotModified (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyPreservesBaseURLQuery
+--- PASS: TestFetchCodexModelsManifestAPIKeyPreservesBaseURLQuery (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyRejectsBaseURLFragment
+--- PASS: TestFetchCodexModelsManifestAPIKeyRejectsBaseURLFragment (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKey401KeepsNoFailoverAndNoDisable
+--- PASS: TestFetchCodexModelsManifestAPIKey401KeepsNoFailoverAndNoDisable (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyUpstreamError
+--- PASS: TestFetchCodexModelsManifestAPIKeyUpstreamError (0.00s)
+=== RUN   TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint
+=== RUN   TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint/missing_base_URL
+=== RUN   TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint/official_host
+=== RUN   TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint/official_versioned_URL
+--- PASS: TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint (0.03s)
+    --- PASS: TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint/missing_base_URL (0.01s)
+    --- PASS: TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint/official_host (0.01s)
+    --- PASS: TestFetchCodexModelsManifestAPIKeyUsesOfficialOpenAIModelsEndpoint/official_versioned_URL (0.01s)
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/top_level_hit_and_miss
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/prompt_nested_positive
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/prompt_nested_zero
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/input_nested_positive
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/input_nested_zero_wins
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/legacy_cached_tokens
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/legacy_cache_read_tokens
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/legacy_cache_read_input
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/negative_hit
+=== RUN   TestOpenAIUsage_PromptCacheHitFallback/miss_only
+--- PASS: TestOpenAIUsage_PromptCacheHitFallback (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/top_level_hit_and_miss (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/prompt_nested_positive (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/prompt_nested_zero (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/input_nested_positive (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/input_nested_zero_wins (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/legacy_cached_tokens (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/legacy_cache_read_tokens (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/legacy_cache_read_input (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/negative_hit (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitFallback/miss_only (0.00s)
+=== RUN   TestOpenAIUsage_PromptCacheHitHTTPAndSSE
+=== RUN   TestOpenAIUsage_PromptCacheHitHTTPAndSSE/json
+=== RUN   TestOpenAIUsage_PromptCacheHitHTTPAndSSE/sse_to_json
+=== RUN   TestOpenAIUsage_PromptCacheHitHTTPAndSSE/streaming
+--- PASS: TestOpenAIUsage_PromptCacheHitHTTPAndSSE (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitHTTPAndSSE/json (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitHTTPAndSSE/sse_to_json (0.00s)
+    --- PASS: TestOpenAIUsage_PromptCacheHitHTTPAndSSE/streaming (0.00s)
+=== RUN   TestPaginateAPIKeysLargePage
+=== PAUSE TestPaginateAPIKeysLargePage
+=== CONT  TestPaginateAPIKeysLargePage
+--- PASS: TestPaginateAPIKeysLargePage (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	6.249s
+=== RUN   TestPaginateSliceLargePage
+=== PAUSE TestPaginateSliceLargePage
+=== RUN   TestUsageBillingDeletedKeySQLite
+=== RUN   TestUsageBillingDeletedKeySQLite/soft_deleted
+=== RUN   TestUsageBillingDeletedKeySQLite/missing
+=== RUN   TestUsageBillingDeletedKeySQLite/simple_mode_command
+=== RUN   TestUsageBillingDeletedKeySQLite/quota_database_error
+=== RUN   TestUsageBillingDeletedKeySQLite/rate_database_error
+--- PASS: TestUsageBillingDeletedKeySQLite (0.08s)
+    --- PASS: TestUsageBillingDeletedKeySQLite/soft_deleted (0.02s)
+    --- PASS: TestUsageBillingDeletedKeySQLite/missing (0.02s)
+    --- PASS: TestUsageBillingDeletedKeySQLite/simple_mode_command (0.02s)
+    --- PASS: TestUsageBillingDeletedKeySQLite/quota_database_error (0.01s)
+    --- PASS: TestUsageBillingDeletedKeySQLite/rate_database_error (0.02s)
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_expired_utc
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_expired_shanghai
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_missing_reset
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_invalid_reset
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_active
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/rolling_expired
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/rolling_active
+=== RUN   TestUsageBillingRepositoryApplySQLiteQuotaWindows/disabled
+--- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows (0.13s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_expired_utc (0.02s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_expired_shanghai (0.02s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_missing_reset (0.02s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_invalid_reset (0.02s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/fixed_active (0.02s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/rolling_expired (0.02s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/rolling_active (0.02s)
+    --- PASS: TestUsageBillingRepositoryApplySQLiteQuotaWindows/disabled (0.02s)
+=== RUN   TestUsageBillingRepositoryApplySQLiteAppliesAllEffects
+--- PASS: TestUsageBillingRepositoryApplySQLiteAppliesAllEffects (0.02s)
+=== RUN   TestUsagePromptCacheHitSQLiteSettlement
+=== RUN   TestUsagePromptCacheHitSQLiteSettlement/stream=false
+2026/10/29 01:06:11 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/29 01:06:11 [Billing] Using fallback pricing for model: gpt-5.4
+=== RUN   TestUsagePromptCacheHitSQLiteSettlement/stream=true
+2026/10/29 01:06:38 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/10/29 01:06:38 [Billing] Using fallback pricing for model: gpt-5.4
+--- PASS: TestUsagePromptCacheHitSQLiteSettlement (51.54s)
+    --- PASS: TestUsagePromptCacheHitSQLiteSettlement/stream=false (25.10s)
+    --- PASS: TestUsagePromptCacheHitSQLiteSettlement/stream=true (26.44s)
+=== RUN   TestUserPlatformQuotaSQLiteInitialSkipsUnlimitedAndPreservesZero
+--- PASS: TestUserPlatformQuotaSQLiteInitialSkipsUnlimitedAndPreservesZero (0.45s)
+=== RUN   TestUserPlatformQuotaSQLiteClearDoesNotReviveAndReconfigureStartsFresh
+--- PASS: TestUserPlatformQuotaSQLiteClearDoesNotReviveAndReconfigureStartsFresh (0.47s)
+=== RUN   TestUserPlatformQuotaSQLiteUsageMissingIsNoop
+--- PASS: TestUserPlatformQuotaSQLiteUsageMissingIsNoop (0.42s)
+=== RUN   TestUserPlatformQuotaSQLiteSnapshotsUpdateExistingAndChunkLargeInput
+--- PASS: TestUserPlatformQuotaSQLiteSnapshotsUpdateExistingAndChunkLargeInput (30.92s)
+=== RUN   TestUserPlatformQuotaSQLiteSnapshotChunksRollBackTogether
+--- PASS: TestUserPlatformQuotaSQLiteSnapshotChunksRollBackTogether (8.03s)
+=== RUN   TestUserPlatformQuotaSQLiteLegacyWindowColumnsRoundTrip
+--- PASS: TestUserPlatformQuotaSQLiteLegacyWindowColumnsRoundTrip (0.54s)
+=== RUN   TestUserPlatformQuotaSQLiteConcurrentIncrementsDoNotLoseUsage
+--- PASS: TestUserPlatformQuotaSQLiteConcurrentIncrementsDoNotLoseUsage (0.80s)
+=== CONT  TestPaginateSliceLargePage
+--- PASS: TestPaginateSliceLargePage (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/repository	94.505s
+=== RUN   TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite
+=== RUN   TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite/messages
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLitemessage147432963/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite/chat_completions
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLitechat_co2431792718/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] chat client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite/native
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLitenative2407545105/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+--- PASS: TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite (0.05s)
+    --- PASS: TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite/messages (0.02s)
+    --- PASS: TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite/chat_completions (0.02s)
+    --- PASS: TestGeminiStreamAbortDropQueueOverflowStillSettlesSQLite/native (0.02s)
+=== RUN   TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata
+=== RUN   TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata/messages
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortQueuedUsageCapturesRequestMetadatamessages1837933950/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata/chat_completions
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortQueuedUsageCapturesRequestMetadatachat_com707178026/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] chat client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata/native
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortQueuedUsageCapturesRequestMetadatanative2334639315/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+--- PASS: TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata (0.05s)
+    --- PASS: TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata/messages (0.02s)
+    --- PASS: TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata/chat_completions (0.02s)
+    --- PASS: TestGeminiStreamAbortQueuedUsageCapturesRequestMetadata/native (0.01s)
+=== RUN   TestGeminiStreamAbortUsageQueueSettlesOnceSQLite
+=== RUN   TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/messages/usage=true
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitemessagesusage=3918588518/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitemessagesusage=3918588518/002/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/messages/usage=false
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitemessagesusage=700121815/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitemessagesusage=700121815/002/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Pricing] Service stopped
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/chat_completions/usage=true
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitechat_completion131976340/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] chat client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitechat_completion131976340/002/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] chat client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/chat_completions/usage=false
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitechat_completion1146743805/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitechat_completion1146743805/002/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Pricing] Service stopped
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/native/usage=true
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitenativeusage=tr495014525/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitenativeusage=tr495014525/002/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Gemini] client disconnected; stream_finished=false
+2026/10/29 01:05:46 [Pricing] Service stopped
+2026/10/29 01:05:46 [Pricing] Service stopped
+=== RUN   TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/native/usage=false
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitenativeusage=fa708913996/001/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Pricing] Loaded 1 models from /tmp/TestGeminiStreamAbortUsageQueueSettlesOnceSQLitenativeusage=fa708913996/002/model_pricing.json
+2026/10/29 01:05:46 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/10/29 01:05:46 [Pricing] Service initialized with 1 models
+2026/10/29 01:05:46 INFO sticky.hash_source source=message_content_fallback hash=2ejsk6qpxoqug content_len=21
+2026/10/29 01:05:46 INFO sticky.scheduler_entry group_id=9400 session_hash=gemini:2 sticky_account_id=0 sticky_source="" model=gemini-2.5-flash load_batch=false has_concurrency_svc=false excluded_count=0
+2026/10/29 01:05:46 [Pricing] Service stopped
+2026/10/29 01:05:46 [Pricing] Service stopped
+--- PASS: TestGeminiStreamAbortUsageQueueSettlesOnceSQLite (0.11s)
+    --- PASS: TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/messages/usage=true (0.02s)
+    --- PASS: TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/messages/usage=false (0.02s)
+    --- PASS: TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/chat_completions/usage=true (0.03s)
+    --- PASS: TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/chat_completions/usage=false (0.02s)
+    --- PASS: TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/native/usage=true (0.02s)
+    --- PASS: TestGeminiStreamAbortUsageQueueSettlesOnceSQLite/native/usage=false (0.01s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	1.303s
+=== RUN   TestParseOpsOpenAITokenStatsFilter_Defaults
+--- PASS: TestParseOpsOpenAITokenStatsFilter_Defaults (0.00s)
+=== RUN   TestParseOpsOpenAITokenStatsFilter_WithTopN
+--- PASS: TestParseOpsOpenAITokenStatsFilter_WithTopN (0.00s)
+=== RUN   TestParseOpsOpenAITokenStatsFilter_InvalidParams
+--- PASS: TestParseOpsOpenAITokenStatsFilter_InvalidParams (0.00s)
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=9223372036854775807&page_size=1
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=461168601842738790&page_size=20
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=461168601842738791&page_size=20
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=439208192231179800&page_size=21
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=439208192231179801&page_size=21
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=92233720368547758&page_size=100
+=== RUN   TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=92233720368547759&page_size=100
+--- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries (0.00s)
+    --- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=9223372036854775807&page_size=1 (0.00s)
+    --- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=461168601842738790&page_size=20 (0.00s)
+    --- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=461168601842738791&page_size=20 (0.00s)
+    --- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=439208192231179800&page_size=21 (0.00s)
+    --- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=439208192231179801&page_size=21 (0.00s)
+    --- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=92233720368547758&page_size=100 (0.00s)
+    --- PASS: TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries//?page=92233720368547759&page_size=100 (0.00s)
+=== RUN   TestUserHandler_AdminGuardsSQLite
+=== RUN   TestUserHandler_AdminGuardsSQLite/last_admin_demotion
+=== RUN   TestUserHandler_AdminGuardsSQLite/direct_disable
+=== RUN   TestUserHandler_AdminGuardsSQLite/disable_with_another_admin
+=== RUN   TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable
+=== RUN   TestUserHandler_AdminGuardsSQLite/direct_delete
+=== RUN   TestUserHandler_AdminGuardsSQLite/delete_with_another_admin
+=== RUN   TestUserHandler_AdminGuardsSQLite/demotion_with_another_admin
+2026/10/29 01:08:49 audit: user role changed actor_admin_id=0 target_user_id=1 old_role=admin new_role=user
+=== RUN   TestUserHandler_AdminGuardsSQLite/database_write_failure
+2026/10/29 01:09:16 [ERROR] PUT /api/v1/admin/users/1
+  Error: SQL logic error: no such function: unavailable_admin_write_function (1)
+--- PASS: TestUserHandler_AdminGuardsSQLite (209.51s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/last_admin_demotion (24.94s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/direct_disable (26.27s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/disable_with_another_admin (26.08s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable (26.16s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/direct_delete (26.39s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/delete_with_another_admin (26.44s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/demotion_with_another_admin (26.59s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/database_write_failure (26.64s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler/admin	210.599s
+=== RUN   TestMalformedFunctionCallTransform
+=== RUN   TestMalformedFunctionCallTransform/{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}
+=== RUN   TestMalformedFunctionCallTransform/{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL","content":{"parts":[{"thoughtSignature":"test-signature"}]}}]}
+=== RUN   TestMalformedFunctionCallTransform/{"response":{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}}
+=== RUN   TestMalformedFunctionCallTransform/{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"},{"finishReason":"STOP","content":{"parts":[{"text":"other_candidate"}]}}]}
+--- PASS: TestMalformedFunctionCallTransform (0.00s)
+    --- PASS: TestMalformedFunctionCallTransform/{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]} (0.00s)
+    --- PASS: TestMalformedFunctionCallTransform/{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL","content":{"parts":[{"thoughtSignature":"test-signature"}]}}]} (0.00s)
+    --- PASS: TestMalformedFunctionCallTransform/{"response":{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}} (0.00s)
+    --- PASS: TestMalformedFunctionCallTransform/{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"},{"finishReason":"STOP","content":{"parts":[{"text":"other_candidate"}]}}]} (0.00s)
+=== RUN   TestMalformedFunctionCallTransform_UsesSelectedCandidate
+--- PASS: TestMalformedFunctionCallTransform_UsesSelectedCandidate (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/antigravity	1.024s
+=== RUN   TestPaginationParamsNormalizedSortOrder
+=== PAUSE TestPaginationParamsNormalizedSortOrder
+=== RUN   TestPaginationParamsLimit
+=== PAUSE TestPaginationParamsLimit
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit
+=== RUN   TestPaginationParamsOffsetDoesNotOverflow
+=== PAUSE TestPaginationParamsOffsetDoesNotOverflow
+=== CONT  TestPaginationParamsNormalizedSortOrder
+=== CONT  TestPaginationParamsLimit
+=== CONT  TestPaginationParamsOffsetDoesNotOverflow
+--- PASS: TestPaginationParamsNormalizedSortOrder (0.00s)
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit
+=== RUN   TestPaginationParamsLimit/non-positive_falls_back_to_default
+--- PASS: TestPaginationParamsOffsetDoesNotOverflow (0.00s)
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page
+=== PAUSE TestPaginationParamsLimit/non-positive_falls_back_to_default
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page
+=== RUN   TestPaginationParamsLimit/negative_falls_back_to_default
+=== PAUSE TestPaginationParamsLimit/negative_falls_back_to_default
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default
+=== RUN   TestPaginationParamsLimit/normal_value_keeps
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default
+=== PAUSE TestPaginationParamsLimit/normal_value_keeps
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default
+=== RUN   TestPaginationParamsLimit/max_value_keeps
+=== PAUSE TestPaginationParamsLimit/max_value_keeps
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/normal_values
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/normal_values
+=== RUN   TestPaginationParamsLimit/beyond_max_clamps_to_1000
+=== PAUSE TestPaginationParamsLimit/beyond_max_clamps_to_1000
+=== CONT  TestPaginationParamsLimit/non-positive_falls_back_to_default
+=== CONT  TestPaginationParamsLimit/beyond_max_clamps_to_1000
+=== CONT  TestPaginationParamsLimit/max_value_keeps
+=== CONT  TestPaginationParamsLimit/negative_falls_back_to_default
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped
+=== CONT  TestPaginationParamsLimit/normal_value_keeps
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates
+--- PASS: TestPaginationParamsLimit (0.00s)
+    --- PASS: TestPaginationParamsLimit/non-positive_falls_back_to_default (0.00s)
+    --- PASS: TestPaginationParamsLimit/beyond_max_clamps_to_1000 (0.00s)
+    --- PASS: TestPaginationParamsLimit/max_value_keeps (0.00s)
+    --- PASS: TestPaginationParamsLimit/negative_falls_back_to_default (0.00s)
+    --- PASS: TestPaginationParamsLimit/normal_value_keeps (0.00s)
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps
+=== RUN   TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates
+=== PAUSE TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/normal_values
+=== CONT  TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates
+--- PASS: TestPaginationParamsOffsetUsesNormalizedLimit (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/negative_page_size_uses_default (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/zero_page_size_uses_default (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_max_page_size_saturates (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/invalid_page_uses_first_page (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/page_at_saturation_bound_keeps (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/normal_values (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_with_odd_page_size_saturates (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/page_just_past_saturation_bound_saturates (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/max_int_page_saturates (0.00s)
+    --- PASS: TestPaginationParamsOffsetUsesNormalizedLimit/page_size_beyond_max_is_clamped (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/pagination	1.017s
+=== RUN   TestParsePagination
+=== RUN   TestParsePagination/无参数_使用默认值
+=== RUN   TestParsePagination/仅指定page
+=== RUN   TestParsePagination/仅指定page_size
+=== RUN   TestParsePagination/同时指定page和page_size
+=== RUN   TestParsePagination/使用limit代替page_size
+=== RUN   TestParsePagination/page_size优先于limit
+=== RUN   TestParsePagination/page为0_使用默认值
+=== RUN   TestParsePagination/page_size超过1000_使用默认值
+=== RUN   TestParsePagination/page_size恰好1000_有效
+=== RUN   TestParsePagination/page为非数字_使用默认值
+=== RUN   TestParsePagination/page_size为非数字_使用默认值
+=== RUN   TestParsePagination/limit为非数字_使用默认值
+=== RUN   TestParsePagination/page_size为0_使用默认值
+=== RUN   TestParsePagination/limit为0_使用默认值
+=== RUN   TestParsePagination/大页码
+=== RUN   TestParsePagination/page_size为1_最小有效值
+=== RUN   TestParsePagination/混合数字和字母的page
+=== RUN   TestParsePagination/limit超过1000_使用默认值
+=== RUN   TestParsePagination/page为MaxInt_钳制到不溢出的上限
+=== RUN   TestParsePagination/page为MaxInt且page_size为1000_钳制到不溢出的上限
+=== RUN   TestParsePagination/page恰好在上限_有效
+=== RUN   TestParsePagination/page刚超过上限_钳制
+=== RUN   TestParsePagination/page超过MaxInt_使用默认值
+=== RUN   TestParsePagination/page超过uint64范围_不能回绕为2
+=== RUN   TestParsePagination/page_size超过uint64范围_不能回绕为21
+=== RUN   TestParsePagination/limit超过uint64范围_不能回绕为21
+=== RUN   TestParsePagination/超长数字_使用默认值
+--- PASS: TestParsePagination (0.00s)
+    --- PASS: TestParsePagination/无参数_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/仅指定page (0.00s)
+    --- PASS: TestParsePagination/仅指定page_size (0.00s)
+    --- PASS: TestParsePagination/同时指定page和page_size (0.00s)
+    --- PASS: TestParsePagination/使用limit代替page_size (0.00s)
+    --- PASS: TestParsePagination/page_size优先于limit (0.00s)
+    --- PASS: TestParsePagination/page为0_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size超过1000_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size恰好1000_有效 (0.00s)
+    --- PASS: TestParsePagination/page为非数字_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size为非数字_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/limit为非数字_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page_size为0_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/limit为0_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/大页码 (0.00s)
+    --- PASS: TestParsePagination/page_size为1_最小有效值 (0.00s)
+    --- PASS: TestParsePagination/混合数字和字母的page (0.00s)
+    --- PASS: TestParsePagination/limit超过1000_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page为MaxInt_钳制到不溢出的上限 (0.00s)
+    --- PASS: TestParsePagination/page为MaxInt且page_size为1000_钳制到不溢出的上限 (0.00s)
+    --- PASS: TestParsePagination/page恰好在上限_有效 (0.00s)
+    --- PASS: TestParsePagination/page刚超过上限_钳制 (0.00s)
+    --- PASS: TestParsePagination/page超过MaxInt_使用默认值 (0.00s)
+    --- PASS: TestParsePagination/page超过uint64范围_不能回绕为2 (0.00s)
+    --- PASS: TestParsePagination/page_size超过uint64范围_不能回绕为21 (0.00s)
+    --- PASS: TestParsePagination/limit超过uint64范围_不能回绕为21 (0.00s)
+    --- PASS: TestParsePagination/超长数字_使用默认值 (0.00s)
+=== RUN   TestParsePaginationBoundariesAndResponse
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775806&page_size=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1#01
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387902&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387903&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387904&page_size=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258601&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258602&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258603&page_size=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738789&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738790&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738791&page_size=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179799&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179800&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179801&page_size=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496271&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496272&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496273&page_size=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854774&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854776&page_size=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775806&limit=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1#01
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387902&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387903&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=4611686018427387904&limit=2
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258601&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258602&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=3074457345618258603&limit=3
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738789&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738790&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=461168601842738791&limit=20
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179799&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179800&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=439208192231179801&limit=21
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496271&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496272&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9232604641496273&limit=999
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854774&limit=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775&limit=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1000
+=== RUN   TestParsePaginationBoundariesAndResponse/page=9223372036854776&limit=1000
+--- PASS: TestParsePaginationBoundariesAndResponse (0.02s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775806&page_size=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1#01 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387902&page_size=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387903&page_size=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387904&page_size=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258601&page_size=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258602&page_size=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258603&page_size=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738789&page_size=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738790&page_size=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738791&page_size=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179799&page_size=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179800&page_size=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179801&page_size=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496271&page_size=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496272&page_size=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496273&page_size=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854774&page_size=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775&page_size=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&page_size=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854776&page_size=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775806&limit=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1#01 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387902&limit=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387903&limit=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=4611686018427387904&limit=2 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258601&limit=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258602&limit=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=3074457345618258603&limit=3 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738789&limit=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738790&limit=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=461168601842738791&limit=20 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179799&limit=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179800&limit=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=439208192231179801&limit=21 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496271&limit=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496272&limit=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9232604641496273&limit=999 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854774&limit=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775&limit=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854775807&limit=1000 (0.00s)
+    --- PASS: TestParsePaginationBoundariesAndResponse/page=9223372036854776&limit=1000 (0.00s)
+=== RUN   Test_parseInt
+=== RUN   Test_parseInt/正常数字
+=== RUN   Test_parseInt/零
+=== RUN   Test_parseInt/单个数字
+=== RUN   Test_parseInt/大数字
+=== RUN   Test_parseInt/包含字母_返回0
+=== RUN   Test_parseInt/数字开头接字母_返回0
+=== RUN   Test_parseInt/包含负号_返回0
+=== RUN   Test_parseInt/包含小数点_返回0
+=== RUN   Test_parseInt/包含空格_返回0
+=== RUN   Test_parseInt/空字符串
+=== RUN   Test_parseInt/前导零_有效
+=== RUN   Test_parseInt/正号_无效
+=== RUN   Test_parseInt/MaxInt_有效
+=== RUN   Test_parseInt/超过MaxInt_返回范围错误
+--- PASS: Test_parseInt (0.00s)
+    --- PASS: Test_parseInt/正常数字 (0.00s)
+    --- PASS: Test_parseInt/零 (0.00s)
+    --- PASS: Test_parseInt/单个数字 (0.00s)
+    --- PASS: Test_parseInt/大数字 (0.00s)
+    --- PASS: Test_parseInt/包含字母_返回0 (0.00s)
+    --- PASS: Test_parseInt/数字开头接字母_返回0 (0.00s)
+    --- PASS: Test_parseInt/包含负号_返回0 (0.00s)
+    --- PASS: Test_parseInt/包含小数点_返回0 (0.00s)
+    --- PASS: Test_parseInt/包含空格_返回0 (0.00s)
+    --- PASS: Test_parseInt/空字符串 (0.00s)
+    --- PASS: Test_parseInt/前导零_有效 (0.00s)
+    --- PASS: Test_parseInt/正号_无效 (0.00s)
+    --- PASS: Test_parseInt/MaxInt_有效 (0.00s)
+    --- PASS: Test_parseInt/超过MaxInt_返回范围错误 (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/response	1.048s
+=== RUN   TestPromptAdminRejectsInvalidEventIDsTimesAndPagination
+--- PASS: TestPromptAdminRejectsInvalidEventIDsTimesAndPagination (0.00s)
+=== RUN   TestPromptAdminRejectsOverflowingPagination
+=== RUN   TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=461168601842738790&page_size=20
+=== RUN   TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=461168601842738791&page_size=20
+=== RUN   TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=439208192231179800&page_size=21
+=== RUN   TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=439208192231179801&page_size=21
+=== RUN   TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=92233720368547758&page_size=100
+=== RUN   TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=92233720368547759&page_size=100
+--- PASS: TestPromptAdminRejectsOverflowingPagination (0.00s)
+    --- PASS: TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=461168601842738790&page_size=20 (0.00s)
+    --- PASS: TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=461168601842738791&page_size=20 (0.00s)
+    --- PASS: TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=439208192231179800&page_size=21 (0.00s)
+    --- PASS: TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=439208192231179801&page_size=21 (0.00s)
+    --- PASS: TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=92233720368547758&page_size=100 (0.00s)
+    --- PASS: TestPromptAdminRejectsOverflowingPagination//admin/prompt-audit/events?page=92233720368547759&page_size=100 (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/securityaudit	1.061s

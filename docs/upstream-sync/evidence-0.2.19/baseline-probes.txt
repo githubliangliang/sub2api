@@ -1,0 +1,51 @@
+2026/10/28 12:46:09 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestRelease019ProbeClaudeUTF16
+    release019_intake_probe_test.go:39: DEFECT: Go byte-index fingerprint=51b, independent JS UTF-16 oracle=c7e
+    release019_intake_probe_test.go:39: DEFECT: Go byte-index fingerprint=83a, independent JS UTF-16 oracle=4ed
+    release019_intake_probe_test.go:39: DEFECT: Go byte-index fingerprint=f32, independent JS UTF-16 oracle=0e9
+--- PASS: TestRelease019ProbeClaudeUTF16 (0.00s)
+=== RUN   TestRelease019ProbeCodexRefreshAfterFreshFill
+    release019_intake_probe_test.go:63: DEFECT: fresh cache at flight entry still caused one upstream fetch; intended count is zero
+--- PASS: TestRelease019ProbeCodexRefreshAfterFreshFill (0.00s)
+=== RUN   TestRelease019ProbeGeminiFileData
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    release019_intake_probe_test.go:72: DEFECT: two actual fileData images under a custom alias resolve to zero billable images
+--- PASS: TestRelease019ProbeGeminiFileData (0.00s)
+=== RUN   TestRelease019ProbePromptCacheHitTokens
+    release019_intake_probe_test.go:79: DEFECT: shared OpenAI-compatible usage reader drops prompt_cache_hit_tokens=80
+--- PASS: TestRelease019ProbePromptCacheHitTokens (0.00s)
+=== RUN   TestRelease019ProbeMalformedAntigravityNonStream
+2026/10/28 12:46:09 [Antigravity] MALFORMED_FUNCTION_CALL detected in response for model claude-fable-5
+    release019_intake_probe_test.go:92: DEFECT: malformed tool response became empty successful Claude message: {"id":"msg_014Vxm54LEJK9pEJbXGUDr0F","type":"message","role":"assistant","model":"claude-fable-5","content":[],"stop_reason":"end_turn","usage":{"input_tokens":0,"output_tokens":0}}
+2026/10/28 12:46:09 [Antigravity] MALFORMED_FUNCTION_CALL detected in response for model claude-fable-5
+    release019_intake_probe_test.go:92: DEFECT: malformed tool response became empty successful Claude message: {"id":"msg_01REkwsySY5h1VBnCJ6IpQjs","type":"message","role":"assistant","model":"claude-fable-5","content":[],"stop_reason":"end_turn","usage":{"input_tokens":0,"output_tokens":0}}
+--- PASS: TestRelease019ProbeMalformedAntigravityNonStream (0.00s)
+=== RUN   TestRelease019ProbeGrokInvalidCatalogShape
+    release019_intake_probe_test.go:100: DEFECT: invalid catalog shape became model IDs: ["upstream failure"]
+    release019_intake_probe_test.go:100: DEFECT: invalid catalog shape became model IDs: ["{\"label\":\"no-id\"}"]
+--- PASS: TestRelease019ProbeGrokInvalidCatalogShape (0.00s)
+=== RUN   TestRelease019ProbeChannelPartialDimensions
+    release019_intake_probe_test.go:111: DEFECT: partial channel update removed the previously enabled OpenAI Web Search dimension
+--- PASS: TestRelease019ProbeChannelPartialDimensions (0.00s)
+=== RUN   TestRelease019ProbePaginationOverflow
+    release019_intake_probe_test.go:116: DEFECT: MaxInt page wraps to offset=-40
+--- PASS: TestRelease019ProbePaginationOverflow (0.00s)
+=== RUN   TestRelease019ProbeMultipartTruncation
+    release019_intake_probe_test.go:131: DEFECT: 20971521-byte upload accepted and truncated to 20971520 bytes
+--- PASS: TestRelease019ProbeMultipartTruncation (0.09s)
+=== RUN   TestRelease019ProbeAdminGuardStatus
+    release019_intake_probe_test.go:140: DEFECT: last-admin validation error is classified as HTTP 500
+--- PASS: TestRelease019ProbeAdminGuardStatus (0.00s)
+=== RUN   TestRelease019ProbeImageContextTierAlreadyCorrect
+    release019_intake_probe_test.go:158: NEGATIVE CONTROL: channel per-request image pricing already retains tokens; 0.3 x 2 = 0.6
+--- PASS: TestRelease019ProbeImageContextTierAlreadyCorrect (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	0.120s
+=== RUN   TestRelease019ProbeGrokStaleExtraOnSQLite
+    release019_intake_probe_test.go:27: DEFECT: real SQLite read sees new catalog, but ordinary account update merge selects stale form catalog and metadata
+--- PASS: TestRelease019ProbeGrokStaleExtraOnSQLite (0.01s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/repository	0.040s

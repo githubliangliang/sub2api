@@ -1,0 +1,162 @@
+diff --git a/backend/internal/service/gateway_billing_block.go b/backend/internal/service/gateway_billing_block.go
+index 98f98bc04..9c8e84845 100644
+--- a/backend/internal/service/gateway_billing_block.go
++++ b/backend/internal/service/gateway_billing_block.go
+@@ -4,6 +4,7 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 	"fmt"
++	"unicode/utf16"
+ 
+ 	"github.com/tidwall/gjson"
+ )
+@@ -18,23 +19,35 @@ const fingerprintSalt = "59cf53e54c78"
+ // computeClaudeCodeFingerprint 复刻真实 Claude Code CLI 的 cc_version 指纹算法：
+ //
+ //  1. 取 messages 中第一条 role=user 的纯文本（首块 text）
+-//  2. 取该文本的第 4、7、20 字符（不足以 '0' 补齐）
+-//  3. SHA256(SALT + chars + cc_version) 取 hex 前 3 字符
++//  2. 按 JavaScript UTF-16 码元取零基下标 4、7、20（不足以 '0' 补齐）
++//  3. 拼接采样码元后按 JavaScript UTF-8 语义编码，再对 SALT + chars + cc_version
++//     计算 SHA256，取 hex 前 3 字符
+ //
+ // 算法来自 Parrot src/transform/cc_mimicry.py:compute_fingerprint，与官方 CLI 字节对齐。
+ // 任何偏差都会导致 cc_version=X.Y.Z.{fp} 在上游侧与真实 CLI 不一致。
+ func computeClaudeCodeFingerprint(body []byte, version string) string {
+ 	firstText := extractFirstUserText(body)
+-	indices := []int{4, 7, 20}
+-	chars := make([]byte, 0, 3)
++	indices := [...]int{4, 7, 20}
++	// Only the prefix through index 20 is needed, even for very long prompts.
++	textUnits := make([]uint16, 0, 22)
++	for _, r := range firstText {
++		textUnits = utf16.AppendRune(textUnits, r)
++		if len(textUnits) > indices[len(indices)-1] {
++			break
++		}
++	}
++	chars := make([]uint16, 0, len(indices))
+ 	for _, i := range indices {
+-		if i < len(firstText) {
+-			chars = append(chars, firstText[i])
++		if i < len(textUnits) {
++			chars = append(chars, textUnits[i])
+ 		} else {
+ 			chars = append(chars, '0')
+ 		}
+ 	}
+-	sum := sha256.Sum256([]byte(fingerprintSalt + string(chars) + version))
++	// Decode after joining: sampled halves can form a new surrogate pair.
++	// Unpaired halves become U+FFFD, matching JS UTF-8 encoding for the hash.
++	sample := string(utf16.Decode(chars))
++	sum := sha256.Sum256([]byte(fingerprintSalt + sample + version))
+ 	return hex.EncodeToString(sum[:])[:3]
+ }
+ 
+diff --git a/backend/internal/service/gateway_billing_block_test.go b/backend/internal/service/gateway_billing_block_test.go
+new file mode 100644
+index 000000000..d69a46bec
+--- /dev/null
++++ b/backend/internal/service/gateway_billing_block_test.go
+@@ -0,0 +1,52 @@
++package service
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestClaudeCodeFingerprint_JavaScriptUTF16(t *testing.T) {
++	const version = "2.1.283"
++	// Fixed outputs from Node.js crypto, independent of the Go implementation:
++	// createHash('sha256').update('59cf53e54c78' +
++	//   [4, 7, 20].map(i => text[i] || '0').join('') + '2.1.283')
++	//   .digest('hex').slice(0, 3)
++	tests := []struct {
++		name string
++		text string
++		want string
++	}{
++		{name: "empty", text: "", want: "49b"},
++		{name: "short_ascii", text: "hi", want: "49b"},
++		{name: "ascii", text: "abcdefghijklmnopqrstuvwxyz", want: "2e9"},
++		{name: "chinese", text: "这是一个用于验证中文指纹计算的测试消息，请保持一致。", want: "c7e"},
++		{name: "short_chinese", text: "你好世界呀", want: "4ed"},
++		{name: "mixed", text: "abcd中fg文ijklmnopqrst界", want: "183"},
++		{name: "emoji_before_indices", text: "😀abcdefghijklmnopqrstuvwxyz", want: "c16"},
++		{name: "isolated_high_surrogate", text: "abcd😀fghijklmnopqrstuvwxyz", want: "d96"},
++		{name: "isolated_low_surrogate", text: "abc😀efghijklmnopqrstuvwxyz", want: "d96"},
++		{name: "sampled_surrogates_form_pair", text: "abcd😀😀efghijklmnopqrstuvwxyz", want: "0e9"},
++		{name: "nul_is_not_missing", text: "abcd\x00fg\x00hijklmnopqrs\x00", want: "03e"},
++	}
++	for _, tt := range tests {
++		for _, format := range []string{"string", "text_block"} {
++			t.Run(tt.name+"/"+format, func(t *testing.T) {
++				var content any = tt.text
++				if format == "text_block" {
++					content = []map[string]any{{"type": "text", "text": tt.text}}
++				}
++				body, err := json.Marshal(map[string]any{
++					"messages": []map[string]any{{"role": "user", "content": content}},
++				})
++				require.NoError(t, err)
++				require.Equal(t, tt.want, computeClaudeCodeFingerprint(body, version))
++
++				billing, err := buildBillingAttributionText(body, version)
++				require.NoError(t, err)
++				require.Equal(t, "x-anthropic-billing-header: cc_version="+version+"."+tt.want+"; cc_entrypoint=cli;", billing)
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/gateway_billing_header_test.go b/backend/internal/service/gateway_billing_header_test.go
+index 5d85b2992..c1d3793ef 100644
+--- a/backend/internal/service/gateway_billing_header_test.go
++++ b/backend/internal/service/gateway_billing_header_test.go
+@@ -87,6 +87,24 @@ func TestSyncBillingHeaderVersion_RecomputesSuffixAndIsIdempotent(t *testing.T)
+ 	require.JSONEq(t, gjson.GetBytes(body, "messages").Raw, gjson.GetBytes(result, "messages").Raw)
+ }
+ 
++func TestSyncBillingHeaderVersion_UnicodeSuffix(t *testing.T) {
++	for _, initialVersion := range []string{"2.1.81.df2", "2.1.283.000", "2.1.283.c7e"} {
++		t.Run(initialVersion, func(t *testing.T) {
++			body := []byte(`{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=` + initialVersion + `; cc_entrypoint=cli;"},{"type":"text","text":"Keep this prompt."}],"messages":[{"role":"user","content":"这是一个用于验证中文指纹计算的测试消息，请保持一致。"}],"unknown":{"keep":true}}`)
++			result := syncBillingHeaderVersion(body, "claude-cli/2.1.283")
++			// Node.js reference output; do not derive this from the helper under test.
++			require.Equal(t, "x-anthropic-billing-header: cc_version=2.1.283.c7e; cc_entrypoint=cli;", gjson.GetBytes(result, "system.0.text").String())
++			require.Equal(t, result, syncBillingHeaderVersion(result, "claude-cli/2.1.283"))
++			if initialVersion == "2.1.283.c7e" {
++				require.Equal(t, body, result)
++			}
++			for _, path := range []string{"messages", "system.1", "unknown"} {
++				require.Equal(t, gjson.GetBytes(body, path).Raw, gjson.GetBytes(result, path).Raw)
++			}
++		})
++	}
++}
++
+ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	for _, endpoint := range []string{"messages", "count_tokens"} {
+@@ -105,7 +123,7 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
+ 				resetGatewayForwardingSettingsCacheForTest(t)
+ 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+ 				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+-				body := []byte(`{"model":"claude-haiku-4-5","system":[{"type":"text","text":""}],"messages":[{"role":"user","content":"hello world"}]}`)
++				body := []byte(`{"model":"claude-haiku-4-5","system":[{"type":"text","text":""}],"messages":[{"role":"user","content":"这是一个用于验证中文指纹计算的测试消息，请保持一致。"}]}`)
+ 				billing, err := buildBillingAttributionText(body, "2.1.81")
+ 				require.NoError(t, err)
+ 				body, err = sjson.SetBytes(body, "system.0.text", billing)
+@@ -144,6 +162,10 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
+ 				version := ExtractCLIVersion(wantUA)
+ 				require.Contains(t, gjson.GetBytes(wireBody, "system.0.text").String(),
+ 					"cc_version="+version+"."+computeClaudeCodeFingerprint(wireBody, version)+";")
++				if !tc.mimic {
++					// Independently calculated with Node.js for the cached 2.9.0 UA.
++					require.Contains(t, gjson.GetBytes(wireBody, "system.0.text").String(), "cc_version=2.9.0.ac8;")
++				}
+ 				actualBody, err := io.ReadAll(req.Body)
+ 				require.NoError(t, err)
+ 				require.Equal(t, wireBody, actualBody)

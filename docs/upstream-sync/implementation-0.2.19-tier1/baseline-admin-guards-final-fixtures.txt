@@ -1,0 +1,101 @@
+2026/10/28 16:53:38 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAdminService_AdminGuardsAreClientErrors
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/disable
+    admin_service_role_test.go:166: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/admin_service_role_test.go:166
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestAdminService_AdminGuardsAreClientErrors/disable
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion
+    admin_service_role_test.go:166: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/admin_service_role_test.go:166
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion
+=== RUN   TestAdminService_AdminGuardsAreClientErrors/delete
+    admin_service_role_test.go:166: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/admin_service_role_test.go:166
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestAdminService_AdminGuardsAreClientErrors/delete
+--- FAIL: TestAdminService_AdminGuardsAreClientErrors (0.00s)
+    --- FAIL: TestAdminService_AdminGuardsAreClientErrors/disable (0.00s)
+    --- FAIL: TestAdminService_AdminGuardsAreClientErrors/last_admin_demotion (0.00s)
+    --- FAIL: TestAdminService_AdminGuardsAreClientErrors/delete (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.042s
+=== RUN   TestUserHandler_AdminGuardsSQLite
+=== RUN   TestUserHandler_AdminGuardsSQLite/last_admin_demotion
+2026/10/29 00:53:41 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot demote the last admin user
+    user_guard_sqlite_test.go:76: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:76
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestUserHandler_AdminGuardsSQLite/last_admin_demotion
+=== RUN   TestUserHandler_AdminGuardsSQLite/direct_disable
+2026/10/29 00:53:42 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot disable admin user
+    user_guard_sqlite_test.go:76: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:76
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestUserHandler_AdminGuardsSQLite/direct_disable
+=== RUN   TestUserHandler_AdminGuardsSQLite/disable_with_another_admin
+2026/10/29 00:53:43 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot disable admin user
+    user_guard_sqlite_test.go:76: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:76
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestUserHandler_AdminGuardsSQLite/disable_with_another_admin
+=== RUN   TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable
+2026/10/29 00:53:45 [ERROR] PUT /api/v1/admin/users/1
+  Error: cannot disable admin user
+    user_guard_sqlite_test.go:76: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:76
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable
+=== RUN   TestUserHandler_AdminGuardsSQLite/direct_delete
+2026/10/29 00:53:46 [ERROR] DELETE /api/v1/admin/users/1
+  Error: cannot delete admin user
+    user_guard_sqlite_test.go:76: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:76
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestUserHandler_AdminGuardsSQLite/direct_delete
+=== RUN   TestUserHandler_AdminGuardsSQLite/delete_with_another_admin
+2026/10/29 00:53:47 [ERROR] DELETE /api/v1/admin/users/1
+  Error: cannot delete admin user
+    user_guard_sqlite_test.go:76: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/admin/user_guard_sqlite_test.go:76
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 500
+        	Test:       	TestUserHandler_AdminGuardsSQLite/delete_with_another_admin
+=== RUN   TestUserHandler_AdminGuardsSQLite/demotion_with_another_admin
+2026/10/29 00:53:49 audit: user role changed actor_admin_id=0 target_user_id=1 old_role=admin new_role=user
+=== RUN   TestUserHandler_AdminGuardsSQLite/database_write_failure
+2026/10/29 00:53:50 [ERROR] PUT /api/v1/admin/users/1
+  Error: SQL logic error: no such function: unavailable_admin_write_function (1)
+--- FAIL: TestUserHandler_AdminGuardsSQLite (10.41s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/last_admin_demotion (1.26s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/direct_disable (1.34s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/disable_with_another_admin (1.31s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/simultaneous_demotion_and_disable (1.25s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/direct_delete (1.34s)
+    --- FAIL: TestUserHandler_AdminGuardsSQLite/delete_with_another_admin (1.26s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/demotion_with_another_admin (1.35s)
+    --- PASS: TestUserHandler_AdminGuardsSQLite/database_write_failure (1.29s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler/admin	10.425s
+FAIL

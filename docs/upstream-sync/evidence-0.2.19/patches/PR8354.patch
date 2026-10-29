@@ -1,0 +1,46 @@
+diff --git a/backend/internal/service/openai_gateway_response_handling.go b/backend/internal/service/openai_gateway_response_handling.go
+index f8b007830..0707d85a3 100644
+--- a/backend/internal/service/openai_gateway_response_handling.go
++++ b/backend/internal/service/openai_gateway_response_handling.go
+@@ -1579,6 +1579,7 @@ func openAICacheReadTokensFromUsage(value gjson.Result) int {
+ 		value.Get("cache_read_input_tokens"),
+ 		value.Get("cache_read_tokens"),
+ 		value.Get("cached_tokens"),
++		value.Get("prompt_cache_hit_tokens"), // DeepSeek：prompt_tokens = hit + miss
+ 	)
+ }
+ 
+diff --git a/backend/internal/service/openai_usage_deepseek_cache_test.go b/backend/internal/service/openai_usage_deepseek_cache_test.go
+new file mode 100644
+index 000000000..9b8f9bacc
+--- /dev/null
++++ b/backend/internal/service/openai_usage_deepseek_cache_test.go
+@@ -0,0 +1,28 @@
++//go:build unit
++
++package service
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestOpenAIUsageDeepSeekPromptCacheHitTokensCountAsCacheRead(t *testing.T) {
++	// DeepSeek usage 只有 prompt_cache_hit/miss_tokens
++	usage, ok := openAIUsageFromGJSON(gjson.Parse(`{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":80,"prompt_cache_miss_tokens":20}`))
++	require.True(t, ok)
++	require.Equal(t, 100, usage.InputTokens)
++	require.Equal(t, 80, usage.CacheReadInputTokens)
++
++	// 同时返回 prompt_tokens_details.cached_tokens 时以嵌套字段为准
++	usage, ok = openAIUsageFromGJSON(gjson.Parse(`{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":80,"prompt_tokens_details":{"cached_tokens":64}}`))
++	require.True(t, ok)
++	require.Equal(t, 64, usage.CacheReadInputTokens)
++
++	// 顶层 cached_tokens 保持原有行为
++	usage, ok = openAIUsageFromGJSON(gjson.Parse(`{"prompt_tokens":50,"completion_tokens":5,"cached_tokens":30}`))
++	require.True(t, ok)
++	require.Equal(t, 30, usage.CacheReadInputTokens)
++}

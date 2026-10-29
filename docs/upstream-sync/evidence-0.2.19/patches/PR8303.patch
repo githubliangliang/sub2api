@@ -1,0 +1,520 @@
+diff --git a/backend/internal/handler/admin/admin_helpers_test.go b/backend/internal/handler/admin/admin_helpers_test.go
+index 980c26bab..9b6f7010b 100644
+--- a/backend/internal/handler/admin/admin_helpers_test.go
++++ b/backend/internal/handler/admin/admin_helpers_test.go
+@@ -2,6 +2,8 @@ package admin
+ 
+ import (
+ 	"encoding/json"
++	"fmt"
++	"math"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"net/netip"
+@@ -136,6 +138,7 @@ func TestParseOpsOpenAITokenStatsFilter_InvalidParams(t *testing.T) {
+ 		"/?page=0",
+ 		"/?page_size=0",
+ 		"/?page_size=101",
++		"/?page=9223372036854775807",
+ 	}
+ 
+ 	gin.SetMode(gin.TestMode)
+@@ -149,6 +152,32 @@ func TestParseOpsOpenAITokenStatsFilter_InvalidParams(t *testing.T) {
+ 	}
+ }
+ 
++func TestParseOpsOpenAITokenStatsFilter_PaginationBoundaries(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, size := range []int{1, 20, 21, 100} {
++		bound := math.MaxInt / size
++		pages := []int{bound}
++		if bound < math.MaxInt {
++			pages = append(pages, bound+1)
++		}
++		for _, page := range pages {
++			query := fmt.Sprintf("/?page=%d&page_size=%d", page, size)
++			t.Run(query, func(t *testing.T) {
++				c, _ := gin.CreateTestContext(httptest.NewRecorder())
++				c.Request = httptest.NewRequest(http.MethodGet, query, nil)
++				filter, err := parseOpsOpenAITokenStatsFilter(c)
++				if page > bound {
++					require.ErrorContains(t, err, "invalid page")
++					return
++				}
++				require.NoError(t, err)
++				require.Equal(t, page, filter.Page)
++				require.Equal(t, size, filter.PageSize)
++			})
++		}
++	}
++}
++
+ func TestParseOpsTimeRange(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	w := httptest.NewRecorder()
+diff --git a/backend/internal/handler/admin/ops_dashboard_handler.go b/backend/internal/handler/admin/ops_dashboard_handler.go
+index ad16cfa08..9f776e2cb 100644
+--- a/backend/internal/handler/admin/ops_dashboard_handler.go
++++ b/backend/internal/handler/admin/ops_dashboard_handler.go
+@@ -2,6 +2,7 @@ package admin
+ 
+ import (
+ 	"fmt"
++	"math"
+ 	"net/http"
+ 	"strconv"
+ 	"strings"
+@@ -309,6 +310,9 @@ func parseOpsOpenAITokenStatsFilter(c *gin.Context) (*service.OpsOpenAITokenStat
+ 		}
+ 		filter.PageSize = pageSize
+ 	}
++	if filter.Page > math.MaxInt/filter.PageSize {
++		return nil, fmt.Errorf("invalid page")
++	}
+ 	return filter, nil
+ }
+ 
+diff --git a/backend/internal/pkg/pagination/pagination.go b/backend/internal/pkg/pagination/pagination.go
+index 334ba809d..597afbcd5 100644
+--- a/backend/internal/pkg/pagination/pagination.go
++++ b/backend/internal/pkg/pagination/pagination.go
+@@ -1,7 +1,10 @@
+ // Package pagination provides types and helpers for paginated responses.
+ package pagination
+ 
+-import "strings"
++import (
++	"math"
++	"strings"
++)
+ 
+ const (
+ 	SortOrderAsc  = "asc"
+@@ -38,7 +41,12 @@ func (p PaginationParams) Offset() int {
+ 	if p.Page < 1 {
+ 		p.Page = 1
+ 	}
+-	return (p.Page - 1) * p.Limit()
++	limit := p.Limit()
++	// Saturate the page so both the offset and offset+limit stay within int.
++	if p.Page > math.MaxInt/limit {
++		p.Page = math.MaxInt / limit
++	}
++	return (p.Page - 1) * limit
+ }
+ 
+ // Limit 获取限制数
+diff --git a/backend/internal/pkg/pagination/pagination_test.go b/backend/internal/pkg/pagination/pagination_test.go
+index 9704449e9..89b161376 100644
+--- a/backend/internal/pkg/pagination/pagination_test.go
++++ b/backend/internal/pkg/pagination/pagination_test.go
+@@ -1,6 +1,9 @@
+ package pagination
+ 
+-import "testing"
++import (
++	"math"
++	"testing"
++)
+ 
+ func TestNormalizeSortOrder(t *testing.T) {
+ 	t.Parallel()
+@@ -84,6 +87,11 @@ func TestPaginationParamsOffsetUsesNormalizedLimit(t *testing.T) {
+ 		{name: "negative page size uses default", page: 2, pageSize: -1, want: 20},
+ 		{name: "normal values", page: 3, pageSize: 50, want: 100},
+ 		{name: "page size beyond max is clamped", page: 2, pageSize: 1500, want: 1000},
++		{name: "max int page saturates", page: math.MaxInt, pageSize: 20, want: (math.MaxInt/20 - 1) * 20},
++		{name: "max int page with odd page size saturates", page: math.MaxInt, pageSize: 21, want: (math.MaxInt/21 - 1) * 21},
++		{name: "max int page with max page size saturates", page: math.MaxInt, pageSize: 1000, want: (math.MaxInt/1000 - 1) * 1000},
++		{name: "page at saturation bound keeps", page: math.MaxInt / 20, pageSize: 20, want: (math.MaxInt/20 - 1) * 20},
++		{name: "page just past saturation bound saturates", page: math.MaxInt/20 + 1, pageSize: 20, want: (math.MaxInt/20 - 1) * 20},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -96,3 +104,22 @@ func TestPaginationParamsOffsetUsesNormalizedLimit(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestPaginationParamsOffsetDoesNotOverflow(t *testing.T) {
++	t.Parallel()
++
++	pages := []int{math.MinInt, -1, 0, 1, math.MaxInt, math.MaxInt - 1, math.MaxInt / 2, math.MaxInt/20 + 1, math.MaxInt/1000 + 1}
++	pageSizes := []int{math.MinInt, -1, 0, 1, 2, 3, 20, 21, 999, 1000, 1001, math.MaxInt}
++	for _, page := range pages {
++		for _, pageSize := range pageSizes {
++			params := PaginationParams{Page: page, PageSize: pageSize}
++			offset, limit := params.Offset(), params.Limit()
++			if offset < 0 || offset > math.MaxInt-limit {
++				t.Fatalf("Offset() for Page=%d, PageSize=%d = %d, want 0 <= offset <= MaxInt-%d", page, pageSize, offset, limit)
++			}
++			if again := params.Offset(); again != offset {
++				t.Fatalf("Offset() for Page=%d, PageSize=%d is unstable: %d then %d", page, pageSize, offset, again)
++			}
++		}
++	}
++}
+diff --git a/backend/internal/pkg/response/response.go b/backend/internal/pkg/response/response.go
+index b1d6c2d05..a91aebd9e 100644
+--- a/backend/internal/pkg/response/response.go
++++ b/backend/internal/pkg/response/response.go
+@@ -5,6 +5,7 @@ import (
+ 	"log"
+ 	"math"
+ 	"net/http"
++	"strconv"
+ 
+ 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+ 	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
+@@ -166,7 +167,8 @@ func PaginatedWithResult(c *gin.Context, items any, pagination *PaginationResult
+ 	})
+ }
+ 
+-// ParsePagination 解析分页参数
++// ParsePagination 解析分页参数。无效或超出 int 范围的值使用默认值；
++// 有效页码按 pageSize 限制上限，返回可安全计算 offset 和 offset+pageSize 的页码。
+ func ParsePagination(c *gin.Context) (page, pageSize int) {
+ 	page = 1
+ 	pageSize = 20
+@@ -188,16 +190,16 @@ func ParsePagination(c *gin.Context) (page, pageSize int) {
+ 		}
+ 	}
+ 
++	// Clamp the page so both offset and offset+pageSize stay within int.
++	if page > math.MaxInt/pageSize {
++		page = math.MaxInt / pageSize
++	}
++
+ 	return page, pageSize
+ }
+ 
+ func parseInt(s string) (int, error) {
+-	var result int
+-	for _, c := range s {
+-		if c < '0' || c > '9' {
+-			return 0, nil
+-		}
+-		result = result*10 + int(c-'0')
+-	}
+-	return result, nil
++	// Parse unsigned decimal digits within the positive range of the native int.
++	value, err := strconv.ParseUint(s, 10, strconv.IntSize-1)
++	return int(value), err
+ }
+diff --git a/backend/internal/pkg/response/response_test.go b/backend/internal/pkg/response/response_test.go
+index 0debce5fd..202a9b4b5 100644
+--- a/backend/internal/pkg/response/response_test.go
++++ b/backend/internal/pkg/response/response_test.go
+@@ -5,8 +5,11 @@ package response
+ import (
+ 	"encoding/json"
+ 	"errors"
++	"math"
+ 	"net/http"
+ 	"net/http/httptest"
++	"strconv"
++	"strings"
+ 	"testing"
+ 
+ 	errors2 "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+@@ -691,6 +694,60 @@ func TestParsePagination(t *testing.T) {
+ 			wantPage:     1,
+ 			wantPageSize: 20,
+ 		},
++		{
++			name:         "page为MaxInt_钳制到不溢出的上限",
++			query:        "page=" + strconv.Itoa(math.MaxInt),
++			wantPage:     math.MaxInt / 20,
++			wantPageSize: 20,
++		},
++		{
++			name:         "page为MaxInt且page_size为1000_钳制到不溢出的上限",
++			query:        "page=" + strconv.Itoa(math.MaxInt) + "&page_size=1000",
++			wantPage:     math.MaxInt / 1000,
++			wantPageSize: 1000,
++		},
++		{
++			name:         "page恰好在上限_有效",
++			query:        "page=" + strconv.Itoa(math.MaxInt/20),
++			wantPage:     math.MaxInt / 20,
++			wantPageSize: 20,
++		},
++		{
++			name:         "page刚超过上限_钳制",
++			query:        "page=" + strconv.Itoa(math.MaxInt/20+1),
++			wantPage:     math.MaxInt / 20,
++			wantPageSize: 20,
++		},
++		{
++			name:         "page超过MaxInt_使用默认值",
++			query:        "page=" + strconv.FormatUint(uint64(math.MaxInt)+1, 10),
++			wantPage:     1,
++			wantPageSize: 20,
++		},
++		{
++			name:         "page超过uint64范围_不能回绕为2",
++			query:        "page=18446744073709551618",
++			wantPage:     1,
++			wantPageSize: 20,
++		},
++		{
++			name:         "page_size超过uint64范围_不能回绕为21",
++			query:        "page_size=18446744073709551637&limit=50",
++			wantPage:     1,
++			wantPageSize: 20,
++		},
++		{
++			name:         "limit超过uint64范围_不能回绕为21",
++			query:        "limit=18446744073709551637",
++			wantPage:     1,
++			wantPageSize: 20,
++		},
++		{
++			name:         "超长数字_使用默认值",
++			query:        "page=" + strings.Repeat("9", 100),
++			wantPage:     1,
++			wantPageSize: 20,
++		},
+ 	}
+ 
+ 	for _, tt := range tests {
+@@ -705,6 +762,38 @@ func TestParsePagination(t *testing.T) {
+ 	}
+ }
+ 
++func TestParsePaginationBoundariesAndResponse(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, sizeParam := range []string{"page_size", "limit"} {
++		for _, size := range []int{1, 2, 3, 20, 21, 999, 1000} {
++			bound := math.MaxInt / size
++			pages := []int{bound - 1, bound, math.MaxInt}
++			if bound < math.MaxInt {
++				pages = append(pages, bound+1)
++			}
++			for _, requestedPage := range pages {
++				query := "page=" + strconv.Itoa(requestedPage) + "&" + sizeParam + "=" + strconv.Itoa(size)
++				t.Run(query, func(t *testing.T) {
++					w, c := newContextWithQuery(query)
++					page, pageSize := ParsePagination(c)
++					require.Equal(t, min(requestedPage, bound), page)
++					require.Equal(t, size, pageSize)
++					offset := (page - 1) * pageSize
++					require.GreaterOrEqual(t, offset, 0)
++					require.LessOrEqual(t, offset, math.MaxInt-pageSize)
++
++					Paginated(c, []string{}, 0, page, pageSize)
++					require.Equal(t, http.StatusOK, w.Code)
++					_, data := parsePaginatedBody(t, w)
++					require.Equal(t, page, data.Page)
++					require.Equal(t, pageSize, data.PageSize)
++					require.Empty(t, data.Items)
++				})
++			}
++		}
++	}
++}
++
+ func Test_parseInt(t *testing.T) {
+ 	tests := []struct {
+ 		name    string
+@@ -740,37 +829,58 @@ func Test_parseInt(t *testing.T) {
+ 			name:    "包含字母_返回0",
+ 			input:   "abc",
+ 			wantVal: 0,
+-			wantErr: false,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "数字开头接字母_返回0",
+ 			input:   "12a",
+ 			wantVal: 0,
+-			wantErr: false,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "包含负号_返回0",
+ 			input:   "-1",
+ 			wantVal: 0,
+-			wantErr: false,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "包含小数点_返回0",
+ 			input:   "1.5",
+ 			wantVal: 0,
+-			wantErr: false,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "包含空格_返回0",
+ 			input:   "1 2",
+ 			wantVal: 0,
+-			wantErr: false,
++			wantErr: true,
+ 		},
+ 		{
+ 			name:    "空字符串",
+ 			input:   "",
+ 			wantVal: 0,
+-			wantErr: false,
++			wantErr: true,
++		},
++		{
++			name:    "前导零_有效",
++			input:   "000123",
++			wantVal: 123,
++		},
++		{
++			name:    "正号_无效",
++			input:   "+1",
++			wantErr: true,
++		},
++		{
++			name:    "MaxInt_有效",
++			input:   strconv.Itoa(math.MaxInt),
++			wantVal: math.MaxInt,
++		},
++		{
++			name:    "超过MaxInt_返回范围错误",
++			input:   strconv.FormatUint(uint64(math.MaxInt)+1, 10),
++			wantVal: math.MaxInt,
++			wantErr: true,
+ 		},
+ 	}
+ 
+diff --git a/backend/internal/repository/pagination_test.go b/backend/internal/repository/pagination_test.go
+new file mode 100644
+index 000000000..5d11b5a37
+--- /dev/null
++++ b/backend/internal/repository/pagination_test.go
+@@ -0,0 +1,17 @@
++package repository
++
++import (
++	"math"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
++	"github.com/stretchr/testify/require"
++)
++
++func TestPaginateSliceLargePage(t *testing.T) {
++	t.Parallel()
++	for _, size := range []int{0, 1, 2, 3, 20, 21, 1000, 1001} {
++		params := pagination.PaginationParams{Page: math.MaxInt, PageSize: size}
++		require.Empty(t, paginateSlice([]int{1}, params), "page_size=%d", size)
++	}
++}
+diff --git a/backend/internal/securityaudit/prompt_handler.go b/backend/internal/securityaudit/prompt_handler.go
+index 342f3a546..71d5d5ae7 100644
+--- a/backend/internal/securityaudit/prompt_handler.go
++++ b/backend/internal/securityaudit/prompt_handler.go
+@@ -3,6 +3,7 @@ package securityaudit
+ import (
+ 	"context"
+ 	"errors"
++	"math"
+ 	"strconv"
+ 	"strings"
+ 
+@@ -91,6 +92,10 @@ func (h *PromptAdminHandler) ListEvents(c *gin.Context) {
+ 		response.ErrorFrom(c, err)
+ 		return
+ 	}
++	if page > math.MaxInt/pageSize {
++		response.ErrorFrom(c, infraerrors.BadRequest("prompt_audit_invalid_pagination", "分页参数无效"))
++		return
++	}
+ 	filter, err := eventFilterFromQuery(c)
+ 	if err != nil {
+ 		response.ErrorFrom(c, err)
+diff --git a/backend/internal/securityaudit/prompt_handler_test.go b/backend/internal/securityaudit/prompt_handler_test.go
+index 0ec2ff5d8..b5a6136c4 100644
+--- a/backend/internal/securityaudit/prompt_handler_test.go
++++ b/backend/internal/securityaudit/prompt_handler_test.go
+@@ -5,8 +5,10 @@ import (
+ 	"context"
+ 	"encoding/json"
+ 	"errors"
++	"math"
+ 	"net/http"
+ 	"net/http/httptest"
++	"strconv"
+ 	"strings"
+ 	"testing"
+ 
+@@ -211,6 +213,7 @@ func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
+ 		{http.MethodGet, "/admin/prompt-audit/events?group_id=bad", nil, "prompt_audit_invalid_filter_id"},
+ 		{http.MethodGet, "/admin/prompt-audit/events?start_at=not-time", nil, "prompt_audit_invalid_time"},
+ 		{http.MethodGet, "/admin/prompt-audit/events?page=0", nil, "prompt_audit_invalid_pagination"},
++		{http.MethodGet, "/admin/prompt-audit/events?page=9223372036854775807", nil, "prompt_audit_invalid_pagination"},
+ 		{http.MethodPost, "/admin/prompt-audit/events/batch-delete", map[string]any{"ids": []int64{1, -2}}, "prompt_audit_invalid_event_id"},
+ 	} {
+ 		response := promptAdminRequest(t, router, tc.method, tc.path, tc.body)
+@@ -219,6 +222,18 @@ func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
+ 	}
+ }
+ 
++func TestPromptAdminRejectsOverflowingPagination(t *testing.T) {
++	router := promptAdminRouter(nil)
++	for _, size := range []int{20, 21, 100} {
++		query := "/admin/prompt-audit/events?page=" + strconv.Itoa(math.MaxInt/size+1) + "&page_size=" + strconv.Itoa(size)
++		t.Run(query, func(t *testing.T) {
++			response := promptAdminRequest(t, router, http.MethodGet, query, nil)
++			require.Equal(t, http.StatusBadRequest, response.Code)
++			require.Contains(t, response.Body.String(), "prompt_audit_invalid_pagination")
++		})
++	}
++}
++
+ func validHandlerUpdateRequest(token string) UpdateConfigRequest {
+ 	return UpdateConfigRequest{
+ 		ExpectedConfigVersion: 7,
+diff --git a/backend/internal/service/api_key_service.go b/backend/internal/service/api_key_service.go
+index e20a2697e..ec9f2c46d 100644
+--- a/backend/internal/service/api_key_service.go
++++ b/backend/internal/service/api_key_service.go
+@@ -653,11 +653,7 @@ func paginateAPIKeys(keys []APIKey, params pagination.PaginationParams) []APIKey
+ 		return []APIKey{}
+ 	}
+ 	limit := params.Limit()
+-	page := params.Page
+-	if page < 1 {
+-		page = 1
+-	}
+-	offset := (page - 1) * limit
++	offset := params.Offset()
+ 	if offset >= len(keys) {
+ 		return []APIKey{}
+ 	}
+diff --git a/backend/internal/service/pagination_test.go b/backend/internal/service/pagination_test.go
+new file mode 100644
+index 000000000..e195959e0
+--- /dev/null
++++ b/backend/internal/service/pagination_test.go
+@@ -0,0 +1,25 @@
++package service
++
++import (
++	"math"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
++	"github.com/stretchr/testify/require"
++)
++
++func TestPaginateAPIKeysLargePage(t *testing.T) {
++	t.Parallel()
++	for _, size := range []int{0, 1, 2, 3, 20, 21, 1000, 1001} {
++		params := pagination.PaginationParams{Page: math.MaxInt, PageSize: size}
++		require.Empty(t, paginateAPIKeys([]APIKey{{ID: 1}}, params), "page_size=%d", size)
++	}
++}
++
++func TestMergeBalanceHistoryCodesLargePage(t *testing.T) {
++	t.Parallel()
++	for _, size := range []int{0, 1, 2, 3, 20, 21, 1000, 1001} {
++		params := pagination.PaginationParams{Page: math.MaxInt, PageSize: size}
++		require.Empty(t, mergeBalanceHistoryCodes([]RedeemCode{{ID: 1}}, nil, params), "page_size=%d", size)
++	}
++}

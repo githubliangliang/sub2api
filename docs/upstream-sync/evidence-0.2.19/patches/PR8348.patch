@@ -1,0 +1,140 @@
+diff --git a/backend/internal/service/grok_media.go b/backend/internal/service/grok_media.go
+index f8a41c707..b9c95747a 100644
+--- a/backend/internal/service/grok_media.go
++++ b/backend/internal/service/grok_media.go
+@@ -231,7 +231,9 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
+ 			_ = part.Close()
+ 			continue
+ 		}
+-		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize))
++		// The body is already bounded by the request body limit; truncating a part
++		// here would forward a corrupt image upstream.
++		data, err := io.ReadAll(part)
+ 		_ = part.Close()
+ 		if err != nil {
+ 			return
+diff --git a/backend/internal/service/openai_images.go b/backend/internal/service/openai_images.go
+index 962e9ce24..12042b0e5 100644
+--- a/backend/internal/service/openai_images.go
++++ b/backend/internal/service/openai_images.go
+@@ -39,7 +39,7 @@ const (
+ 	openAIChatGPTFilesURL                  = "https://chatgpt.com/backend-api/files"
+ 	openAIImageBackendUserAgent            = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+ 	openAIImageMaxDownloadBytes            = 20 << 20 // 20MB per image download
+-	openAIImageMaxUploadPartSize           = 20 << 20 // 20MB per multipart upload part
++	openAIImageMaxUploadPartSize           = 50 << 20 // OpenAI's documented per-image limit for GPT image edits
+ 	openAIImagesResponsesMainModel         = "gpt-5.6-luna"
+ 	openAIImagesVerbatimPromptInstructions = "When invoking the image_generation tool, use the user's image prompt verbatim. Do not rewrite, expand, summarize, embellish, translate, normalize punctuation, or add or remove visual details or constraints. Preserve the original language, wording, capitalization, quotes, and punctuation exactly."
+ )
+@@ -352,11 +352,16 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+ 			continue
+ 		}
+ 
+-		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize))
++		// Read one byte past the limit so an oversized part is rejected instead of
++		// being cut short and forwarded upstream as a corrupt image.
++		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize+1))
+ 		_ = part.Close()
+ 		if err != nil {
+ 			return fmt.Errorf("read multipart field %s: %w", name, err)
+ 		}
++		if len(data) > openAIImageMaxUploadPartSize {
++			return fmt.Errorf("multipart field %q exceeds the %d MB per-part limit", name, openAIImageMaxUploadPartSize>>20)
++		}
+ 
+ 		fileName := strings.TrimSpace(part.FileName())
+ 		if fileName != "" {
+diff --git a/backend/internal/service/openai_images_responses.go b/backend/internal/service/openai_images_responses.go
+index 25724620f..36995437f 100644
+--- a/backend/internal/service/openai_images_responses.go
++++ b/backend/internal/service/openai_images_responses.go
+@@ -1806,13 +1806,18 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+ 	direct := usesCodexDirectImages(upstreamModel) && !isOpenAIImagesForceResponses(ctx)
+ 	beginUpstreamResponseModelObservation(c)
+ 	SetOpsUpstreamModel(c, upstreamModel)
++	uploadParts := make([]string, 0, len(parsed.Uploads))
++	for _, upload := range parsed.Uploads {
++		uploadParts = append(uploadParts, fmt.Sprintf("%s:%d", upload.ContentType, len(upload.Data)))
++	}
+ 	logger.LegacyPrintf(
+ 		"service.openai_gateway",
+-		"[OpenAI] Images request routing request_model=%s endpoint=%s account_type=%s uploads=%d",
++		"[OpenAI] Images request routing request_model=%s endpoint=%s account_type=%s uploads=%d upload_parts=%v",
+ 		requestModel,
+ 		parsed.Endpoint,
+ 		account.Type,
+ 		len(parsed.Uploads),
++		uploadParts,
+ 	)
+ 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+ 	defer releaseUpstreamCtx()
+diff --git a/backend/internal/service/openai_images_upload_limit_test.go b/backend/internal/service/openai_images_upload_limit_test.go
+new file mode 100644
+index 000000000..cf5263307
+--- /dev/null
++++ b/backend/internal/service/openai_images_upload_limit_test.go
+@@ -0,0 +1,64 @@
++package service
++
++import (
++	"bytes"
++	"mime/multipart"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func buildImagesEditMultipartBody(t *testing.T, imageSize int) ([]byte, string, []byte) {
++	t.Helper()
++	image := bytes.Repeat([]byte{0xAB}, imageSize)
++	var body bytes.Buffer
++	writer := multipart.NewWriter(&body)
++	require.NoError(t, writer.WriteField("model", "gpt-image-2"))
++	require.NoError(t, writer.WriteField("prompt", "replace background"))
++	part, err := writer.CreateFormFile("image", "source.png")
++	require.NoError(t, err)
++	_, err = part.Write(image)
++	require.NoError(t, err)
++	require.NoError(t, writer.Close())
++	return body.Bytes(), writer.FormDataContentType(), image
++}
++
++func parseImagesEditMultipart(t *testing.T, body []byte, contentType string) (*OpenAIImagesRequest, error) {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", bytes.NewReader(body))
++	req.Header.Set("Content-Type", contentType)
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = req
++	svc := &OpenAIGatewayService{}
++	return svc.ParseOpenAIImagesRequest(c, body)
++}
++
++func TestParseOpenAIImagesRequest_MultipartKeepsUploadAbove20MB(t *testing.T) {
++	body, contentType, image := buildImagesEditMultipartBody(t, 21<<20)
++
++	parsed, err := parseImagesEditMultipart(t, body, contentType)
++	require.NoError(t, err)
++	require.Len(t, parsed.Uploads, 1)
++	require.Equal(t, len(image), len(parsed.Uploads[0].Data))
++	require.True(t, bytes.Equal(image, parsed.Uploads[0].Data))
++}
++
++func TestParseOpenAIImagesRequest_MultipartRejectsUploadAbovePartLimit(t *testing.T) {
++	body, contentType, _ := buildImagesEditMultipartBody(t, openAIImageMaxUploadPartSize+1)
++
++	parsed, err := parseImagesEditMultipart(t, body, contentType)
++	require.Nil(t, parsed)
++	require.ErrorContains(t, err, `multipart field "image" exceeds the 50 MB per-part limit`)
++}
++
++func TestParseGrokMediaRequest_MultipartKeepsUploadAbove20MB(t *testing.T) {
++	body, contentType, image := buildImagesEditMultipartBody(t, 21<<20)
++
++	info := ParseGrokMediaRequest(contentType, body)
++	require.Len(t, info.Uploads, 1)
++	require.Equal(t, len(image), len(info.Uploads[0].Data))
++}

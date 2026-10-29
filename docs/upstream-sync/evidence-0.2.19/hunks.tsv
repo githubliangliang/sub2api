@@ -1,0 +1,561 @@
+candidate	path	hunk
+5c185c5c5	backend/cmd/server/VERSION	@@ -1 +1 @@
+PR8319	.gitignore	@@ -133,6 +133,7 @@ deploy/docker-compose.override.yml
+PR8319	backend/cmd/server/wire_gen.go	@@ -52,7 +52,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+PR8319	backend/internal/handler/admin/account_handler.go	@@ -1419,7 +1419,9 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
+PR8319	backend/internal/handler/admin/account_handler.go	@@ -1471,7 +1473,10 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
+PR8319	backend/internal/handler/admin/account_handler.go	@@ -1527,17 +1532,19 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
+PR8319	backend/internal/handler/admin/account_handler.go	@@ -2804,6 +2811,10 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
+PR8319	backend/internal/handler/admin/announcement_handler.go	@@ -252,5 +252,5 @@ func (h *AnnouncementHandler) ListReadStatus(c *gin.Context) {
+PR8319	backend/internal/handler/admin/custom_admin_key_accounts.go	@@ -0,0 +1,284 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_accounts_test.go	@@ -0,0 +1,150 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_codex_import.go	@@ -0,0 +1,189 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_codex_import_test.go	@@ -0,0 +1,249 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_commit_test.go	@@ -0,0 +1,199 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_group_models.go	@@ -0,0 +1,167 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_proxies.go	@@ -0,0 +1,163 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_proxies_test.go	@@ -0,0 +1,198 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_users.go	@@ -0,0 +1,47 @@
+PR8319	backend/internal/handler/admin/custom_admin_key_users_test.go	@@ -0,0 +1,113 @@
+PR8319	backend/internal/handler/admin/custom_admin_keys.go	@@ -0,0 +1,102 @@
+PR8319	backend/internal/handler/admin/custom_admin_keys_test.go	@@ -0,0 +1,78 @@
+PR8319	backend/internal/handler/admin/custom_legacy_admin_key_test.go	@@ -0,0 +1,141 @@
+PR8319	backend/internal/handler/admin/idempotency_helper.go	@@ -115,6 +115,18 @@ func executeAdminIdempotentJSONWithMode(
+PR8319	backend/internal/handler/admin/idempotency_helper.go	@@ -131,7 +143,7 @@ func executeAdminIdempotentJSONWithMode(
+PR8319	backend/internal/handler/admin/idempotency_helper.go	@@ -144,5 +156,5 @@ func executeAdminIdempotentJSONWithMode(
+PR8319	backend/internal/handler/admin/promo_handler.go	@@ -207,5 +207,5 @@ func (h *PromoHandler) GetUsages(c *gin.Context) {
+PR8319	backend/internal/handler/admin/proxy_handler.go	@@ -57,6 +57,9 @@ type UpdateProxyRequest struct {
+PR8319	backend/internal/handler/admin/proxy_handler.go	@@ -86,6 +89,9 @@ func (h *ProxyHandler) List(c *gin.Context) {
+PR8319	backend/internal/handler/admin/proxy_handler.go	@@ -118,6 +124,9 @@ func (h *ProxyHandler) GetAll(c *gin.Context) {
+PR8319	backend/internal/handler/admin/scoped_admin_content_response.go	@@ -0,0 +1,47 @@
+PR8319	backend/internal/handler/admin/scoped_admin_content_response_test.go	@@ -0,0 +1,94 @@
+PR8319	backend/internal/handler/admin/scoped_admin_subscription_response.go	@@ -0,0 +1,65 @@
+PR8319	backend/internal/handler/admin/scoped_admin_subscription_response_test.go	@@ -0,0 +1,164 @@
+PR8319	backend/internal/handler/admin/scoped_admin_usage_response.go	@@ -0,0 +1,97 @@
+PR8319	backend/internal/handler/admin/scoped_admin_usage_response_test.go	@@ -0,0 +1,92 @@
+PR8319	backend/internal/handler/admin/setting_handler_runtime.go	@@ -13,6 +13,9 @@ import (
+PR8319	backend/internal/handler/admin/setting_handler_runtime.go	@@ -25,9 +28,21 @@ func (h *SettingHandler) GetAdminAPIKey(c *gin.Context) {
+PR8319	backend/internal/handler/admin/setting_handler_runtime.go	@@ -42,6 +57,9 @@ func (h *SettingHandler) RegenerateAdminAPIKey(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -94,7 +94,7 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -112,7 +112,7 @@ func (h *SubscriptionHandler) GetByID(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -157,7 +157,7 @@ func (h *SubscriptionHandler) Assign(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -184,7 +184,7 @@ func (h *SubscriptionHandler) BulkAssign(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -226,13 +226,13 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -264,7 +264,7 @@ func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -301,7 +301,7 @@ func (h *SubscriptionHandler) Restore(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -325,7 +325,7 @@ func (h *SubscriptionHandler) ListByGroup(c *gin.Context) {
+PR8319	backend/internal/handler/admin/subscription_handler.go	@@ -347,7 +347,7 @@ func (h *SubscriptionHandler) ListByUser(c *gin.Context) {
+PR8319	backend/internal/handler/admin/usage_handler.go	@@ -213,11 +213,7 @@ func (h *UsageHandler) List(c *gin.Context) {
+PR8319	backend/internal/handler/admin/user_handler.go	@@ -12,6 +12,7 @@ import (
+PR8319	backend/internal/handler/admin/user_handler.go	@@ -150,6 +151,11 @@ func (h *UserHandler) List(c *gin.Context) {
+PR8319	backend/internal/handler/admin/user_handler.go	@@ -157,6 +163,15 @@ func (h *UserHandler) List(c *gin.Context) {
+PR8319	backend/internal/handler/admin/user_handler.go	@@ -227,7 +242,7 @@ func (h *UserHandler) GetByID(c *gin.Context) {
+PR8319	backend/internal/handler/admin/user_handler.go	@@ -407,12 +422,18 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
+PR8319	backend/internal/handler/admin/user_handler.go	@@ -884,6 +905,10 @@ func (h *UserHandler) UpdateUserPlatformQuotas(c *gin.Context) {
+PR8319	backend/internal/handler/admin/user_handler.go	@@ -966,6 +991,11 @@ func (h *UserHandler) ResetUserPlatformQuotaWindow(c *gin.Context) {
+PR8319	backend/internal/pkg/adminaccess/catalog.go	@@ -0,0 +1,106 @@
+PR8319	backend/internal/pkg/adminaccess/policy.go	@@ -0,0 +1,154 @@
+PR8319	backend/internal/pkg/adminaccess/policy_test.go	@@ -0,0 +1,144 @@
+PR8319	backend/internal/repository/account_repo.go	@@ -25,6 +25,7 @@ import (
+PR8319	backend/internal/repository/account_repo.go	@@ -125,6 +126,9 @@ func newAccountRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor, schedul
+PR8319	backend/internal/repository/account_repo.go	@@ -263,6 +267,9 @@ func (r *accountRepository) CreateWithAccountGroups(ctx context.Context, account
+PR8319	backend/internal/repository/account_repo.go	@@ -439,6 +446,9 @@ func (r *accountRepository) ListCRSAccountIDs(ctx context.Context) (map[string]i
+PR8319	backend/internal/repository/account_repo.go	@@ -958,6 +968,9 @@ func (r *accountRepository) UpdateCredentials(ctx context.Context, id int64, cre
+PR8319	backend/internal/repository/account_repo.go	@@ -1846,6 +1859,9 @@ func (r *accountRepository) syncSchedulerAccountSnapshots(ctx context.Context, a
+PR8319	backend/internal/repository/account_repo.go	@@ -1929,6 +1945,12 @@ func (r *accountRepository) GetGroups(ctx context.Context, accountID int64) ([]s
+PR8319	backend/internal/repository/account_repo.go	@@ -2551,6 +2573,9 @@ func (r *accountRepository) SetGrokCredentialTempUnschedulableIfMatch(
+PR8319	backend/internal/repository/account_repo.go	@@ -2570,6 +2595,9 @@ func (r *accountRepository) ClearTempUnschedulable(ctx context.Context, id int64
+PR8319	backend/internal/repository/account_repo.go	@@ -2587,6 +2615,9 @@ func (r *accountRepository) ClearRateLimit(ctx context.Context, id int64) error
+PR8319	backend/internal/repository/account_repo.go	@@ -2611,6 +2642,9 @@ func (r *accountRepository) ClearAntigravityQuotaScopes(ctx context.Context, id
+PR8319	backend/internal/repository/account_repo.go	@@ -2673,6 +2707,9 @@ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64
+PR8319	backend/internal/repository/account_repo.go	@@ -2731,6 +2768,9 @@ func (r *accountRepository) AutoPauseExpiredAccounts(ctx context.Context, now ti
+PR8319	backend/internal/repository/account_repo.go	@@ -4072,6 +4112,9 @@ func (r *accountRepository) RevertProxyFallback(ctx context.Context, accountID i
+PR8319	backend/internal/repository/custom_account_proxy_selection.go	@@ -0,0 +1,46 @@
+PR8319	backend/internal/repository/custom_account_proxy_selection_test.go	@@ -0,0 +1,129 @@
+PR8319	backend/internal/repository/custom_admin_key_group_models.go	@@ -0,0 +1,98 @@
+PR8319	backend/internal/repository/custom_admin_key_group_models_test.go	@@ -0,0 +1,105 @@
+PR8319	backend/internal/repository/custom_admin_key_review_test.go	@@ -0,0 +1,225 @@
+PR8319	backend/internal/repository/custom_admin_key_scope.go	@@ -0,0 +1,247 @@
+PR8319	backend/internal/repository/custom_admin_key_scope_test.go	@@ -0,0 +1,257 @@
+PR8319	backend/internal/repository/custom_admin_key_transaction.go	@@ -0,0 +1,19 @@
+PR8319	backend/internal/repository/custom_admin_keys.go	@@ -0,0 +1,112 @@
+PR8319	backend/internal/repository/custom_admin_keys_postgres_test.go	@@ -0,0 +1,146 @@
+PR8319	backend/internal/repository/custom_admin_keys_test.go	@@ -0,0 +1,50 @@
+PR8319	backend/internal/repository/custom_proxy_options.go	@@ -0,0 +1,56 @@
+PR8319	backend/internal/repository/custom_proxy_sample_test.go	@@ -0,0 +1,111 @@
+PR8319	backend/internal/repository/custom_proxy_search.go	@@ -0,0 +1,20 @@
+PR8319	backend/internal/repository/setting_repo.go	@@ -82,6 +82,20 @@ func (r *settingRepository) Set(ctx context.Context, key, value string) error {
+PR8319	backend/internal/repository/wire.go	@@ -87,6 +87,7 @@ var ProviderSet = wire.NewSet(
+PR8319	backend/internal/server/middleware/admin_auth.go	@@ -5,9 +5,10 @@ import (
+PR8319	backend/internal/server/middleware/admin_auth.go	@@ -49,6 +50,16 @@ func adminAuth(
+PR8319	backend/internal/server/middleware/admin_auth.go	@@ -218,3 +229,54 @@ func validateJWTForAdmin(
+PR8319	backend/internal/server/middleware/custom_admin_key_rate_limit_test.go	@@ -0,0 +1,170 @@
+PR8319	backend/internal/server/middleware/custom_admin_keys_test.go	@@ -0,0 +1,117 @@
+PR8319	backend/internal/server/middleware/panel_rate_limit.go	@@ -9,6 +9,7 @@ import (
+PR8319	backend/internal/server/middleware/panel_rate_limit.go	@@ -18,6 +19,8 @@ import (
+PR8319	backend/internal/server/middleware/panel_rate_limit.go	@@ -26,7 +29,7 @@ type panelRateLimitAllower interface {
+PR8319	backend/internal/server/middleware/panel_rate_limit.go	@@ -46,6 +49,7 @@ func NewPanelRateLimiter(redisClient *redis.Client, settingService *service.Sett
+PR8319	backend/internal/server/middleware/panel_rate_limit.go	@@ -67,35 +71,52 @@ func (p *PanelRateLimiter) userScoped(scope string, limitOf func(service.PanelRa
+PR8319	backend/internal/server/routes/admin.go	@@ -30,6 +30,8 @@ func RegisterAdminRoutes(
+PR8319	backend/internal/server/routes/admin.go	@@ -74,7 +76,7 @@ func RegisterAdminRoutes(
+PR8319	backend/internal/server/routes/admin.go	@@ -326,6 +328,7 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+PR8319	backend/internal/server/routes/admin.go	@@ -564,8 +567,9 @@ func registerPromoCodeRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+PR8319	backend/internal/server/routes/admin.go	@@ -578,8 +582,8 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+PR8319	backend/internal/server/routes/custom_admin_key_access_test.go	@@ -0,0 +1,420 @@
+PR8319	backend/internal/server/routes/custom_admin_key_group_models_test.go	@@ -0,0 +1,203 @@
+PR8319	backend/internal/server/routes/custom_admin_key_payment_rate_limit_test.go	@@ -0,0 +1,54 @@
+PR8319	backend/internal/server/routes/custom_admin_key_user_responses_test.go	@@ -0,0 +1,134 @@
+PR8319	backend/internal/server/routes/custom_admin_keys.go	@@ -0,0 +1,18 @@
+PR8319	backend/internal/server/routes/custom_admin_keys_test.go	@@ -0,0 +1,35 @@
+PR8319	backend/internal/server/routes/payment.go	@@ -91,6 +91,7 @@ func RegisterPaymentRoutes(
+PR8319	backend/internal/service/admin_account.go	@@ -546,30 +546,32 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
+PR8319	backend/internal/service/admin_account.go	@@ -1324,10 +1326,16 @@ func (s *adminServiceImpl) ClearAccountError(ctx context.Context, id int64) (*Ac
+PR8319	backend/internal/service/admin_service.go	@@ -396,6 +396,7 @@ type UpdateGroupInput struct {
+PR8319	backend/internal/service/admin_service.go	@@ -428,6 +429,7 @@ type ShadowOptions struct {
+PR8319	backend/internal/service/custom_admin_key_accounts.go	@@ -0,0 +1,366 @@
+PR8319	backend/internal/service/custom_admin_key_accounts_test.go	@@ -0,0 +1,325 @@
+PR8319	backend/internal/service/custom_admin_key_codex_import.go	@@ -0,0 +1,164 @@
+PR8319	backend/internal/service/custom_admin_key_codex_import_test.go	@@ -0,0 +1,174 @@
+PR8319	backend/internal/service/custom_admin_key_group_models.go	@@ -0,0 +1,56 @@
+PR8319	backend/internal/service/custom_admin_key_group_models_test.go	@@ -0,0 +1,48 @@
+PR8319	backend/internal/service/custom_admin_key_proxy_selection.go	@@ -0,0 +1,72 @@
+PR8319	backend/internal/service/custom_admin_key_proxy_selection_test.go	@@ -0,0 +1,174 @@
+PR8319	backend/internal/service/custom_admin_key_recovery_review_test.go	@@ -0,0 +1,77 @@
+PR8319	backend/internal/service/custom_admin_key_testdb_test.go	@@ -0,0 +1,47 @@
+PR8319	backend/internal/service/custom_admin_key_transaction.go	@@ -0,0 +1,29 @@
+PR8319	backend/internal/service/custom_admin_key_transaction_test.go	@@ -0,0 +1,53 @@
+PR8319	backend/internal/service/custom_admin_keys.go	@@ -0,0 +1,253 @@
+PR8319	backend/internal/service/custom_admin_keys_test.go	@@ -0,0 +1,229 @@
+PR8319	backend/internal/service/custom_proxy_options.go	@@ -0,0 +1,35 @@
+PR8319	backend/internal/service/setting_features.go	@@ -12,6 +12,8 @@ import (
+PR8319	backend/internal/service/setting_features.go	@@ -566,7 +568,7 @@ func (s *SettingService) GetIdentityPatchPrompt(ctx context.Context) string {
+PR8319	backend/internal/service/setting_features.go	@@ -576,10 +578,20 @@ func (s *SettingService) GenerateAdminAPIKey(ctx context.Context) (string, error
+PR8319	backend/internal/service/setting_service.go	@@ -117,6 +117,7 @@ type WebSearchManagerBuilder func(cfg *WebSearchEmulationConfig, proxyURLs map[i
+PR8319	backend/internal/service/wire.go	@@ -792,8 +792,9 @@ func ProvideOpsIngressRejectAggregator(opsRepo OpsRepository, opsService *OpsSer
+PR8319	backend/migrations/247_scoped_admin_api_keys.sql	@@ -0,0 +1,22 @@
+PR8319	docs/admin-api-keys.md	@@ -0,0 +1,145 @@
+PR8319	frontend/src/api/admin/adminAccessKeys.ts	@@ -0,0 +1,37 @@
+PR8319	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -0,0 +1,193 @@
+PR8319	frontend/src/components/admin/settings/__tests__/AdminAccessKeysSettings.spec.ts	@@ -0,0 +1,247 @@
+PR8319	frontend/src/i18n/locales/en/adminAccessKeys.ts	@@ -0,0 +1,73 @@
+PR8319	frontend/src/i18n/locales/en/index.ts	@@ -1,3 +1,4 @@
+PR8319	frontend/src/i18n/locales/en/index.ts	@@ -7,6 +8,7 @@ import admin from './admin'
+PR8319	frontend/src/i18n/locales/zh/adminAccessKeys.ts	@@ -0,0 +1,73 @@
+PR8319	frontend/src/i18n/locales/zh/index.ts	@@ -1,3 +1,4 @@
+PR8319	frontend/src/i18n/locales/zh/index.ts	@@ -7,6 +8,7 @@ import admin from './admin'
+PR8319	frontend/src/views/admin/SettingsView.vue	@@ -46,8 +46,10 @@
+PR8319	frontend/src/views/admin/SettingsView.vue	@@ -86,48 +88,6 @@
+PR8319	frontend/src/views/admin/SettingsView.vue	@@ -197,7 +157,7 @@
+PR8319	frontend/src/views/admin/SettingsView.vue	@@ -9048,6 +9008,7 @@ import {
+PR8319	frontend/src/views/admin/SettingsView.vue	@@ -12029,15 +11990,17 @@ async function loadAdminApiKey() {
+PR8319	frontend/src/views/admin/SettingsView.vue	@@ -12053,12 +12016,13 @@ async function deleteAdminApiKey() {
+3f1c8f36c	README.md	@@ -31,6 +31,17 @@ Please read the following carefully before using this project:
+3f1c8f36c	README.md	@@ -161,8 +172,20 @@ Please read the following carefully before using this project:
+3f1c8f36c	README_CN.md	@@ -32,6 +32,17 @@
+3f1c8f36c	README_CN.md	@@ -164,8 +175,20 @@
+3f1c8f36c	README_JA.md	@@ -31,6 +31,17 @@
+3f1c8f36c	README_JA.md	@@ -163,8 +174,20 @@
+3f1c8f36c	assets/partners/banners/wandapi-cn-dark.svg	@@ -0,0 +1,57 @@
+3f1c8f36c	assets/partners/banners/wandapi-cn.svg	@@ -0,0 +1,57 @@
+3f1c8f36c	assets/partners/banners/wandapi-en-dark.svg	@@ -0,0 +1,57 @@
+3f1c8f36c	assets/partners/banners/wandapi-en.svg	@@ -0,0 +1,57 @@
+PR8323	backend/ent/group.go	@@ -64,6 +64,8 @@ type Group struct {
+PR8323	backend/ent/group.go	@@ -262,7 +264,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
+PR8323	backend/ent/group.go	@@ -433,6 +435,12 @@ func (_m *Group) assignValues(columns []string, values []any) error {
+PR8323	backend/ent/group.go	@@ -886,6 +894,9 @@ func (_m *Group) String() string {
+PR8323	backend/ent/group/group.go	@@ -60,6 +60,8 @@ const (
+PR8323	backend/ent/group/group.go	@@ -247,6 +249,7 @@ var Columns = []string{
+PR8323	backend/ent/group/group.go	@@ -367,6 +370,8 @@ var (
+PR8323	backend/ent/group/group.go	@@ -554,6 +559,11 @@ func ByAllowBatchImageGeneration(opts ...sql.OrderTermOption) OrderOption {
+PR8323	backend/ent/group/where.go	@@ -160,6 +160,11 @@ func AllowBatchImageGeneration(v bool) predicate.Group {
+PR8323	backend/ent/group/where.go	@@ -1325,6 +1330,16 @@ func AllowBatchImageGenerationNEQ(v bool) predicate.Group {
+PR8323	backend/ent/group_create.go	@@ -322,6 +322,20 @@ func (_c *GroupCreate) SetNillableAllowBatchImageGeneration(v *bool) *GroupCreat
+PR8323	backend/ent/group_create.go	@@ -1105,6 +1119,10 @@ func (_c *GroupCreate) defaults() error {
+PR8323	backend/ent/group_create.go	@@ -1309,6 +1327,9 @@ func (_c *GroupCreate) check() error {
+PR8323	backend/ent/group_create.go	@@ -1546,6 +1567,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
+PR8323	backend/ent/group_create.go	@@ -2188,6 +2213,18 @@ func (u *GroupUpsert) UpdateAllowBatchImageGeneration() *GroupUpsert {
+PR8323	backend/ent/group_create.go	@@ -3355,6 +3392,20 @@ func (u *GroupUpsertOne) UpdateAllowBatchImageGeneration() *GroupUpsertOne {
+PR8323	backend/ent/group_create.go	@@ -4815,6 +4866,20 @@ func (u *GroupUpsertBulk) UpdateAllowBatchImageGeneration() *GroupUpsertBulk {
+PR8323	backend/ent/group_update.go	@@ -373,6 +373,20 @@ func (_u *GroupUpdate) SetNillableAllowBatchImageGeneration(v *bool) *GroupUpdat
+PR8323	backend/ent/group_update.go	@@ -1665,6 +1679,9 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+PR8323	backend/ent/group_update.go	@@ -2576,6 +2593,20 @@ func (_u *GroupUpdateOne) SetNillableAllowBatchImageGeneration(v *bool) *GroupUp
+PR8323	backend/ent/group_update.go	@@ -3898,6 +3929,9 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
+PR8323	backend/ent/migrate/schema.go	@@ -925,6 +925,7 @@ var (
+PR8323	backend/ent/migrate/schema.go	@@ -1005,7 +1006,7 @@ var (
+PR8323	backend/ent/mutation.go	@@ -22109,6 +22109,7 @@ type GroupMutation struct {
+PR8323	backend/ent/mutation.go	@@ -23293,6 +23294,42 @@ func (m *GroupMutation) ResetAllowBatchImageGeneration() {
+PR8323	backend/ent/mutation.go	@@ -25958,7 +25995,7 @@ func (m *GroupMutation) Type() string {
+PR8323	backend/ent/mutation.go	@@ -26025,6 +26062,9 @@ func (m *GroupMutation) Fields() []string {
+PR8323	backend/ent/mutation.go	@@ -26212,6 +26252,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
+PR8323	backend/ent/mutation.go	@@ -26355,6 +26397,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
+PR8323	backend/ent/mutation.go	@@ -26608,6 +26652,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
+PR8323	backend/ent/mutation.go	@@ -27500,6 +27551,9 @@ func (m *GroupMutation) ResetField(name string) error {
+PR8323	backend/ent/runtime/runtime.go	@@ -1103,142 +1103,146 @@ func init() {
+PR8323	backend/ent/schema/group.go	@@ -109,6 +109,9 @@ func (Group) Fields() []ent.Field {
+PR8323	backend/internal/handler/admin/group_handler.go	@@ -200,6 +200,7 @@ type CreateGroupRequest struct {
+PR8323	backend/internal/handler/admin/group_handler.go	@@ -276,6 +277,7 @@ type UpdateGroupRequest struct {
+PR8323	backend/internal/handler/admin/group_handler.go	@@ -681,6 +683,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
+PR8323	backend/internal/handler/admin/group_handler.go	@@ -828,6 +831,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
+PR8323	backend/internal/handler/dto/mappers.go	@@ -194,6 +194,7 @@ func groupFromServiceBase(g *service.Group) Group {
+PR8323	backend/internal/handler/dto/types.go	@@ -112,6 +112,7 @@ type Group struct {
+PR8323	backend/internal/repository/api_key_repo.go	@@ -183,6 +183,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
+PR8323	backend/internal/repository/api_key_repo.go	@@ -992,6 +993,7 @@ func groupEntityToService(g *dbent.Group) *service.Group {
+PR8323	backend/internal/repository/group_repo.go	@@ -108,6 +108,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
+PR8323	backend/internal/repository/group_repo.go	@@ -299,6 +300,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
+PR8323	backend/internal/server/api_contract_test.go	@@ -378,6 +378,7 @@ func TestAPIContracts(t *testing.T) {
+PR8323	backend/internal/service/admin_group.go	@@ -534,6 +534,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
+PR8323	backend/internal/service/admin_group.go	@@ -589,6 +591,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
+PR8323	backend/internal/service/admin_group.go	@@ -845,6 +848,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
+PR8323	backend/internal/service/admin_group_duplicate.go	@@ -117,6 +117,7 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
+PR8323	backend/internal/service/admin_service.go	@@ -248,6 +248,7 @@ type CreateGroupInput struct {
+PR8323	backend/internal/service/admin_service.go	@@ -330,6 +331,7 @@ type UpdateGroupInput struct {
+PR8323	backend/internal/service/antigravity_gateway_gemini.go	@@ -470,6 +470,7 @@ handleSuccess:
+PR8323	backend/internal/service/api_key_auth_cache.go	@@ -69,6 +69,7 @@ type APIKeyAuthGroupSnapshot struct {
+PR8323	backend/internal/service/api_key_auth_cache_impl.go	@@ -14,7 +14,7 @@ import (
+PR8323	backend/internal/service/api_key_auth_cache_impl.go	@@ -391,6 +391,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey)
+PR8323	backend/internal/service/api_key_auth_cache_impl.go	@@ -493,6 +494,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
+PR8323	backend/internal/service/gateway_service.go	@@ -642,7 +642,11 @@ type ForwardResult struct {
+PR8323	backend/internal/service/gateway_usage_billing.go	@@ -1020,10 +1020,13 @@ func (s *GatewayService) calculateRecordUsageCost(
+PR8323	backend/internal/service/gateway_usage_billing.go	@@ -1168,8 +1171,12 @@ func (s *GatewayService) calculateImageCost(
+PR8323	backend/internal/service/gateway_usage_billing.go	@@ -1191,25 +1198,52 @@ func (s *GatewayService) calculateImageCost(
+PR8323	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -309,6 +309,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+PR8323	backend/internal/service/gemini_messages_compat_service.go	@@ -1074,6 +1074,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8323	backend/internal/service/gemini_messages_compat_service.go	@@ -1609,6 +1610,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+PR8323	backend/internal/service/grok_media.go	@@ -786,6 +786,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
+PR8323	backend/internal/service/group.go	@@ -44,6 +44,7 @@ type Group struct {
+PR8323	backend/internal/service/group_service.go	@@ -73,6 +73,7 @@ type CreateGroupRequest struct {
+PR8323	backend/internal/service/group_service.go	@@ -85,6 +86,7 @@ type UpdateGroupRequest struct {
+PR8323	backend/internal/service/group_service.go	@@ -105,6 +107,11 @@ func NewGroupService(groupRepo GroupRepository, authCacheInvalidator APIKeyAuthC
+PR8323	backend/internal/service/group_service.go	@@ -131,6 +138,7 @@ func (s *GroupService) Create(ctx context.Context, req CreateGroupRequest) (*Gro
+PR8323	backend/internal/service/group_service.go	@@ -207,6 +215,16 @@ func (s *GroupService) Update(ctx context.Context, id int64, req UpdateGroupRequ
+PR8323	backend/internal/service/image_billing_count.go	@@ -0,0 +1,20 @@
+PR8323	backend/internal/service/image_billing_count_test.go	@@ -0,0 +1,47 @@
+PR8323	backend/internal/service/image_count_billing_switch_test.go	@@ -0,0 +1,224 @@
+PR8323	backend/internal/service/media_price_config.go	@@ -1,5 +1,17 @@
+PR8323	backend/internal/service/openai_gateway_service.go	@@ -278,14 +278,17 @@ type OpenAIForwardResult struct {
+PR8323	backend/internal/service/openai_gateway_usage.go	@@ -619,7 +619,11 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
+PR8323	backend/internal/service/openai_images.go	@@ -741,7 +741,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+PR8323	backend/internal/service/openai_images.go	@@ -757,6 +757,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+PR8323	backend/internal/service/openai_images.go	@@ -766,7 +767,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+PR8323	backend/internal/service/openai_images.go	@@ -779,6 +780,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+PR8323	backend/internal/service/openai_images.go	@@ -790,9 +792,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+PR8323	backend/internal/service/openai_images.go	@@ -803,6 +803,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+PR8323	backend/internal/service/openai_images_responses.go	@@ -1955,6 +1955,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+PR8323	backend/internal/service/openai_images_responses.go	@@ -1991,9 +1992,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+PR8323	backend/internal/service/openai_images_responses.go	@@ -2007,6 +2006,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+PR8323	backend/migrations/248_group_image_count_billing.sql	@@ -0,0 +1,5 @@
+PR8323	frontend/src/i18n/locales/en/admin/overview.ts	@@ -1078,6 +1078,7 @@ export default {
+PR8323	frontend/src/i18n/locales/zh/admin/overview.ts	@@ -1075,6 +1075,7 @@ export default {
+PR8323	frontend/src/types/index.ts	@@ -594,6 +594,7 @@ export interface Group {
+PR8323	frontend/src/types/index.ts	@@ -819,6 +820,7 @@ export interface CreateGroupRequest {
+PR8323	frontend/src/types/index.ts	@@ -886,6 +888,7 @@ export interface UpdateGroupRequest {
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -919,6 +919,20 @@
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -2559,6 +2573,20 @@
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -4959,6 +4987,7 @@ const createForm = reactive({
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -5325,6 +5354,7 @@ const editForm = reactive({
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -5388,6 +5418,7 @@ type ImagePricingFormState = {
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -5534,7 +5565,12 @@ const editWebSearchFinalPricePreview = computed(() =>
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -5544,6 +5580,12 @@ const resetDisabledBatchImagePricing = (
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -5783,6 +5825,7 @@ const closeCreateModal = () => {
+PR8323	frontend/src/views/admin/GroupsView.vue	@@ -6078,6 +6121,7 @@ const handleEdit = async (group: AdminGroup) => {
+PR8364	backend/internal/pkg/apicompat/anthropic_to_responses.go	@@ -68,7 +68,7 @@ func AnthropicToResponsesWithMinOutputTokens(req *AnthropicRequest, minOutputTok
+PR8364	backend/internal/pkg/openai/constants.go	@@ -25,6 +25,7 @@ var DefaultModels = []Model{
+PR8364	backend/internal/pkg/openai/constants.go	@@ -216,6 +217,27 @@ func IsGPT61SolModelSpelling(model string) bool {
+PR8364	backend/internal/service/billing_service.go	@@ -591,6 +591,20 @@ func (s *BillingService) initFallbackPricing() {
+PR8364	backend/internal/service/billing_service.go	@@ -1256,7 +1270,7 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+PR8364	backend/internal/service/billing_service.go	@@ -1432,7 +1446,7 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
+PR8364	backend/internal/service/billing_service.go	@@ -1952,7 +1966,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+PR8364	backend/internal/service/billing_service.go	@@ -1978,7 +1992,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+PR8364	backend/internal/service/billing_service.go	@@ -1990,7 +2004,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+PR8364	backend/internal/service/billing_service_test.go	@@ -2049,6 +2049,8 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
+PR8364	backend/internal/service/openai_codex_models_service.go	@@ -649,6 +649,9 @@ func configuredCodexGPTReasoningLevels(modelID string) []configuredCodexReasonin
+PR8364	backend/internal/service/openai_codex_transform.go	@@ -11,6 +11,7 @@ import (
+PR8364	backend/internal/service/openai_codex_transform.go	@@ -63,6 +64,7 @@ var codexVersionModelPrefixes = []struct {
+PR8364	backend/internal/service/openai_compat_model.go	@@ -8,6 +8,9 @@ import (
+PR8364	backend/internal/service/openai_compat_model.go	@@ -24,10 +27,11 @@ func NormalizeOpenAICompatRequestedModel(model string) string {
+PR8364	backend/internal/service/openai_gateway_chat_completions_raw.go	@@ -95,8 +95,8 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
+PR8364	backend/internal/service/openai_gateway_messages_chat_fallback.go	@@ -67,8 +67,8 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
+PR8364	backend/internal/service/openai_gateway_responses_chat_fallback.go	@@ -75,8 +75,8 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
+PR8364	backend/internal/service/openai_gpt61_terra_test.go	@@ -0,0 +1,142 @@
+PR8364	backend/internal/service/openai_model_alias.go	@@ -37,6 +37,9 @@ func normalizeKnownOpenAICodexModel(model string) string {
+PR8364	backend/internal/service/openai_model_alias.go	@@ -163,5 +166,5 @@ func firstUsageBillingModel(candidates []string) string {
+PR8364	backend/internal/service/pricing_service.go	@@ -74,6 +74,23 @@ var (
+PR8364	backend/internal/service/pricing_service.go	@@ -1583,6 +1600,12 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
+PR8364	backend/resources/model-pricing/model_prices_and_context_window.json	@@ -1,4 +1,49 @@
+PR8364	frontend/src/components/keys/UseKeyModal.vue	@@ -1477,6 +1477,12 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
+PR8364	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -722,6 +722,12 @@ describe('UseKeyModal', () => {
+PR8364	frontend/src/composables/__tests__/useModelWhitelist.spec.ts	@@ -47,6 +47,7 @@ describe('useModelWhitelist', () => {
+PR8364	frontend/src/composables/__tests__/useModelWhitelist.spec.ts	@@ -54,6 +55,7 @@ describe('useModelWhitelist', () => {
+PR8364	frontend/src/composables/useModelWhitelist.ts	@@ -12,7 +12,7 @@ const openaiModels = [
+PR8364	frontend/src/composables/useModelWhitelist.ts	@@ -342,6 +342,7 @@ const openaiPresetMappings = [
+PR8339	backend/internal/handler/admin/account_handler.go	@@ -964,7 +964,11 @@ func (h *AccountHandler) GetByID(c *gin.Context) {
+PR8339	backend/internal/handler/admin/account_handler.go	@@ -3090,6 +3094,11 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
+PR8339	backend/internal/handler/admin/account_handler_grok_model_diagnostics_test.go	@@ -0,0 +1,347 @@
+PR8339	backend/internal/handler/dto/account_mapper_redact_test.go	@@ -100,3 +100,58 @@ func TestAccountFromServiceShallow_NilCredentialsOmitsStatus(t *testing.T) {
+PR8339	backend/internal/handler/dto/types.go	@@ -328,6 +328,9 @@ type Account struct {
+PR8339	backend/internal/repository/account_repo.go	@@ -680,7 +680,9 @@ func lockAndMergeAccountProbeExtra(
+PR8339	backend/internal/repository/account_repo.go	@@ -709,6 +711,8 @@ func lockAndMergeAccountProbeExtra(
+PR8339	backend/internal/repository/account_repo.go	@@ -723,6 +727,8 @@ func lockAndMergeAccountProbeExtra(
+PR8339	backend/internal/repository/account_repo.go	@@ -836,6 +842,21 @@ func lockAndMergeAccountProbeExtra(
+PR8339	backend/internal/repository/account_repo_grok_managed_extra_integration_test.go	@@ -0,0 +1,326 @@
+PR8339	backend/internal/repository/account_repo_grok_managed_extra_test.go	@@ -0,0 +1,171 @@
+PR8339	backend/internal/repository/account_repo_grok_models.go	@@ -0,0 +1,61 @@
+PR8339	backend/internal/repository/account_repo_grok_models_integration_test.go	@@ -0,0 +1,374 @@
+PR8339	backend/internal/repository/account_repo_grok_models_test.go	@@ -0,0 +1,334 @@
+PR8339	backend/internal/repository/account_repo_opencode_go_usage_test.go	@@ -76,6 +76,7 @@ func openCodeGoMergeMockColumns() []string {
+PR8339	backend/internal/repository/account_repo_opencode_go_usage_test.go	@@ -188,7 +189,7 @@ func TestLockAndMergeAccountProbeExtraPreservesOpenCodeGoManagedState(t *testing
+PR8339	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -81,8 +81,8 @@ func TestLockAndMergeAccountProbeExtraUsesCurrentDatabaseSnapshot(t *testing.T)
+PR8339	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -172,8 +172,8 @@ func TestLockAndMergeAccountProbeExtraNeverInfersProbeFromRateSync(t *testing.T)
+PR8339	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -211,8 +211,8 @@ func TestLockAndMergeAccountProbeExtraProtectsOllamaManagedFields(t *testing.T)
+PR8339	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -371,8 +371,8 @@ func TestUpdateWithAccountBillingSettingsRollsBackWhenOutboxFails(t *testing.T)
+PR8339	backend/internal/service/admin_account.go	@@ -687,6 +687,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR8339	backend/internal/service/admin_account.go	@@ -695,6 +698,8 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR8339	backend/internal/service/admin_account_grok_catalog_test.go	@@ -0,0 +1,176 @@
+PR8339	backend/internal/service/grok_model_catalog.go	@@ -0,0 +1,310 @@
+PR8339	backend/internal/service/grok_model_catalog_store.go	@@ -0,0 +1,112 @@
+PR8339	backend/internal/service/grok_model_catalog_store_test.go	@@ -0,0 +1,644 @@
+PR8339	backend/internal/service/grok_model_catalog_sync_test.go	@@ -0,0 +1,945 @@
+PR8339	backend/internal/service/grok_model_catalog_test.go	@@ -0,0 +1,573 @@
+PR8339	backend/internal/service/grok_model_diagnostics.go	@@ -0,0 +1,265 @@
+PR8339	backend/internal/service/grok_model_diagnostics_test.go	@@ -0,0 +1,591 @@
+PR8339	backend/internal/service/grok_observed_models.go	@@ -3,6 +3,8 @@ package service
+PR8339	backend/internal/service/grok_observed_models.go	@@ -11,7 +13,6 @@ import (
+PR8339	backend/internal/service/grok_observed_models.go	@@ -20,11 +21,7 @@ const (
+PR8339	backend/internal/service/grok_observed_models.go	@@ -46,7 +43,12 @@ func (s *GrokQuotaService) scheduleGrokObservedModelsSync(account *Account) {
+PR8339	backend/internal/service/grok_observed_models.go	@@ -55,12 +57,58 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
+PR8339	backend/internal/service/grok_observed_models.go	@@ -69,7 +117,7 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
+PR8339	backend/internal/service/grok_observed_models.go	@@ -80,15 +128,15 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
+PR8339	backend/internal/service/grok_observed_models.go	@@ -113,66 +161,36 @@ func (s *GrokQuotaService) syncGrokObservedModels(ctx context.Context, account *
+PR8339	backend/internal/service/grok_observed_models.go	@@ -191,8 +209,119 @@ func parseGrokObservedModels(extra map[string]any) *grokObservedModelsSnapshot {
+PR8339	backend/internal/service/grok_observed_models_log_test.go	@@ -0,0 +1,137 @@
+PR8339	backend/internal/service/grok_p2_test.go	@@ -59,8 +59,9 @@ func TestGrokStickyAffinitySeed_ScopesByModel(t *testing.T) {
+PR8339	backend/internal/service/grok_quota_service_test.go	@@ -5,6 +5,7 @@ package service
+PR8339	backend/internal/service/grok_quota_service_test.go	@@ -61,6 +62,39 @@ func (r *grokQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates
+PR8339	backend/internal/service/grok_quota_service_test.go	@@ -139,7 +173,7 @@ func TestSyncGrokObservedModelsUsesCLIIdentityAndAccountHeaders(t *testing.T) {
+PR8339	backend/internal/service/grok_response_model_audit_test.go	@@ -0,0 +1,630 @@
+PR8339	backend/internal/service/openai_gateway_chat_completions.go	@@ -676,7 +676,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
+PR8339	backend/internal/service/openai_gateway_chat_completions.go	@@ -689,6 +689,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
+PR8339	backend/internal/service/openai_gateway_grok.go	@@ -249,18 +249,20 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -604,7 +604,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -621,6 +621,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -771,16 +772,67 @@ func openAICompatTerminalResponse(event *apicompat.ResponsesStreamEvent, payload
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -858,6 +910,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -868,11 +921,11 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -882,11 +935,11 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -906,6 +959,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -917,7 +971,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8339	backend/internal/service/openai_gateway_messages.go	@@ -926,7 +980,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8339	backend/internal/service/response_model_billing_test.go	@@ -589,6 +589,127 @@ func TestOpenAIGatewayServiceRecordUsage_ResponseModelSkippedForSearchSurcharged
+PR8339	backend/internal/service/upstream_models.go	@@ -53,9 +53,19 @@ type UpstreamModelMetadataSnapshot struct {
+PR8339	backend/internal/service/upstream_models.go	@@ -213,13 +223,32 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
+PR8339	backend/internal/service/upstream_models.go	@@ -228,8 +257,21 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
+PR8339	backend/internal/service/upstream_models.go	@@ -734,34 +776,54 @@ func normalizeModelRegistryBaseURL(raw string) string {
+PR8339	backend/internal/service/upstream_models.go	@@ -770,13 +832,38 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
+PR8339	backend/internal/service/upstream_models.go	@@ -1415,7 +1502,7 @@ func extractUpstreamModelIDs(body []byte) ([]string, error) {
+PR8339	backend/internal/service/upstream_models_test.go	@@ -6,6 +6,7 @@ import (
+PR8339	backend/internal/service/upstream_models_test.go	@@ -19,6 +20,8 @@ type upstreamModelMetadataRepoStub struct {
+PR8339	backend/internal/service/upstream_models_test.go	@@ -36,6 +39,60 @@ func (r *upstreamModelMetadataRepoStub) UpdateExtra(_ context.Context, id int64,
+PR8339	backend/internal/service/upstream_response_model_test.go	@@ -49,6 +49,7 @@ func TestUpstreamResponseModelObservationAttemptReset(t *testing.T) {
+PR8339	backend/internal/service/upstream_response_model_test.go	@@ -85,6 +86,11 @@ func TestUpstreamModelMismatchTreatsGrokBuildRuntimeIDsAsAliases(t *testing.T) {
+PR8339	backend/internal/service/upstream_response_model_test.go	@@ -118,6 +124,16 @@ func TestUpstreamModelMismatchDoesNotCollapseDifferentModels(t *testing.T) {
+PR8339	frontend/src/api/__tests__/admin.accounts.grokModelDiagnostics.spec.ts	@@ -0,0 +1,81 @@
+PR8339	frontend/src/api/admin/accounts.ts	@@ -30,6 +30,7 @@ import type {
+PR8339	frontend/src/api/admin/accounts.ts	@@ -611,6 +612,8 @@ export interface SyncUpstreamModelsResult {
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -251,7 +251,11 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -265,18 +269,32 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -294,14 +312,23 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -318,9 +345,31 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -330,10 +379,11 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -350,20 +400,41 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -379,15 +450,20 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -402,7 +478,10 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -799,6 +878,7 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -813,36 +893,79 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -852,26 +975,47 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -887,15 +1031,20 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -910,7 +1059,10 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -3227,7 +3379,7 @@
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -3245,6 +3397,7 @@ import type {
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -3260,6 +3413,7 @@ import ProxySelector from '@/components/common/ProxySelector.vue'
+PR8339	frontend/src/components/account/EditAccountModal.vue	@@ -3727,6 +3881,152 @@ const headerOverrideCapable = computed(
+PR8339	frontend/src/components/account/GrokModelDiagnosticsPanel.vue	@@ -0,0 +1,463 @@
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -102,8 +102,9 @@
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -145,7 +146,7 @@
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -159,7 +160,7 @@ import { extractApiErrorMessage } from '@/utils/apiError'
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -171,11 +172,13 @@ const props = defineProps<{
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -186,6 +189,20 @@ const searchQuery = ref('')
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -293,16 +310,26 @@ const fillRelated = () => {
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -310,7 +337,7 @@ const syncUpstreamModels = async () => {
+PR8339	frontend/src/components/account/ModelWhitelistSelector.vue	@@ -344,13 +371,21 @@ const syncUpstreamModels = async () => {
+PR8339	frontend/src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts	@@ -1,18 +1,59 @@
+PR8339	frontend/src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts	@@ -28,6 +69,8 @@ vi.mock('@/api/admin', () => ({
+PR8339	frontend/src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts	@@ -41,7 +84,11 @@ vi.mock('@/api/admin', () => ({
+PR8339	frontend/src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts	@@ -49,13 +96,46 @@ vi.mock('vue-i18n', async () => {
+PR8339	frontend/src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts	@@ -95,8 +175,11 @@ function buildGrokOAuthAccount(
+PR8339	frontend/src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts	@@ -110,18 +193,66 @@ function mountModal(account: any) {
+PR8339	frontend/src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts	@@ -323,4 +454,1020 @@ describe('EditAccountModal Grok OAuth upstream config', () => {
+PR8339	frontend/src/components/account/__tests__/GrokModelDiagnosticsPanel.spec.ts	@@ -0,0 +1,1017 @@
+PR8339	frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts	@@ -58,6 +58,16 @@ vi.mock('@/composables/useClipboard', () => ({
+PR8339	frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts	@@ -73,6 +83,10 @@ function mountSelector(props: Record<string, unknown> = {}) {
+PR8339	frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts	@@ -331,6 +345,111 @@ describe('ModelWhitelistSelector', () => {
+PR8339	frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts	@@ -348,4 +467,138 @@ describe('ModelWhitelistSelector', () => {
+PR8339	frontend/src/i18n/locales/en/admin/accounts.ts	@@ -910,6 +910,64 @@ export default {
+PR8339	frontend/src/i18n/locales/zh/admin/accounts.ts	@@ -1012,6 +1012,64 @@ export default {
+PR8339	frontend/src/types/index.ts	@@ -1229,6 +1229,37 @@ export interface OpenCodeGoUsageSettings {
+PR8339	frontend/src/types/index.ts	@@ -1372,6 +1403,8 @@ export interface Account {
+PR8286	backend/internal/service/ratelimit_cn_frequency_429_test.go	@@ -0,0 +1,139 @@
+PR8286	backend/internal/service/ratelimit_cn_providers.go	@@ -121,6 +121,90 @@ func cnProviderResponseIndicatesInsufficientBalance(body []byte) bool {
+PR8286	backend/internal/service/ratelimit_cn_providers.go	@@ -288,7 +372,22 @@ func (s *RateLimitService) applyCNProviderReactive429(
+PR8377	backend/internal/service/gateway_billing_block.go	@@ -4,6 +4,7 @@ import (
+PR8377	backend/internal/service/gateway_billing_block.go	"@@ -18,23 +19,35 @@ const fingerprintSalt = ""59cf53e54c78"""
+PR8377	backend/internal/service/gateway_billing_block_test.go	@@ -0,0 +1,52 @@
+PR8377	backend/internal/service/gateway_billing_header_test.go	@@ -87,6 +87,24 @@ func TestSyncBillingHeaderVersion_RecomputesSuffixAndIsIdempotent(t *testing.T)
+PR8377	backend/internal/service/gateway_billing_header_test.go	@@ -105,7 +123,7 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
+PR8377	backend/internal/service/gateway_billing_header_test.go	@@ -144,6 +162,10 @@ func TestBuildOAuthRequest_BillingMatchesWireUserAgent(t *testing.T) {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	@@ -7,10 +7,10 @@ import (
+PR8326	backend/internal/service/gemini_image_output_accounting.go	@@ -47,7 +47,7 @@ func geminiImageOutputCounterFromContext(c *gin.Context) *geminiImageOutputCount
+PR8326	backend/internal/service/gemini_image_output_accounting.go	@@ -55,7 +55,7 @@ func observeGeminiImageOutputs(c *gin.Context, payload []byte) {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	@@ -70,15 +70,14 @@ func observedGeminiImageOutputs(c *gin.Context) int {
+PR8326	backend/internal/service/gemini_image_output_accounting.go	@@ -90,17 +89,16 @@ func resolveGeminiImageCount(c *gin.Context, originalModel, mappedModel string)
+PR8326	backend/internal/service/gemini_image_output_accounting.go	@@ -110,23 +108,27 @@ func countGeminiInlineImageOutputs(payload []byte) int {
+PR8326	backend/internal/service/gemini_image_output_accounting_test.go	@@ -3,11 +3,15 @@
+PR8326	backend/internal/service/gemini_image_output_accounting_test.go	@@ -28,7 +32,7 @@ func geminiImageResponse(parts string) string {
+PR8326	backend/internal/service/gemini_image_output_accounting_test.go	@@ -78,6 +82,46 @@ func TestCountGeminiInlineImageOutputs(t *testing.T) {
+PR8326	backend/internal/service/gemini_image_output_accounting_test.go	@@ -85,7 +129,7 @@ func TestCountGeminiInlineImageOutputs(t *testing.T) {
+PR8326	backend/internal/service/gemini_image_output_accounting_test.go	@@ -202,3 +246,46 @@ func TestHandleNativeNonStreamingResponse_FeedsImageCounter(t *testing.T) {
+PR8003	backend/internal/service/billing_service.go	"@@ -267,9 +267,8 @@ var ErrModelPricingUnavailable = errors.New(""pricing not found"")"
+PR8003	backend/internal/service/billing_service.go	@@ -311,21 +310,6 @@ func deepseekPeakMultiplierAt(now time.Time) float64 {
+PR8003	backend/internal/service/billing_service.go	@@ -1400,7 +1384,6 @@ func (s *BillingService) HasIdentifiedTokenPricing(model string) bool {
+PR8003	backend/internal/service/billing_service.go	@@ -1416,9 +1399,8 @@ func (s *BillingService) CacheStoragePricePerTokenHour(model string) float64 {
+PR8003	backend/internal/service/billing_service.go	@@ -1645,8 +1627,7 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
+PR8003	backend/internal/service/billing_service.go	@@ -1922,17 +1903,15 @@ func (s *BillingService) calculateCostInternalWithPolicy(
+PR8003	backend/internal/service/billing_service.go	@@ -1945,20 +1924,18 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -262,13 +262,13 @@ func TestGetModelPricing_DeepseekForcesOfficialRatesOverJSON(t *testing.T) {
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -279,10 +279,10 @@ func TestGetModelPricing_DeepseekForcesOfficialRatesOverJSON(t *testing.T) {
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -290,7 +290,7 @@ func TestGetModelPricing_DeepseekForcesOfficialRatesOverJSON(t *testing.T) {
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -298,12 +298,12 @@ func TestGetModelPricing_DeepseekForcesOfficialRatesOverJSON(t *testing.T) {
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -381,7 +381,7 @@ func TestDeepseekPricingFileMatchesOfficialRates(t *testing.T) {
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -393,7 +393,7 @@ func TestCalculateCostUnified_DeepseekFlashAndLegacyFlashShareNewRates(t *testin
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -405,15 +405,14 @@ func TestCalculateCostUnified_DeepseekFlashAndLegacyFlashShareNewRates(t *testin
+PR8003	backend/internal/service/deepseek_pricing_test.go	@@ -421,25 +420,25 @@ func TestCalculateCostUnified_DeepseekProRoutesToFlashAtCutoff(t *testing.T) {
+PR8366	backend/internal/service/model_plaza_service.go	@@ -233,6 +233,11 @@ func (s *ModelPlazaService) ListGroups(ctx context.Context) ([]PlazaGroup, error
+PR8366	backend/internal/service/model_plaza_service_test.go	@@ -309,6 +309,79 @@ func TestListPlazaGroups_GroupImagePriceOverridesChannelPricing(t *testing.T) {
+PR8354	backend/internal/service/openai_gateway_response_handling.go	@@ -1579,6 +1579,7 @@ func openAICacheReadTokensFromUsage(value gjson.Result) int {
+PR8354	backend/internal/service/openai_usage_deepseek_cache_test.go	@@ -0,0 +1,28 @@
+PR8376	backend/internal/service/openai_chat_roles.go	@@ -5,9 +5,11 @@ import (
+PR8376	backend/internal/service/openai_chat_roles.go	@@ -15,6 +17,11 @@ func requiresSystemChatRole(account *Account, targetURL string) bool {
+PR8376	backend/internal/service/openai_chat_roles.go	@@ -34,7 +41,7 @@ func requiresSystemChatRole(account *Account, targetURL string) bool {
+PR8376	backend/internal/service/openai_chat_roles_test.go	@@ -60,6 +60,9 @@ func TestForwardAsChatCompletions_StrictDeveloperRole(t *testing.T) {
+PR8376	backend/internal/service/openai_chat_roles_test.go	@@ -138,6 +141,36 @@ func TestNormalizeStrictChatDeveloperRoles_ExactOfficialHosts(t *testing.T) {
+PR8303	backend/internal/handler/admin/admin_helpers_test.go	@@ -2,6 +2,8 @@ package admin
+PR8303	backend/internal/handler/admin/admin_helpers_test.go	@@ -136,6 +138,7 @@ func TestParseOpsOpenAITokenStatsFilter_InvalidParams(t *testing.T) {
+PR8303	backend/internal/handler/admin/admin_helpers_test.go	@@ -149,6 +152,32 @@ func TestParseOpsOpenAITokenStatsFilter_InvalidParams(t *testing.T) {
+PR8303	backend/internal/handler/admin/ops_dashboard_handler.go	@@ -2,6 +2,7 @@ package admin
+PR8303	backend/internal/handler/admin/ops_dashboard_handler.go	@@ -309,6 +310,9 @@ func parseOpsOpenAITokenStatsFilter(c *gin.Context) (*service.OpsOpenAITokenStat
+PR8303	backend/internal/pkg/pagination/pagination.go	@@ -1,7 +1,10 @@
+PR8303	backend/internal/pkg/pagination/pagination.go	@@ -38,7 +41,12 @@ func (p PaginationParams) Offset() int {
+PR8303	backend/internal/pkg/pagination/pagination_test.go	@@ -1,6 +1,9 @@
+PR8303	backend/internal/pkg/pagination/pagination_test.go	@@ -84,6 +87,11 @@ func TestPaginationParamsOffsetUsesNormalizedLimit(t *testing.T) {
+PR8303	backend/internal/pkg/pagination/pagination_test.go	@@ -96,3 +104,22 @@ func TestPaginationParamsOffsetUsesNormalizedLimit(t *testing.T) {
+PR8303	backend/internal/pkg/response/response.go	@@ -5,6 +5,7 @@ import (
+PR8303	backend/internal/pkg/response/response.go	@@ -166,7 +167,8 @@ func PaginatedWithResult(c *gin.Context, items any, pagination *PaginationResult
+PR8303	backend/internal/pkg/response/response.go	@@ -188,16 +190,16 @@ func ParsePagination(c *gin.Context) (page, pageSize int) {
+PR8303	backend/internal/pkg/response/response_test.go	@@ -5,8 +5,11 @@ package response
+PR8303	backend/internal/pkg/response/response_test.go	@@ -691,6 +694,60 @@ func TestParsePagination(t *testing.T) {
+PR8303	backend/internal/pkg/response/response_test.go	@@ -705,6 +762,38 @@ func TestParsePagination(t *testing.T) {
+PR8303	backend/internal/pkg/response/response_test.go	@@ -740,37 +829,58 @@ func Test_parseInt(t *testing.T) {
+PR8303	backend/internal/repository/pagination_test.go	@@ -0,0 +1,17 @@
+PR8303	backend/internal/securityaudit/prompt_handler.go	@@ -3,6 +3,7 @@ package securityaudit
+PR8303	backend/internal/securityaudit/prompt_handler.go	@@ -91,6 +92,10 @@ func (h *PromptAdminHandler) ListEvents(c *gin.Context) {
+PR8303	backend/internal/securityaudit/prompt_handler_test.go	@@ -5,8 +5,10 @@ import (
+PR8303	backend/internal/securityaudit/prompt_handler_test.go	@@ -211,6 +213,7 @@ func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
+PR8303	backend/internal/securityaudit/prompt_handler_test.go	@@ -219,6 +222,18 @@ func TestPromptAdminRejectsInvalidEventIDsTimesAndPagination(t *testing.T) {
+PR8303	backend/internal/service/api_key_service.go	@@ -653,11 +653,7 @@ func paginateAPIKeys(keys []APIKey, params pagination.PaginationParams) []APIKey
+PR8303	backend/internal/service/pagination_test.go	@@ -0,0 +1,25 @@
+PR8348	backend/internal/service/grok_media.go	@@ -231,7 +231,9 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
+PR8348	backend/internal/service/openai_images.go	@@ -39,7 +39,7 @@ const (
+PR8348	backend/internal/service/openai_images.go	@@ -352,11 +352,16 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+PR8348	backend/internal/service/openai_images_responses.go	@@ -1806,13 +1806,18 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+PR8348	backend/internal/service/openai_images_upload_limit_test.go	@@ -0,0 +1,64 @@
+PR8362	backend/internal/pkg/antigravity/response_transformer.go	@@ -3,6 +3,7 @@ package antigravity
+PR8362	backend/internal/pkg/antigravity/response_transformer.go	@@ -10,6 +11,8 @@ import (
+PR8362	backend/internal/pkg/antigravity/response_transformer.go	@@ -34,6 +37,10 @@ func TransformGeminiToClaude(geminiResp []byte, originalModel string) ([]byte, *
+PR8362	backend/internal/pkg/antigravity/response_transformer_malformed_test.go	@@ -0,0 +1,18 @@
+PR8362	backend/internal/service/antigravity_gateway_compat.go	@@ -606,6 +606,9 @@ func (s *AntigravityGatewayService) mapAntigravityCompatCollectionError(c *gin.C
+PR8362	backend/internal/service/antigravity_gateway_nonstream_malformed_test.go	@@ -0,0 +1,55 @@
+PR8362	backend/internal/service/antigravity_gateway_streaming.go	@@ -850,6 +850,11 @@ func (s *AntigravityGatewayService) collectClaudeStreamResponse(c *gin.Context,
+PR8352	backend/internal/service/admin_service_role_test.go	@@ -4,8 +4,10 @@ package service
+PR8352	backend/internal/service/admin_service_role_test.go	@@ -141,3 +143,18 @@ func TestAdminService_UpdateUser_PromoteDoesNotCountAdmins(t *testing.T) {
+PR8352	backend/internal/service/admin_user.go	@@ -172,7 +172,7 @@ func (s *adminServiceImpl) ensureNotLastAdmin(ctx context.Context) error {
+PR8352	backend/internal/service/admin_user.go	@@ -211,7 +211,7 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
+PR8352	backend/internal/service/admin_user.go	@@ -363,7 +363,7 @@ func (s *adminServiceImpl) DeleteUser(ctx context.Context, id int64) error {
+0a2a29b32	backend/go.mod	@@ -51,12 +51,12 @@ require (
+0a2a29b32	backend/go.mod	@@ -201,10 +201,10 @@ require (
+0a2a29b32	backend/go.sum	@@ -562,10 +562,8 @@ golang.org/x/crypto v0.19.0/go.mod h1:Iy9bg/ha4yyC70EfRS8jz+B6ybOBKMaSxLj6P6oBDf
+0a2a29b32	backend/go.sum	@@ -580,8 +578,6 @@ golang.org/x/mod v0.8.0/go.mod h1:iBbtSCu2XBx23ZKBPSOrRkjjQPZFPuis4dIYUhu/chs=
+0a2a29b32	backend/go.sum	@@ -605,10 +601,8 @@ golang.org/x/net v0.21.0/go.mod h1:bIjVDfnllIU7BJ2DNgfnXvpSvtn8VRwhlsaeUTyUS44=
+0a2a29b32	backend/go.sum	@@ -620,10 +614,8 @@ golang.org/x/sync v0.1.0/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+0a2a29b32	backend/go.sum	@@ -655,10 +647,8 @@ golang.org/x/sys v0.17.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+0a2a29b32	backend/go.sum	@@ -671,10 +661,8 @@ golang.org/x/term v0.17.0/go.mod h1:lLRBjIVuehSbZlaOtGMbcMncT+aqLLLmKrsjNrUguwk=
+0a2a29b32	backend/go.sum	@@ -685,10 +673,8 @@ golang.org/x/text v0.13.0/go.mod h1:TvPlkZtksWOMsz7fbANvkp4WM8x/WCo/om8BMLbz+aE=
+0a2a29b32	backend/go.sum	@@ -703,12 +689,8 @@ golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc
+PR8390	backend/internal/service/channel_service.go	@@ -973,7 +973,7 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
+PR8390	backend/internal/service/channel_service.go	@@ -986,6 +986,65 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
+PR8390	backend/internal/service/channel_websearch_merge_test.go	@@ -0,0 +1,130 @@
+PR8390	frontend/src/i18n/locales/en/admin/channels.ts	@@ -201,7 +201,7 @@ export default {
+PR8390	frontend/src/i18n/locales/zh/admin/channels.ts	@@ -201,7 +201,7 @@ export default {
+PR8390	frontend/src/views/admin/ChannelsView.vue	@@ -324,8 +324,8 @@
+PR8390	frontend/src/views/admin/ChannelsView.vue	@@ -659,6 +659,20 @@ const { t } = useI18n()
+PR8390	frontend/src/views/admin/ChannelsView.vue	@@ -1150,15 +1164,13 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
+PR8390	frontend/src/views/admin/__tests__/ChannelsView.webSearchEmulation.spec.ts	@@ -0,0 +1,41 @@
+PR8395	backend/internal/handler/gateway_models_test.go	@@ -559,7 +559,7 @@ func TestGatewayModels_GeminiGroupFallsBackToGeminiModels(t *testing.T) {
+PR8395	backend/internal/handler/gemini_mixed_models_test.go	@@ -102,7 +102,7 @@ func TestGeminiNativeModelsMergesNativeUpstream(t *testing.T) {
+PR8395	backend/internal/handler/gemini_mixed_models_test.go	@@ -134,3 +134,109 @@ func TestGeminiNativeModelsMergesNativeUpstream(t *testing.T) {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	@@ -9,6 +9,7 @@ import (
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	@@ -76,6 +77,25 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
+PR8395	backend/internal/handler/gemini_v1beta_handler.go	@@ -259,6 +279,18 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
+PR8395	backend/internal/pkg/gemini/models.go	@@ -18,16 +18,22 @@ type ModelsListResponse struct {
+PR8395	backend/internal/pkg/gemini/models_test.go	@@ -12,7 +12,7 @@ func TestDefaultModels_ContainsFallbackCatalogModels(t *testing.T) {
+PR8395	backend/internal/pkg/geminicli/models.go	@@ -11,15 +11,22 @@ type Model struct {
+PR8395	backend/internal/pkg/geminicli/models.go	@@ -43,4 +50,4 @@ func GoogleOneModelMapping() map[string]string {
+PR8395	backend/internal/pkg/geminicli/models_test.go	@@ -11,8 +11,9 @@ func TestDefaultModels_ContainsImageModels(t *testing.T) {
+PR8395	backend/internal/service/account_test_service.go	@@ -2382,6 +2382,14 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
+PR8395	backend/internal/service/account_test_service.go	@@ -2389,7 +2397,7 @@ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account
+PR8395	backend/internal/service/account_test_service_gemini_test.go	@@ -7,6 +7,7 @@ import (
+PR8395	backend/internal/service/account_test_service_gemini_test.go	@@ -57,3 +58,14 @@ func TestProcessGeminiStream_EmitsImageEvent(t *testing.T) {
+PR8395	backend/internal/service/antigravity_gateway_streaming.go	@@ -1165,7 +1165,7 @@ func (s *AntigravityGatewayService) extractImageInputSize(body []byte) string {
+PR8395	backend/internal/service/antigravity_gateway_streaming.go	@@ -1175,6 +1175,8 @@ func isImageGenerationModel(model string) bool {
+PR8395	backend/internal/service/antigravity_image_test.go	@@ -21,6 +21,13 @@ func TestIsImageGenerationModel_GeminiFlashImage(t *testing.T) {
+PR8395	backend/internal/service/gemini_models_endpoints.go	@@ -8,6 +8,7 @@ import (
+PR8395	backend/internal/service/gemini_models_endpoints.go	@@ -23,6 +24,47 @@ import (
+PR8395	backend/internal/service/gemini_models_endpoints.go	"@@ -35,7 +77,7 @@ var errGeminiModelsUpstreamStatus = errors.New(""upstream model list returned non"
+PR8395	frontend/src/composables/__tests__/useModelWhitelist.spec.ts	@@ -154,10 +154,22 @@ describe('useModelWhitelist', () => {
+PR8395	frontend/src/composables/useModelWhitelist.ts	@@ -51,13 +51,21 @@ const geminiModels = [
+PR8395	frontend/src/composables/useModelWhitelist.ts	@@ -284,10 +292,11 @@ const perplexityModels = [
+PR8395	frontend/src/composables/useModelWhitelist.ts	@@ -303,7 +312,7 @@ const allModelsList: string[] = [
+PR8287	backend/internal/config/config.go	@@ -1109,6 +1109,8 @@ type GatewayConfig struct {
+PR8287	backend/internal/config/config.go	@@ -2434,6 +2436,7 @@ func setDefaults() {
+PR8287	backend/internal/config/config.go	@@ -3371,6 +3374,9 @@ func (c *Config) Validate() error {
+PR8287	backend/internal/config/config_test.go	@@ -46,6 +46,19 @@ func TestLoadMinOutputTokensFromEnv(t *testing.T) {
+PR8287	backend/internal/config/config_test.go	@@ -1887,6 +1900,16 @@ func TestValidateConfigErrors(t *testing.T) {
+PR8287	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -127,7 +127,8 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+PR8287	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -166,7 +167,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+PR8287	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -184,7 +185,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+PR8287	backend/internal/service/gemini_error_policy_single_check_test.go	@@ -182,6 +182,7 @@ func TestGeminiForward_UncheckedFinalResponseIsCheckedAfterLoop(t *testing.T) {
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -35,9 +35,10 @@ import (
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -717,7 +718,9 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -798,7 +801,6 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -837,7 +839,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -865,8 +868,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -1269,7 +1272,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -1340,7 +1344,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -1368,7 +1372,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+PR8287	backend/internal/service/gemini_messages_compat_service.go	@@ -1671,6 +1675,14 @@ func (s *GeminiMessagesCompatService) cachedContentPassthroughInLoop(ctx context
+PR8287	backend/internal/service/gemini_same_account_retries_test.go	@@ -0,0 +1,92 @@
+PR8287	backend/internal/service/gemini_vertex_api_key_forward_test.go	@@ -144,7 +144,7 @@ func TestGeminiForwardNative_VertexSharedCapacity429RetriesSameAccountWithoutCoo
+PR8369	backend/internal/handler/gemini_cached_content_bound_retry_test.go	@@ -0,0 +1,120 @@
+PR8369	backend/internal/service/gemini_cached_content.go	@@ -277,7 +277,7 @@ func geminiCachedContentBoundFromContext(ctx context.Context) bool {
+PR8369	backend/internal/service/gemini_cached_content_hardening_test.go	@@ -295,6 +295,55 @@ func TestGeminiForwardNative_BoundCacheUpstreamGatewayErrorsSkipAccountPenalty(t
+PR8369	backend/internal/service/gemini_messages_compat_service.go	@@ -1418,9 +1418,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+PR8369	backend/internal/service/gemini_messages_compat_service.go	@@ -1741,6 +1741,36 @@ func (s *GeminiMessagesCompatService) skippedErrorPolicyFailoverError(c *gin.Con
+PR8373	backend/internal/service/openai_codex_models_service.go	@@ -1893,9 +1893,13 @@ func (s *OpenAIGatewayService) fetchCachedOpenAIModels(ctx context.Context, requ

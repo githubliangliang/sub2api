@@ -1,0 +1,159 @@
+//go:build unit
+
+package service
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"math"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+)
+
+// These assertions describe the frozen baseline. PASS can prove a defect or a
+// negative control; it never means that a proposed release fix is implemented.
+func TestRelease019ProbeClaudeUTF16(t *testing.T) {
+	const version = "2.1.283"
+	for _, sample := range []struct{ text, want string }{
+		{"这是一个用于验证中文指纹计算的测试消息，请保持一致。", "c7e"},
+		{"你好世界呀", "4ed"},
+		{"abcd😀😀efghijklmnopqrstuvwxyz", "0e9"},
+	} {
+		body, err := json.Marshal(map[string]any{"messages": []map[string]any{{"role": "user", "content": sample.text}}})
+		if err != nil { t.Fatal(err) }
+		got := computeClaudeCodeFingerprint(body, version)
+		if got == sample.want { t.Fatalf("expected baseline byte-index defect, got matching oracle %s", got) }
+		t.Logf("DEFECT: Go byte-index fingerprint=%s, independent JS UTF-16 oracle=%s", got, sample.want)
+	}
+	if got := computeClaudeCodeFingerprint([]byte(`{"messages":[{"role":"user","content":"abcdefghijklmnopqrstuvwxyz"}]}`), version); got != "2e9" {
+		t.Fatalf("ASCII control changed: %s", got)
+	}
+}
+
+func TestRelease019ProbeCodexRefreshAfterFreshFill(t *testing.T) {
+	var calls atomic.Int32
+	upstream := &codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		calls.Add(1)
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"models":[]}`))}, nil
+	}}
+	svc := newCodexModelsAPIKeyTestService(upstream)
+	request := codexModelsManifestRequest{url: "https://upstream.example/v1/models", headers: make(http.Header), accountID: 19, useAPIKeyUpstream: true}
+	key := buildCodexModelsManifestCacheKey(request)
+	_, first := svc.codexModelsManifestCache.get(key, time.Now())
+	if first == codexModelsManifestCacheFresh { t.Fatal("initial cache unexpectedly fresh") }
+	// Deterministic interleaving: caller observed a miss, another completed flight
+	// then filled the cache, and the original caller now enters refresh.
+	svc.codexModelsManifestCache.set(key, &CodexModelsManifest{Body: []byte(`{"models":[]}`)}, time.Now())
+	result := <-svc.refreshCachedAPIKeyCodexModelsManifest(key, request)
+	if result.Err != nil { t.Fatal(result.Err) }
+	if calls.Load() != 1 { t.Fatalf("expected one unnecessary baseline fetch, got %d", calls.Load()) }
+	t.Log("DEFECT: fresh cache at flight entry still caused one upstream fetch; intended count is zero")
+}
+
+func TestRelease019ProbeGeminiFileData(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	beginGeminiImageOutputObservation(c)
+	payload := []byte(`{"candidates":[{"content":{"parts":[{"fileData":{"mimeType":"image/png","fileUri":"https://images.example/a.png"}},{"file_data":{"mime_type":"image/jpeg","file_uri":"https://images.example/b.jpg"}}]}}]}`)
+	observeGeminiImageOutputs(c, payload)
+	if count := resolveGeminiImageCount(c, "private-image-alias", "private-image-alias"); count != 0 { t.Fatalf("unexpected baseline count %d", count) }
+	t.Log("DEFECT: two actual fileData images under a custom alias resolve to zero billable images")
+	if got := countGeminiInlineImageOutputs([]byte(`{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"YQ=="}}]}}]}`)); got != 1 { t.Fatalf("inline control=%d", got) }
+}
+
+func TestRelease019ProbePromptCacheHitTokens(t *testing.T) {
+	usage, ok := openAIUsageFromGJSON(gjson.Parse(`{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":80,"prompt_cache_miss_tokens":20}`))
+	if !ok || usage.InputTokens != 100 || usage.CacheReadInputTokens != 0 { t.Fatalf("unexpected baseline usage %#v, ok=%v", usage, ok) }
+	t.Log("DEFECT: shared OpenAI-compatible usage reader drops prompt_cache_hit_tokens=80")
+	control, ok := openAIUsageFromGJSON(gjson.Parse(`{"prompt_tokens":100,"completion_tokens":5,"prompt_cache_hit_tokens":80,"prompt_tokens_details":{"cached_tokens":64}}`))
+	if !ok || control.CacheReadInputTokens != 64 { t.Fatalf("nested cache control %#v", control) }
+}
+
+func TestRelease019ProbeMalformedAntigravityNonStream(t *testing.T) {
+	for _, payload := range []string{
+		`{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}`,
+		`{"response":{"candidates":[{"finishReason":"MALFORMED_FUNCTION_CALL"}]}}`,
+	} {
+		body, _, err := antigravity.TransformGeminiToClaude([]byte(payload), "claude-fable-5")
+		if err != nil { t.Fatalf("baseline unexpectedly rejected malformed upstream: %v", err) }
+		if !gjson.GetBytes(body, "content").IsArray() || len(gjson.GetBytes(body, "content").Array()) != 0 { t.Fatalf("unexpected body %s", body) }
+		t.Logf("DEFECT: malformed tool response became empty successful Claude message: %s", body)
+	}
+}
+
+func TestRelease019ProbeGrokInvalidCatalogShape(t *testing.T) {
+	for _, payload := range []string{`{"error":"upstream failure"}`, `{"data":[{"label":"no-id"}]}`} {
+		ids := extractGrokModelIDsFromModelsBody([]byte(payload))
+		if len(ids) == 0 { t.Fatal("expected invalid-shape baseline acceptance") }
+		t.Logf("DEFECT: invalid catalog shape became model IDs: %q", ids)
+	}
+}
+
+func TestRelease019ProbeChannelPartialDimensions(t *testing.T) {
+	channel := &Channel{FeaturesConfig: map[string]any{featureKeyWebSearchEmulation: map[string]any{"anthropic": true, "openai": true}}}
+	svc := &ChannelService{}
+	err := svc.applyUpdateInput(context.Background(), channel, &UpdateChannelInput{FeaturesConfig: map[string]any{featureKeyWebSearchEmulation: map[string]any{"anthropic": false}}})
+	if err != nil { t.Fatal(err) }
+	dimensions := channel.FeaturesConfig[featureKeyWebSearchEmulation].(map[string]any)
+	if _, exists := dimensions["openai"]; exists { t.Fatal("baseline unexpectedly preserved absent OpenAI dimension") }
+	t.Log("DEFECT: partial channel update removed the previously enabled OpenAI Web Search dimension")
+}
+
+func TestRelease019ProbePaginationOverflow(t *testing.T) {
+	params := pagination.PaginationParams{Page: math.MaxInt, PageSize: 20}
+	if got := params.Offset(); got >= 0 { t.Fatalf("expected negative wrapped offset, got %d", got) } else { t.Logf("DEFECT: MaxInt page wraps to offset=%d", got) }
+}
+
+func TestRelease019ProbeMultipartTruncation(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("model", "gpt-image-1"); err != nil { t.Fatal(err) }
+	part, err := writer.CreateFormFile("image", "input.png")
+	if err != nil { t.Fatal(err) }
+	if _, err := io.Copy(part, io.LimitReader(strings.NewReader(strings.Repeat("a", openAIImageMaxUploadPartSize+1)), int64(openAIImageMaxUploadPartSize+1))); err != nil { t.Fatal(err) }
+	if err := writer.Close(); err != nil { t.Fatal(err) }
+	request := &OpenAIImagesRequest{}
+	if err := parseOpenAIImagesMultipartRequest(body.Bytes(), writer.FormDataContentType(), request); err != nil { t.Fatalf("baseline rejected instead of truncating: %v", err) }
+	if len(request.Uploads) != 1 { t.Fatalf("unexpected upload count %d", len(request.Uploads)) }
+	if len(request.Uploads[0].Data) != openAIImageMaxUploadPartSize { t.Fatalf("unexpected upload length %d", len(request.Uploads[0].Data)) }
+	t.Logf("DEFECT: %d-byte upload accepted and truncated to %d bytes", openAIImageMaxUploadPartSize+1, len(request.Uploads[0].Data))
+}
+
+func TestRelease019ProbeAdminGuardStatus(t *testing.T) {
+	base := &userRepoStub{user: &User{ID: 42, Role: RoleAdmin}}
+	repo := &roleGuardUserRepoStub{rpmUserRepoStub: &rpmUserRepoStub{userRepoStub: base}, adminTotal: 1}
+	svc := &adminServiceImpl{userRepo: repo, redeemCodeRepo: &redeemRepoStub{}}
+	_, err := svc.UpdateUser(context.Background(), 42, &UpdateUserInput{Role: RoleUser})
+	if err == nil || infraerrors.Code(err) != http.StatusInternalServerError { t.Fatalf("unexpected baseline guard %v (status %d)", err, infraerrors.Code(err)) }
+	t.Log("DEFECT: last-admin validation error is classified as HTTP 500")
+}
+
+func TestRelease019ProbeImageContextTierAlreadyCorrect(t *testing.T) {
+	const groupID int64 = 905
+	const model = "gemini-3-pro-image"
+	resolver := newOpenAITokenImageChannelPricingResolverForTest(t, groupID, model)
+	cached := resolver.channelService.cache.Load().(*channelCache)
+	maximum := 1000
+	cached.pricingByGroupModel[channelModelKey{groupID: groupID, model: model}] = &ChannelModelPricing{BillingMode: BillingModePerRequest, Intervals: []PricingInterval{
+		{MinTokens: 0, MaxTokens: &maximum, PerRequestPrice: f64p(0.1)}, {MinTokens: 1000, PerRequestPrice: f64p(0.3)},
+	}}
+	group := &Group{ID: groupID, Platform: PlatformComposite, Status: StatusActive, Hydrated: true, AllowImageGeneration: true}
+	id := groupID
+	apiKey := &APIKey{ID: 5, GroupID: &id, Group: group}
+	svc := &GatewayService{billingService: resolver.billingService, resolver: resolver}
+	cost := svc.calculateRecordUsageCost(context.Background(), &ForwardResult{Model: model, ImageCount: 2, ImageSize: "1K", Usage: ClaudeUsage{InputTokens: 5000, OutputTokens: 100}}, apiKey, model, 1, 1, &recordUsageOpts{})
+	if cost == nil || math.Abs(cost.TotalCost-0.6) > 1e-12 { t.Fatalf("expected already-correct context tier 0.6, got %#v", cost) }
+	t.Log("NEGATIVE CONTROL: channel per-request image pricing already retains tokens; 0.3 x 2 = 0.6")
+}

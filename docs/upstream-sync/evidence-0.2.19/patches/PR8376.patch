@@ -1,0 +1,89 @@
+diff --git a/backend/internal/service/openai_chat_roles.go b/backend/internal/service/openai_chat_roles.go
+index 1e80101f5..cf773b235 100644
+--- a/backend/internal/service/openai_chat_roles.go
++++ b/backend/internal/service/openai_chat_roles.go
+@@ -5,9 +5,11 @@ import (
+ 	"errors"
+ 	"net/url"
+ 	"strings"
++
++	"github.com/tidwall/gjson"
+ )
+ 
+-func requiresSystemChatRole(account *Account, targetURL string) bool {
++func requiresSystemChatRole(account *Account, targetURL, upstreamModel string) bool {
+ 	if account == nil || account.Type != AccountTypeAPIKey {
+ 		return false
+ 	}
+@@ -15,6 +17,11 @@ func requiresSystemChatRole(account *Account, targetURL string) bool {
+ 	case PlatformDeepseek, PlatformKimi, PlatformZhipu:
+ 		return true
+ 	}
++	// OpenCode multiplexes providers: only its DeepSeek models require system.
++	// Use the mapped outbound model and selected destination, not the client alias.
++	if (account.IsOpenCodeGo() || isOfficialOpenCodeHost(targetURL)) && isDeepSeekCatalogModel(upstreamModel) {
++		return true
++	}
+ 	// OpenAI-compatible accounts can point at the same strict providers. Match
+ 	// the selected destination's exact hostname, never the requested model ID.
+ 	u, err := url.Parse(targetURL)
+@@ -34,7 +41,7 @@ func requiresSystemChatRole(account *Account, targetURL string) bool {
+ // RawMessage preserves unknown fields and numeric precision. The input remains
+ // untouched so a retry on another account sees the original developer roles.
+ func normalizeStrictChatDeveloperRoles(account *Account, targetURL string, body []byte) ([]byte, error) {
+-	if !requiresSystemChatRole(account, targetURL) {
++	if !requiresSystemChatRole(account, targetURL, gjson.GetBytes(body, "model").String()) {
+ 		return body, nil
+ 	}
+ 	var root map[string]json.RawMessage
+diff --git a/backend/internal/service/openai_chat_roles_test.go b/backend/internal/service/openai_chat_roles_test.go
+index 27434ad98..842dad542 100644
+--- a/backend/internal/service/openai_chat_roles_test.go
++++ b/backend/internal/service/openai_chat_roles_test.go
+@@ -60,6 +60,9 @@ func TestForwardAsChatCompletions_StrictDeveloperRole(t *testing.T) {
+ 			{PlatformOpenAI, "k3", "https://api.kimi.com/coding"},
+ 			{PlatformOpenAI, "kimi-k3", "https://api.moonshot.ai"},
+ 			{PlatformOpenAI, "glm-5.3", "https://open.bigmodel.cn/api/paas/v4"},
++			{PlatformOpenCodeGo, "deepseek-v4.1-flash", DefaultOpenCodeGoBaseURL},
++			{PlatformOpenAI, "deepseek-v4.1-flash", DefaultOpenCodeGoBaseURL},
++			{PlatformOpenAI, "deepseek-v4.1-flash", DefaultOpenCodeZenBaseURL},
+ 		} {
+ 			t.Run(fmt.Sprintf("%s/%s/%s/stream=%t", target.platform, target.model, target.base, stream), func(t *testing.T) {
+ 				body := []byte(fmt.Sprintf(`{"model":"example-alias","messages":[{"role":"developer","content":"Keep these instructions."},{"role":"user","content":"ping"}],"stream":%t,"max_tokens":10}`, stream))
+@@ -138,6 +141,36 @@ func TestNormalizeStrictChatDeveloperRoles_ExactOfficialHosts(t *testing.T) {
+ 	}
+ }
+ 
++func TestNormalizeStrictChatDeveloperRoles_OpenCodeModelRouting(t *testing.T) {
++	for _, tc := range []struct {
++		name, platform, target, model, wantRole string
++	}{
++		{"go_deepseek", PlatformOpenCodeGo, DefaultOpenCodeGoBaseURL, "deepseek-v4.1-flash", "system"},
++		{"go_deepseek_proxy", PlatformOpenCodeGo, "https://relay.example.test/v1/chat/completions", "deepseek-v4.1-flash", "system"},
++		{"zen_deepseek", PlatformOpenAI, DefaultOpenCodeZenBaseURL, "deepseek-v4.1-flash", "system"},
++		{"prefixed_deepseek", PlatformOpenAI, DefaultOpenCodeGoBaseURL, "opencode-go/DeepSeek-V4-Pro", "system"},
++		{"go_other_model", PlatformOpenCodeGo, DefaultOpenCodeGoBaseURL, "gpt-5.6-luna", "developer"},
++		{"zen_other_model", PlatformOpenAI, DefaultOpenCodeZenBaseURL, "gpt-5.6-luna", "developer"},
++		{"unrelated_deepseek", PlatformOpenAI, "https://relay.example.test/v1/chat/completions", "deepseek-v4.1-flash", "developer"},
++		{"host_suffix", PlatformOpenAI, "https://opencode.ai.example.test/v1/chat/completions", "deepseek-v4.1-flash", "developer"},
++		{"host_in_path", PlatformOpenAI, "https://example.test/opencode.ai/zen/v1/chat/completions", "deepseek-v4.1-flash", "developer"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			// A stale configured URL must not override the selected protocol destination.
++			account := &Account{Platform: tc.platform, Type: AccountTypeAPIKey, Credentials: map[string]any{"base_url": DefaultOpenCodeZenBaseURL}}
++			body := []byte(fmt.Sprintf(`{"model":%q,"messages":[{"role":"developer","content":"rules"}]}`, tc.model))
++			original := bytes.Clone(body)
++			got, err := normalizeStrictChatDeveloperRoles(account, tc.target, body)
++			require.NoError(t, err)
++			require.Equal(t, tc.wantRole, gjson.GetBytes(got, "messages.0.role").String())
++			require.Equal(t, original, body)
++			if tc.wantRole == "developer" {
++				require.Equal(t, original, got)
++			}
++		})
++	}
++}
++
+ func TestNormalizeStrictChatDeveloperRoles_OtherTargetsUntouched(t *testing.T) {
+ 	// Neither model names nor host-like strings in the path/userinfo may enable
+ 	// normalization on an otherwise compatible provider.

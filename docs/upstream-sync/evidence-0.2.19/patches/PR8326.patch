@@ -1,0 +1,254 @@
+diff --git a/backend/internal/service/gemini_image_output_accounting.go b/backend/internal/service/gemini_image_output_accounting.go
+index 948a2d4ae..1a2735673 100644
+--- a/backend/internal/service/gemini_image_output_accounting.go
++++ b/backend/internal/service/gemini_image_output_accounting.go
+@@ -7,10 +7,10 @@ import (
+ 	"github.com/tidwall/gjson"
+ )
+ 
+-// geminiImageOutputCounterKey 是请求级内联图片计数器挂在 gin.Context 上的键。
++// geminiImageOutputCounterKey 是请求级图片计数器挂在 gin.Context 上的键。
+ const geminiImageOutputCounterKey = "gemini_image_output_counter"
+ 
+-// geminiImageOutputCounter 记录一次转发里 Gemini 上游真正回吐的内联图片数量。
++// geminiImageOutputCounter 记录一次转发里 Gemini 上游真正回吐的图片数量。
+ //
+ // 取「单个 payload 内的最大值」而不是累加：Gemini 兼容上游的 SSE 分片可能是
+ // 累积式的（同一份内容在后续 chunk 里重复整段回来——本文件同目录的
+@@ -47,7 +47,7 @@ func geminiImageOutputCounterFromContext(c *gin.Context) *geminiImageOutputCount
+ 	return counter
+ }
+ 
+-// observeGeminiImageOutputs 观测一段上游响应（整份或单个 chunk）里的内联图片。
++// observeGeminiImageOutputs 观测一段上游响应（整份或单个 chunk）里的图片。
+ // 调用点与 upstreamResponseModelObserver.ObserveGemini 一一对应——那里拿得到
+ // 解包后的上游响应体，这里需要的是同一份字节。
+ func observeGeminiImageOutputs(c *gin.Context, payload []byte) {
+@@ -55,7 +55,7 @@ func observeGeminiImageOutputs(c *gin.Context, payload []byte) {
+ 	if counter == nil {
+ 		return
+ 	}
+-	if count := countGeminiInlineImageOutputs(payload); count > counter.count {
++	if count := countGeminiImageOutputs(payload); count > counter.count {
+ 		counter.count = count
+ 	}
+ }
+@@ -70,15 +70,14 @@ func observedGeminiImageOutputs(c *gin.Context) int {
+ 
+ // resolveGeminiImageCount 决定本次请求按几张图计费。
+ //
+-// 优先用上游真正返回的内联图片数：走 GeminiMessagesCompatService 的账号多是
++// 优先用上游真正返回的图片数：走 GeminiMessagesCompatService 的账号多是
+ // API Key + 自定义模型映射，客户端请求名和上游模型名都可能是站长自取的别名
+ // （issue #5358 里的 nana-banana-2），isImageGenerationModel 的白名单必然判不出，
+ // 于是 ImageCount=0，calculateRecordUsageCost 整条按次计费分支不触发，
+ // 生图请求全部记 $0。
+ //
+-// 只有响应里数不出图时（例如上游用 fileData 引用而非 inlineData 回图，或聚合
+-// 函数丢掉了图片 part）才退回既有的模型名启发式，保证老行为不回退；这里额外
+-// 也认映射后的上游模型名，与 shouldSkipCodexPlanGatedImageModelCooldown 对
++// 只有响应里数不出图时（例如聚合函数丢掉了图片 part）才退回既有的模型名
++// 启发式，保证老行为不回退；这里额外也认映射后的上游模型名，与 shouldSkipCodexPlanGatedImageModelCooldown 对
+ // requestedModel / modelKey 双取的口径一致。
+ func resolveGeminiImageCount(c *gin.Context, originalModel, mappedModel string) int {
+ 	if observed := observedGeminiImageOutputs(c); observed > 0 {
+@@ -90,17 +89,16 @@ func resolveGeminiImageCount(c *gin.Context, originalModel, mappedModel string)
+ 	return 0
+ }
+ 
+-// countGeminiInlineImageOutputs 统计一段 Gemini 响应 JSON 里的内联图片 part。
+-// Gemini REST 回 camelCase 的 inlineData，官方 SDK 与部分中转会回 snake_case
+-// 的 inline_data，两种都要认。
+-func countGeminiInlineImageOutputs(payload []byte) int {
++// countGeminiImageOutputs 统计一段 Gemini 响应 JSON 里的图片 part。
++// 同时识别 inlineData、fileData 及 SDK/中转使用的 snake_case 字段。
++func countGeminiImageOutputs(payload []byte) int {
+ 	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+ 		return 0
+ 	}
+ 	count := 0
+ 	gjson.GetBytes(payload, "candidates").ForEach(func(_, candidate gjson.Result) bool {
+ 		candidate.Get("content.parts").ForEach(func(_, part gjson.Result) bool {
+-			if geminiPartIsInlineImage(part) {
++			if geminiPartIsImage(part) {
+ 				count++
+ 			}
+ 			return true
+@@ -110,23 +108,27 @@ func countGeminiInlineImageOutputs(payload []byte) int {
+ 	return count
+ }
+ 
+-func geminiPartIsInlineImage(part gjson.Result) bool {
+-	inline := part.Get("inlineData")
+-	if !inline.Exists() {
+-		inline = part.Get("inline_data")
+-	}
+-	if !inline.Exists() {
+-		return false
+-	}
+-
+-	mimeType := inline.Get("mimeType")
+-	if !mimeType.Exists() {
+-		mimeType = inline.Get("mime_type")
+-	}
+-	if !isGeminiInlineImageMIMEType(strings.ToLower(strings.TrimSpace(mimeType.String()))) {
+-		return false
++func geminiPartIsImage(part gjson.Result) bool {
++	for _, key := range []string{"inlineData", "inline_data", "fileData", "file_data"} {
++		image := part.Get(key)
++		mimeType := image.Get("mimeType")
++		if !mimeType.Exists() {
++			mimeType = image.Get("mime_type")
++		}
++		if !isGeminiInlineImageMIMEType(strings.ToLower(strings.TrimSpace(mimeType.String()))) {
++			continue
++		}
++		data := image.Get("data")
++		if key == "fileData" || key == "file_data" {
++			data = image.Get("fileUri")
++			if !data.Exists() {
++				data = image.Get("file_uri")
++			}
++		}
++		// 只认带有实际数据或 URI 的图片 part；同一个 part 最多计费一次。
++		if data.Type == gjson.String && strings.TrimSpace(data.String()) != "" {
++			return true
++		}
+ 	}
+-
+-	// 只认真的带上了 base64 数据的 part，空壳 part 不计费。
+-	return strings.TrimSpace(inline.Get("data").String()) != ""
++	return false
+ }
+diff --git a/backend/internal/service/gemini_image_output_accounting_test.go b/backend/internal/service/gemini_image_output_accounting_test.go
+index 73e525e00..2f13e5d4e 100644
+--- a/backend/internal/service/gemini_image_output_accounting_test.go
++++ b/backend/internal/service/gemini_image_output_accounting_test.go
+@@ -3,11 +3,15 @@
+ package service
+ 
+ import (
++	"context"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"strings"
+ 	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/stretchr/testify/require"
+@@ -28,7 +32,7 @@ func geminiImageResponse(parts string) string {
+ 	return `{"candidates":[{"content":{"role":"model","parts":[` + parts + `]},"finishReason":"STOP"}]}`
+ }
+ 
+-func TestCountGeminiInlineImageOutputs(t *testing.T) {
++func TestCountGeminiImageOutputs(t *testing.T) {
+ 	cases := []struct {
+ 		name    string
+ 		payload string
+@@ -78,6 +82,46 @@ func TestCountGeminiInlineImageOutputs(t *testing.T) {
+ 			payload: geminiImageResponse(`{"inlineData":{"mimeType":"image/png","data":""}}`),
+ 			want:    0,
+ 		},
++		{
++			name:    "camelCase fileData",
++			payload: geminiImageResponse(`{"fileData":{"mimeType":"image/jpeg","fileUri":"https://example.test/image.jpg"}}`),
++			want:    1,
++		},
++		{
++			name:    "snake_case file_data",
++			payload: geminiImageResponse(`{"file_data":{"mime_type":"image/png","file_uri":"gs://bucket/image.png"}}`),
++			want:    1,
++		},
++		{
++			name:    "mixed inline and referenced images",
++			payload: geminiImageResponse(`{"inlineData":{"mimeType":"image/png","data":"` + geminiTestPNG + `"}},{"fileData":{"mimeType":"image/webp","fileUri":"https://example.test/image.webp"}}`),
++			want:    2,
++		},
++		{
++			name:    "a part is counted once",
++			payload: geminiImageResponse(`{"inlineData":{"mimeType":"image/png","data":"` + geminiTestPNG + `"},"fileData":{"mimeType":"image/png","fileUri":"https://example.test/image.png"}}`),
++			want:    1,
++		},
++		{
++			name:    "non image file",
++			payload: geminiImageResponse(`{"fileData":{"mimeType":"application/pdf","fileUri":"https://example.test/file.pdf"}}`),
++			want:    0,
++		},
++		{
++			name:    "empty file URI",
++			payload: geminiImageResponse(`{"fileData":{"mimeType":"image/png","fileUri":"  "}}`),
++			want:    0,
++		},
++		{
++			name:    "missing file URI",
++			payload: geminiImageResponse(`{"fileData":{"mimeType":"image/png"}}`),
++			want:    0,
++		},
++		{
++			name:    "non string file URI",
++			payload: geminiImageResponse(`{"fileData":{"mimeType":"image/png","fileUri":123}}`),
++			want:    0,
++		},
+ 		{name: "empty payload", payload: "", want: 0},
+ 		{name: "invalid json", payload: "not-json", want: 0},
+ 		{name: "error response", payload: `{"error":{"code":429,"message":"quota"}}`, want: 0},
+@@ -85,7 +129,7 @@ func TestCountGeminiInlineImageOutputs(t *testing.T) {
+ 
+ 	for _, tc := range cases {
+ 		t.Run(tc.name, func(t *testing.T) {
+-			require.Equal(t, tc.want, countGeminiInlineImageOutputs([]byte(tc.payload)))
++			require.Equal(t, tc.want, countGeminiImageOutputs([]byte(tc.payload)))
+ 		})
+ 	}
+ }
+@@ -202,3 +246,46 @@ func TestHandleNativeNonStreamingResponse_FeedsImageCounter(t *testing.T) {
+ 	require.Equal(t, 1, observedGeminiImageOutputs(c))
+ 	require.Equal(t, 1, resolveGeminiImageCount(c, "nana-banana-2", "nana-banana-2"))
+ }
++
++// fileData from a custom native model must reach per-image billing without
++// depending on the model-name heuristic (issue #8300).
++func TestHandleNativeNonStreamingResponse_FileDataImageBilling(t *testing.T) {
++	c := newGeminiImageTestContext(t)
++	beginGeminiImageOutputObservation(c)
++	body := geminiImageResponse(`{"file_data":{"mime_type":"image/jpeg","file_uri":"https://example.test/one.jpg"}},{"fileData":{"mimeType":"image/png","fileUri":"https://example.test/two.png"}}`)
++	resp := &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"application/json"}},
++		Body:       io.NopCloser(strings.NewReader(body)),
++	}
++	_, err := (&GeminiMessagesCompatService{}).handleNativeNonStreamingResponse(c, resp, false, nil, "")
++	require.NoError(t, err)
++	const model = "gemini-nano-banana-2.1"
++	require.False(t, isImageGenerationModel(model))
++	count := resolveGeminiImageCount(c, model, model)
++	require.Equal(t, 2, count)
++	groupID := int64(128)
++	svc := &GatewayService{
++		billingService: NewBillingService(&config.Config{}, nil),
++		resolver:       newOpenAIImageChannelPricingResolverForTest(t, groupID, model, 0.25),
++	}
++	cost := svc.calculateRecordUsageCost(context.Background(),
++		&ForwardResult{Model: model, ImageCount: count, ImageSize: "1K"},
++		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
++		model, 0.15, 1.0, time.Time{})
++	require.NotNil(t, cost)
++	require.Equal(t, string(BillingModeImage), cost.BillingMode)
++	require.InDelta(t, 0.50, cost.TotalCost, 1e-12)
++}
++
++func TestObserveGeminiImageOutputs_FileDataCumulativeChunks(t *testing.T) {
++	c := newGeminiImageTestContext(t)
++	beginGeminiImageOutputObservation(c)
++	payload := []byte(geminiImageResponse(`{"fileData":{"mimeType":"image/png","fileUri":"https://example.test/image.png"}}`))
++	for range 4 {
++		observeGeminiImageOutputs(c, payload)
++	}
++	require.Equal(t, 1, observedGeminiImageOutputs(c))
++	beginGeminiImageOutputObservation(c)
++	require.Zero(t, observedGeminiImageOutputs(c))
++}
