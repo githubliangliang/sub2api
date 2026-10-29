@@ -7,6 +7,21 @@ vi.mock('@/api/admin/accounts', () => ({
 import { allModels, buildModelMappingObject, getModelsByPlatform, getPresetMappingsByPlatform, splitModelMappingObject } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
+  it('exposes Terra once and round-trips its whitelist and mapping preset', () => {
+    expect(getModelsByPlatform('openai').filter(model => model === 'gpt-6.1-terra')).toEqual(['gpt-6.1-terra'])
+    expect(allModels.filter(model => model.value === 'gpt-6.1-terra')).toHaveLength(1)
+    const preset = getPresetMappingsByPlatform('openai').find(mapping => mapping.label === 'GPT-6.1 Terra')
+    expect(preset).toMatchObject({ from: 'gpt-6.1-terra', to: 'gpt-6.1-terra' })
+    const mapping = buildModelMappingObject('combined', ['gpt-6.1-terra'], [{ from: 'public-terra', to: preset!.to }])
+    expect(splitModelMappingObject(mapping)).toEqual({
+      allowedModels: ['gpt-6.1-terra'],
+      modelMappings: [{ from: 'public-terra', to: 'gpt-6.1-terra' }]
+    })
+    for (const platform of ['claude', 'grok', 'gemini', 'antigravity']) {
+      expect(getModelsByPlatform(platform)).not.toContain('gpt-6.1-terra')
+    }
+  })
+
   it('openai 模型列表包含 GPT-5.4 官方快照', () => {
     const models = getModelsByPlatform('openai')
 

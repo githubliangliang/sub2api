@@ -51,8 +51,8 @@ func buildOpenAIResponsesURL(base string) string {
 // 用于展示的占位值，透传过去会被拒。
 //
 // 移植说明：本仓库没有国产供应商平台，故只有 OAuth/SetupToken 与「API Key + 官方 base」
-// 两种保留情形，与上游终态一致。
-func shouldPreserveOpenAIResponsesNoneReasoningEffort(account *Account) bool {
+// 两种保留情形；Terra 的实际 none 能力另外按映射后的模型识别。
+func shouldPreserveOpenAIResponsesNoneReasoningEffort(account *Account, model string) bool {
 	if account == nil {
 		return false
 	}
@@ -64,6 +64,10 @@ func shouldPreserveOpenAIResponsesNoneReasoningEffort(account *Account) bool {
 	}
 	if !account.IsOpenAIApiKey() {
 		return false
+	}
+	// Terra's none is an actual capability, including through a custom alias/base URL.
+	if openai.IsGPT61TerraModelSpelling(account.GetMappedModel(model)) {
+		return true
 	}
 	baseURL := strings.TrimSpace(account.GetCredential("base_url"))
 	return baseURL == "" || isOfficialOpenAIModelsBaseURL(baseURL)
@@ -77,7 +81,7 @@ func shouldPreserveOpenAIResponsesNoneReasoningEffort(account *Account) bool {
 // IsOpenAIOAuthLike / decodeOpenAIJSONUseNumber 而整支剔除（见 PORTING-0.1.184.md §15.2）；
 // 两个基座已随 0.1.183 §5.1 Responses Lite 簇落地，此处补齐本体。
 func filterOpenAIResponsesNoneReasoningEffortForAccount(account *Account, body []byte) ([]byte, error) {
-	if len(body) == 0 || shouldPreserveOpenAIResponsesNoneReasoningEffort(account) {
+	if len(body) == 0 || shouldPreserveOpenAIResponsesNoneReasoningEffort(account, gjson.GetBytes(body, "model").String()) {
 		return body, nil
 	}
 
@@ -106,7 +110,8 @@ func filterOpenAIResponsesNoneReasoningEffortForAccount(account *Account, body [
 // deleteOpenAIResponsesNoneReasoningEffortFromObject 是上面那个的 map 形态版本，
 // 供已经解成 map 的路径（WS HTTP bridge）复用同一判定。
 func deleteOpenAIResponsesNoneReasoningEffortFromObject(account *Account, body map[string]any) {
-	if body == nil || shouldPreserveOpenAIResponsesNoneReasoningEffort(account) {
+	model, _ := body["model"].(string)
+	if body == nil || shouldPreserveOpenAIResponsesNoneReasoningEffort(account, model) {
 		return
 	}
 	if effort, ok := body["reasoning_effort"].(string); ok && strings.EqualFold(strings.TrimSpace(effort), "none") {
@@ -1559,7 +1564,7 @@ func normalizeOpenAIReasoningEffort(raw string) string {
 }
 
 func normalizeOpenAIReasoningEffortForModel(raw, model string) string {
-	if strings.EqualFold(strings.TrimSpace(raw), "none") && openai.IsGPT6SolOrLunaModelSpelling(model) {
+	if strings.EqualFold(strings.TrimSpace(raw), "none") && (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) {
 		return "none"
 	}
 	if strings.EqualFold(strings.TrimSpace(raw), "max") && (isOpenAIGPT56Model(model) || isOpenAIGPT6Model(model)) {

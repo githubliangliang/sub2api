@@ -505,6 +505,11 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 				descriptor.ContextWindow = configuredCodexGPT6AstraContext
 				descriptor.MaxContextWindow = configuredCodexGPT6AstraContext
 			}
+			if openai.IsGPT61TerraModelSpelling(modelID) {
+				// Frozen #8364 defaults; explicit account metadata remains authoritative.
+				descriptor.ContextWindow = 1_050_000
+				descriptor.MaxContextWindow = 1_050_000
+			}
 		}
 		if SupportsVerbosity(modelID) {
 			defaultVerbosity := "low"
@@ -604,6 +609,9 @@ func configuredCodexGPTReasoningLevels(modelID string) []configuredCodexReasonin
 			Effort:      "ultra",
 			Description: "Maximum reasoning with automatic task delegation",
 		})
+	}
+	if openai.IsGPT61TerraModelSpelling(modelID) {
+		levels = append([]configuredCodexReasoningLevel{{Effort: "none", Description: "No reasoning"}}, levels...)
 	}
 	return levels
 }
@@ -2235,7 +2243,8 @@ func completeAPIKeyCodexModelsManifestMetadata(body []byte, completeAll bool, ac
 		}
 
 		completeDescriptor := completeAll || isDeepSeekCodexModel(slug)
-		forceOfficialImage := officialOpenAI && isOpenAICodexImageInputModel(slug)
+		// Terra defaults fill missing fields; live or synced text-only declarations win.
+		forceOfficialImage := officialOpenAI && isOpenAICodexImageInputModel(slug) && !openai.IsGPT61TerraModelSpelling(slug)
 		if !completeDescriptor && !forceOfficialImage {
 			continue
 		}
