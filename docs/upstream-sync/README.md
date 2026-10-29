@@ -2,6 +2,8 @@
 
 最新评估（2026-10-28）：[PORTING-0.2.19.md](./PORTING-0.2.19.md)，v0.2.18→v0.2.19，fork `49939fb2c` / VERSION1.1.20 / Go1.27.3 / SQLite227。50非merge、20PR+3直接提交，276文件先反后正A0/C203/X61/N12。建议第一档7簇、第二档6簇；用户选定GPT-6.1 Terra，仍为第三档、单独提案。评估时三份均未实施，评估证据保持当时的产品/版本/迁移/依赖值。[来源与基线证据](./evidence-0.2.19/MANIFEST.md)。
 
+第二档实施（2026-10-29）已完成：[OpenSpec 验收](../../openspec/changes/port-upstream-0.2.19-tier2/verification.md) / [实际证据与哈希](./implementation-0.2.19-tier2/README.md)，23/23 任务，本地 main `cccf931efe201671f8cd27284b04e74114f4f894`。Grok 原文模型审计与目录/SQLite CAS、上传完整性、搜索维度、既有 Gemini 目录/默认测试和 x/net 最小维护完成；54 包 unit/build、7 包相关/network race、SQLite227/quota/fixed-window/dedup、lint0 issues，前端2105/2 skipped、typecheck/lint/build/critical及真实浏览器通过。用户确认 S01 保持迁移227，冲突位到 usage 边界并验证SQLite回退；原规格快照保留。VERSION/Go/schema、前端依赖与生成代码保持，剩余 audit 单列；冻结评估保持原文，Terra独立未实施，无支付/发布/push/部署/业务实例操作。
+
 第一档实施（2026-10-29）已完成：[OpenSpec验收](../../openspec/changes/port-upstream-0.2.19-tier1/verification.md) / [实际证据与哈希](./implementation-0.2.19-tier1/README.md)，26/26任务，提交本地main为`683354b2cdd2461dc581fa14158be09ef51de29b`。Claude UTF-16、Codex cache flight、共享cache-hit用量、Gemini file图片、Antigravity畸形工具、分页和管理员400保护七项完成；54包unit/build、8包race、SQLite迁移/quota/dedup、lint0 issues及OpenSpec通过。最终unit隔离测试子进程代理，SDK本地端点代理误匹配的控制证据已记录，相关验证码代码未改。VERSION1.1.20/Go1.27.3/迁移227、依赖/前端/生成代码不变；评估来源/第二档/Terra提案保持冻结，后两者仍未实施；未归档/发布/push/部署/操作业务实例数据。
 
 - [x] 冻结tag/HEAD、整PR覆盖和全部四态，复查3732产品哈希与原始证据。
@@ -10,13 +12,14 @@
 - [x] backend实际测试目录/10包定向及Terra邻近回归、61前端测试、SQLite与Grok缺陷probe、x/net隔离PoC/MVS可行性检查。
 - [x] 三提案严格校验、链接/来源/空实施槽与最终范围哈希核对。
 - [x] 实施第一档7簇并完成[实际验收](../../openspec/changes/port-upstream-0.2.19-tier1/verification.md)，26/26任务。
-- [ ] 实施第二档6簇并完成实际验收。
+- [x] 实施第二档6簇并完成[23/23 实际验收](../../openspec/changes/port-upstream-0.2.19-tier2/verification.md)。
 - [ ] 实施已选定第三档Terra并完成实际验收。
 
 v0.2.19通用教训（[§9](./PORTING-0.2.19.md#9-本轮新增通用教训)）：
 
 - 缓存函数名不同不等于无此缺陷，沿实际消费者复现flight窗口。
 - 新CLEAN文件仍可能是PG CAS；单键观测必须与普通旧表单、外部事务和缓存发布一并验收。
+- SQLite JSON null 根也要验单键更新；空目录/非法形态、最后成功/最后尝试必须分开。实际页面可能使用另一份同名组件；异步背景请求和实时毫秒字段不能写成脆弱夹具断言。
 - 11行事务helper可复用已有边界，不引入未选定9000行授权能力；34行目录收集/匹配也不需要整344行模型端点系统。
 - 新模型要贯通effort/工具/metadata/价格/usage；来源占位created不是发布时间，用户选择第三档时保留原档位。
 - 安全依赖先量最小MVS；PoC、实际可达与利用性分开；当前audit与历史证据、评估PASS与修复验收分开。

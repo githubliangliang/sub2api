@@ -1,0 +1,93 @@
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/views/admin/__tests__/ChannelsView.webSearch.spec.ts (4 tests | 2 failed) 128ms
+   × channel OpenAI Web Search inheritance > retains supported and unknown dimensions when the global control is hidden 23ms
+     → expected "spy" to be called with arguments: [ 11, ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+    11,
+-   ObjectContaining {
++   Object {
++     "account_stats_pricing_rules": Array [],
++     "apply_pricing_to_account_stats": false,
++     "billing_model_source": "channel_mapped",
++     "description": undefined,
+      "features_config": Object {
++       "bedrock_cc_compat": Object {
++         "anthropic": false,
++       },
++       "codex_image_generation_bridge": Object {
++         "openai": false,
++       },
+        "unrelated": Object {
+          "keep": true,
+        },
+        "web_search_emulation": Object {
+          "anthropic": true,
+          "future": true,
+          "openai": true,
+        },
+      },
++     "group_ids": Array [
++       1,
++       2,
++     ],
++     "model_mapping": Object {},
++     "model_pricing": Array [],
++     "name": "shared search",
++     "restrict_models": false,
++     "status": "active",
+    },
+  ]
+
+
+Number of calls: 1
+
+   × channel OpenAI Web Search inheritance > creates an OpenAI channel with an enabled search flag 16ms
+     → expected "spy" to be called with arguments: [ ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   ObjectContaining {
+-     "features_config": ObjectContaining {
++   Object {
++     "account_stats_pricing_rules": Array [],
++     "apply_pricing_to_account_stats": false,
++     "billing_model_source": "channel_mapped",
++     "description": undefined,
++     "features_config": Object {
++       "codex_image_generation_bridge": Object {
++         "openai": false,
++       },
+        "web_search_emulation": Object {
+-         "anthropic": false,
+          "openai": true,
+        },
+      },
+      "group_ids": Array [
+        2,
+      ],
++     "model_mapping": Object {},
++     "model_pricing": Array [],
++     "name": "new search channel",
++     "restrict_models": false,
+    },
+  ]
+
+
+Number of calls: 1
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  20:33:33
+   Duration  1.91s (transform 953ms, setup 67ms, collect 1.10s, tests 128ms, environment 233ms, prepare 44ms)
+

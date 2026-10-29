@@ -9,7 +9,8 @@ The system SHALL carry the upstream response model and its conflict flag through
 
 #### Scenario: Buffered events declare different models
 - **WHEN** a nonterminal event declares one Grok model and a terminal event declares another during Chat or Messages buffering
-- **THEN** the terminal model wins and the conflict flag survives the forward result, asynchronous snapshot and SQLite record
+- **THEN** the terminal model wins and the conflict flag survives the forward result, asynchronous snapshot and usage-write boundary
+- **AND** the SQLite record retains the response model and the established billing fallback is verified without adding a conflict column or changing migration 227
 
 #### Scenario: Many events or another provider are processed
 - **WHEN** a stream has many long model declarations or the account is not Grok

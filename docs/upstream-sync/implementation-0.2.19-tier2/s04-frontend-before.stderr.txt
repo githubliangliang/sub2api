@@ -1,0 +1,111 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/admin/__tests__/ChannelsView.webSearch.spec.ts > channel OpenAI Web Search inheritance > explicitly disables search when a supported platform section is disabled
+AssertionError: expected "spy" to be called with arguments: [ 11, ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+    11,
+-   ObjectContaining {
+-     "features_config": ObjectContaining {
++   Object {
++     "account_stats_pricing_rules": Array [],
++     "apply_pricing_to_account_stats": false,
++     "billing_model_source": "channel_mapped",
++     "description": undefined,
++     "features_config": Object {
++       "codex_image_generation_bridge": Object {
++         "openai": false,
++       },
+        "web_search_emulation": Object {
+-         "anthropic": false,
+          "openai": true,
+        },
+      },
+      "group_ids": Array [
+        2,
+      ],
++     "model_mapping": Object {},
++     "model_pricing": Array [],
++     "name": "shared search",
++     "restrict_models": false,
++     "status": "active",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/views/admin/__tests__/ChannelsView.webSearch.spec.ts:56:27
+     54|     await wrapper.get('form#channel-form').trigger('submit.prevent')
+     55|     await flushPromises()
+     56|     expect(updateChannel).toHaveBeenCalledWith(11, expect.objectContai…
+       |                           ^
+     57|       group_ids: [2], features_config: expect.objectContaining({ web_s…
+     58|     }))
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/views/admin/__tests__/ChannelsView.webSearch.spec.ts > channel OpenAI Web Search inheritance > retains supported and unknown dimensions when the global control is hidden
+AssertionError: expected "spy" to be called with arguments: [ 11, ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+    11,
+-   ObjectContaining {
++   Object {
++     "account_stats_pricing_rules": Array [],
++     "apply_pricing_to_account_stats": false,
++     "billing_model_source": "channel_mapped",
++     "description": undefined,
+      "features_config": Object {
++       "bedrock_cc_compat": Object {
++         "anthropic": false,
++       },
++       "codex_image_generation_bridge": Object {
++         "openai": false,
++       },
+        "unrelated": Object {
+          "keep": true,
+        },
+        "web_search_emulation": Object {
+          "anthropic": true,
+-         "future": true,
+          "openai": true,
+        },
+      },
++     "group_ids": Array [
++       1,
++       2,
++     ],
++     "model_mapping": Object {},
++     "model_pricing": Array [],
++     "name": "shared search",
++     "restrict_models": false,
++     "status": "active",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/views/admin/__tests__/ChannelsView.webSearch.spec.ts:73:27
+     71|     await wrapper.get('form#channel-form').trigger('submit.prevent')
+     72|     await flushPromises()
+     73|     expect(updateChannel).toHaveBeenCalledWith(11, expect.objectContai…
+       |                           ^
+     74|     expect(existing.features_config.web_search_emulation.future).toBe(…
+     75|     wrapper.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

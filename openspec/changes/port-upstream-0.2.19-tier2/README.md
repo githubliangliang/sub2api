@@ -1,6 +1,6 @@
 # v0.2.19 第二档：Grok一致性、上传、搜索、Gemini与依赖维护
 
-状态：2026-10-28评估完成，**提案未实施**；所有tasks和实施verification保持空白。原请求是评估release，本change是可审查的行为与验收方案。
+状态：2026-10-29 用户授权后已实施，**23/23 任务完成**。代码提交本地 main：`cccf931efe201671f8cd27284b04e74114f4f894`；[完整实施证据](../../../docs/upstream-sync/implementation-0.2.19-tier2/README.md)。2026-10-28 冻结评估来源保持原文，change 仍活动待归档。
 
 | 编号 | 行为 | 规格 |
 |---|---|---|
@@ -13,7 +13,7 @@
 
 - [proposal](./proposal.md) / [design](./design.md)：范围与适配决策。
 - [source-baseline](./source-baseline.md) / [source-feature-map](./source-feature-map.md)：冻结SHA与行为来源。
-- [tasks](./tasks.md) / [verification](./verification.md)：未来实施任务和空验收槽。
+- [tasks](./tasks.md) / [verification](./verification.md)：实际实施任务和验收记录。
 - [评估与patch sites](../../../docs/upstream-sync/PORTING-0.2.19.md) / [评估证据](../../../docs/upstream-sync/evidence-0.2.19/MANIFEST.md)。
 
 保留SQLite-only、miniredis、simple mode、成功usage dedup、固定quota窗口及迁移227。VERSION1.1.20/Go1.27.3是冻结评估值；实际起点另记，不改历史证据。Terra是用户选定的独立第三档提案；其它未选定新能力、支付、发布与部署不在此范围。

@@ -1,0 +1,95 @@
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+ ❯ src/views/admin/__tests__/ChannelsView.webSearch.spec.ts (4 tests | 2 failed) 123ms
+   × channel OpenAI Web Search inheritance > explicitly disables search when a supported platform section is disabled 71ms
+     → expected "spy" to be called with arguments: [ 11, ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+    11,
+-   ObjectContaining {
+-     "features_config": ObjectContaining {
++   Object {
++     "account_stats_pricing_rules": Array [],
++     "apply_pricing_to_account_stats": false,
++     "billing_model_source": "channel_mapped",
++     "description": undefined,
++     "features_config": Object {
++       "codex_image_generation_bridge": Object {
++         "openai": false,
++       },
+        "web_search_emulation": Object {
+-         "anthropic": false,
+          "openai": true,
+        },
+      },
+      "group_ids": Array [
+        2,
+      ],
++     "model_mapping": Object {},
++     "model_pricing": Array [],
++     "name": "shared search",
++     "restrict_models": false,
++     "status": "active",
+    },
+  ]
+
+
+Number of calls: 1
+
+   × channel OpenAI Web Search inheritance > retains supported and unknown dimensions when the global control is hidden 17ms
+     → expected "spy" to be called with arguments: [ 11, ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+    11,
+-   ObjectContaining {
++   Object {
++     "account_stats_pricing_rules": Array [],
++     "apply_pricing_to_account_stats": false,
++     "billing_model_source": "channel_mapped",
++     "description": undefined,
+      "features_config": Object {
++       "bedrock_cc_compat": Object {
++         "anthropic": false,
++       },
++       "codex_image_generation_bridge": Object {
++         "openai": false,
++       },
+        "unrelated": Object {
+          "keep": true,
+        },
+        "web_search_emulation": Object {
+          "anthropic": true,
+-         "future": true,
+          "openai": true,
+        },
+      },
++     "group_ids": Array [
++       1,
++       2,
++     ],
++     "model_mapping": Object {},
++     "model_pricing": Array [],
++     "name": "shared search",
++     "restrict_models": false,
++     "status": "active",
+    },
+  ]
+
+
+Number of calls: 1
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  20:32:08
+   Duration  2.01s (transform 1.02s, setup 62ms, collect 1.21s, tests 123ms, environment 250ms, prepare 52ms)
+

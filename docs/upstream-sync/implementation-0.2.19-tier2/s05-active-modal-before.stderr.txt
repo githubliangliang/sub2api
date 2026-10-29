@@ -1,0 +1,22 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/admin/account/__tests__/AccountTestModal.spec.ts > AccountTestModal > ordinary Gemini account tests send the supported 3.5 Flash default
+AssertionError: expected 'gemini-3.1-flash-image' to be 'gemini-3.5-flash' // Object.is equality
+
+Expected: "gemini-3.5-flash"
+Received: "gemini-3.1-flash-image"
+
+ ❯ src/components/admin/account/__tests__/AccountTestModal.spec.ts:133:47
+    131|     await flushPromises()
+    132|     const [, request] = (global.fetch as any).mock.calls[0]
+    133|     expect(JSON.parse(request.body).model_id).toBe('gemini-3.5-flash')
+       |                                               ^
+    134|     wrapper.unmount()
+    135|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

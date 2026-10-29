@@ -1,0 +1,52 @@
+2026/10/29 12:17:06 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestGrokCatalogRejectsMissingProtocolID
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"error":{"message":"upstream_failed"}}
+    grok_catalog_consistency_test.go:14: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:14
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestGrokCatalogRejectsMissingProtocolID/{"error":{"message":"upstream_failed"}}
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"data":[{"name":"Display_Label"}]}
+    grok_catalog_consistency_test.go:14: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:14
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestGrokCatalogRejectsMissingProtocolID/{"data":[{"name":"Display_Label"}]}
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"data":[{"id":"valid"},{}]}
+    grok_catalog_consistency_test.go:14: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:14
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestGrokCatalogRejectsMissingProtocolID/{"data":[{"id":"valid"},{}]}
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"data":[{"meta":{"name":"Display_Label"}}]}
+    grok_catalog_consistency_test.go:14: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:14
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestGrokCatalogRejectsMissingProtocolID/{"data":[{"meta":{"name":"Display_Label"}}]}
+--- FAIL: TestGrokCatalogRejectsMissingProtocolID (0.00s)
+    --- FAIL: TestGrokCatalogRejectsMissingProtocolID/{"error":{"message":"upstream_failed"}} (0.00s)
+    --- FAIL: TestGrokCatalogRejectsMissingProtocolID/{"data":[{"name":"Display_Label"}]} (0.00s)
+    --- FAIL: TestGrokCatalogRejectsMissingProtocolID/{"data":[{"id":"valid"},{}]} (0.00s)
+    --- FAIL: TestGrokCatalogRejectsMissingProtocolID/{"data":[{"meta":{"name":"Display_Label"}}]} (0.00s)
+=== RUN   TestGrokCatalogConsumersUseSameIDs
+    grok_catalog_consistency_test.go:26: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:26
+        	Error:      	Not equal: 
+        	            	expected: []string{"Custom-ID", "custom-id", "grok-4.7"}
+        	            	actual  : []string{"{\"model\":\"Custom-ID\"}", "grok-4.7", "Custom-ID", "custom-id"}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,5 +1,6 @@
+        	            	-([]string) (len=3) {
+        	            	+([]string) (len=4) {
+        	            	+ (string) (len=21) "{\"model\":\"Custom-ID\"}",
+        	            	+ (string) (len=8) "grok-4.7",
+        	            	  (string) (len=9) "Custom-ID",
+        	            	- (string) (len=9) "custom-id",
+        	            	- (string) (len=8) "grok-4.7"
+        	            	+ (string) (len=9) "custom-id"
+        	            	 }
+        	Test:       	TestGrokCatalogConsumersUseSameIDs
+--- FAIL: TestGrokCatalogConsumersUseSameIDs (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.025s
+FAIL

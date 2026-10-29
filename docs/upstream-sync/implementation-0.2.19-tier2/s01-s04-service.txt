@@ -1,0 +1,270 @@
+2026/10/29 12:32:58 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestChannelUpdatePreservesSearchDimensions
+=== RUN   TestChannelUpdatePreservesSearchDimensions/partial
+=== RUN   TestChannelUpdatePreservesSearchDimensions/missing
+=== RUN   TestChannelUpdatePreservesSearchDimensions/unknown
+=== RUN   TestChannelUpdatePreservesSearchDimensions/empty
+=== RUN   TestChannelUpdatePreservesSearchDimensions/null
+--- PASS: TestChannelUpdatePreservesSearchDimensions (0.00s)
+    --- PASS: TestChannelUpdatePreservesSearchDimensions/partial (0.00s)
+    --- PASS: TestChannelUpdatePreservesSearchDimensions/missing (0.00s)
+    --- PASS: TestChannelUpdatePreservesSearchDimensions/unknown (0.00s)
+    --- PASS: TestChannelUpdatePreservesSearchDimensions/empty (0.00s)
+    --- PASS: TestChannelUpdatePreservesSearchDimensions/null (0.00s)
+=== RUN   TestGrokCatalogRejectsMissingProtocolID
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"error":{"message":"upstream_failed"}}
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"data":[{"name":"Display_Label"}]}
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"data":[{"id":"valid"},{}]}
+=== RUN   TestGrokCatalogRejectsMissingProtocolID/{"data":[{"meta":{"name":"Display_Label"}}]}
+--- PASS: TestGrokCatalogRejectsMissingProtocolID (0.00s)
+    --- PASS: TestGrokCatalogRejectsMissingProtocolID/{"error":{"message":"upstream_failed"}} (0.00s)
+    --- PASS: TestGrokCatalogRejectsMissingProtocolID/{"data":[{"name":"Display_Label"}]} (0.00s)
+    --- PASS: TestGrokCatalogRejectsMissingProtocolID/{"data":[{"id":"valid"},{}]} (0.00s)
+    --- PASS: TestGrokCatalogRejectsMissingProtocolID/{"data":[{"meta":{"name":"Display_Label"}}]} (0.00s)
+=== RUN   TestGrokCatalogConsumersUseSameIDs
+--- PASS: TestGrokCatalogConsumersUseSameIDs (0.00s)
+=== RUN   TestGrokCatalogDistinguishesEmptyAndInvalid
+--- PASS: TestGrokCatalogDistinguishesEmptyAndInvalid (0.00s)
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/success/manual
+    grok_catalog_consistency_test.go:102: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:102
+        	Error:      	Received unexpected error:
+        	            	Failed to get Grok access token: grok oauth refresh token is missing
+        	Test:       	TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/success/manual
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/invalid/manual
+    grok_catalog_consistency_test.go:110: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:110
+        	Error:      	Not equal: 
+        	            	expected: "invalid_response"
+        	            	actual  : "transport"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-invalid_response
+        	            	+transport
+        	Test:       	TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/invalid/manual
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/missing-id/manual
+    grok_catalog_consistency_test.go:110: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:110
+        	Error:      	Not equal: 
+        	            	expected: "invalid_response"
+        	            	actual  : "transport"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-invalid_response
+        	            	+transport
+        	Test:       	TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/missing-id/manual
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/empty/manual
+    grok_catalog_consistency_test.go:110: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:110
+        	Error:      	Not equal: 
+        	            	expected: "empty_catalog"
+        	            	actual  : "transport"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-empty_catalog
+        	            	+transport
+        	Test:       	TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/empty/manual
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/http/manual
+    grok_catalog_consistency_test.go:110: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:110
+        	Error:      	Not equal: 
+        	            	expected: "http_error"
+        	            	actual  : "transport"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-http_error
+        	            	+transport
+        	Test:       	TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/http/manual
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/transport/manual
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/too-large/manual
+    grok_catalog_consistency_test.go:110: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_catalog_consistency_test.go:110
+        	Error:      	Not equal: 
+        	            	expected: "too_large"
+        	            	actual  : "transport"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-too_large
+        	            	+transport
+        	Test:       	TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/too-large/manual
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/success/background
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/invalid/background
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/missing-id/background
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/empty/background
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/http/background
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/transport/background
+=== RUN   TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/too-large/background
+--- FAIL: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures (0.02s)
+    --- FAIL: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/success/manual (0.00s)
+    --- FAIL: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/invalid/manual (0.00s)
+    --- FAIL: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/missing-id/manual (0.00s)
+    --- FAIL: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/empty/manual (0.00s)
+    --- FAIL: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/http/manual (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/transport/manual (0.00s)
+    --- FAIL: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/too-large/manual (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/success/background (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/invalid/background (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/missing-id/background (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/empty/background (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/http/background (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/transport/background (0.00s)
+    --- PASS: TestGrokCatalogBothSyncConsumersPreserveSuccessOnFailures/too-large/background (0.01s)
+=== RUN   TestGrokCatalogFreshnessRequiresValidTimeAndCurrentScope
+--- PASS: TestGrokCatalogFreshnessRequiresValidTimeAndCurrentScope (0.00s)
+=== RUN   TestGrokCatalogPersistMergesAfterConflictWithoutUpdateExtra
+=== PAUSE TestGrokCatalogPersistMergesAfterConflictWithoutUpdateExtra
+=== RUN   TestGrokCatalogPersistStopsAfterThreeConflicts
+=== PAUSE TestGrokCatalogPersistStopsAfterThreeConflicts
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability
+=== RUN   TestGrokCatalogPersistKeepsNewerSnapshotWhenObservationIsOlder
+=== PAUSE TestGrokCatalogPersistKeepsNewerSnapshotWhenObservationIsOlder
+=== RUN   TestGrokCatalogPersistCancelStopsImmediately
+=== PAUSE TestGrokCatalogPersistCancelStopsImmediately
+=== RUN   TestGrokCatalogPersistConcurrentWritersAreRaceSafe
+--- PASS: TestGrokCatalogPersistConcurrentWritersAreRaceSafe (0.00s)
+=== RUN   TestGrokCatalogScopeSanitizesURLAndSeparatesQuerySources
+=== PAUSE TestGrokCatalogScopeSanitizesURLAndSeparatesQuerySources
+=== RUN   TestGrokCatalogMergeKeepsNewerSuccessWhenOlderArrivesLater
+=== PAUSE TestGrokCatalogMergeKeepsNewerSuccessWhenOlderArrivesLater
+=== RUN   TestGrokCatalogMergeFailurePreservesSuccessScope
+=== PAUSE TestGrokCatalogMergeFailurePreservesSuccessScope
+=== RUN   TestGrokCatalogMergeEarlierSuccessDoesNotOverwriteNewerAttempt
+=== PAUSE TestGrokCatalogMergeEarlierSuccessDoesNotOverwriteNewerAttempt
+=== RUN   TestGrokCatalogMergeConfiguredFallbackDoesNotRefreshSuccess
+=== PAUSE TestGrokCatalogMergeConfiguredFallbackDoesNotRefreshSuccess
+=== RUN   TestGrokCatalogMergeDuplicateIsIdempotent
+=== PAUSE TestGrokCatalogMergeDuplicateIsIdempotent
+=== RUN   TestGrokCatalogMergeDoesNotMutateInputs
+=== PAUSE TestGrokCatalogMergeDoesNotMutateInputs
+=== RUN   TestGrokCatalogMergeEqualTimestampDoesNotFlip
+=== PAUSE TestGrokCatalogMergeEqualTimestampDoesNotFlip
+=== RUN   TestGrokCatalogMergeRejectsIllegalObservation
+=== PAUSE TestGrokCatalogMergeRejectsIllegalObservation
+=== RUN   TestGrokCatalogMergeLegacySnapshotAcceptsSuccess
+=== PAUSE TestGrokCatalogMergeLegacySnapshotAcceptsSuccess
+=== RUN   TestGrokCatalogParseReadsLegacySnapshotWithoutScope
+=== PAUSE TestGrokCatalogParseReadsLegacySnapshotWithoutScope
+=== RUN   TestGrokCatalogParseReadsLastAttemptWithoutModels
+=== PAUSE TestGrokCatalogParseReadsLastAttemptWithoutModels
+=== RUN   TestGrokCatalogParserDoesNotStringifyObjectEntries
+=== PAUSE TestGrokCatalogParserDoesNotStringifyObjectEntries
+=== RUN   TestSyncGrokObservedModelsRejectsOAuthCustomURLOutsideOperatorPolicy
+--- PASS: TestSyncGrokObservedModelsRejectsOAuthCustomURLOutsideOperatorPolicy (0.00s)
+=== RUN   TestSyncGrokObservedModelsUsesCLIIdentityAndAccountHeaders
+--- PASS: TestSyncGrokObservedModelsUsesCLIIdentityAndAccountHeaders (0.00s)
+=== RUN   TestGrokNativeResponseModelAudit
+--- PASS: TestGrokNativeResponseModelAudit (0.00s)
+=== RUN   TestGrokBufferedResponseModelConflict
+--- PASS: TestGrokBufferedResponseModelConflict (0.00s)
+=== RUN   TestOpenAIImagesUploadPartBoundaryAndIntegrity
+=== RUN   TestOpenAIImagesUploadPartBoundaryAndIntegrity/image/extra=0
+=== RUN   TestOpenAIImagesUploadPartBoundaryAndIntegrity/image/extra=1
+=== RUN   TestOpenAIImagesUploadPartBoundaryAndIntegrity/image[1]/extra=0
+=== RUN   TestOpenAIImagesUploadPartBoundaryAndIntegrity/image[1]/extra=1
+=== RUN   TestOpenAIImagesUploadPartBoundaryAndIntegrity/mask/extra=0
+=== RUN   TestOpenAIImagesUploadPartBoundaryAndIntegrity/mask/extra=1
+--- PASS: TestOpenAIImagesUploadPartBoundaryAndIntegrity (0.28s)
+    --- PASS: TestOpenAIImagesUploadPartBoundaryAndIntegrity/image/extra=0 (0.07s)
+    --- PASS: TestOpenAIImagesUploadPartBoundaryAndIntegrity/image/extra=1 (0.04s)
+    --- PASS: TestOpenAIImagesUploadPartBoundaryAndIntegrity/image[1]/extra=0 (0.04s)
+    --- PASS: TestOpenAIImagesUploadPartBoundaryAndIntegrity/image[1]/extra=1 (0.06s)
+    --- PASS: TestOpenAIImagesUploadPartBoundaryAndIntegrity/mask/extra=0 (0.04s)
+    --- PASS: TestOpenAIImagesUploadPartBoundaryAndIntegrity/mask/extra=1 (0.03s)
+=== RUN   TestGrokMediaUploadParsingRetainsFullBoundedBody
+--- PASS: TestGrokMediaUploadParsingRetainsFullBoundedBody (0.02s)
+=== CONT  TestGrokCatalogPersistMergesAfterConflictWithoutUpdateExtra
+=== CONT  TestGrokCatalogMergeConfiguredFallbackDoesNotRefreshSuccess
+--- PASS: TestGrokCatalogMergeConfiguredFallbackDoesNotRefreshSuccess (0.00s)
+=== CONT  TestGrokCatalogParserDoesNotStringifyObjectEntries
+=== CONT  TestGrokCatalogScopeSanitizesURLAndSeparatesQuerySources
+=== CONT  TestGrokCatalogMergeRejectsIllegalObservation
+=== CONT  TestGrokCatalogMergeEqualTimestampDoesNotFlip
+=== CONT  TestGrokCatalogPersistCancelStopsImmediately
+=== CONT  TestGrokCatalogMergeDoesNotMutateInputs
+=== RUN   TestGrokCatalogPersistCancelStopsImmediately/already_canceled
+=== CONT  TestGrokCatalogMergeDuplicateIsIdempotent
+--- PASS: TestGrokCatalogParserDoesNotStringifyObjectEntries (0.00s)
+=== CONT  TestGrokCatalogPersistStopsAfterThreeConflicts
+--- PASS: TestGrokCatalogPersistMergesAfterConflictWithoutUpdateExtra (0.00s)
+=== CONT  TestGrokCatalogMergeEarlierSuccessDoesNotOverwriteNewerAttempt
+=== CONT  TestGrokCatalogParseReadsLastAttemptWithoutModels
+--- PASS: TestGrokCatalogMergeDuplicateIsIdempotent (0.00s)
+=== CONT  TestGrokCatalogMergeFailurePreservesSuccessScope
+--- PASS: TestGrokCatalogMergeEarlierSuccessDoesNotOverwriteNewerAttempt (0.00s)
+=== CONT  TestGrokCatalogMergeKeepsNewerSuccessWhenOlderArrivesLater
+--- PASS: TestGrokCatalogMergeFailurePreservesSuccessScope (0.00s)
+=== CONT  TestGrokCatalogMergeLegacySnapshotAcceptsSuccess
+--- PASS: TestGrokCatalogParseReadsLastAttemptWithoutModels (0.00s)
+=== PAUSE TestGrokCatalogPersistCancelStopsImmediately/already_canceled
+--- PASS: TestGrokCatalogMergeKeepsNewerSuccessWhenOlderArrivesLater (0.00s)
+--- PASS: TestGrokCatalogMergeEqualTimestampDoesNotFlip (0.00s)
+--- PASS: TestGrokCatalogMergeDoesNotMutateInputs (0.00s)
+=== RUN   TestGrokCatalogPersistCancelStopsImmediately/canceled_between_attempts
+--- PASS: TestGrokCatalogMergeRejectsIllegalObservation (0.00s)
+--- PASS: TestGrokCatalogMergeLegacySnapshotAcceptsSuccess (0.00s)
+=== CONT  TestGrokCatalogPersistKeepsNewerSnapshotWhenObservationIsOlder
+--- PASS: TestGrokCatalogPersistStopsAfterThreeConflicts (0.00s)
+=== CONT  TestGrokCatalogParseReadsLegacySnapshotWithoutScope
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/nil_repository
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/nil_repository
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/typed_nil_repository
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/typed_nil_repository
+=== PAUSE TestGrokCatalogPersistCancelStopsImmediately/canceled_between_attempts
+=== CONT  TestGrokCatalogPersistCancelStopsImmediately/already_canceled
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/capability_missing_does_not_update_extra
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/capability_missing_does_not_update_extra
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/deleted_account
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/deleted_account
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/scope_account_id_mismatches
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/scope_account_id_mismatches
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/loaded_account_id_mismatches
+--- PASS: TestGrokCatalogScopeSanitizesURLAndSeparatesQuerySources (0.00s)
+=== CONT  TestGrokCatalogPersistCancelStopsImmediately/canceled_between_attempts
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/loaded_account_id_mismatches
+--- PASS: TestGrokCatalogParseReadsLegacySnapshotWithoutScope (0.00s)
+--- PASS: TestGrokCatalogPersistKeepsNewerSnapshotWhenObservationIsOlder (0.00s)
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/platform_mismatches
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/platform_mismatches
+=== RUN   TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/non_positive_account_id
+=== PAUSE TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/non_positive_account_id
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/nil_repository
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/non_positive_account_id
+--- PASS: TestGrokCatalogPersistCancelStopsImmediately (0.00s)
+    --- PASS: TestGrokCatalogPersistCancelStopsImmediately/already_canceled (0.00s)
+    --- PASS: TestGrokCatalogPersistCancelStopsImmediately/canceled_between_attempts (0.00s)
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/scope_account_id_mismatches
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/typed_nil_repository
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/capability_missing_does_not_update_extra
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/platform_mismatches
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/loaded_account_id_mismatches
+=== CONT  TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/deleted_account
+--- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/nil_repository (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/non_positive_account_id (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/typed_nil_repository (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/scope_account_id_mismatches (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/platform_mismatches (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/capability_missing_does_not_update_extra (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/loaded_account_id_mismatches (0.00s)
+    --- PASS: TestGrokCatalogPersistRejectsDeletedMismatchAndMissingCapability/deleted_account (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.512s
+FAIL
