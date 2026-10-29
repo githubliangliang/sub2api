@@ -54,6 +54,24 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		return
 	}
 
+	if effectivePlatform == service.PlatformGemini {
+		if declared, err := h.geminiCompatService.DeclaredModelIDs(c.Request.Context(), apiKey.GroupID); err == nil && len(declared) > 0 {
+			ids := declared
+			if mixed, err := h.geminiCompatService.AntigravityGeminiModelIDs(c.Request.Context(), apiKey.GroupID, true); err == nil {
+				ids = mergeModelIDs(ids, mixed)
+			}
+			if apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
+				ids = filterModelsByCustomList(ids, defaultModelIDsForPlatform(service.PlatformGemini), apiKey.Group.ModelsListConfig.Models)
+			}
+			models := make([]gemini.Model, 0, len(ids))
+			for _, id := range ids {
+				models = append(models, gemini.FallbackModel(id))
+			}
+			c.JSON(http.StatusOK, gemini.ModelsListResponse{Models: models})
+			return
+		}
+	}
+
 	account, err := h.geminiCompatService.SelectAccountForAIStudioEndpoints(c.Request.Context(), apiKey.GroupID)
 	if err != nil {
 		// 没有 gemini 账户，检查是否有 antigravity 账户可用
@@ -120,6 +138,21 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 	if forcePlatform == service.PlatformAntigravity || effectivePlatform == service.PlatformAntigravity {
 		c.JSON(http.StatusOK, antigravity.FallbackGeminiModel(modelName))
 		return
+	}
+
+	if declared, err := h.geminiCompatService.DeclaredModelIDs(c.Request.Context(), apiKey.GroupID); err == nil && len(declared) > 0 {
+		if service.DeclaredModelsCover(declared, modelName) {
+			c.JSON(http.StatusOK, gemini.FallbackModel(modelName))
+			return
+		}
+		if mixed, err := h.geminiCompatService.AntigravityGeminiModelIDs(c.Request.Context(), apiKey.GroupID, true); err == nil {
+			if service.DeclaredModelsCover(mixed, modelName) {
+				c.JSON(http.StatusOK, gemini.FallbackModel(modelName))
+				return
+			}
+			googleError(c, http.StatusNotFound, "models/"+modelName+" is not found")
+			return
+		}
 	}
 
 	account, err := h.geminiCompatService.SelectAccountForAIStudioEndpoints(c.Request.Context(), apiKey.GroupID)

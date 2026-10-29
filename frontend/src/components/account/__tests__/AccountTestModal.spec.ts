@@ -118,6 +118,42 @@ describe('AccountTestModal', () => {
     localStorage.clear()
   })
 
+  it('preselects the existing 3.5 Flash for ordinary Gemini connection tests', async () => {
+    getAvailableModelsMock.mockResolvedValue([
+      { id: 'gemini-3.1-flash-image', display_name: 'Image' },
+      { id: 'gemini-3.5-flash', display_name: 'Flash 3.5' }
+    ])
+    const wrapper = mount(AccountTestModal, {
+      props: { show: false, account: { ...buildAccount(), platform: 'gemini', type: 'apikey' } },
+      global: { stubs: { BaseDialog: BaseDialogStub, Select: SelectStub, TextArea: TextAreaStub, Icon: true } }
+    })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('gemini-3.5-flash')
+    wrapper.unmount()
+  })
+
+  it('keeps conservative legacy choices and explicitly selected aliases', async () => {
+    getAvailableModelsMock.mockResolvedValue([
+      { id: 'gemini-2.0-flash', display_name: 'Legacy Flash 2.0' },
+      { id: 'gemini-2.5-flash', display_name: 'Legacy Flash 2.5' },
+      { id: 'Legacy-Alias', display_name: 'Custom alias' }
+    ])
+    const wrapper = mount(AccountTestModal, {
+      props: { show: false, account: { ...buildAccount(), platform: 'gemini', credentials: { oauth_type: 'google_one' } } },
+      global: { stubs: { BaseDialog: BaseDialogStub, Select: SelectStub, TextArea: TextAreaStub, Icon: true } }
+    })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('select').element.value).toBe('gemini-2.5-flash')
+    await wrapper.get('select').setValue('Legacy-Alias')
+    await (wrapper.vm as any).startTest()
+    await flushPromises()
+    const [, options] = (global.fetch as any).mock.calls[0]
+    expect(JSON.parse(options.body).model_id).toBe('Legacy-Alias')
+    wrapper.unmount()
+  })
+
   it('posts compact mode for OpenAI compact probe', async () => {
     const wrapper = mount(AccountTestModal, {
       props: {

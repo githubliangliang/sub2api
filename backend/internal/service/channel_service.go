@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -863,7 +864,7 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 		channel.BillingModelSource = input.BillingModelSource
 	}
 	if input.FeaturesConfig != nil {
-		channel.FeaturesConfig = input.FeaturesConfig
+		channel.FeaturesConfig = mergeWebSearchEmulationDimensions(channel.FeaturesConfig, input.FeaturesConfig)
 	}
 	if input.ApplyPricingToAccountStats != nil {
 		channel.ApplyPricingToAccountStats = *input.ApplyPricingToAccountStats
@@ -872,6 +873,38 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 		channel.AccountStatsPricingRules = *input.AccountStatsPricingRules
 	}
 	return nil
+}
+
+// mergeWebSearchEmulationDimensions preserves partial clients' unknown search
+// platforms. An explicit empty object or null clears search; other feature keys
+// retain their existing whole-block replacement behavior.
+func mergeWebSearchEmulationDimensions(existing, incoming map[string]any) map[string]any {
+	if incoming == nil {
+		return nil
+	}
+	out := maps.Clone(incoming)
+	current, _ := existing[featureKeyWebSearchEmulation].(map[string]any)
+	value, present := incoming[featureKeyWebSearchEmulation]
+	if !present {
+		if len(current) > 0 {
+			out[featureKeyWebSearchEmulation] = maps.Clone(current)
+		}
+		return out
+	}
+	dimensions, ok := value.(map[string]any)
+	if !ok {
+		return out
+	}
+	merged := maps.Clone(dimensions)
+	if len(dimensions) > 0 {
+		for platform, value := range current {
+			if _, present := merged[platform]; !present {
+				merged[platform] = value
+			}
+		}
+	}
+	out[featureKeyWebSearchEmulation] = merged
+	return out
 }
 
 // checkGroupConflicts 检查待关联的分组是否已属于其他渠道。

@@ -5,6 +5,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -61,6 +62,31 @@ func (r *grokQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates 
 	return nil
 }
 
+func (r *grokQuotaAccountRepo) CompareAndSwapGrokObservedModels(ctx context.Context, id int64, expected, next json.RawMessage) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if r.mockAccountRepoForPlatform == nil {
+		return false, ErrAccountNotFound
+	}
+	account := r.accountsByID[id]
+	if account == nil || !account.IsGrok() {
+		return false, nil
+	}
+	current, err := json.Marshal(account.Extra[grokObservedModelsExtraKey])
+	if err != nil {
+		return false, err
+	}
+	if !grokCatalogMemoryJSONEqual(current, expected) {
+		return false, nil
+	}
+	var snapshot any
+	if err := json.Unmarshal(next, &snapshot); err != nil {
+		return false, err
+	}
+	return true, r.UpdateExtra(ctx, id, map[string]any{grokObservedModelsExtraKey: snapshot})
+}
+
 func (r *grokQuotaAccountRepo) SetRateLimited(_ context.Context, id int64, resetAt time.Time) error {
 	r.rateLimitedCalls++
 	r.lastRateLimitedID = id
@@ -107,7 +133,10 @@ func TestSyncGrokObservedModelsRejectsOAuthCustomURLOutsideOperatorPolicy(t *tes
 	svc := &GrokQuotaService{accountRepo: repo, httpUpstream: upstream, cfg: cfg}
 
 	err := svc.syncGrokObservedModels(context.Background(), account)
-	require.ErrorContains(t, err, "base URL rejected by URL security policy")
+	require.ErrorContains(t, err, "Invalid Grok base URL")
+	var syncErr *UpstreamModelSyncError
+	require.ErrorAs(t, err, &syncErr)
+	require.ErrorContains(t, syncErr.Err, "base URL rejected by URL security policy")
 	require.Nil(t, upstream.lastReq)
 }
 
@@ -291,13 +320,18 @@ func (u *grokHybridUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*h
 	}, nil
 }
 
+// snapshot reports quota traffic; catalog observation is an independent background consumer.
 func (u *grokHybridUpstream) snapshot() ([]*http.Request, [][]byte) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	requests := append([]*http.Request(nil), u.requests...)
-	bodies := make([][]byte, len(u.bodies))
-	for i := range u.bodies {
-		bodies[i] = append([]byte(nil), u.bodies[i]...)
+	var requests []*http.Request
+	var bodies [][]byte
+	for i, request := range u.requests {
+		if strings.HasSuffix(request.URL.Path, "/models") {
+			continue
+		}
+		requests = append(requests, request)
+		bodies = append(bodies, append([]byte(nil), u.bodies[i]...))
 	}
 	return requests, bodies
 }

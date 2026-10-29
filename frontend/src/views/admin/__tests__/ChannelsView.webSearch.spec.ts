@@ -3,8 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChannelsView from '../ChannelsView.vue'
 
-const { listChannels, updateChannel, createChannel, getGroups, showError } = vi.hoisted(() => ({
-  listChannels: vi.fn(), updateChannel: vi.fn(), createChannel: vi.fn(), getGroups: vi.fn(), showError: vi.fn()
+const { listChannels, updateChannel, createChannel, getGroups, showError, getSearchConfig } = vi.hoisted(() => ({
+  listChannels: vi.fn(), updateChannel: vi.fn(), createChannel: vi.fn(), getGroups: vi.fn(), showError: vi.fn(), getSearchConfig: vi.fn()
 }))
 
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError, showSuccess: vi.fn() }) }))
@@ -12,7 +12,7 @@ vi.mock('@/api/admin', () => ({ adminAPI: {
   channels: { list: listChannels, update: updateChannel, create: createChannel },
   groups: { getAll: getGroups },
   accounts: { search: vi.fn().mockResolvedValue([]) },
-  settings: { getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: true, providers: [{}] }) }
+  settings: { getWebSearchEmulationConfig: getSearchConfig }
 } }))
 vi.mock('vue-i18n', async () => ({
   ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
@@ -36,12 +36,43 @@ function mountView() {
 
 describe('channel OpenAI Web Search inheritance', () => {
   beforeEach(() => {
+    getSearchConfig.mockReset().mockResolvedValue({ enabled: true, providers: [{}] })
     showError.mockReset()
     localStorage.clear()
     listChannels.mockReset().mockResolvedValue({ items: [channel], total: 1 })
     getGroups.mockReset().mockResolvedValue([{ id: 1, name: 'claude', platform: 'anthropic' }, { id: 2, name: 'search-group', platform: 'openai' }])
     updateChannel.mockReset().mockResolvedValue(channel)
     createChannel.mockReset().mockResolvedValue(channel)
+  })
+
+  it('explicitly disables search when a supported platform section is disabled', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('label').find(label => label.text() === 'admin.groups.platforms.anthropic')!.get('input').setValue(false)
+    await wrapper.get('form#channel-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateChannel).toHaveBeenCalledWith(11, expect.objectContaining({
+      group_ids: [2], features_config: expect.objectContaining({ web_search_emulation: { anthropic: false, openai: true } })
+    }))
+    wrapper.unmount()
+  })
+
+  it('retains supported and unknown dimensions when the global control is hidden', async () => {
+    getSearchConfig.mockResolvedValue({ enabled: false, providers: [] })
+    const existing = { ...channel, features_config: { web_search_emulation: { anthropic: true, openai: true, future: true }, unrelated: { keep: true } } }
+    listChannels.mockResolvedValue({ items: [existing], total: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'common.edit')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="channel-web-search-openai"]').exists()).toBe(false)
+    await wrapper.get('form#channel-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateChannel).toHaveBeenCalledWith(11, expect.objectContaining({ features_config: expect.objectContaining(existing.features_config) }))
+    expect(existing.features_config.web_search_emulation.future).toBe(true)
+    wrapper.unmount()
   })
 
   it('reads and saves OpenAI independently while retaining the Anthropic flag', async () => {

@@ -224,7 +224,8 @@ func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokM
 			_ = part.Close()
 			continue
 		}
-		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize))
+		// The complete request body is already bounded before multipart parsing.
+		data, err := io.ReadAll(part)
 		_ = part.Close()
 		if err != nil {
 			return

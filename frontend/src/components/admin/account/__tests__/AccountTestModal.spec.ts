@@ -119,6 +119,21 @@ describe('AccountTestModal', () => {
     vi.restoreAllMocks()
   })
 
+  it('ordinary Gemini account tests send the supported 3.5 Flash default', async () => {
+    getAvailableModels.mockResolvedValue([
+      { id: 'gemini-3.1-flash-image', display_name: 'Image' },
+      { id: 'gemini-3.5-flash', display_name: 'Flash 3.5' }
+    ])
+    const wrapper = mountModal()
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text().includes('admin.accounts.startTest'))!.trigger('click')
+    await flushPromises()
+    const [, request] = (global.fetch as any).mock.calls[0]
+    expect(JSON.parse(request.body).model_id).toBe('gemini-3.5-flash')
+    wrapper.unmount()
+  })
+
   it('gemini 图片模型测试会携带提示词并渲染图片预览', async () => {
     const wrapper = mountModal()
     await wrapper.setProps({ show: true })

@@ -235,7 +235,7 @@ func TestFetchUpstreamSupportedModelsParsesOpenAIOAuthManifest(t *testing.T) {
 func TestExtractGrokUpstreamModelIDs(t *testing.T) {
 	t.Parallel()
 
-	models, err := extractGrokUpstreamModelIDs([]byte(`{"data":[{"id":"display-id","model":"grok-4.5"},{"modelId":"grok-build-0.1"},{"model_id":"grok-composer-2.5-fast"},{"name":"Grok Meta Display Name","_meta":{"model":"grok-meta"}},{"name":"grok-name"},{"id":"grok-safe","_meta":"not-an-object"}]}`))
+	models, err := extractGrokUpstreamModelIDs([]byte(`{"data":[{"id":"display-id","model":"grok-4.5"},{"modelId":"grok-build-0.1"},{"model_id":"grok-composer-2.5-fast"},{"name":"Grok Meta Display Name","_meta":{"model":"grok-meta"}},{"name":"Display Grok Name","id":"grok-name"},{"id":"grok-safe","_meta":"not-an-object"}]}`))
 	require.NoError(t, err)
 	require.Equal(t, []string{"grok-4.5", "grok-build-0.1", "grok-composer-2.5-fast", "grok-meta", "grok-name", "grok-safe"}, models)
 }

@@ -632,7 +632,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 ) (*OpenAIForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
 
-	finalResponse, usage, acc, err := s.readOpenAICompatBufferedTerminal(resp, "openai chat_completions buffered", requestID)
+	finalResponse, usage, acc, prior, err := s.readOpenAICompatBufferedTerminal(resp, account, "openai chat_completions buffered", requestID)
 	if err != nil {
 		return nil, s.newOpenAICompatBufferedReadFailoverError(c, account, resp, requestID, err)
 	}
@@ -645,6 +645,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
+	prior.apply(observer)
 	observer.Observe(finalResponse.Model, true)
 	if strings.TrimSpace(finalResponse.Status) == "failed" {
 		payload, _ := json.Marshal(gin.H{"type": "response.failed", "response": finalResponse})

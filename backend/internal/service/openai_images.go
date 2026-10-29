@@ -332,10 +332,13 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 			continue
 		}
 
-		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize))
+		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize+1))
 		_ = part.Close()
 		if err != nil {
 			return fmt.Errorf("read multipart field %s: %w", name, err)
+		}
+		if len(data) > openAIImageMaxUploadPartSize {
+			return fmt.Errorf("multipart field %q exceeds the %d MB per-part limit", name, openAIImageMaxUploadPartSize>>20)
 		}
 
 		fileName := strings.TrimSpace(part.FileName())

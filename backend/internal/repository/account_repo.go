@@ -224,6 +224,9 @@ func (r *accountRepository) CreateWithAccountGroups(ctx context.Context, account
 }
 
 func (r *accountRepository) GetByID(ctx context.Context, id int64) (*service.Account, error) {
+	if scoped := r.accountTransactionScope(ctx); scoped != r {
+		return scoped.GetByID(ctx, id)
+	}
 	m, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Only(ctx)
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrAccountNotFound, nil)
@@ -591,6 +594,11 @@ func lockAndMergeAccountProbeExtra(
 		currentOllamaSnapshot        []byte
 	)
 
+	// The caller holds a transaction; take SQLite's writer lock before the
+	// managed-state read, including when a catalog observation is in flight.
+	if _, err := client.ExecContext(ctx, "UPDATE accounts SET updated_at = updated_at WHERE id = $1 AND deleted_at IS NULL", account.ID); err != nil {
+		return nil, err
+	}
 	current, err := client.Account.Get(ctx, account.ID)
 	if err != nil {
 		return nil, err
@@ -691,6 +699,14 @@ func lockAndMergeAccountProbeExtra(
 			} else if ok {
 				extra[service.OllamaCloudUsageSnapshotExtraKey] = snapshot
 			}
+		}
+	}
+	// Catalog and capability metadata are database-owned. Ordinary forms
+	// cannot erase them, inject values or restore a stale success snapshot.
+	for _, key := range []string{"grok_observed_models", service.UpstreamModelMetadataExtraKey} {
+		delete(extra, key)
+		if value, ok := currentExtra[key]; ok {
+			extra[key] = value
 		}
 	}
 	return extra, nil
@@ -2496,58 +2512,37 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 	if len(updates) == 0 {
 		return nil
 	}
-
 	clearProbeSnapshot := upstreamBillingProbeExplicitlyDisabled(updates) || upstreamBillingProbeSnapshotClearRequested(updates)
 	durableSchedulerChange := shouldEnqueueSchedulerOutboxForExtraUpdates(updates) || clearProbeSnapshot
-	baseCtx := ctx
-	contextTx := dbent.TxFromContext(ctx)
-	client := clientFromContext(ctx, r.client)
-	var tx *dbent.Tx
-	if durableSchedulerChange && contextTx == nil {
-		var txErr error
-		tx, txErr = r.client.Tx(ctx)
-		if txErr != nil && !errors.Is(txErr, dbent.ErrTxStarted) {
-			return txErr
+	committed, err := withRepositoryTransaction(ctx, r.client, func(txCtx context.Context, client *dbent.Client) error {
+		// Serialize the read/merge/write with catalog CAS and ordinary edits.
+		if _, err := client.ExecContext(txCtx, "UPDATE accounts SET updated_at = updated_at WHERE id = $1 AND deleted_at IS NULL", id); err != nil {
+			return err
 		}
-		if tx != nil {
-			defer func() { _ = tx.Rollback() }()
-			ctx = dbent.NewTxContext(ctx, tx)
-			client = tx.Client()
+		current, err := client.Account.Get(txCtx, id)
+		if err != nil {
+			return err
 		}
-	}
-	current, err := client.Account.Get(ctx, id)
+		merged := copyJSONMap(normalizeJSONMap(current.Extra))
+		for key, value := range updates {
+			merged[key] = value
+		}
+		if clearProbeSnapshot {
+			delete(merged, service.UpstreamBillingProbeExtraKey)
+		}
+		if _, err := client.Account.UpdateOneID(id).SetExtra(merged).Save(txCtx); err != nil {
+			return err
+		}
+		if durableSchedulerChange {
+			return enqueueSchedulerOutbox(txCtx, client, service.SchedulerOutboxEventAccountChanged, &id, nil, nil)
+		}
+		return nil
+	})
 	if err != nil {
 		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
 	}
-	merged := copyJSONMap(normalizeJSONMap(current.Extra))
-	for k, v := range updates {
-		merged[k] = v
-	}
-	if clearProbeSnapshot {
-		delete(merged, service.UpstreamBillingProbeExtraKey)
-	}
-	if _, err := client.Account.UpdateOneID(id).SetExtra(merged).Save(ctx); err != nil {
-		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
-	}
-	if durableSchedulerChange {
-		if err := enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
-			return err
-		}
-		if tx != nil {
-			if err := tx.Commit(); err != nil {
-				return err
-			}
-		}
-		if contextTx == nil {
-			r.syncSchedulerAccountSnapshot(baseCtx, id)
-		}
-	} else {
-		// 观测型 extra 字段不需要触发 bucket 重建，但仍同步单账号快照，
-		// 让 sticky session / GetAccount 命中缓存时也能读到最新数据，
-		// 同时避免缓存局部 patch 覆盖掉并发写入的其它账号字段。
-		if dbent.TxFromContext(ctx) == nil {
-			r.syncSchedulerAccountSnapshot(ctx, id)
-		}
+	if committed {
+		r.syncSchedulerAccountSnapshot(ctx, id)
 	}
 	return nil
 }

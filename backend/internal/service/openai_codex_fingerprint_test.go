@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -484,6 +485,7 @@ func TestExtractClientSessionID(t *testing.T) {
 func rawVsMapClientMetadata(t *testing.T, body []byte, ids *codexFingerprintIDs) (map[string]any, map[string]any) {
 	t.Helper()
 
+	started := time.Now().UnixMilli()
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(body, &decoded))
 	applyCodexFingerprintClientMetadata(decoded, ids)
@@ -495,6 +497,27 @@ func rawVsMapClientMetadata(t *testing.T, body []byte, ids *codexFingerprintIDs)
 	var rawDecoded map[string]any
 	require.NoError(t, json.Unmarshal(rawBody, &rawDecoded))
 	rawCM, _ := rawDecoded["client_metadata"].(map[string]any)
+	finished := time.Now().UnixMilli()
+	// Each implementation samples the wall clock independently. Validate its
+	// generated timestamp, then compare the stable metadata fields exactly.
+	if ids.mode != codexFingerprintDevice {
+		for _, metadata := range []map[string]any{mapCM, rawCM} {
+			value, ok := metadata["x-codex-turn-metadata"].(string)
+			if !ok {
+				continue
+			}
+			var embedded map[string]any
+			require.NoError(t, json.Unmarshal([]byte(value), &embedded))
+			timestamp, ok := embedded["turn_started_at_unix_ms"].(float64)
+			require.True(t, ok)
+			require.GreaterOrEqual(t, timestamp, float64(started))
+			require.LessOrEqual(t, timestamp, float64(finished))
+			delete(embedded, "turn_started_at_unix_ms")
+			normalized, err := json.Marshal(embedded)
+			require.NoError(t, err)
+			metadata["x-codex-turn-metadata"] = string(normalized)
+		}
+	}
 	return mapCM, rawCM
 }
 

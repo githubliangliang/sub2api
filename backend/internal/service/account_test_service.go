@@ -2182,6 +2182,14 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
 	}
 }
 
+// geminiDefaultTestModel retains the conservative Google One account contract.
+func geminiDefaultTestModel(account *Account) string {
+	if account.IsGeminiGoogleOne() {
+		return geminicli.GoogleOneModels[0].ID
+	}
+	return geminicli.DefaultTestModel
+}
+
 // testGeminiAccountConnection tests a Gemini account's connection
 func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
 	ctx := c.Request.Context()
@@ -2189,7 +2197,7 @@ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account
 	// Determine the model to use
 	testModelID := modelID
 	if testModelID == "" {
-		testModelID = geminicli.DefaultTestModel
+		testModelID = geminiDefaultTestModel(account)
 	}
 
 	// For static upstream credentials with model mapping, map the model

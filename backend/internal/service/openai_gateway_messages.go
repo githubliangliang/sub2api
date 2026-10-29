@@ -576,7 +576,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 ) (*OpenAIForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
 
-	finalResponse, usage, acc, err := s.readOpenAICompatBufferedTerminal(resp, "openai messages buffered", requestID)
+	finalResponse, usage, acc, prior, err := s.readOpenAICompatBufferedTerminal(resp, account, "openai messages buffered", requestID)
 	if err != nil {
 		// Anthropic 侧保持既有语义：只解包，不因读取失败而 failover。
 		var readErr *openAICompatBufferedReadError
@@ -594,6 +594,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 	if observer == nil {
 		observer = beginUpstreamResponseModelObservation(c)
 	}
+	prior.apply(observer)
 	observer.Observe(finalResponse.Model, true)
 
 	if strings.TrimSpace(finalResponse.Status) == "failed" {
@@ -715,15 +716,63 @@ type openAICompatBufferedReadError struct {
 func (e *openAICompatBufferedReadError) Error() string { return e.cause.Error() }
 func (e *openAICompatBufferedReadError) Unwrap() error { return e.cause }
 
+func openAICompatBufferedPriorModel(event *apicompat.ResponsesStreamEvent) (string, bool) {
+	if event == nil || event.Response == nil || isOpenAICompatResponsesTerminalEvent(event.Type) {
+		return "", false
+	}
+	model := strings.TrimSpace(event.Response.Model)
+	if model == "" {
+		return "", false
+	}
+	return model, true
+}
+
+// openAICompatPriorModelAudit 是一次缓冲读取的固定大小审计状态。
+// 只有 Grok 折叠非终止 model：保留一条按既有上限截断的声明和冲突位。
+// 后面的不同声明只置冲突，不按事件数量或原文长度继续保存。
+type openAICompatPriorModelAudit struct {
+	enabled  bool
+	observer upstreamResponseModelObserver
+}
+
+func newOpenAICompatPriorModelAudit(account *Account) openAICompatPriorModelAudit {
+	return openAICompatPriorModelAudit{enabled: account != nil && account.IsGrok()}
+}
+
+func (a *openAICompatPriorModelAudit) record(event *apicompat.ResponsesStreamEvent) {
+	if a == nil || !a.enabled {
+		return
+	}
+	model, ok := openAICompatBufferedPriorModel(event)
+	if !ok {
+		return
+	}
+	a.observer.Observe(model, false)
+}
+
+func (a openAICompatPriorModelAudit) apply(observer *upstreamResponseModelObserver) {
+	if !a.enabled || observer == nil {
+		return
+	}
+	if a.observer.first != "" {
+		observer.Observe(a.observer.first, false)
+	}
+	if a.observer.conflict {
+		observer.conflict = true
+	}
+}
+
 func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 	resp *http.Response,
+	account *Account,
 	logPrefix string,
 	requestID string,
-) (*apicompat.ResponsesResponse, OpenAIUsage, *apicompat.BufferedResponseAccumulator, error) {
+) (*apicompat.ResponsesResponse, OpenAIUsage, *apicompat.BufferedResponseAccumulator, openAICompatPriorModelAudit, error) {
 	acc := apicompat.NewBufferedResponseAccumulator()
 	var usage OpenAIUsage
+	prior := newOpenAICompatPriorModelAudit(account)
 	if resp == nil || resp.Body == nil {
-		return nil, usage, acc, errors.New("upstream response body is nil")
+		return nil, usage, acc, prior, errors.New("upstream response body is nil")
 	}
 
 	scanner := s.newUpstreamSSEScanner(resp.Body)
@@ -799,6 +848,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 					var event apicompat.ResponsesStreamEvent
 					if err := json.Unmarshal([]byte(payload), &event); err == nil {
 						acc.ProcessEvent(&event)
+						prior.record(&event)
 						if isOpenAICompatResponsesTerminalEvent(event.Type) && event.Response != nil {
 							if event.Usage != nil {
 								usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
@@ -809,11 +859,11 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 							if event.Response.Usage != nil {
 								usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 							}
-							return event.Response, usage, acc, nil
+							return event.Response, usage, acc, prior, nil
 						}
 					}
 				}
-				return nil, usage, acc, nil
+				return nil, usage, acc, prior, nil
 			}
 			resetTimeout()
 			if ev.err != nil {
@@ -823,11 +873,11 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 						zap.String("request_id", requestID),
 					)
 				}
-				return nil, usage, acc, &openAICompatBufferedReadError{cause: ev.err}
+				return nil, usage, acc, prior, &openAICompatBufferedReadError{cause: ev.err}
 			}
 
 			if isOpenAICompatDoneSentinelLine(ev.line) {
-				return nil, usage, acc, nil
+				return nil, usage, acc, prior, nil
 			}
 			frame, ok := parser.AddLine(ev.line)
 			if !ok {
@@ -845,6 +895,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 			}
 
 			acc.ProcessEvent(&event)
+			prior.record(&event)
 
 			if isOpenAICompatResponsesTerminalEvent(event.Type) && event.Response != nil {
 				if event.Usage != nil {
@@ -856,7 +907,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 				if event.Response.Usage != nil {
 					usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 				}
-				return event.Response, usage, acc, nil
+				return event.Response, usage, acc, prior, nil
 			}
 
 		case <-timeoutCh:
@@ -865,7 +916,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 				zap.String("request_id", requestID),
 				zap.Duration("interval", streamInterval),
 			)
-			return nil, usage, acc, fmt.Errorf("stream data interval timeout")
+			return nil, usage, acc, prior, fmt.Errorf("stream data interval timeout")
 		}
 	}
 }

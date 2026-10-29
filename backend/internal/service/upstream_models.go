@@ -52,6 +52,13 @@ type UpstreamModelCatalog struct {
 	Warnings []UpstreamModelSyncWarning       `json:"warnings,omitempty"`
 }
 
+// upstreamModelListFetchResult retains the request scope for catalog observation.
+type upstreamModelListFetchResult struct {
+	Models          []string
+	Body            []byte
+	GrokObservation *GrokCatalogObservation
+}
+
 type UpstreamModelSyncWarning struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -207,12 +214,19 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 // snapshot. When no model is complete, the existing account snapshot is left
 // untouched.
 func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, account *Account) (*UpstreamModelCatalog, error) {
-	models, body, err := s.fetchUpstreamModelList(ctx, account)
+	fetched, err := s.fetchUpstreamModelListWithObservation(ctx, account)
+	models, body, observation := fetched.Models, fetched.Body, fetched.GrokObservation
 	liveListAvailable := err == nil
 	if err != nil {
 		configuredModels := configuredUpstreamModelsForCapabilitySync(account)
 		if !upstreamModelListEndpointUnsupported(err) || len(configuredModels) == 0 {
+			s.keepGrokCatalogFailure(ctx, account, observation)
 			return nil, err
+		}
+		if observation != nil {
+			observation.Attempt.Status = grokCatalogStatusConfiguredFallback
+			observation.Attempt.ErrorCode = "http_error"
+			observation.Models = nil
 		}
 		models = configuredModels
 		body = nil
@@ -222,6 +236,9 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 			"status_code", upstreamModelSyncStatusCode(err),
 			"model_count", len(models),
 		)
+	}
+	if saveErr := s.saveGrokCatalogObservation(ctx, account, observation); saveErr != nil {
+		return nil, newUpstreamModelSyncInternalError("Failed to save upstream model catalog", saveErr)
 	}
 	catalog := &UpstreamModelCatalog{Models: models, Metadata: make(map[string]UpstreamModelMetadata)}
 	if len(body) > 0 {
@@ -718,44 +735,63 @@ func normalizeModelRegistryBaseURL(raw string) string {
 }
 
 func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account *Account) ([]string, []byte, error) {
+	result, err := s.fetchUpstreamModelListWithObservation(ctx, account)
+	if result == nil {
+		return nil, nil, err
+	}
+	return result.Models, result.Body, err
+}
+
+func (s *AccountTestService) fetchUpstreamModelListWithObservation(ctx context.Context, account *Account) (*upstreamModelListFetchResult, error) {
+	started := time.Now().UTC()
+	models, body, req, err := s.fetchUpstreamModelListRequest(ctx, account)
+	result := &upstreamModelListFetchResult{Models: models, Body: body}
+	if account != nil && account.IsGrok() {
+		observation := buildGrokCatalogObservation(account, req, started, models, err)
+		result.GrokObservation = &observation
+	}
+	return result, err
+}
+
+func (s *AccountTestService) fetchUpstreamModelListRequest(ctx context.Context, account *Account) ([]string, []byte, *http.Request, error) {
 	if s == nil {
-		return nil, nil, newUpstreamModelSyncConfigError("Account test service is not configured", nil)
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Account test service is not configured", nil)
 	}
 	if account == nil {
-		return nil, nil, newUpstreamModelSyncConfigError("Account is required", nil)
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Account is required", nil)
 	}
 
 	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {
 		models, err := s.fetchAntigravityOAuthUpstreamModels(ctx, account)
-		return models, nil, err
+		return models, nil, nil, err
 	}
 
 	if s.httpUpstream == nil {
-		return nil, nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
+		return nil, nil, nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
 	}
 
 	req, err := s.buildUpstreamModelsRequest(ctx, account)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	proxyURL := upstreamModelsProxyURL(account)
 	resp, err := s.doUpstreamModelsRequest(req, proxyURL, account)
 	if err != nil {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to request upstream model list", err)
+		return nil, nil, req, newUpstreamModelSyncUpstreamError("Failed to request upstream model list", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, upstreamModelsBodyLimit+1))
 	if err != nil {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to read upstream model list", err)
+		return nil, nil, req, newUpstreamModelSyncUpstreamError("Failed to read upstream model list", err)
 	}
 	if int64(len(body)) > upstreamModelsBodyLimit {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response is too large", fmt.Errorf("response exceeds %d bytes", upstreamModelsBodyLimit))
+		return nil, nil, req, newUpstreamModelSyncUpstreamError("Upstream model list response is too large", fmt.Errorf("response exceeds %d bytes", upstreamModelsBodyLimit))
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, nil, &UpstreamModelSyncError{
+		return nil, nil, req, &UpstreamModelSyncError{
 			Kind:       UpstreamModelSyncErrorUpstream,
 			Message:    fmt.Sprintf("Upstream model list request failed with HTTP %d", resp.StatusCode),
 			StatusCode: resp.StatusCode,
@@ -769,13 +805,38 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 	}
 	models, err := extractModels(body)
 	if err != nil {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
+		if account.IsGrok() && errors.Is(err, errGrokCatalogEmpty) {
+			return nil, nil, req, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", err)
+		}
+		return nil, nil, req, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
 	}
 	if len(models) == 0 {
-		return nil, nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+		return nil, nil, req, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
 	}
 
-	return models, body, nil
+	return models, body, req, nil
+}
+
+func (s *AccountTestService) saveGrokCatalogObservation(ctx context.Context, account *Account, observation *GrokCatalogObservation) error {
+	if s == nil || account == nil || !account.IsGrok() || account.ID <= 0 || observation == nil {
+		return nil
+	}
+	snap, err := PersistGrokCatalogObservation(ctx, s.accountRepo, account.ID, *observation)
+	if err != nil {
+		return err
+	}
+	rememberGrokObservedSnapshot(account, snap)
+	return nil
+}
+
+func (s *AccountTestService) keepGrokCatalogFailure(ctx context.Context, account *Account, observation *GrokCatalogObservation) {
+	if err := s.saveGrokCatalogObservation(ctx, account, observation); err != nil {
+		slog.Warn("grok model catalog observation was not saved",
+			"account_id", upstreamModelSyncAccountID(account),
+			"platform", upstreamModelSyncPlatform(account),
+			"error", err,
+		)
+	}
 }
 
 func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
@@ -1245,7 +1306,7 @@ func extractUpstreamModelIDs(body []byte) ([]string, error) {
 }
 
 func extractGrokUpstreamModelIDs(body []byte) ([]string, error) {
-	return extractUpstreamModelIDsWithSelector(body, grokUpstreamModelEntryID)
+	return parseGrokCatalogModelIDs(body)
 }
 
 func extractUpstreamModelCatalog(body []byte, grok bool) ([]string, map[string]UpstreamModelMetadata, error) {
@@ -1479,13 +1540,9 @@ func grokUpstreamModelEntryID(entry upstreamModelEntry) string {
 				meta.ModelIDSnake,
 				meta.ID,
 				meta.Slug,
-				meta.Name,
 			)
 		}
 	}
-	// `name` is a display label in the Grok catalog, so keep it as the final
-	// compatibility fallback rather than preferring it over protocol model IDs.
-	candidates = append(candidates, entry.Name)
 	for _, candidate := range candidates {
 		modelID := strings.TrimSpace(candidate)
 		if modelID != "" {
