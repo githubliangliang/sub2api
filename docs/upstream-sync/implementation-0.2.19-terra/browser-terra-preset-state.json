@@ -1,0 +1,29 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "HTTP_PROXY",
+    "-u",
+    "HTTPS_PROXY",
+    "-u",
+    "ALL_PROXY",
+    "-u",
+    "http_proxy",
+    "-u",
+    "https_proxy",
+    "-u",
+    "all_proxy",
+    "agent-browser",
+    "--session",
+    "sub2api-terra-20261029",
+    "eval",
+    "(async()=>{const state=(await (await fetch(\"/api/v1/qa/state\")).json()).data;const updates=state.requests.filter(request=>request.path===\"/api/v1/admin/accounts/101\"&&request.method===\"PUT\");if(updates.length!==2||state.account.credentials.model_mapping[\"gpt-6.1-terra\"]!==\"gpt-6.1-terra\")throw new Error(\"Terra preset save mismatch\");return {savedMappings:updates.map(request=>request.body.credentials.model_mapping),platform:state.account.platform};})()",
+    "--json"
+  ],
+  "cwd": "/home/liang/myself/work_space/idea/github/sub2api",
+  "started_at_utc": "2026-10-29T16:19:02.966348+00:00",
+  "duration_seconds": 23.912,
+  "exit_code": 1,
+  "stdout": "browser-terra-preset-state.txt",
+  "stderr": "browser-terra-preset-state.stderr.txt"
+}

@@ -1,0 +1,29 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "HTTP_PROXY",
+    "-u",
+    "HTTPS_PROXY",
+    "-u",
+    "ALL_PROXY",
+    "-u",
+    "http_proxy",
+    "-u",
+    "https_proxy",
+    "-u",
+    "all_proxy",
+    "agent-browser",
+    "--session",
+    "sub2api-terra-20261029",
+    "eval",
+    "(async()=>{const response=await fetch(\"/api/v1/qa/state\");const state=(await response.json()).data;if(state.account.credentials.model_mapping[\"gpt-6.1-terra\"]!==\"gpt-6.1-terra\")throw new Error(\"Whitelist save did not persist\");return {modelMapping:state.account.credentials.model_mapping,platform:state.account.platform};})()",
+    "--json"
+  ],
+  "cwd": "/home/liang/myself/work_space/idea/github/sub2api",
+  "started_at_utc": "2026-10-29T16:17:18.630370+00:00",
+  "duration_seconds": 0.013,
+  "exit_code": 0,
+  "stdout": "browser-terra-whitelist-state.txt",
+  "stderr": "browser-terra-whitelist-state.stderr.txt"
+}

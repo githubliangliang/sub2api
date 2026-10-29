@@ -1,0 +1,29 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "HTTP_PROXY",
+    "-u",
+    "HTTPS_PROXY",
+    "-u",
+    "ALL_PROXY",
+    "-u",
+    "http_proxy",
+    "-u",
+    "https_proxy",
+    "-u",
+    "all_proxy",
+    "agent-browser",
+    "--session",
+    "sub2api-terra-20261029",
+    "eval",
+    "(() => { const write=navigator.clipboard.writeText.bind(navigator.clipboard); window.__terraClipboardWrite=null; navigator.clipboard.writeText=async(text)=>{const observation={matchesRenderedConfig:text===document.querySelector(\"pre code\").textContent,completed:false,terra:JSON.parse(text).provider.openai.models[\"gpt-6.1-terra\"]};window.__terraClipboardWrite=observation;try {await write(text);observation.completed=true;} catch(error) {observation.error=error.name;throw error;}};for(let node=document.querySelector(\"pre code\").parentElement;node;node=node.parentElement){if(node.scrollHeight>node.clientHeight+10)node.scrollTop=0;}return true;})()",
+    "--json"
+  ],
+  "cwd": "/home/liang/myself/work_space/idea/github/sub2api",
+  "started_at_utc": "2026-10-29T16:08:58.986750+00:00",
+  "duration_seconds": 0.008,
+  "exit_code": 0,
+  "stdout": "browser-clipboard-write-observer.txt",
+  "stderr": "browser-clipboard-write-observer.stderr.txt"
+}

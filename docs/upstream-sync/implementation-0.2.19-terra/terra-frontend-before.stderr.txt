@@ -1,0 +1,60 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/composables/__tests__/useModelWhitelist.spec.ts > useModelWhitelist > exposes Terra once and round-trips its whitelist and mapping preset
+AssertionError: expected [] to deeply equal [ 'gpt-6.1-terra' ]
+
+- Expected
++ Received
+
+- Array [
+-   "gpt-6.1-terra",
+- ]
++ Array []
+
+ ❯ src/composables/__tests__/useModelWhitelist.spec.ts:11:86
+      9| describe('useModelWhitelist', () => {
+     10|   it('exposes Terra once and round-trips its whitelist and mapping pre…
+     11|     expect(getModelsByPlatform('openai').filter(model => model === 'gp…
+       |                                                                                      ^
+     12|     expect(allModels.filter(model => model.value === 'gpt-6.1-terra'))…
+     13|     const preset = getPresetMappingsByPlatform('openai').find(mapping …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/components/keys/__tests__/UseKeyModal.spec.ts > UseKeyModal > renders GPT-5.6 and GPT-6 Astra capabilities in OpenCode config
+AssertionError: expected undefined to deeply equal { name: 'GPT-6.1 Terra', …(3) }
+
+- Expected: 
+Object {
+  "limit": Object {
+    "context": 1050000,
+    "output": 128000,
+  },
+  "name": "GPT-6.1 Terra",
+  "options": Object {
+    "store": false,
+  },
+  "variants": Object {
+    "high": Object {},
+    "low": Object {},
+    "max": Object {},
+    "medium": Object {},
+    "none": Object {},
+    "xhigh": Object {},
+  },
+}
+
++ Received: 
+undefined
+
+ ❯ src/components/keys/__tests__/UseKeyModal.spec.ts:704:37
+    702|     const parsed = JSON.parse(wrapper.find('pre code').text())
+    703|     const models = parsed.provider.openai.models
+    704|     expect(models['gpt-6.1-terra']).toEqual({
+       |                                     ^
+    705|       name: 'GPT-6.1 Terra',
+    706|       limit: { context: 1050000, output: 128000 },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
