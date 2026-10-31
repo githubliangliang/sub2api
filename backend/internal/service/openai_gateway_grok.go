@@ -933,6 +933,20 @@ func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
 		}
 	}
 
+	if !grokRawToolsContainType(filteredTools, "tool_search") {
+		for index, raw := range filteredTools {
+			if !gjson.GetBytes(raw, "defer_loading").Exists() {
+				continue
+			}
+			cleaned, err := sjson.DeleteBytes(raw, "defer_loading")
+			if err != nil {
+				return nil, err
+			}
+			filteredTools[index] = cleaned
+			toolsChanged = true
+		}
+	}
+
 	var err error
 	if len(filteredTools) != len(rawTools) || toolsChanged {
 		if len(filteredTools) == 0 {
@@ -961,6 +975,15 @@ func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
 		}
 	}
 	return body, nil
+}
+
+func grokRawToolsContainType(tools []json.RawMessage, want string) bool {
+	for _, tool := range tools {
+		if strings.TrimSpace(gjson.GetBytes(tool, "type").String()) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldDropGrokToolChoice(toolChoice gjson.Result, tools []json.RawMessage) bool {

@@ -68,7 +68,7 @@ func writeOpenAICompactSSEBridge(c *gin.Context, statusCode int, finalResponse [
 		}
 		return false
 	}
-	payload, ok := buildOpenAICompactSSEPayload(finalResponse)
+	payload, ok := buildOpenAICompactSSEPayload(finalResponse, responsesSequenceFromContext(c).peek())
 	if !ok {
 		if committed {
 			writeOpenAICompactSSEFailure(c, http.StatusBadGateway, finalResponse)
@@ -84,7 +84,9 @@ func writeOpenAICompactSSEBridge(c *gin.Context, statusCode int, finalResponse [
 		header.Set("X-Accel-Buffering", "no")
 		c.Writer.WriteHeader(statusCode)
 	}
-	_, _ = c.Writer.Write(payload)
+	if _, err := c.Writer.Write(payload); err == nil {
+		ObserveOpenAIResponsesSequence(c, openAIResponsesSequenceFromSSE(string(payload)))
+	}
 	c.Writer.Flush()
 	return true
 }
@@ -113,7 +115,8 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 	}
 	MarkOpsStreamError(c, errType, message, statusCode)
 	payload, err := json.Marshal(map[string]any{
-		"type": "response.failed",
+		"type":            "response.failed",
+		"sequence_number": NextOpenAIResponsesSequence(c),
 		"response": map[string]any{
 			"id":     "resp_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
 			"object": "response",
@@ -140,7 +143,7 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 // 并要求 response.completed 的 response.id 必填、usage（若存在）必须携带
 // input_tokens/output_tokens/total_tokens 整数字段，否则整条 completed 事件
 // 解析失败，故此处做兜底修补。
-func buildOpenAICompactSSEPayload(finalResponse []byte) ([]byte, bool) {
+func buildOpenAICompactSSEPayload(finalResponse []byte, startingSequence ...int64) ([]byte, bool) {
 	if len(finalResponse) == 0 || !gjson.ValidBytes(finalResponse) {
 		return nil, false
 	}
@@ -172,12 +175,25 @@ func buildOpenAICompactSSEPayload(finalResponse []byte) ([]byte, bool) {
 
 	var buf bytes.Buffer
 	outputIndex := 0
-	appendEvent := func(eventType string, data []byte) {
+	sequence := int64(0)
+	if len(startingSequence) > 0 && startingSequence[0] >= 0 {
+		sequence = startingSequence[0]
+	}
+	appendEvent := func(eventType string, data []byte) bool {
+		if sequence < 0 {
+			return false
+		}
+		numbered, err := sjson.SetBytes(data, "sequence_number", sequence)
+		if err != nil {
+			return false
+		}
+		sequence++
 		_, _ = buf.WriteString("event: ")
 		_, _ = buf.WriteString(eventType)
 		_, _ = buf.WriteString("\ndata: ")
-		_, _ = buf.Write(data)
+		_, _ = buf.Write(numbered)
 		_, _ = buf.WriteString("\n\n")
+		return true
 	}
 	for _, item := range gjson.GetBytes(response, "output").Array() {
 		if !item.IsObject() {
@@ -191,7 +207,9 @@ func buildOpenAICompactSSEPayload(finalResponse []byte) ([]byte, bool) {
 		if err != nil {
 			return nil, false
 		}
-		appendEvent("response.output_item.done", event)
+		if !appendEvent("response.output_item.done", event) {
+			return nil, false
+		}
 		outputIndex++
 	}
 
@@ -199,7 +217,9 @@ func buildOpenAICompactSSEPayload(finalResponse []byte) ([]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	appendEvent("response.completed", completed)
+	if !appendEvent("response.completed", completed) {
+		return nil, false
+	}
 	return buf.Bytes(), true
 }
 

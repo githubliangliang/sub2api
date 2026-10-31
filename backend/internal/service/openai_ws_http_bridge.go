@@ -324,8 +324,9 @@ func buildOpenAIWSHTTPBridgeErrorEvent(statusCode int, message string) []byte {
 		message = "upstream request failed"
 	}
 	event := map[string]any{
-		"type":   "error",
-		"status": statusCode,
+		"type":            "error",
+		"sequence_number": 0,
+		"status":          statusCode,
 		"error": map[string]any{
 			"type":    "upstream_error",
 			"message": message,
@@ -333,7 +334,7 @@ func buildOpenAIWSHTTPBridgeErrorEvent(statusCode int, message string) []byte {
 	}
 	body, err := json.Marshal(event)
 	if err != nil {
-		return []byte(`{"type":"error","error":{"type":"upstream_error","message":"upstream request failed"}}`)
+		return []byte(`{"type":"error","sequence_number":0,"error":{"type":"upstream_error","message":"upstream request failed"}}`)
 	}
 	return body
 }
@@ -493,6 +494,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	upstreamTerminalEvent := ""
 	sawDone := false
 	wroteDownstream := false
+	sequenceState := newResponsesSequenceState()
 	// 首轮语义输出前先把客户端消息暂存住：一旦写出去就再也切不了号，
 	// 而降载/错误帧往往排在真正的输出之前。
 	pendingClientMessages := make([][]byte, 0, 4)
@@ -727,6 +729,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 							wroteDownstream,
 						)
 					}
+					sequenceState.observe(openAIResponsesSequenceFromSSE(string(message)))
 					if !isKeepalive {
 						wroteDownstream = true
 					}
@@ -772,7 +775,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		s.handleOpenAIAccountUpstreamError(ctx, account, openAIStreamFailureStatus(bareErrors.pending, message), resp.Header, bareErrors.pending, canonicalOpenAIAccountSchedulingModel(account, originalModel))
 		upstreamTerminalEvent = "response.failed"
 		if !clientDisconnected {
-			frame := buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message)
+			frame := buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message, sequenceState.next())
 			for _, line := range strings.Split(frame, "\n") {
 				if data, ok := extractOpenAISSEDataLine(line); ok {
 					_ = writeClientMessage([]byte(data))

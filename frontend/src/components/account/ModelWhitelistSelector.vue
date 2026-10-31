@@ -145,11 +145,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { accountsAPI } from '@/api/admin/accounts'
-import type { SyncUpstreamPreviewParams } from '@/api/admin/accounts'
+import type { SyncUpstreamPreviewParams, SyncUpstreamModelsResult } from '@/api/admin/accounts'
 import { useClipboard } from '@/composables/useClipboard'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -175,6 +175,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
   'upstream-synced': []
+  'sync-result': [result: SyncUpstreamModelsResult, accountId?: number]
+  'sync-error': [accountId?: number]
 }>()
 
 const appStore = useAppStore()
@@ -185,6 +187,12 @@ const searchQuery = ref('')
 const customModel = ref('')
 const isComposing = ref(false)
 const isSyncingUpstream = ref(false)
+let syncGeneration = 0
+watch([() => props.accountId, () => props.platform, () => props.syncCredentials], () => {
+  syncGeneration++
+  isSyncingUpstream.value = false
+})
+onBeforeUnmount(() => { syncGeneration++ })
 const normalizedPlatforms = computed(() => {
   const rawPlatforms =
     props.platforms && props.platforms.length > 0
@@ -295,6 +303,8 @@ const syncUpstreamModels = async () => {
   if (!props.accountId && !props.syncCredentials) return
 
   isSyncingUpstream.value = true
+  const generation = ++syncGeneration
+  const accountId = props.accountId
   try {
     let result
     if (props.accountId) {
@@ -305,6 +315,12 @@ const syncUpstreamModels = async () => {
       return
     }
 
+    await nextTick()
+    if (generation !== syncGeneration) return
+    emit('sync-result', result, accountId)
+    if (result.discovery_source === 'configured_fallback') {
+      appStore.showWarning(t('admin.accounts.grokModelDiagnostics.configuredFallback'))
+    }
     const upstreamModels = result.models.map(model => model.trim()).filter(Boolean)
     if (upstreamModels.length === 0) {
       appStore.showInfo(t('admin.accounts.syncUpstreamModelsEmpty'))
@@ -336,6 +352,7 @@ const syncUpstreamModels = async () => {
       appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataIncomplete'))
       return
     }
+    if (result.discovery_source === 'configured_fallback') return
     if (addedCount > 0) {
       appStore.showSuccess(t('admin.accounts.syncUpstreamModelsSuccess', { count: addedCount, total: upstreamModels.length }))
     } else {
@@ -345,10 +362,12 @@ const syncUpstreamModels = async () => {
       appStore.showWarning(t('admin.accounts.syncUpstreamModelsMetadataPartial'))
     }
   } catch (error) {
+    if (generation !== syncGeneration) return
+    emit('sync-error', accountId)
     const message = extractApiErrorMessage(error, t('admin.accounts.syncUpstreamModelsFailed'))
     appStore.showError(t('admin.accounts.syncUpstreamModelsError', { message }))
   } finally {
-    isSyncingUpstream.value = false
+    if (generation === syncGeneration) isSyncingUpstream.value = false
   }
 }
 

@@ -1,0 +1,102 @@
+//go:build unit
+
+package service
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+)
+
+func TestUnmergedReviewStreamedToolArguments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-5.4","input":"read file","stream":true,"tools":[{"type":"function","name":"read_file","parameters":{"type":"object"}}]}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	upstreamBody := "data: {\"id\":\"chat_review_stream\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_bad\",\"type\":\"function\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\ndata: [DONE]\n\n"
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body: io.NopCloser(strings.NewReader(upstreamBody)),
+	}}
+	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+	result, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
+	t.Logf("actual gateway result_present=%t err=%v", result != nil, err)
+	for _, line := range strings.Split(recorder.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
+			continue
+		}
+		data := []byte(strings.TrimPrefix(line, "data: "))
+		if gjson.GetBytes(data, "type").String() == "response.output_item.done" && gjson.GetBytes(data, "item.type").String() == "function_call" {
+			arguments := gjson.GetBytes(data, "item.arguments").String()
+			if !json.Valid([]byte(arguments)) {
+				t.Errorf("actual gateway completed invalid tool call: %s", data)
+			}
+		}
+	}
+	if result == nil || result.Usage.InputTokens != 3 || result.Usage.OutputTokens != 2 {
+		t.Errorf("probe did not reach expected usage boundary: result=%+v", result)
+	}
+}
+
+func TestUnmergedReviewSyntheticSequenceWire(t *testing.T) {
+	t.Run("compact_items_and_terminal", func(t *testing.T) {
+		payload, ok := buildOpenAICompactSSEPayload([]byte(`{"id":"resp_review","output":[{"type":"message","id":"msg_review","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}`))
+		if !ok {
+			t.Fatal("valid compact response rejected")
+		}
+		assertReviewSSESequence(t, payload)
+	})
+	t.Run("compact_failure", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		writeOpenAICompactSSEFailureMessage(c, http.StatusBadGateway, "upstream_error", "fixture failure")
+		assertReviewSSESequence(t, recorder.Body.Bytes())
+	})
+	t.Run("ws_http_bridge_error", func(t *testing.T) {
+		payload := buildOpenAIWSHTTPBridgeErrorEvent(http.StatusBadGateway, "fixture failure")
+		if !gjson.GetBytes(payload, "sequence_number").Exists() {
+			t.Errorf("WS HTTP bridge error omits sequence_number: %s", payload)
+		}
+	})
+}
+
+func assertReviewSSESequence(t *testing.T, payload []byte) {
+	t.Helper()
+	count := 0
+	for _, line := range strings.Split(string(payload), "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		count++
+		data := []byte(strings.TrimPrefix(line, "data: "))
+		if !gjson.GetBytes(data, "sequence_number").Exists() {
+			t.Errorf("synthetic %s event omits sequence_number: %s", gjson.GetBytes(data, "type").String(), data)
+		}
+	}
+	if count == 0 {
+		t.Fatal("probe produced no SSE events")
+	}
+}
+
+func TestUnmergedReviewGrokDeferredToolFlags(t *testing.T) {
+	body := []byte(`{"model":"grok-4.5","input":"hello","tools":[{"type":"function","name":"read_file","parameters":{"type":"object"},"defer_loading":true},{"type":"tool_search"}]}`)
+	patched, _, err := patchGrokResponsesBodyWithClientTools(body, "grok-4.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range gjson.GetBytes(patched, "tools").Array() {
+		if tool.Get("defer_loading").Exists() {
+			t.Errorf("actual Grok request keeps defer_loading without built-in tool_search: %s", patched)
+		}
+	}
+}

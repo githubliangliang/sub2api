@@ -1,0 +1,116 @@
+{
+  "recorded_after_utc": "2026-10-31T14:00:35.119870+00:00",
+  "baseline_targeted": {
+    "command": [
+      "rtk",
+      "proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^Test(AdaptResponsesClientTools|RestoreResponsesClientToolPayload|ResponsesClientToolStreamRestorer|ForwardResponses_(ForceChatCompletions|ChatFallback)|PatchGrokResponsesBodyWithClientTools|BuildOpenAICompactSSEPayload|OpenAIHandleStreamingAwareError|GatewayHandleStreamingAwareError|InboundIsResponses)",
+      "-count=1",
+      "-json",
+      "./internal/pkg/apicompat",
+      "./internal/service",
+      "./internal/handler"
+    ],
+    "cwd": "/home/liang/myself/work_space/idea/github/sub2api/backend",
+    "exit_code": 0,
+    "top_level_passed": 47,
+    "test_events": {
+      "pass": 83
+    },
+    "packages": {
+      "github.com/Wei-Shaw/sub2api/internal/pkg/apicompat": "pass",
+      "github.com/Wei-Shaw/sub2api/internal/handler": "pass",
+      "github.com/Wei-Shaw/sub2api/internal/service": "pass"
+    }
+  },
+  "test_list": {
+    "command": [
+      "rtk",
+      "proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "-list",
+      "^Test(AdaptResponsesClientTools|RestoreResponsesClientToolPayload|ResponsesClientToolStreamRestorer|ForwardResponses_(ForceChatCompletions|ChatFallback)|PatchGrokResponsesBodyWithClientTools|BuildOpenAICompactSSEPayload|OpenAIHandleStreamingAwareError|GatewayHandleStreamingAwareError|InboundIsResponses)",
+      "./internal/pkg/apicompat",
+      "./internal/service",
+      "./internal/handler"
+    ],
+    "exit_code": 0,
+    "listed": 47
+  },
+  "overlay_probes": {
+    "apicompat": {
+      "exit_code": 1,
+      "expected_for_intake": true,
+      "top_level_failed_tests": 5
+    },
+    "service": {
+      "exit_code": 1,
+      "expected_for_intake": true,
+      "top_level_failed_tests": 3
+    },
+    "handler": {
+      "exit_code": 1,
+      "expected_for_intake": true,
+      "top_level_failed_tests": 1
+    }
+  },
+  "source_states": {
+    "total": {
+      "CONFLICT": 9,
+      "CLEAN": 14,
+      "ALREADY": 1,
+      "NOBASE": 1
+    },
+    "clusters": {
+      "C01": {
+        "CONFLICT": 3,
+        "CLEAN": 2
+      },
+      "C02": {
+        "CLEAN": 5,
+        "CONFLICT": 1
+      },
+      "C03": {
+        "CLEAN": 2,
+        "CONFLICT": 3,
+        "ALREADY": 1
+      },
+      "C04": {
+        "CLEAN": 5,
+        "CONFLICT": 2,
+        "NOBASE": 1
+      }
+    },
+    "rows": 25,
+    "head": "e44324231ec98b5176fe04c6ddb3f3552a352889",
+    "method": "isolated index; all reverse checks before all forward checks; no patch applied"
+  },
+  "openspec_strict": {
+    "command": [
+      "rtk",
+      "proxy",
+      "env",
+      "OPENSPEC_TELEMETRY=0",
+      "node",
+      "/home/liang/.npm/_npx/abab5bd700860149/node_modules/@fission-ai/openspec/bin/openspec.js",
+      "validate",
+      "port-upstream-historical-client-compatibility",
+      "--strict"
+    ],
+    "version": "1.13.2",
+    "exit_code": 0,
+    "log": "openspec-strict.log"
+  },
+  "online_review": {
+    "github_pr_open": "HTTP 502",
+    "github_search": "HTTP 502",
+    "fallback": "frozen primary git objects and whole-PR patches; no claim about later releases"
+  },
+  "scope": "assessment documents and draft specification only; implementation acceptance slots remain empty"
+}

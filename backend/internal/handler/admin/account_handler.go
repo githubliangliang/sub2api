@@ -834,7 +834,11 @@ func (h *AccountHandler) GetByID(c *gin.Context) {
 		}
 	}
 
-	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+	result := h.buildAccountResponseWithRuntime(c.Request.Context(), account)
+	if h.accountTestService != nil && account != nil && account.IsGrok() {
+		result.GrokModelDiagnostics = h.accountTestService.GetGrokModelDiagnostics(c.Request.Context(), account)
+	}
+	response.Success(c, result)
 }
 
 // CheckMixedChannel handles checking mixed channel risk for account-group binding.
@@ -2944,6 +2948,11 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 		return
 	}
 
+	if catalog != nil && account != nil && account.IsGrok() {
+		if latest, readErr := h.adminService.GetAccount(c.Request.Context(), accountID); readErr == nil && latest != nil {
+			catalog.GrokModelDiagnostics = h.accountTestService.GetGrokModelDiagnostics(c.Request.Context(), latest)
+		}
+	}
 	response.Success(c, catalog)
 }
 

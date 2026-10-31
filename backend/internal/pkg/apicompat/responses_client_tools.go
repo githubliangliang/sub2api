@@ -119,6 +119,9 @@ func AdaptResponsesClientTools(req map[string]any) (ResponsesClientToolMapping, 
 			lowered = append(lowered, raw)
 		}
 	}
+	if stripResponsesDeferredToolFlags(lowered) {
+		changed = true
+	}
 	if changed {
 		req["tools"] = lowered
 	}
@@ -139,6 +142,30 @@ func AdaptResponsesClientTools(req map[string]any) (ResponsesClientToolMapping, 
 		adapter.NamespaceTools = nil
 	}
 	return adapter, changed, nil
+}
+
+// Defer flags require a built-in tool_search in the final declaration list.
+// Copy affected declarations so lowering does not mutate a shared source map.
+func stripResponsesDeferredToolFlags(tools []any) bool {
+	for _, raw := range tools {
+		if tool, ok := raw.(map[string]any); ok && strings.TrimSpace(stringValue(tool["type"])) == "tool_search" {
+			return false
+		}
+	}
+	changed := false
+	for index, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, exists := tool["defer_loading"]; exists {
+			copy := copyClientTool(tool)
+			delete(copy, "defer_loading")
+			tools[index] = copy
+			changed = true
+		}
+	}
+	return changed
 }
 
 func copyClientTool(tool map[string]any) map[string]any {

@@ -148,7 +148,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+              <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" @sync-result="handleGrokCatalogSynced" @sync-error="handleGrokCatalogSyncError" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -577,7 +577,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" @sync-result="handleGrokCatalogSynced" @sync-error="handleGrokCatalogSyncError" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -789,7 +789,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" @sync-result="handleGrokCatalogSynced" @sync-error="handleGrokCatalogSyncError" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -2658,6 +2658,17 @@
         </div>
       </div>
 
+      <GrokModelDiagnosticsPanel
+        v-if="show && account?.platform === 'grok'"
+        :diagnostics="grokModelDiagnostics"
+        :loading="grokDiagnosticsLoading"
+        :refresh-failed="grokDiagnosticsRefreshFailed"
+        :dirty="grokDiagnosticsDirty"
+        :can-sync="account.type === 'oauth' || account.type === 'apikey'"
+        :syncing="grokDiagnosticsSyncing"
+        @sync="syncGrokModelCatalog"
+      />
+
       <!-- Group Selection - 仅标准模式显示 -->
       <GroupSelector
         v-if="!authStore.isSimpleMode"
@@ -2724,7 +2735,7 @@
 <script setup lang="ts">
 import type { TempUnschedulableScope } from '@/types'
 import { resolveTempUnschedScope } from '@/utils/tempUnschedScope'
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -2732,6 +2743,7 @@ import { adminAPI } from '@/api/admin'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
 import type {
   Account,
+  GrokModelDiagnostics,
   Proxy,
   AdminGroup,
   Group,
@@ -2752,6 +2764,8 @@ import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
+import GrokModelDiagnosticsPanel from '@/components/account/GrokModelDiagnosticsPanel.vue'
+import type { SyncUpstreamModelsResult } from '@/api/admin/accounts'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
 import {
@@ -3768,15 +3782,117 @@ async function loadTLSProfiles() {
   }
 }
 
+const grokModelDiagnostics = ref<GrokModelDiagnostics | null>(null)
+const grokDiagnosticsLoading = ref(false)
+const grokDiagnosticsRefreshFailed = ref(false)
+const grokDiagnosticsSyncing = ref(false)
+const grokSavedConfig = ref('')
+let grokAccountGeneration = 0
+let grokDiagnosticReadSequence = 0
+
+function grokDiagnosticConfigSnapshot(): string {
+  const mapping = buildModelRestrictionMapping() ?? {}
+  return JSON.stringify({
+    base_url: props.account?.type === 'oauth'
+      ? (grokOAuthCustomBaseUrlEnabled.value ? grokOAuthBaseUrl.value.trim() : '')
+      : editBaseUrl.value.trim(),
+    api_key: editApiKey.value,
+    model_mapping: Object.fromEntries(Object.entries(mapping).sort(([left], [right]) => left.localeCompare(right))),
+    headers: headerOverrideEnabled.value ? headerOverrideRows.value : []
+  })
+}
+
+const grokDiagnosticsDirty = computed(() => props.account?.platform === 'grok'
+  && grokSavedConfig.value !== ''
+  && grokSavedConfig.value !== grokDiagnosticConfigSnapshot())
+
+function resetGrokDiagnostics() {
+  grokAccountGeneration++
+  grokDiagnosticReadSequence++
+  grokModelDiagnostics.value = null
+  grokDiagnosticsLoading.value = false
+  grokDiagnosticsRefreshFailed.value = false
+  grokDiagnosticsSyncing.value = false
+  grokSavedConfig.value = ''
+}
+
+function currentGrokAccount(accountId: number | undefined): accountId is number {
+  return props.show && props.account?.platform === 'grok' && props.account.id === accountId
+}
+
+async function loadGrokDiagnostics(accountId: number) {
+  if (!currentGrokAccount(accountId)) return
+  const generation = grokAccountGeneration
+  const sequence = ++grokDiagnosticReadSequence
+  grokDiagnosticsLoading.value = true
+  try {
+    const latest = await adminAPI.accounts.getById(accountId)
+    if (generation !== grokAccountGeneration || sequence !== grokDiagnosticReadSequence || !currentGrokAccount(accountId)) return
+    grokModelDiagnostics.value = latest.grok_model_diagnostics ?? null
+    grokDiagnosticsRefreshFailed.value = false
+  } catch {
+    if (generation === grokAccountGeneration && sequence === grokDiagnosticReadSequence && currentGrokAccount(accountId)) {
+      grokDiagnosticsRefreshFailed.value = true
+    }
+  } finally {
+    if (generation === grokAccountGeneration && sequence === grokDiagnosticReadSequence) grokDiagnosticsLoading.value = false
+  }
+}
+
+function handleGrokCatalogSynced(_result: SyncUpstreamModelsResult, accountId?: number) {
+  if (currentGrokAccount(accountId)) void loadGrokDiagnostics(accountId)
+}
+
+async function handleGrokCatalogSyncError(accountId?: number) {
+  if (!currentGrokAccount(accountId)) return
+  const generation = grokAccountGeneration
+  await loadGrokDiagnostics(accountId)
+  if (generation === grokAccountGeneration && currentGrokAccount(accountId)) grokDiagnosticsRefreshFailed.value = true
+}
+
+async function syncGrokModelCatalog() {
+  const accountId = props.account?.id
+  if (!currentGrokAccount(accountId) || grokDiagnosticsSyncing.value || grokDiagnosticsLoading.value) return
+  const generation = grokAccountGeneration
+  grokDiagnosticsSyncing.value = true
+  try {
+    const result = await adminAPI.accounts.syncUpstreamModels(accountId)
+    if (generation !== grokAccountGeneration || !currentGrokAccount(accountId)) return
+    if (result.discovery_source === 'configured_fallback') {
+      appStore.showWarning(t('admin.accounts.grokModelDiagnostics.configuredFallback'))
+    }
+    await loadGrokDiagnostics(accountId)
+  } catch {
+    if (generation === grokAccountGeneration && currentGrokAccount(accountId)) {
+      await loadGrokDiagnostics(accountId)
+      if (generation === grokAccountGeneration && currentGrokAccount(accountId)) {
+        grokDiagnosticsRefreshFailed.value = true
+        appStore.showError(t('admin.accounts.syncUpstreamModelsFailed'))
+      }
+    }
+  } finally {
+    if (generation === grokAccountGeneration) grokDiagnosticsSyncing.value = false
+  }
+}
+
+onBeforeUnmount(resetGrokDiagnostics)
+
 watch(
   [() => props.show, () => props.account],
   ([show, newAccount], [wasShow, previousAccount]) => {
     if (!show || !newAccount) {
+      resetGrokDiagnostics()
       return
     }
     if (!wasShow || newAccount !== previousAccount) {
+      resetGrokDiagnostics()
       syncFormFromAccount(newAccount)
       loadTLSProfiles()
+      if (newAccount.platform === 'grok') {
+        grokSavedConfig.value = grokDiagnosticConfigSnapshot()
+        grokModelDiagnostics.value = newAccount.grok_model_diagnostics ?? null
+        if (newAccount.grok_model_diagnostics === undefined) void loadGrokDiagnostics(newAccount.id)
+      }
     }
   },
   { immediate: true }

@@ -1,0 +1,102 @@
+{
+  "backend_unit": {
+    "command": [
+      "rtk",
+      "proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./...",
+      "-count=1"
+    ],
+    "exit_code": 0,
+    "packages": 54,
+    "log": "backend-unit.log"
+  },
+  "backend_build": {
+    "command": [
+      "rtk",
+      "proxy",
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-ldflags=-s -w",
+      "-o",
+      "/tmp/sub2api-historical-compatibility-server",
+      "./cmd/server"
+    ],
+    "exit_code": 0,
+    "log": "backend-build.log"
+  },
+  "backend_lint": {
+    "command": [
+      "rtk",
+      "proxy",
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "exit_code": 0,
+    "issues": 0,
+    "log": "backend-lint.log"
+  },
+  "targeted_race": {
+    "exit_code": 0,
+    "packages": 4,
+    "test_cases": 456,
+    "log": "backend-race.jsonl"
+  },
+  "sqlite_protection": {
+    "exit_code": 0,
+    "packages": 3,
+    "test_cases": 468,
+    "log": "sqlite-protection.jsonl"
+  },
+  "frontend": {
+    "typecheck": 0,
+    "lint": 0,
+    "build": 0,
+    "tests": 2169,
+    "existing_skips": 2,
+    "critical_exit": 0,
+    "full_log": "frontend-full.log",
+    "build_log": "frontend-build.log",
+    "critical_log": "frontend-critical.log",
+    "critical_tests": 176,
+    "critical_skips": 2
+  },
+  "acceptance": {
+    "strict_http_and_sqlite": "strict-http-sqlite-initial.jsonl",
+    "grok_admin_sqlite": "grok-admin-sqlite-initial.jsonl",
+    "browser_commands": "browser/commands.json",
+    "viewport": 390,
+    "width": 390,
+    "panel_width": 340
+  },
+  "scope": {
+    "starting_head": "5250907f5b8294eabed3d3101d2c4bf79936e0f7",
+    "version": "1.1.21",
+    "go": "1.27.3",
+    "sqlite_max": 227,
+    "changed_product_files": 33,
+    "historical_frozen_files": 2294,
+    "historical_changes": 0,
+    "protected_changes": 0,
+    "code_sha256": "d472f1d75f0aece88b9930e94cfb52ab232f2d716b521fd2268b60a3e5b72852"
+  },
+  "ws_race": {
+    "test_events": {
+      "pass": 74
+    },
+    "packages": {
+      "github.com/Wei-Shaw/sub2api/internal/handler": "pass",
+      "github.com/Wei-Shaw/sub2api/internal/service": "pass"
+    },
+    "failed": [],
+    "exit_code": 0,
+    "log": "ws-race.jsonl"
+  }
+}

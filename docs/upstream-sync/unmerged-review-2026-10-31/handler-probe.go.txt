@@ -1,0 +1,31 @@
+//go:build unit
+
+package handler
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestUnmergedReviewHandlerFailureSequence(t *testing.T) {
+	c, recorder := newGinContextForEndpoint(t, "/v1/responses")
+	if !writeResponsesFailedSSE(c, "upstream_error", "fixture failure") {
+		t.Fatal("Responses failure was not written")
+	}
+	for _, line := range strings.Split(recorder.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := []byte(strings.TrimPrefix(line, "data: "))
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(data, &object); err != nil {
+			t.Fatal(err)
+		}
+		if _, exists := object["sequence_number"]; !exists {
+			t.Errorf("actual handler failure omits sequence_number: %s", data)
+		}
+		return
+	}
+	t.Fatal("probe produced no SSE data")
+}

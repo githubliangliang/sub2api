@@ -134,11 +134,21 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			}
 		}()
 	}
+	pendingSequence := int64(-1)
 	writePendingString := func(value string) (int, error) {
+		var n int
+		var err error
 		if firstOutputStage != nil && !firstOutputStage.closed {
-			return firstOutputStage.WriteString(value)
+			n, err = firstOutputStage.WriteString(value)
+		} else {
+			n, err = bufferedWriter.WriteString(value)
 		}
-		return bufferedWriter.WriteString(value)
+		if err == nil {
+			if sequence := openAIResponsesSequenceFromSSE(value); sequence > pendingSequence {
+				pendingSequence = sequence
+			}
+		}
+		return n, err
 	}
 	pendingBytes := func() int64 {
 		if firstOutputStage != nil && !firstOutputStage.closed {
@@ -156,6 +166,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				return err
 			}
 		}
+		ObserveOpenAIResponsesSequence(c, pendingSequence)
 		flusher.Flush()
 		return nil
 	}
@@ -314,11 +325,11 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			return
 		}
 		errorEventSent = true
-		payload := `{"type":"error","sequence_number":0,"code":` + strconv.Quote(code) + `,"message":` + strconv.Quote(message) + `,"param":null}`
 		if err := flushBuffered(); err != nil {
 			clientDisconnected = true
 			return
 		}
+		payload := `{"type":"error","sequence_number":` + strconv.FormatInt(NextOpenAIResponsesSequence(c), 10) + `,"code":` + strconv.Quote(code) + `,"message":` + strconv.Quote(message) + `,"param":null}`
 		if _, err := writePendingString("event: error\ndata: " + payload + "\n\n"); err != nil {
 			clientDisconnected = true
 			return
@@ -374,8 +385,13 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			s.handleOpenAIAccountUpstreamError(ctx, account, openAIStreamFailureStatus(bareErrors.pending, message), resp.Header, bareErrors.pending, canonicalOpenAIAccountSchedulingModel(account, originalModel))
 			if !clientDisconnected {
 				applyAttemptResponseHeaders()
-				if _, err := writePendingString(buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message)); err != nil {
+				if err := flushBuffered(); err != nil {
 					handlePendingWriteError(err)
+				}
+				if !clientDisconnected {
+					if _, err := writePendingString(buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message, NextOpenAIResponsesSequence(c))); err != nil {
+						handlePendingWriteError(err)
+					}
 				}
 				flushPending("Client disconnected during error terminal flush")
 				MarkResponseCommitted(c)

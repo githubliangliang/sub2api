@@ -50,6 +50,7 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 		return nil, fmt.Errorf("resolve responses tools: %w", err)
 	}
 	customTools := apicompat.CustomToolNames(effectiveTools)
+	functionTools := apicompat.FunctionToolNames(effectiveTools)
 	toolSearch := apicompat.HasToolSearchTool(effectiveTools)
 	namespaceTools := apicompat.NamespaceToolNames(effectiveTools)
 
@@ -128,13 +129,13 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	}
 
 	if clientStream {
-		result, streamErr := s.streamChatCompletionsAsResponses(c, resp, originalModel, customTools, toolSearch, namespaceTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+		result, streamErr := s.streamChatCompletionsAsResponses(c, resp, originalModel, customTools, functionTools, toolSearch, namespaceTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 		if result != nil {
 			logOpenAIServiceTierDifference(c, account, result.RequestID, serviceTier, result.ServiceTier)
 		}
 		return result, streamErr
 	}
-	result, bufferErr := s.bufferChatCompletionsAsResponses(c, resp, originalModel, customTools, toolSearch, namespaceTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+	result, bufferErr := s.bufferChatCompletionsAsResponses(c, resp, originalModel, customTools, functionTools, toolSearch, namespaceTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 	if result != nil {
 		logOpenAIServiceTierDifference(c, account, result.RequestID, serviceTier, result.ServiceTier)
 	}
@@ -146,6 +147,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 	resp *http.Response,
 	originalModel string,
 	customTools map[string]bool,
+	functionTools map[string]bool,
 	toolSearch bool,
 	namespaceTools map[string]apicompat.NamespacedToolName,
 	billingModel string,
@@ -159,7 +161,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 	if err != nil {
 		return nil, err
 	}
-	responsesResp := apicompat.ChatCompletionsResponseToResponses(ccResp, originalModel, customTools, toolSearch, namespaceTools)
+	responsesResp := apicompat.ChatCompletionsResponseToResponses(ccResp, originalModel, customTools, toolSearch, namespaceTools, functionTools)
 	s.cacheReasoningItemsFromOutput(responsesResp.Output)
 	providerServiceTier := normalizeOpenAIServiceTier(ccResp.ServiceTier)
 
@@ -186,6 +188,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 	resp *http.Response,
 	originalModel string,
 	customTools map[string]bool,
+	functionTools map[string]bool,
 	toolSearch bool,
 	namespaceTools map[string]apicompat.NamespacedToolName,
 	billingModel string,
@@ -199,6 +202,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 
 	state := apicompat.NewChatCompletionsToResponsesStreamState(originalModel)
 	state.CustomTools = customTools
+	state.FunctionTools = functionTools
 	state.ToolSearchDeclared = toolSearch
 	state.NamespaceTools = namespaceTools
 	clientDisconnected := false
@@ -225,6 +229,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 				)
 				return
 			}
+			ObserveOpenAIResponsesSequence(c, int64(event.SequenceNumber))
 		}
 		c.Writer.Flush()
 	}
@@ -251,6 +256,21 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		}, fmt.Errorf("stream usage incomplete: %w", scan.Err)
 	}
 	providerServiceTier := normalizeOpenAIServiceTier(scan.ServiceTier)
+
+	if err := state.ValidateToolCallArguments(); err != nil {
+		return &OpenAIForwardResult{
+			RequestID:       requestID,
+			Usage:           scan.Usage,
+			Model:           originalModel,
+			BillingModel:    billingModel,
+			UpstreamModel:   upstreamModel,
+			ReasoningEffort: reasoningEffort,
+			ServiceTier:     firstNonNilServiceTier(providerServiceTier, serviceTier),
+			Stream:          true,
+			Duration:        time.Since(startTime),
+			FirstTokenMs:    scan.FirstTokenMs,
+		}, fmt.Errorf("invalid tool call arguments from upstream: %w", err)
+	}
 
 	finalEvents := apicompat.FinalizeChatCompletionsResponsesStream(state)
 	s.cacheReasoningItemsFromEvents(finalEvents)

@@ -1,0 +1,106 @@
+//go:build unit
+
+package apicompat
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+// These are intake probes, not implementation acceptance. They intentionally
+// fail where the current release still violates the proposed behavior.
+func TestUnmergedReviewInvalidToolHistory(t *testing.T) {
+	input, err := json.Marshal([]map[string]any{
+		{"type": "function_call", "call_id": "call_bad", "name": "read_file", "arguments": `{"path":`},
+		{"type": "function_call_output", "call_id": "call_bad", "output": "failed"},
+		{"role": "user", "content": "continue"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := ResponsesToChatCompletionsRequest(&ResponsesRequest{Model: "gpt-5.4", Input: input})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range req.Messages {
+		for _, call := range message.ToolCalls {
+			if call.ID == "call_bad" {
+				t.Errorf("invalid historical function call forwarded: arguments=%q", call.Function.Arguments)
+			}
+		}
+		if message.ToolCallID == "call_bad" {
+			t.Error("matching output of invalid historical call also forwarded")
+		}
+	}
+}
+
+func TestUnmergedReviewBufferedToolArguments(t *testing.T) {
+	for _, arguments := range []string{`{"path":`, `{"path":"ok"}`} {
+		t.Run(arguments, func(t *testing.T) {
+			resp := ChatCompletionsResponseToResponses(&ChatCompletionsResponse{
+				ID: "chat_review", Choices: []ChatChoice{{Message: ChatMessage{
+					Role: "assistant", ToolCalls: []ChatToolCall{{ID: "call_review", Type: "function", Function: ChatFunctionCall{Name: "read_file", Arguments: arguments}}},
+				}, FinishReason: "tool_calls"}},
+			}, "gpt-5.4", nil, false, nil)
+			found := false
+			for _, item := range resp.Output {
+				if item.Type == "function_call" {
+					found = true
+					if !json.Valid([]byte(item.Arguments)) {
+						t.Errorf("invalid function call emitted with status=%q arguments=%q", item.Status, item.Arguments)
+					}
+				}
+			}
+			if json.Valid([]byte(arguments)) && !found {
+				t.Error("valid function call was lost")
+			}
+		})
+	}
+}
+
+func TestUnmergedReviewCustomToolAlias(t *testing.T) {
+	resp := ChatCompletionsResponseToResponses(&ChatCompletionsResponse{
+		ID: "chat_alias", Choices: []ChatChoice{{Message: ChatMessage{
+			Role: "assistant", ToolCalls: []ChatToolCall{{ID: "call_alias", Type: "function", Function: ChatFunctionCall{Name: "functions__exec", Arguments: `{"input":"pwd"}`}}},
+		}, FinishReason: "tool_calls"}},
+	}, "gpt-5.4", map[string]bool{"exec": true}, false, map[string]NamespacedToolName{"functions__wait": {Namespace: "functions", Name: "wait"}})
+	if len(resp.Output) != 1 {
+		t.Fatalf("unexpected output count: %d", len(resp.Output))
+	}
+	item := resp.Output[0]
+	if item.Type != "custom_tool_call" || item.Name != "exec" || item.Input != "pwd" {
+		t.Fatalf("unambiguous custom alias not restored: type=%q name=%q input=%q", item.Type, item.Name, item.Input)
+	}
+}
+
+func TestUnmergedReviewDeferredToolFlags(t *testing.T) {
+	req := map[string]any{"tools": []any{
+		map[string]any{"type": "function", "name": "read_file", "parameters": map[string]any{"type": "object"}, "defer_loading": true},
+		map[string]any{"type": "tool_search"},
+	}}
+	if _, _, err := AdaptResponsesClientTools(req); err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range req["tools"].([]any) {
+		tool := raw.(map[string]any)
+		if _, exists := tool["defer_loading"]; exists {
+			t.Errorf("orphan defer_loading remains after built-in tool_search was lowered: %v", tool)
+		}
+	}
+}
+
+func TestUnmergedReviewEventSequenceWire(t *testing.T) {
+	for _, sequence := range []int{0, 1} {
+		data, err := json.Marshal(ResponsesStreamEvent{Type: "response.created", SequenceNumber: sequence})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(data, &object); err != nil {
+			t.Fatal(err)
+		}
+		if _, exists := object["sequence_number"]; !exists {
+			t.Errorf("sequence=%d omitted from serialized event: %s", sequence, data)
+		}
+	}
+}

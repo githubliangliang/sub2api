@@ -1609,6 +1609,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
 				return false
 			}
+			ObserveOpenAIResponsesSequence(c, openAIResponsesSequenceFromSSE(pending))
 		}
 		pendingLines = pendingLines[:0]
 		return true
@@ -1809,6 +1810,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				clientDisconnected = true
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
 			} else {
+				ObserveOpenAIResponsesSequence(c, openAIResponsesSequenceFromSSE(line))
 				clientOutputStarted = true
 				flushPending = true
 				if line == "" {
@@ -1828,8 +1830,10 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		s.handleOpenAIAccountUpstreamError(ctx, account, openAIStreamFailureStatus(bareErrors.pending, message), resp.Header, bareErrors.pending, canonicalOpenAIAccountSchedulingModel(account, originalModel))
 		if !clientDisconnected {
 			if writePendingLines() {
-				_, writeErr := fmt.Fprint(w, buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message))
+				frame := buildOpenAIResponseFailedSSE(responseID, originalModel, createdAtStamper.Value(), bareErrors.pending, message, NextOpenAIResponsesSequence(c))
+				_, writeErr := fmt.Fprint(w, frame)
 				if writeErr == nil {
+					ObserveOpenAIResponsesSequence(c, openAIResponsesSequenceFromSSE(frame))
 					flusher.Flush()
 					MarkResponseCommitted(c)
 				}

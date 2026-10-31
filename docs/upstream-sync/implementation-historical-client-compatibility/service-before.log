@@ -1,0 +1,23 @@
+2026/10/31 14:29:39 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestUnmergedReviewStreamedToolArguments
+    unmerged_review_probe_test.go:33: actual gateway result_present=true err=<nil>
+    unmerged_review_probe_test.go:42: actual gateway completed invalid tool call: {"item":{"arguments":"{\"path\":","call_id":"call_bad","id":"item_a9ce76b9427420ba2a93f76c","name":"read_file","status":"completed","type":"function_call"},"output_index":0,"sequence_number":4,"type":"response.output_item.done"}
+--- FAIL: TestUnmergedReviewStreamedToolArguments (0.00s)
+=== RUN   TestUnmergedReviewSyntheticSequenceWire
+=== RUN   TestUnmergedReviewSyntheticSequenceWire/compact_items_and_terminal
+    unmerged_review_probe_test.go:57: synthetic response.output_item.done event omits sequence_number: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_review","role":"assistant","content":[{"type":"output_text","text":"ok"}]}}
+    unmerged_review_probe_test.go:57: synthetic response.completed event omits sequence_number: {"type":"response.completed","response":{"id":"resp_review","output":[{"type":"message","id":"msg_review","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}}
+=== RUN   TestUnmergedReviewSyntheticSequenceWire/compact_failure
+    unmerged_review_probe_test.go:63: synthetic response.failed event omits sequence_number: {"response":{"error":{"code":"upstream_error","message":"fixture failure"},"id":"resp_118bf9daf9cd41dfaa2e6db611288039","object":"response","output":[],"status":"failed"},"type":"response.failed"}
+=== RUN   TestUnmergedReviewSyntheticSequenceWire/ws_http_bridge_error
+    unmerged_review_probe_test.go:68: WS HTTP bridge error omits sequence_number: {"error":{"message":"fixture failure","type":"upstream_error"},"status":502,"type":"error"}
+--- FAIL: TestUnmergedReviewSyntheticSequenceWire (0.00s)
+    --- FAIL: TestUnmergedReviewSyntheticSequenceWire/compact_items_and_terminal (0.00s)
+    --- FAIL: TestUnmergedReviewSyntheticSequenceWire/compact_failure (0.00s)
+    --- FAIL: TestUnmergedReviewSyntheticSequenceWire/ws_http_bridge_error (0.00s)
+=== RUN   TestUnmergedReviewGrokDeferredToolFlags
+    unmerged_review_probe_test.go:99: actual Grok request keeps defer_loading without built-in tool_search: {"input":"hello","model":"grok-4.5","tools":[{"defer_loading":true,"name":"read_file","parameters":{"type":"object"},"type":"function"},{"description":"Search and load Codex tools, plugins, connectors, and MCP namespaces for the current task.","name":"tool_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search query for tools or connectors to load."},"limit":{"type":"integer","description":"Maximum number of tool groups to return."}},"required":["query"]},"type":"function"}]}
+--- FAIL: TestUnmergedReviewGrokDeferredToolFlags (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.015s
+FAIL

@@ -1,5 +1,7 @@
 # 上游合并指南
 
+历史未合项复查（2026-10-31）：[当前建议与证据](./UNMERGED-REVIEW-2026-10-31.md)，基于已发布v1.1.21 / `e44324231` / Go1.27.3 / SQLite227，既有7份活动change的276/276任务均已完成。重新复现工具参数、custom别名、孤儿defer和Responses序号四项兼容性尾项，建议[独立第二档方案](../../openspec/changes/port-upstream-historical-client-compatibility/README.md)，**方案未实施**；后续优先按需选择Grok目录诊断，其它能力继续按用途。本次复查未扩展到新的上游release，历史来源/验收记录保留原时点值。
+
 最新评估（2026-10-28）：[PORTING-0.2.19.md](./PORTING-0.2.19.md)，v0.2.18→v0.2.19，fork `49939fb2c` / VERSION1.1.20 / Go1.27.3 / SQLite227。50非merge、20PR+3直接提交，276文件先反后正A0/C203/X61/N12。建议第一档7簇、第二档6簇；用户选定GPT-6.1 Terra，仍为第三档、单独提案。评估时三份均未实施，评估证据保持当时的产品/版本/迁移/依赖值。[来源与基线证据](./evidence-0.2.19/MANIFEST.md)。
 
 用户选定 Terra 实施（2026-10-30）已完成：[14/14 OpenSpec验收](../../openspec/changes/port-upstream-0.2.19-terra/verification.md) / [实际证据与哈希](./implementation-0.2.19-terra/README.md)，本地 main 实现提交 `a541d0b611f4c2da5cab9811c3c4e02ae8344136`，起点 `b9e51e273`。六档/default medium、none/max与工具协议、metadata/raw目录/ETag、冻结价格/两层fallback/显式0/272k边界、HTTP/SSE/WS与SQLite结算、白名单/映射/OpenCode配置均验收。54包unit、embed构建、5包race、SQLite227/quota/固定窗口/dedup、lint0 issues通过；前端2106/2 skipped、typecheck/lint/build/critical与实际浏览器保存/重开/复制通过。VERSION1.1.20/Go1.27.3/迁移227、依赖与Ent/Wire保持，源/规格/历史证据冻结；仍属用户选定第三档，待归档，其他按需能力/支付/发布/push/部署/业务实例操作不在范围内。

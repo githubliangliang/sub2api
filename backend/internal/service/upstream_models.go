@@ -47,9 +47,11 @@ type UpstreamModelMetadataSnapshot struct {
 }
 
 type UpstreamModelCatalog struct {
-	Models   []string                         `json:"models"`
-	Metadata map[string]UpstreamModelMetadata `json:"metadata,omitempty"`
-	Warnings []UpstreamModelSyncWarning       `json:"warnings,omitempty"`
+	Models               []string                         `json:"models"`
+	Metadata             map[string]UpstreamModelMetadata `json:"metadata,omitempty"`
+	Warnings             []UpstreamModelSyncWarning       `json:"warnings,omitempty"`
+	DiscoverySource      string                           `json:"discovery_source,omitempty"`
+	GrokModelDiagnostics *GrokModelDiagnostics            `json:"grok_model_diagnostics,omitempty"`
 }
 
 // upstreamModelListFetchResult retains the request scope for catalog observation.
@@ -241,6 +243,12 @@ func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, accou
 		return nil, newUpstreamModelSyncInternalError("Failed to save upstream model catalog", saveErr)
 	}
 	catalog := &UpstreamModelCatalog{Models: models, Metadata: make(map[string]UpstreamModelMetadata)}
+	if account != nil && account.IsGrok() {
+		catalog.DiscoverySource = "upstream"
+		if !liveListAvailable {
+			catalog.DiscoverySource = "configured_fallback"
+		}
+	}
 	if len(body) > 0 {
 		_, directMetadata, parseErr := extractUpstreamModelCatalog(body, account != nil && account.IsGrok())
 		if parseErr == nil {

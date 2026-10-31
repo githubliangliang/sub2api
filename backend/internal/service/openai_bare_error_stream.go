@@ -62,7 +62,7 @@ func (s *openAIBareErrorStream) skipLine(line string, outputStarted bool) bool {
 	return s.suppressFrame
 }
 
-func buildOpenAIResponseFailedSSE(responseID, model string, createdAt int64, source []byte, fallbackMessage string) string {
+func buildOpenAIResponseFailedSSE(responseID, model string, createdAt int64, source []byte, fallbackMessage string, minimumSequence ...int64) string {
 	responseID = strings.TrimSpace(responseID)
 	if responseID == "" {
 		responseID = "resp_" + strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -93,6 +93,9 @@ func buildOpenAIResponseFailedSSE(responseID, model string, createdAt int64, sou
 		createdAt = time.Now().Unix()
 	}
 	sequenceNumber := openAIResponsesFailedSequenceNumber(source)
+	if len(minimumSequence) > 0 && sequenceNumber < minimumSequence[0] {
+		sequenceNumber = minimumSequence[0]
+	}
 	response := gin.H{
 		"id":         responseID,
 		"object":     "response",

@@ -316,6 +316,9 @@ type Account struct {
 
 	GroupIDs []int64  `json:"group_ids,omitempty"`
 	Groups   []*Group `json:"groups,omitempty"`
+
+	// Populated only for Grok admin details, never by list or public mappers.
+	GrokModelDiagnostics *service.GrokModelDiagnostics `json:"grok_model_diagnostics,omitempty"`
 }
 
 // AccountListItem is the compact representation returned by the admin account
