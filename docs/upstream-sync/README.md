@@ -1,5 +1,7 @@
 # 上游合并指南
 
+用户选定兼容性与Grok诊断已完成（2026-10-31）：[补充范围](./PORTING-0.2.19-personal-compatibility.md) / [实际证据](./implementation-historical-client-compatibility/README.md)。本地main实现`becd2d2a31192e13bdc431bc43fbe44436e2c319`，C01–C04 17/17、Grok诊断D01–D03 12/12。后端54包unit/embed构建/lint0、四包456和WS相邻74 race、SQLite468保护通过；前端2169/2 skipped、typecheck/lint/build/critical与真实浏览器通过。保留模型参考价格提交、VERSION1.1.21、Go1.27.3、迁移227、依赖及生成代码，原评估/来源/历史哈希不回写。两change活动待归档，其它按需能力独立，未发布或部署业务实例。
+
 历史未合项复查（2026-10-31）：[当前建议与证据](./UNMERGED-REVIEW-2026-10-31.md)，基于已发布v1.1.21 / `e44324231` / Go1.27.3 / SQLite227，既有7份活动change的276/276任务均已完成。重新复现工具参数、custom别名、孤儿defer和Responses序号四项兼容性尾项，建议[独立第二档方案](../../openspec/changes/port-upstream-historical-client-compatibility/README.md)，**方案未实施**；后续优先按需选择Grok目录诊断，其它能力继续按用途。本次复查未扩展到新的上游release，历史来源/验收记录保留原时点值。
 
 最新评估（2026-10-28）：[PORTING-0.2.19.md](./PORTING-0.2.19.md)，v0.2.18→v0.2.19，fork `49939fb2c` / VERSION1.1.20 / Go1.27.3 / SQLite227。50非merge、20PR+3直接提交，276文件先反后正A0/C203/X61/N12。建议第一档7簇、第二档6簇；用户选定GPT-6.1 Terra，仍为第三档、单独提案。评估时三份均未实施，评估证据保持当时的产品/版本/迁移/依赖值。[来源与基线证据](./evidence-0.2.19/MANIFEST.md)。

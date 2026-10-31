@@ -2,7 +2,7 @@
 
 2026-10-31 完成用户要求的工具参数/别名/defer、Responses事件序号和Grok模型目录诊断。实施起点`5250907f5b8294eabed3d3101d2c4bf79936e0f7`，保留之前的模型参考价格提交。版本1.1.21、Go1.27.3、最大SQLite迁移227。
 
-当前33个产品/测试文件汇总SHA256为`d472f1d75f0aece88b9930e94cfb52ab232f2d716b521fd2268b60a3e5b72852`。[起点和保护哈希](./baseline.json)、[逐文件范围与哈希](./scope-facts.json)、[门禁索引](./gate-results.json)。实现提交在后续完成记录中填写。
+当前33个产品/测试文件汇总SHA256为`d472f1d75f0aece88b9930e94cfb52ab232f2d716b521fd2268b60a3e5b72852`。[起点和保护哈希](./baseline.json)、[逐文件范围与哈希](./scope-facts.json)、[门禁索引](./gate-results.json)。实际实现提交`becd2d2a31192e13bdc431bc43fbe44436e2c319`，见[提交记录](./implementation-commit.json)。
 
 | 行为 | 实际证据 |
 |---|---|

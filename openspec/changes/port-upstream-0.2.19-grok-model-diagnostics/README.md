@@ -1,6 +1,6 @@
 # 用户选定：Grok 模型目录诊断
 
-2026-10-31 用户选定实现Grok目录诊断，与历史工具/事件兼容性修复同时验收。该能力保持第三档，属于本次明确选择；评估来源与旧批次保持原文。
+2026-10-31 用户选定的Grok目录诊断已实现并验收，12/12 tasks，本地main实现`becd2d2a31192e13bdc431bc43fbe44436e2c319`。与历史工具/事件兼容性修复同时完成。该能力保持第三档，属于本次明确选择；评估来源与旧批次保持原文。
 
 - [proposal](./proposal.md) / [design](./design.md)：范围和适配。
 - [source-baseline](./source-baseline.md) / [source-feature-map](./source-feature-map.md)：冻结来源和行为。

@@ -17,3 +17,7 @@
 [本次起点及保护哈希](./implementation-historical-client-compatibility/baseline.json)。正式回归、完整backend/frontend门禁、SQLite/dedup/固定窗口、定向race、严格协议及真实浏览器结果写入两份verification和独立实施证据，原评估探针不冒充修复验收。
 
 VERSION、Go、迁移、依赖及Ent/Wire保持当前范围。付款、新模型/平台、Fast/Realtime、统计扩展、发布与部署均独立于本次选择。
+
+## 实施完成
+
+用户选定三类行为已在本地main实现`becd2d2a31192e13bdc431bc43fbe44436e2c319`，C01–C04 17/17、D01–D03 12/12验收完成。后端54包unit/build/lint0、四包456及WS相邻74 race、SQLite468保护通过；前端2169/2 skipped、typecheck/lint/build/critical和真实浏览器通过。版本1.1.21、Go1.27.3、迁移227、依赖和生成代码保持；完整结果见两份verification及[独立证据](./implementation-historical-client-compatibility/README.md)。
