@@ -80,6 +80,35 @@
             </span>
           </template>
 
+          <template #cell-pricing="{ row }">
+            <div
+              v-if="row.pricing"
+              class="min-w-36 space-y-1 text-xs tabular-nums"
+              :title="t('admin.modelPlaza.priceHint')"
+            >
+              <div
+                v-if="row.pricing.model !== row.client_id"
+                class="font-mono text-gray-400 dark:text-dark-500"
+              >
+                {{ row.pricing.model }}
+              </div>
+              <template v-for="field in priceFields" :key="field.key">
+                <div
+                  v-if="row.pricing[field.key] != null"
+                  class="flex items-center justify-between gap-3 whitespace-nowrap"
+                >
+                  <span class="text-gray-500 dark:text-gray-400">
+                    {{ t(`admin.modelPlaza.${field.label}`) }}
+                  </span>
+                  <span class="font-mono text-gray-700 dark:text-gray-200">
+                    {{ formatScaled(row.pricing[field.key], 1_000_000, 2) }}
+                  </span>
+                </div>
+              </template>
+            </div>
+            <span v-else class="text-sm text-gray-400 dark:text-dark-500">—</span>
+          </template>
+
           <template #cell-account_count="{ value }">
             <span class="tabular-nums text-sm text-gray-700 dark:text-gray-200">{{ value }}</span>
           </template>
@@ -112,6 +141,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore } from '@/stores/app'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
+import { formatScaled } from '@/utils/pricing'
 
 interface PlazaRow extends AccountModelPlazaItem {
   rowKey: string
@@ -126,10 +156,19 @@ const items = ref<PlazaRow[]>([])
 const searchQuery = ref('')
 const platformFilter = ref('')
 
+const priceFields = [
+  { key: 'input_price', label: 'inputPrice' },
+  { key: 'output_price', label: 'outputPrice' },
+  { key: 'cache_read_price', label: 'cacheReadPrice' },
+  { key: 'cache_write_price', label: 'cacheWritePrice' },
+  { key: 'cache_write_1h_price', label: 'cacheWrite1hPrice' }
+] as const
+
 const columns = computed<Column[]>(() => [
   { key: 'client_id', label: t('admin.modelPlaza.clientId'), sortable: true },
   { key: 'upstream_ids', label: t('admin.modelPlaza.upstreamIds') },
   { key: 'platform', label: t('admin.modelPlaza.platform'), sortable: true },
+  { key: 'pricing', label: t('admin.modelPlaza.price') },
   { key: 'account_count', label: t('admin.modelPlaza.accountCount'), sortable: true }
 ])
 

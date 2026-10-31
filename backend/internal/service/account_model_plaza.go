@@ -14,10 +14,21 @@ import (
 // AccountModelPlazaItem is one deduped (client model ID, platform) row
 // aggregated from enabled (status=active) accounts.
 type AccountModelPlazaItem struct {
-	ClientID     string   `json:"client_id"`
-	Platform     string   `json:"platform"`
-	UpstreamIDs  []string `json:"upstream_ids"`
-	AccountCount int      `json:"account_count"`
+	ClientID     string                    `json:"client_id"`
+	Platform     string                    `json:"platform"`
+	UpstreamIDs  []string                  `json:"upstream_ids"`
+	AccountCount int                       `json:"account_count"`
+	Pricing      *AccountModelPlazaPricing `json:"pricing"`
+}
+
+// AccountModelPlazaPricing contains default reference prices in USD per token.
+type AccountModelPlazaPricing struct {
+	Model             string   `json:"model"`
+	InputPrice        float64  `json:"input_price"`
+	OutputPrice       float64  `json:"output_price"`
+	CacheWritePrice   *float64 `json:"cache_write_price"`
+	CacheWrite1hPrice *float64 `json:"cache_write_1h_price"`
+	CacheReadPrice    *float64 `json:"cache_read_price"`
 }
 
 type plazaAggKey struct {

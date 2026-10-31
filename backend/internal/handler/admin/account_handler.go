@@ -64,6 +64,7 @@ type AccountHandler struct {
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
+	pricingService          *service.PricingService
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
@@ -73,6 +74,10 @@ func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamB
 
 func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUsageService) {
 	h.ollamaCloudUsage = usage
+}
+
+func (h *AccountHandler) SetPricingService(pricing *service.PricingService) {
+	h.pricingService = pricing
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -2823,8 +2828,36 @@ func (h *AccountHandler) ListAccountModelPlaza(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	items := service.AggregateAccountModelPlaza(accounts)
+	for i := range items {
+		model := items[i].ClientID
+		pricing := h.pricingService.GetIdentifiedModelPricing(model)
+		// A custom alias can use its sole upstream model's reference price.
+		// Multiple upstream models do not have a single unambiguous price.
+		if pricing == nil && len(items[i].UpstreamIDs) == 1 {
+			model = items[i].UpstreamIDs[0]
+			pricing = h.pricingService.GetIdentifiedModelPricing(model)
+		}
+		if pricing == nil || pricing.TokenPricingAbsent {
+			continue
+		}
+		items[i].Pricing = &service.AccountModelPlazaPricing{
+			Model:       model,
+			InputPrice:  pricing.InputCostPerToken,
+			OutputPrice: pricing.OutputCostPerToken,
+		}
+		if pricing.CacheCreationInputTokenCost > 0 || pricing.CacheCreationInputTokenCostExplicit {
+			items[i].Pricing.CacheWritePrice = &pricing.CacheCreationInputTokenCost
+		}
+		if pricing.CacheCreationInputTokenCostAbove1hr > 0 {
+			items[i].Pricing.CacheWrite1hPrice = &pricing.CacheCreationInputTokenCostAbove1hr
+		}
+		if pricing.CacheReadInputTokenCost > 0 {
+			items[i].Pricing.CacheReadPrice = &pricing.CacheReadInputTokenCost
+		}
+	}
 	response.Success(c, gin.H{
-		"items": service.AggregateAccountModelPlaza(accounts),
+		"items": items,
 	})
 }
 
