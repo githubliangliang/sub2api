@@ -11,11 +11,11 @@
 
 **SQLite-only Sub2API** — a personal / single-node SQLite build of Sub2API at [githubliangliang/sub2api](https://github.com/githubliangliang/sub2api). Database is **SQLite only** (`modernc.org/sqlite`); PostgreSQL is not supported.
 
-本仓库是 Sub2API 的 **SQLite 单机版**：运行时只打开本地 SQLite 文件，`database.driver` / `DATABASE_DRIVER` 写成 `postgres` 也会被忽略。面向 1C1G VPS 单节点，不支持 PostgreSQL / 多实例。
+本仓库是 Sub2API 的 **SQLite 单机版**：运行时只打开本地 SQLite 文件，`database.driver` / `DATABASE_DRIVER` 写成 `postgres` 也会被忽略。面向个人单节点使用，不支持 PostgreSQL / 多实例。
 
 本仓库：**https://github.com/githubliangliang/sub2api** · 发布页：**https://github.com/githubliangliang/sub2api/releases** · [llms.txt](./llms.txt)
 
-[本仓库说明](README.md) | [中文](README_CN.md) | [日本語](README_JA.md)
+[中文](README.md) | [English](README_EN.md) | [日本語](README_JA.md)
 
 </div>
 
@@ -38,7 +38,7 @@
 | 想看 | 去哪 |
 |------|------|
 | 重构细节 | [REFACTOR.md](./REFACTOR.md) |
-| 1C1G 精简说明 | [deploy/START_NATIVE.md](./deploy/START_NATIVE.md) |
+| 原生部署说明 | [deploy/START_NATIVE.md](./deploy/START_NATIVE.md) |
 | 开发约定与踩坑 | [DEV_GUIDE.md](./DEV_GUIDE.md) |
 | 已下线页面 | [REMOVED_PAGES.md](./REMOVED_PAGES.md) |
 | 合上游（**不要**整仓 merge） | [docs/upstream-sync/README.md](./docs/upstream-sync/README.md) |
@@ -51,7 +51,7 @@
 
 | 场景 | 走 |
 |------|-----|
-| 一台 1C1G VPS 自己用 | **方式一**：单二进制 + SQLite + 嵌入式 Redis |
+| 一台 VPS 自己用 | **方式一**：单二进制 + SQLite + 嵌入式 Redis |
 | 本机 / NAS 上已有 Docker | **方式二**：SQLite 单容器 |
 | 多实例、高并发、团队用 | 本仓库不适合（SQLite only，单节点） |
 
@@ -100,9 +100,9 @@ standard 会校验余额，而管理员创建时余额取 `default.user_balance`
 
 ## 部署
 
-### 方式一：1C1G 无 Docker（推荐个人服务器）
+### 方式一：原生部署（推荐个人服务器）
 
-目标：一个人用、内存尽量小。**不要在 1G 机器上编译**，在本机编好二进制再上传。
+目标：个人单节点使用，在本机编好二进制再上传。
 
 方案：单二进制 + SQLite + 无外部 Redis（不跑 PostgreSQL / Redis 进程）。
 
@@ -201,7 +201,6 @@ sudo journalctl -u sub2api -f
 - 工作目录：`/opt/sub2api`
 - 数据：`DATA_DIR=/opt/sub2api/data`
 - 监听：`0.0.0.0:8080`
-- 可选内存上限：在 unit 里取消注释 `# MemoryMax=768M`
 
 #### 5. 访问
 
@@ -226,13 +225,6 @@ deploy/deploy-remote.sh                          # 之后每次：构建 → 上
 ```
 
 只换二进制 + 重启，远端已有的 `config.yaml` 与 systemd unit 不会被覆盖。
-
-#### 不建议在 1G 机上做的事
-
-- 在服务器上跑 `pnpm build` + `go build`（容易 OOM）
-- 装 PostgreSQL + Redis 全栈
-- 开 `ops.aggregation` / `ops.use_preaggregated_tables` / 采集缓存、批量生图队列、高并发连接池
-  - 模板里这些都是关的；`ops.enabled: true` 只开错误/系统日志与每天 03:00 清理，开销很小
 
 #### 校验清单
 
@@ -352,7 +344,7 @@ docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite ps
 不能。`backend/migrations/*.sql` 是 SQLite 方言。本仓库只适合单节点 SQLite。
 
 **和常见 PostgreSQL 部署有什么区别？**  
-SQLite only、Redis 可选（可嵌入进程内）、菜单可隐藏、针对 1C1G 单机部署。详见上文「本仓库改动」。
+SQLite only、Redis 可选（可嵌入进程内）、菜单可隐藏、面向个人单节点部署。详见上文「本仓库改动」。
 
 ---
 
