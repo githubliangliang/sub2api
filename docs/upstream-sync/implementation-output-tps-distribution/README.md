@@ -4,7 +4,7 @@
 
 [baseline.json](baseline.json)记录原始HEAD、完整PR来源哈希、版本和受保护历史树摘要。后续检查记录实际命令、结果与局限；合成浏览器/API夹具与真实SQLite/管理HTTP结果分别说明。
 
-当前工作树已完成：[verification](../../../openspec/changes/port-upstream-output-tps-distribution/verification.md)汇总行为、门禁、过程失败和实际局限；[scope-check.json](scope-check.json)记录最终产品哈希、历史保护与链接检查。尚未创建实现提交、发布或业务实例部署。
+实施已完成：[verification](../../../openspec/changes/port-upstream-output-tps-distribution/verification.md)汇总行为、门禁、过程失败和实际局限；[scope-check.json](scope-check.json)记录最终产品哈希、历史保护与链接检查。实现已提交`f333aa5f3aa7a6f6ecc4d1620cbfc47a737e16e3`，见[提交核对](implementation-commit.json)；用户随后授权推送main，未创建新发布或业务实例部署。
 
 | 证据 | 结果 |
 |---|---|

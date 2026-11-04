@@ -19,4 +19,4 @@
 历次第一/第二档、历史工具/Responses兼容、Terra和Grok诊断已完成归档；窗口TPS余项由本次承接。Claude重置grant、图片计量开关、费用趋势、监控前缀、受限管理员密钥、缓存/COW及新模型/平台仍按需，详见[原复查](./UNMERGED-REVIEW-2026-10-31.md)。支付及PG-only/缺消费者实现排除。VERSION/Go/SQLite227、依赖与Ent/Wire保持；发布/推送/业务实例部署独立。
 
 ## 实施与验收
-当前工作树已实现，起点`ed2340cc5a922ced3e2e408465237f72e8a93579`；[实际验收](../../openspec/changes/port-upstream-output-tps-distribution/verification.md)、[检查索引](./implementation-output-tps-distribution/README.md)。全部54包后端unit、embed构建、lint0、三包定向race和SQLite/adminHTTP通过；前端2174通过/2既有跳过、typecheck/lint/build/critical与真实新建本地实例浏览器通过。1000/10000/100000样本本机现代SQLite查询约3.4/33.6/344.6毫秒，不代表VPS性能保证。历史记录不回写，未创建提交、发布或业务实例部署。
+实现已提交`f333aa5f3aa7a6f6ecc4d1620cbfc47a737e16e3`，起点`ed2340cc5a922ced3e2e408465237f72e8a93579`；[实际验收](../../openspec/changes/port-upstream-output-tps-distribution/verification.md)、[检查索引](./implementation-output-tps-distribution/README.md)。全部54包后端unit、embed构建、lint0、三包定向race和SQLite/adminHTTP通过；前端2174通过/2既有跳过、typecheck/lint/build/critical与真实新建本地实例浏览器通过。1000/10000/100000样本本机现代SQLite查询约3.4/33.6/344.6毫秒，不代表VPS性能保证。历史记录不回写；用户随后授权推送main，不创建新发布或业务实例部署。

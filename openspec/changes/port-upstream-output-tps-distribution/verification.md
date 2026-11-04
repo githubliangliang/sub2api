@@ -12,7 +12,7 @@
 | 前端tests/typecheck/lint/build/critical | 291文件2174通过/2既有跳过，typecheck/lint/build通过；critical176通过/2同一既有跳过 | [全量tests](../../../docs/upstream-sync/implementation-output-tps-distribution/frontend-unit.log)、[typecheck](../../../docs/upstream-sync/implementation-output-tps-distribution/frontend-typecheck.log)、[lint](../../../docs/upstream-sync/implementation-output-tps-distribution/frontend-lint.log)、[build](../../../docs/upstream-sync/implementation-output-tps-distribution/frontend-build.log)、[critical](../../../docs/upstream-sync/implementation-output-tps-distribution/frontend-critical.log) |
 | OpenSpec/链接/冻结范围 | strict通过；链接和受保护3077文件核对结果见检查索引 | [OpenSpec](../../../docs/upstream-sync/implementation-output-tps-distribution/openspec-strict.log)、[最终范围](../../../docs/upstream-sync/implementation-output-tps-distribution/scope-check.json) |
 
-当前成果位于工作树，实施起点`ed2340cc5a922ced3e2e408465237f72e8a93579`，尚无实现提交SHA。VERSION1.1.22、Go1.27.3、SQLite227、依赖及Ent/Wire保持；无业务实例部署。完整后端最终运行允许Go缓存：此前首次完整运行中仅新增HTTP夹具的默认组ID冲突失败，修正后该包与repository重跑通过，其余包复用已通过结果。最终产品文件哈希见scope-check.json。
+实现已提交`f333aa5f3aa7a6f6ecc4d1620cbfc47a737e16e3`，实施起点`ed2340cc5a922ced3e2e408465237f72e8a93579`。VERSION1.1.22、Go1.27.3、SQLite227、依赖及Ent/Wire保持；无业务实例部署。完整后端最终运行允许Go缓存：此前首次完整运行中仅新增HTTP夹具的默认组ID冲突失败，修正后该包与repository重跑通过，其余包复用已通过结果。最终产品文件哈希见scope-check.json；该文件保留提交前受测快照，实际提交一致性见[implementation-commit.json](../../../docs/upstream-sync/implementation-output-tps-distribution/implementation-commit.json)。
 
 ## 证据边界与过程失败
 
