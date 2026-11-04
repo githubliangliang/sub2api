@@ -1,5 +1,7 @@
 # 上游合并指南
 
+用户选定窗口输出TPS已实现（2026-11-04）：[补充范围与patch sites](./PORTING-output-tps-distribution.md)、[OpenSpec](../../openspec/changes/port-upstream-output-tps-distribution/README.md)、[实际验收证据](./implementation-output-tps-distribution/README.md)。历史#7911日志TPS已完成，本次补齐运维整窗口P5/P10/P50/均值/样本数，采用SQLite连续插值，raw/auto/preagg口径一致；自身2秒超时保留概览，父取消/截止和其它数据库错误传播。54包backend unit、embed build、lint0、三包定向race及SQLite/adminHTTP通过；frontend2174/2既有跳过、typecheck/lint/build/critical及真实浏览器桌面/全屏/移动/筛选/刷新通过。保留VERSION1.1.22、Go1.27.3、SQLite227和依赖/生成代码，当前工作树尚未提交或部署；本次第三档已获用户选择，其它按需能力独立。新增通用经验：窗口分位数必须由逐请求样本计算，不能合并小时分位数；SQLite取消可能丢弃连接，执行中断测试不能依赖连接私有内存库。
+
 OpenSpec 归档（2026-11-01）：9 个已完成活动变更、305 项任务已归档；当前共 28 个归档、1,073 项已关闭任务，活动变更为 0。74 个主规格汇总 356 个非支付需求，本次新增 105 个需求并更新 1 个既有需求。主规格记录 WS 默认 1.0、SQLite 227 配额清理和已批准的净化器维护边界；来源、方案、设计、delta 规格、任务、验收及历史证据原文保留，九份原 README 另存归档前快照。见[归档清单](../../openspec/changes/archive/README.md)、[主规格](../../openspec/specs/)与[归档核对](../../openspec/changes/archive/verification-followup-2026-11-01.json)。下列评估与实施条目保留原时点口径，当前完成状态以归档清单为准。
 
 用户选定兼容性与Grok诊断已完成（2026-10-31）：[补充范围](./PORTING-0.2.19-personal-compatibility.md) / [实际证据](./implementation-historical-client-compatibility/README.md)。本地main实现`becd2d2a31192e13bdc431bc43fbe44436e2c319`，C01–C04 17/17、Grok诊断D01–D03 12/12。后端54包unit/embed构建/lint0、四包456和WS相邻74 race、SQLite468保护通过；前端2169/2 skipped、typecheck/lint/build/critical与真实浏览器通过。保留模型参考价格提交、VERSION1.1.21、Go1.27.3、迁移227、依赖及生成代码，原评估/来源/历史哈希不回写。两change活动待归档，其它按需能力独立，未发布或部署业务实例。

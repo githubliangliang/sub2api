@@ -1,0 +1,53 @@
+=== RUN   TestIsQueryTimeoutErr
+--- PASS: TestIsQueryTimeoutErr (0.00s)
+=== RUN   TestOpsOutputTPSOverviewFailurePolicy
+=== RUN   TestOpsOutputTPSOverviewFailurePolicy/own_timeout_keeps_overview
+=== RUN   TestOpsOutputTPSOverviewFailurePolicy/cancellation_propagates
+=== RUN   TestOpsOutputTPSOverviewFailurePolicy/database_errors_propagate
+=== RUN   TestOpsOutputTPSOverviewFailurePolicy/real_two_second_query_budget
+=== RUN   TestOpsOutputTPSOverviewFailurePolicy/caller_deadline_propagates
+--- PASS: TestOpsOutputTPSOverviewFailurePolicy (2.05s)
+    --- PASS: TestOpsOutputTPSOverviewFailurePolicy/own_timeout_keeps_overview (0.00s)
+    --- PASS: TestOpsOutputTPSOverviewFailurePolicy/cancellation_propagates (0.00s)
+    --- PASS: TestOpsOutputTPSOverviewFailurePolicy/database_errors_propagate (0.00s)
+    --- PASS: TestOpsOutputTPSOverviewFailurePolicy/real_two_second_query_budget (2.00s)
+    --- PASS: TestOpsOutputTPSOverviewFailurePolicy/caller_deadline_propagates (0.05s)
+=== RUN   TestOpsOutputTPSDistributionSQLite
+    ops_repo_output_tps_sqlite_test.go:37: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/ops_repo_output_tps_sqlite_test.go:32
+        	            				/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/ops_repo_output_tps_sqlite_test.go:37
+        	Error:      	Received unexpected error:
+        	            	constraint failed: UNIQUE constraint failed: usage_logs.request_id, usage_logs.api_key_id (2067)
+        	Test:       	TestOpsOutputTPSDistributionSQLite
+--- FAIL: TestOpsOutputTPSDistributionSQLite (0.67s)
+=== RUN   TestOpsOutputTPSContinuousPercentilesSQLite
+=== RUN   TestOpsOutputTPSContinuousPercentilesSQLite/single
+=== RUN   TestOpsOutputTPSContinuousPercentilesSQLite/two_reversed
+=== RUN   TestOpsOutputTPSContinuousPercentilesSQLite/odd_with_duplicates
+=== RUN   TestOpsOutputTPSContinuousPercentilesSQLite/integer_ranks
+--- PASS: TestOpsOutputTPSContinuousPercentilesSQLite (0.66s)
+    --- PASS: TestOpsOutputTPSContinuousPercentilesSQLite/single (0.00s)
+    --- PASS: TestOpsOutputTPSContinuousPercentilesSQLite/two_reversed (0.00s)
+    --- PASS: TestOpsOutputTPSContinuousPercentilesSQLite/odd_with_duplicates (0.00s)
+    --- PASS: TestOpsOutputTPSContinuousPercentilesSQLite/integer_ranks (0.00s)
+=== RUN   TestOpsOutputTPSQueryInterruptSQLite
+=== RUN   TestOpsOutputTPSQueryInterruptSQLite/cancel=false
+    ops_repo_output_tps_sqlite_test.go:179: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/ops_repo_output_tps_sqlite_test.go:179
+        	Error:      	Expected error with "context deadline exceeded" in chain but got nil.
+        	Test:       	TestOpsOutputTPSQueryInterruptSQLite/cancel=false
+=== RUN   TestOpsOutputTPSQueryInterruptSQLite/cancel=true
+    ops_repo_output_tps_sqlite_test.go:179: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/ops_repo_output_tps_sqlite_test.go:179
+        	Error:      	Expected error with "context canceled" in chain but got nil.
+        	Test:       	TestOpsOutputTPSQueryInterruptSQLite/cancel=true
+--- FAIL: TestOpsOutputTPSQueryInterruptSQLite (0.00s)
+    --- FAIL: TestOpsOutputTPSQueryInterruptSQLite/cancel=false (0.00s)
+    --- FAIL: TestOpsOutputTPSQueryInterruptSQLite/cancel=true (0.00s)
+=== RUN   TestOpsUpsertHourlyMetricsUsesSQLiteAggregation
+--- PASS: TestOpsUpsertHourlyMetricsUsesSQLiteAggregation (0.66s)
+=== RUN   TestOpsAndUsageQueriesRunOnSQLite
+--- PASS: TestOpsAndUsageQueriesRunOnSQLite (0.66s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/repository	4.730s
+FAIL

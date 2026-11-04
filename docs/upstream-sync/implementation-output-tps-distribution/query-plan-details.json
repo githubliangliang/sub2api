@@ -1,0 +1,154 @@
+{
+  "sqlite_version": "3.45.1",
+  "runtime": "Python sqlite3 (supplementary planner evidence; timings use modernc)",
+  "product_query_sha256": "29006db24b615aa6fd84af9a3ad7916770bbaf420a60a88af8da588ef3071927",
+  "rows": 100000,
+  "plans": [
+    {
+      "filtered": false,
+      "query": "\nWITH rates AS (\n  SELECT ul.output_tokens * 1000.0 / ul.duration_ms AS output_tps\n  FROM usage_logs ul\n  \n  WHERE ul.created_at >= $1 AND ul.created_at < $2\n    AND ul.output_tokens > 0 AND ul.duration_ms > 0\n    AND ul.image_count = 0 AND ul.image_output_tokens = 0\n    AND COALESCE(ul.billing_mode, '') <> 'image'\n    AND ul.request_type IN (1, 2, 3, 4)\n), ranked AS (\n  SELECT output_tps, ROW_NUMBER() OVER (ORDER BY output_tps) AS rn, COUNT(*) OVER () AS cnt\n  FROM rates\n), bounds AS (\n  SELECT\n    MAX(CASE WHEN rn = 1 + (cnt - 1) * 5 / 100 THEN output_tps END) AS p5_lower,\n    MAX(CASE WHEN rn = 1 + ((cnt - 1) * 5 + 99) / 100 THEN output_tps END) AS p5_upper,\n    MAX(CASE WHEN rn = 1 + (cnt - 1) * 10 / 100 THEN output_tps END) AS p10_lower,\n    MAX(CASE WHEN rn = 1 + ((cnt - 1) * 10 + 99) / 100 THEN output_tps END) AS p10_upper,\n    MAX(CASE WHEN rn = 1 + (cnt - 1) * 50 / 100 THEN output_tps END) AS p50_lower,\n    MAX(CASE WHEN rn = 1 + ((cnt - 1) * 50 + 99) / 100 THEN output_tps END) AS p50_upper,\n    AVG(output_tps) AS avg,\n    COUNT(*) AS sample_count\n  FROM ranked\n)\nSELECT\n  p5_lower + (p5_upper - p5_lower) * ((sample_count - 1) * 5 % 100) / 100.0,\n  p10_lower + (p10_upper - p10_lower) * ((sample_count - 1) * 10 % 100) / 100.0,\n  p50_lower + (p50_upper - p50_lower) * ((sample_count - 1) * 50 % 100) / 100.0,\n  avg, sample_count\nFROM bounds",
+      "args": [
+        "2026-01-17 00:00:00+00:00",
+        "2026-01-17 01:00:00+00:00"
+      ],
+      "plan": [
+        {
+          "id": 2,
+          "parent": 0,
+          "detail": "CO-ROUTINE bounds"
+        },
+        {
+          "id": 4,
+          "parent": 2,
+          "detail": "CO-ROUTINE ranked"
+        },
+        {
+          "id": 7,
+          "parent": 4,
+          "detail": "CO-ROUTINE (subquery-5)"
+        },
+        {
+          "id": 10,
+          "parent": 7,
+          "detail": "CO-ROUTINE (subquery-6)"
+        },
+        {
+          "id": 13,
+          "parent": 10,
+          "detail": "SEARCH ul USING INDEX idx_usage_logs_request_type_created_at (request_type=? AND created_at>? AND created_at<?)"
+        },
+        {
+          "id": 70,
+          "parent": 7,
+          "detail": "SCAN (subquery-6)"
+        },
+        {
+          "id": 114,
+          "parent": 7,
+          "detail": "USE TEMP B-TREE FOR ORDER BY"
+        },
+        {
+          "id": 129,
+          "parent": 4,
+          "detail": "SCAN (subquery-5)"
+        },
+        {
+          "id": 168,
+          "parent": 2,
+          "detail": "SCAN ranked"
+        },
+        {
+          "id": 261,
+          "parent": 0,
+          "detail": "SCAN bounds"
+        }
+      ],
+      "result": [
+        20.261397849462366,
+        33.556897837434754,
+        167.11268095768372,
+        195.83716075318785,
+        100000
+      ]
+    },
+    {
+      "filtered": true,
+      "query": "\nWITH rates AS (\n  SELECT ul.output_tokens * 1000.0 / ul.duration_ms AS output_tps\n  FROM usage_logs ul\n  LEFT JOIN groups g ON g.id=ul.group_id LEFT JOIN accounts a ON a.id=ul.account_id\n  WHERE ul.created_at >= $1 AND ul.created_at < $2 AND ul.group_id=$3 AND COALESCE(NULLIF(g.platform,''), a.platform)=$4\n    AND ul.output_tokens > 0 AND ul.duration_ms > 0\n    AND ul.image_count = 0 AND ul.image_output_tokens = 0\n    AND COALESCE(ul.billing_mode, '') <> 'image'\n    AND ul.request_type IN (1, 2, 3, 4)\n), ranked AS (\n  SELECT output_tps, ROW_NUMBER() OVER (ORDER BY output_tps) AS rn, COUNT(*) OVER () AS cnt\n  FROM rates\n), bounds AS (\n  SELECT\n    MAX(CASE WHEN rn = 1 + (cnt - 1) * 5 / 100 THEN output_tps END) AS p5_lower,\n    MAX(CASE WHEN rn = 1 + ((cnt - 1) * 5 + 99) / 100 THEN output_tps END) AS p5_upper,\n    MAX(CASE WHEN rn = 1 + (cnt - 1) * 10 / 100 THEN output_tps END) AS p10_lower,\n    MAX(CASE WHEN rn = 1 + ((cnt - 1) * 10 + 99) / 100 THEN output_tps END) AS p10_upper,\n    MAX(CASE WHEN rn = 1 + (cnt - 1) * 50 / 100 THEN output_tps END) AS p50_lower,\n    MAX(CASE WHEN rn = 1 + ((cnt - 1) * 50 + 99) / 100 THEN output_tps END) AS p50_upper,\n    AVG(output_tps) AS avg,\n    COUNT(*) AS sample_count\n  FROM ranked\n)\nSELECT\n  p5_lower + (p5_upper - p5_lower) * ((sample_count - 1) * 5 % 100) / 100.0,\n  p10_lower + (p10_upper - p10_lower) * ((sample_count - 1) * 10 % 100) / 100.0,\n  p50_lower + (p50_upper - p50_lower) * ((sample_count - 1) * 50 % 100) / 100.0,\n  avg, sample_count\nFROM bounds",
+      "args": [
+        "2026-01-17 00:00:00+00:00",
+        "2026-01-17 01:00:00+00:00",
+        9001,
+        "openai"
+      ],
+      "plan": [
+        {
+          "id": 2,
+          "parent": 0,
+          "detail": "CO-ROUTINE bounds"
+        },
+        {
+          "id": 4,
+          "parent": 2,
+          "detail": "CO-ROUTINE ranked"
+        },
+        {
+          "id": 7,
+          "parent": 4,
+          "detail": "CO-ROUTINE (subquery-5)"
+        },
+        {
+          "id": 10,
+          "parent": 7,
+          "detail": "CO-ROUTINE (subquery-6)"
+        },
+        {
+          "id": 15,
+          "parent": 10,
+          "detail": "SEARCH ul USING INDEX idx_usage_logs_group_created_at_not_null (group_id=? AND created_at>? AND created_at<?)"
+        },
+        {
+          "id": 59,
+          "parent": 10,
+          "detail": "SCAN g USING COVERING INDEX idx_groups_platform LEFT-JOIN"
+        },
+        {
+          "id": 66,
+          "parent": 10,
+          "detail": "SEARCH a USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN"
+        },
+        {
+          "id": 98,
+          "parent": 7,
+          "detail": "SCAN (subquery-6)"
+        },
+        {
+          "id": 142,
+          "parent": 7,
+          "detail": "USE TEMP B-TREE FOR ORDER BY"
+        },
+        {
+          "id": 157,
+          "parent": 4,
+          "detail": "SCAN (subquery-5)"
+        },
+        {
+          "id": 196,
+          "parent": 2,
+          "detail": "SCAN ranked"
+        },
+        {
+          "id": 289,
+          "parent": 0,
+          "detail": "SCAN bounds"
+        }
+      ],
+      "result": [
+        20.261397849462366,
+        33.556897837434754,
+        167.11268095768372,
+        195.83716075318785,
+        100000
+      ]
+    }
+  ]
+}

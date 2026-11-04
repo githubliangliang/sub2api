@@ -1208,7 +1208,7 @@ function handleToolbarRefresh() {
         </div>
       </div>
 
-      <!-- Right: 6 cards (3 cols x 2 rows) -->
+      <!-- Window statistics -->
       <div class="grid h-full grid-cols-1 content-center gap-4 sm:grid-cols-2 lg:col-span-7 lg:grid-cols-3">
         <!-- Card 1: Requests -->
         <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 1;">
@@ -1428,6 +1428,27 @@ function handleToolbarRefresh() {
               <span class="text-gray-500">429/529:</span>
               <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber((overview.upstream_429_count ?? 0) + (overview.upstream_529_count ?? 0)) }}</span>
             </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900 sm:col-span-2 lg:col-span-3" data-testid="output-tps-card" style="order: 7;">
+          <div class="flex items-center gap-1">
+            <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.outputTps') }}</span>
+            <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.outputTps')" />
+          </div>
+          <div class="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-2">
+            <div class="flex items-baseline gap-2">
+              <span class="text-3xl font-black text-gray-900 dark:text-white" data-testid="output-tps-p50">{{ overview.output_tps?.p50?.toFixed(1) ?? '—' }}</span>
+              <span class="text-xs font-bold text-gray-400">tok/s (P50)</span>
+            </div>
+            <div v-for="metric in ['p5', 'p10', 'avg'] as const" :key="metric" class="flex items-baseline gap-1 whitespace-nowrap text-xs">
+              <span class="text-gray-500">{{ metric === 'avg' ? t('admin.ops.average') : metric.toUpperCase() }}:</span>
+              <span class="font-bold text-gray-900 dark:text-white" :data-testid="`output-tps-${metric}`">{{ overview.output_tps?.[metric]?.toFixed(1) ?? '—' }}</span>
+              <span class="text-gray-400">tok/s</span>
+            </div>
+          </div>
+          <div class="mt-2 text-xs text-gray-500" data-testid="output-tps-samples">
+            {{ t('admin.ops.outputTpsSamples', { count: overview.output_tps == null ? '—' : formatNumber(overview.output_tps.sample_count) }) }}
           </div>
         </div>
       </div>
