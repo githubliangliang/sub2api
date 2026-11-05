@@ -79,3 +79,46 @@ func TestAuditLogClearAllSQLiteCanceled(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 }
+
+func TestAuditLogClearAllSQLiteDoesNotRestoreQueuedEntries(t *testing.T) {
+	db := openPersonalMaintenanceSQLite(t)
+	ctx := context.Background()
+	require.NoError(t, EnsureSQLiteAuxTables(ctx, db))
+	repo := NewAuditLogRepository(db)
+	svc := service.NewAuditLogService(repo, nil)
+	t.Cleanup(svc.Stop)
+	svc.Record(&service.AuditLog{Action: "before-clear", StatusCode: 200})
+	_, err := svc.ClearAll(ctx, &service.AuditLog{StatusCode: 200})
+	require.NoError(t, err)
+	svc.Start()
+	svc.Stop()
+	logs, err := repo.List(ctx, nil)
+	require.NoError(t, err)
+	require.Len(t, logs.Logs, 1, "queued operations before clear must not reappear after the writer flushes")
+	require.Equal(t, service.AuditActionAuditLogClear, logs.Logs[0].Action)
+}
+
+func TestAuditLogClearAllSQLitePreservesNewEntriesAndFailedClear(t *testing.T) {
+	db := openPersonalMaintenanceSQLite(t)
+	ctx := context.Background()
+	require.NoError(t, EnsureSQLiteAuxTables(ctx, db))
+	repo := NewAuditLogRepository(db)
+	svc := service.NewAuditLogService(repo, nil)
+	t.Cleanup(svc.Stop)
+	svc.Record(&service.AuditLog{Action: "old", StatusCode: 200})
+	_, err := svc.ClearAll(ctx, &service.AuditLog{StatusCode: 200})
+	require.NoError(t, err)
+	svc.Record(&service.AuditLog{Action: "new", StatusCode: 200})
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = svc.ClearAll(canceled, &service.AuditLog{StatusCode: 200})
+	require.ErrorIs(t, err, context.Canceled)
+	svc.Start()
+	svc.Stop()
+	logs, err := repo.List(ctx, nil)
+	require.NoError(t, err)
+	require.Len(t, logs.Logs, 2)
+	for _, entry := range logs.Logs {
+		require.Contains(t, []string{"new", service.AuditActionAuditLogClear}, entry.Action)
+	}
+}

@@ -621,6 +621,7 @@ func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsag
 	switch parsed.Get("type").String() {
 	case "message_start":
 		msgUsage := parsed.Get("message.usage")
+		observeAnthropicUsageSpeed(usage, msgUsage.Get("speed").String())
 		if msgUsage.Exists() {
 			usage.InputTokens = int(msgUsage.Get("input_tokens").Int())
 			usage.CacheCreationInputTokens = int(msgUsage.Get("cache_creation_input_tokens").Int())
@@ -636,6 +637,7 @@ func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsag
 		}
 	case "message_delta":
 		deltaUsage := parsed.Get("usage")
+		observeAnthropicUsageSpeed(usage, deltaUsage.Get("speed").String())
 		if deltaUsage.Exists() {
 			if v := deltaUsage.Get("input_tokens").Int(); v > 0 {
 				usage.InputTokens = int(v)
@@ -691,6 +693,7 @@ func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 
 	parsed := gjson.ParseBytes(body)
 	usageNode := parsed.Get("usage")
+	observeAnthropicUsageSpeed(usage, usageNode.Get("speed").String())
 	if !usageNode.Exists() {
 		return usage
 	}

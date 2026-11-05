@@ -45,6 +45,11 @@ export default {
       message: 'This permanently deletes all audit logs and cannot be undone. The clear action itself is recorded. Continue?',
       totpTitle: 'Enter Two-Factor Code',
       totpHint: 'Clearing audit logs requires a fresh TOTP verification.',
+      setupTitle: 'Enable two-factor authentication first',
+      setupHint: 'Clearing all operation logs requires two-factor authentication. Set up an authenticator in your profile, then return to clear the logs.',
+      featureDisabledHint: 'Enable two-factor authentication in system settings, then set up an authenticator in your profile before clearing the logs.',
+      openProfile: 'Go to profile',
+      openSettings: 'Go to system settings',
       success: 'Cleared {count} audit log(s)',
       failed: 'Failed to clear audit logs'
     }

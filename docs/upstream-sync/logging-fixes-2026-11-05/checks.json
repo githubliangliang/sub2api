@@ -1,0 +1,173 @@
+[
+  {
+    "name": "backend-targeted-final",
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/repository",
+      "./internal/handler/admin",
+      "-run",
+      "TestAnthropic.*Service|TestAuditLog|TestAuditClear|TestGatewayService_Forward_Stream|Test.*ServiceTier",
+      "-count=1"
+    ],
+    "cwd": "backend",
+    "exit_code": 0,
+    "duration_seconds": 33.877,
+    "log": "backend-targeted-final.log"
+  },
+  {
+    "name": "backend-unit-final",
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "exit_code": 0,
+    "duration_seconds": 216.052,
+    "log": "backend-unit-final.log"
+  },
+  {
+    "name": "backend-race-final",
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/repository",
+      "./internal/handler/admin",
+      "-run",
+      "TestAnthropic.*Service|TestAuditLog|TestAuditClear|TestGatewayService_Forward_Stream|Test.*ServiceTier",
+      "-count=1"
+    ],
+    "cwd": "backend",
+    "exit_code": 0,
+    "duration_seconds": 77.068,
+    "log": "backend-race-final.log"
+  },
+  {
+    "name": "backend-lint-final",
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "exit_code": 0,
+    "duration_seconds": 54.937,
+    "log": "backend-lint-final.log"
+  },
+  {
+    "name": "backend-build",
+    "command": [
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-o",
+      "/tmp/sub2api-log-fixes-server",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "exit_code": 0,
+    "duration_seconds": 15.63,
+    "log": "backend-build.log"
+  },
+  {
+    "name": "frontend-targeted-final",
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/views/admin/__tests__/AuditLogView.clear.spec.ts",
+      "src/components/admin/usage/__tests__/UsageTable.spec.ts",
+      "src/utils/__tests__/usageServiceTier.spec.ts"
+    ],
+    "cwd": "frontend",
+    "exit_code": 0,
+    "duration_seconds": 3.22,
+    "log": "frontend-targeted-final.log"
+  },
+  {
+    "name": "frontend-unit-final",
+    "command": [
+      "pnpm",
+      "run",
+      "test:run"
+    ],
+    "cwd": "frontend",
+    "exit_code": 0,
+    "duration_seconds": 24.401,
+    "log": "frontend-unit-final.log"
+  },
+  {
+    "name": "frontend-typecheck",
+    "command": [
+      "pnpm",
+      "run",
+      "typecheck"
+    ],
+    "cwd": "frontend",
+    "exit_code": 0,
+    "duration_seconds": 18.815,
+    "log": "frontend-typecheck.log"
+  },
+  {
+    "name": "frontend-lint",
+    "command": [
+      "pnpm",
+      "run",
+      "lint:check"
+    ],
+    "cwd": "frontend",
+    "exit_code": 0,
+    "duration_seconds": 54.999,
+    "log": "frontend-lint.log"
+  },
+  {
+    "name": "frontend-check-final",
+    "command": [
+      "pnpm",
+      "exec",
+      "eslint",
+      "src/views/admin/AuditLogView.vue",
+      "src/views/admin/__tests__/AuditLogView.clear.spec.ts",
+      "src/i18n/locales/zh/admin/audit.ts",
+      "src/i18n/locales/en/admin/audit.ts"
+    ],
+    "cwd": "frontend",
+    "exit_code": 0,
+    "duration_seconds": 2.149,
+    "log": "frontend-check-final.log"
+  },
+  {
+    "name": "frontend-build-final",
+    "command": [
+      "pnpm",
+      "run",
+      "build"
+    ],
+    "cwd": "frontend",
+    "exit_code": 0,
+    "duration_seconds": 50.75,
+    "log": "frontend-build-final.log"
+  }
+]

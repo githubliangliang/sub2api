@@ -26,7 +26,11 @@ type AuditLogService struct {
 	repo           AuditLogRepository
 	settingService *SettingService
 
-	queue chan *AuditLog
+	queue chan auditLogWrite
+	// Clear and batch writes share this boundary so old buffered records cannot
+	// restore entries deleted by ClearAll. Enqueueing stays non-blocking.
+	writeMu    sync.Mutex
+	generation atomic.Uint64
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -37,12 +41,17 @@ type AuditLogService struct {
 	writtenCount uint64
 }
 
+type auditLogWrite struct {
+	entry      *AuditLog
+	generation uint64
+}
+
 func NewAuditLogService(repo AuditLogRepository, settingService *SettingService) *AuditLogService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &AuditLogService{
 		repo:           repo,
 		settingService: settingService,
-		queue:          make(chan *AuditLog, auditLogQueueCapacity),
+		queue:          make(chan auditLogWrite, auditLogQueueCapacity),
 		ctx:            ctx,
 		cancel:         cancel,
 	}
@@ -81,7 +90,7 @@ func (s *AuditLogService) Record(entry *AuditLog) {
 	default:
 	}
 	select {
-	case s.queue <- entry:
+	case s.queue <- auditLogWrite{entry: entry, generation: s.generation.Load()}:
 	default:
 		atomic.AddUint64(&s.droppedCount, 1)
 	}
@@ -102,6 +111,9 @@ func (s *AuditLogService) GetByID(ctx context.Context, id int64) (*AuditLog, err
 //  1. 统计并清空全表
 //  2. 同步写入一条 "audit_log.clear" 留痕记录（绕过异步队列，保证落库）
 func (s *AuditLogService) ClearAll(ctx context.Context, trace *AuditLog) (int64, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	deleted, err := s.repo.Count(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("count audit logs: %w", err)
@@ -109,6 +121,9 @@ func (s *AuditLogService) ClearAll(ctx context.Context, trace *AuditLog) (int64,
 	if err := s.repo.TruncateAll(ctx); err != nil {
 		return 0, fmt.Errorf("clear audit logs: %w", err)
 	}
+	// Include records still in the queue or the writer's local batch in the
+	// clear boundary. Advance only after deletion succeeds, even if tracing fails.
+	s.generation.Add(1)
 
 	if trace != nil {
 		trace.Action = AuditActionAuditLogClear
@@ -133,22 +148,37 @@ func (s *AuditLogService) runWriter() {
 	ticker := time.NewTicker(auditLogFlushInterval)
 	defer ticker.Stop()
 
-	batch := make([]*AuditLog, 0, auditLogBatchSize)
+	batch := make([]auditLogWrite, 0, auditLogBatchSize)
+	entries := make([]*AuditLog, 0, auditLogBatchSize)
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		generation := s.generation.Load()
+		for i, item := range batch {
+			if item.generation == generation && item.entry != nil {
+				entries = append(entries, item.entry)
+			}
+			batch[i] = auditLogWrite{}
+		}
+		batch = batch[:0]
+		if len(entries) == 0 {
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		inserted, err := s.repo.BatchInsert(ctx, batch)
+		inserted, err := s.repo.BatchInsert(ctx, entries)
 		cancel()
 		if err != nil {
-			atomic.AddUint64(&s.writeFailed, uint64(len(batch)))
+			atomic.AddUint64(&s.writeFailed, uint64(len(entries)))
 			_, _ = fmt.Fprintf(os.Stderr, "time=%s level=WARN msg=\"audit log flush failed\" err=%v batch=%d\n",
-				time.Now().Format(time.RFC3339Nano), err, len(batch))
+				time.Now().Format(time.RFC3339Nano), err, len(entries))
 		} else {
 			atomic.AddUint64(&s.writtenCount, uint64(inserted))
 		}
-		batch = batch[:0]
+		clear(entries)
+		entries = entries[:0]
 	}
 
 	for {
@@ -158,7 +188,7 @@ func (s *AuditLogService) runWriter() {
 			for {
 				select {
 				case item := <-s.queue:
-					if item == nil {
+					if item.entry == nil {
 						continue
 					}
 					batch = append(batch, item)
@@ -171,7 +201,7 @@ func (s *AuditLogService) runWriter() {
 				}
 			}
 		case item := <-s.queue:
-			if item == nil {
+			if item.entry == nil {
 				continue
 			}
 			batch = append(batch, item)

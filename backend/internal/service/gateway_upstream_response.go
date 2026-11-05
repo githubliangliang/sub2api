@@ -1158,13 +1158,13 @@ func (s *GatewayService) parseSSEUsage(data string, usage *ClaudeUsage) {
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
 		return
 	}
-
 	if patch := s.extractSSEUsagePatch(event); patch != nil {
 		mergeSSEUsagePatch(usage, patch)
 	}
 }
 
 type sseUsagePatch struct {
+	speed                    string
 	inputTokens              int
 	hasInputTokens           bool
 	outputTokens             int
@@ -1193,7 +1193,8 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 			return nil
 		}
 
-		patch := &sseUsagePatch{}
+		rawSpeed, _ := usageObj["speed"].(string)
+		patch := &sseUsagePatch{speed: normalizeAnthropicSpeed(rawSpeed)}
 		patch.hasInputTokens = true
 		if v, ok := parseSSEUsageInt(usageObj["input_tokens"]); ok {
 			patch.inputTokens = v
@@ -1224,7 +1225,8 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 			return nil
 		}
 
-		patch := &sseUsagePatch{}
+		rawSpeed, _ := usageObj["speed"].(string)
+		patch := &sseUsagePatch{speed: normalizeAnthropicSpeed(rawSpeed)}
 		if v, ok := parseSSEUsageInt(usageObj["input_tokens"]); ok && v > 0 {
 			patch.inputTokens = v
 			patch.hasInputTokens = true
@@ -1260,6 +1262,9 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 func mergeSSEUsagePatch(usage *ClaudeUsage, patch *sseUsagePatch) {
 	if usage == nil || patch == nil {
 		return
+	}
+	if patch.speed != "" {
+		usage.Speed = patch.speed
 	}
 
 	if patch.hasInputTokens {
@@ -1405,6 +1410,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 		}
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
+	observeAnthropicUsageSpeed(&response.Usage, gjson.GetBytes(body, "usage.speed").String())
 
 	// 解析嵌套的 cache_creation 对象中的 5m/1h 明细
 	cc5m := gjson.GetBytes(body, "usage.cache_creation.ephemeral_5m_input_tokens")

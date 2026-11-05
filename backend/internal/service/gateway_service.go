@@ -596,13 +596,14 @@ func (r *AccountSelectionResult) ProfitGateActive() bool {
 
 // ClaudeUsage 表示Claude API返回的usage信息
 type ClaudeUsage struct {
-	InputTokens              int `json:"input_tokens"`
-	OutputTokens             int `json:"output_tokens"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
-	CacheCreation5mTokens    int // 5分钟缓存创建token（来自嵌套 cache_creation 对象）
-	CacheCreation1hTokens    int // 1小时缓存创建token（来自嵌套 cache_creation 对象）
-	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
+	Speed                    string `json:"-"` // Recognized upstream usage.speed for log display.
+	InputTokens              int    `json:"input_tokens"`
+	OutputTokens             int    `json:"output_tokens"`
+	CacheCreationInputTokens int    `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int    `json:"cache_read_input_tokens"`
+	CacheCreation5mTokens    int    // 5分钟缓存创建token（来自嵌套 cache_creation 对象）
+	CacheCreation1hTokens    int    // 1小时缓存创建token（来自嵌套 cache_creation 对象）
+	ImageOutputTokens        int    `json:"image_output_tokens,omitempty"`
 }
 
 // ForwardResult 转发结果
@@ -627,6 +628,7 @@ type ForwardResult struct {
 	FirstTokenMs                  *int // 首字时间（流式请求）
 	ClientDisconnect              bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort               *string
+	ServiceTier                   *string // Observed/final request service speed, recorded in usage logs.
 
 	// 图片生成计费字段（图片生成模型使用）
 	ImageCount         int    // 生成的图片数量

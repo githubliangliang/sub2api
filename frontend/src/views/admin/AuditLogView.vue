@@ -73,9 +73,9 @@
               <button type="button" class="btn btn-secondary" :disabled="loading" @click="resetFilters">
                 {{ t('common.reset') }}
               </button>
-              <button type="button" class="btn btn-danger" @click="openClearDialog">
+              <button type="button" class="btn btn-danger" :disabled="checkingTotpStatus || clearing" @click="openClearDialog">
                 <Icon name="trash" size="sm" class="mr-1.5" />
-                {{ t('admin.audit.clearAll') }}
+                {{ checkingTotpStatus ? t('common.loading') : t('admin.audit.clearAll') }}
               </button>
             </div>
           </div>
@@ -313,6 +313,24 @@
       @cancel="clearConfirmVisible = false"
     />
 
+    <!-- TOTP setup guidance -->
+    <BaseDialog
+      :show="clearSetupVisible"
+      :title="t('admin.audit.clearConfirm.setupTitle')"
+      width="narrow"
+      @close="clearSetupVisible = false"
+    >
+      <p class="text-sm text-gray-600 dark:text-gray-400">
+        {{ t(clearTotpFeatureEnabled ? 'admin.audit.clearConfirm.setupHint' : 'admin.audit.clearConfirm.featureDisabledHint') }}
+      </p>
+      <template #footer>
+        <button type="button" class="btn btn-secondary" @click="clearSetupVisible = false">{{ t('common.cancel') }}</button>
+        <RouterLink :to="clearTotpFeatureEnabled ? '/profile' : '/admin/settings'" class="btn btn-primary">
+          {{ t(clearTotpFeatureEnabled ? 'admin.audit.clearConfirm.openProfile' : 'admin.audit.clearConfirm.openSettings') }}
+        </RouterLink>
+      </template>
+    </BaseDialog>
+
     <!-- TOTP prompt for the clear operation -->
     <BaseDialog
       :show="clearTotpVisible"
@@ -331,6 +349,7 @@
           autocomplete="one-time-code"
           class="input mt-4 text-center text-lg tracking-[0.5em]"
           placeholder="••••••"
+          :disabled="clearing"
           @keyup.enter="submitClear"
         />
       </div>
@@ -341,7 +360,7 @@
         <button
           type="button"
           class="btn btn-danger"
-          :disabled="clearing || clearTotpCode.length !== 6"
+          :disabled="clearing || !validClearTotpCode"
           @click="submitClear"
         >
           {{ clearing ? t('common.loading') : t('admin.audit.clearAll') }}
@@ -352,7 +371,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { adminAPI, type AuditLog } from '@/api/admin'
 import { totpAPI } from '@/api'
@@ -533,16 +553,21 @@ function buildQuery() {
   }
 }
 
+let logsRequestSequence = 0
+
 async function fetchLogs() {
+  const sequence = ++logsRequestSequence
   loading.value = true
   try {
     const res = await adminAPI.audit.list(buildQuery())
+    if (unmounted || sequence !== logsRequestSequence) return
     logs.value = res.items
     total.value = res.total
   } catch (err: any) {
+    if (unmounted || sequence !== logsRequestSequence) return
     appStore.showError(err?.message || t('admin.audit.loadFailed'))
   } finally {
-    loading.value = false
+    if (sequence === logsRequestSequence) loading.value = false
   }
 }
 
@@ -609,19 +634,27 @@ const clearTotpVisible = ref(false)
 const clearTotpCode = ref('')
 const clearing = ref(false)
 const checkingTotpStatus = ref(false)
+const clearSetupVisible = ref(false)
+const clearTotpFeatureEnabled = ref(true)
+const validClearTotpCode = computed(() => /^\d{6}$/.test(clearTotpCode.value))
+let unmounted = false
+onUnmounted(() => { unmounted = true })
 
 // 与其他敏感操作一致：未启用 2FA 时直接提示去个人资料启用 TOTP，
 // 而不是弹出一个无法完成的验证码输入框（后端会以 TOTP_NOT_SETUP 拒绝）。
 async function openClearDialog() {
-  if (checkingTotpStatus.value) return
+  if (checkingTotpStatus.value || clearing.value) return
   checkingTotpStatus.value = true
   try {
     const status = await totpAPI.getStatus()
+    if (unmounted) return
     if (!status.enabled) {
-      appStore.showError(t('stepUp.notEnabled'))
+      clearTotpFeatureEnabled.value = status.feature_enabled !== false
+      clearSetupVisible.value = true
       return
     }
   } catch (err: any) {
+    if (unmounted) return
     appStore.showError(err?.message || t('admin.audit.loadFailed'))
     return
   } finally {
@@ -639,10 +672,11 @@ function onClearConfirmed() {
 function cancelClearTotp() {
   if (clearing.value) return
   clearTotpVisible.value = false
+  clearTotpCode.value = ''
 }
 
 async function submitClear() {
-  if (clearing.value || clearTotpCode.value.length !== 6) return
+  if (clearing.value || !clearTotpVisible.value || !validClearTotpCode.value) return
   clearing.value = true
   try {
     const res = await adminAPI.audit.clear(clearTotpCode.value)

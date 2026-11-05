@@ -25,7 +25,7 @@ function createView() {
           props: ['show', 'title'],
           template: '<section v-if="show"><h2>{{ title }}</h2><slot /><slot name="footer" /></section>'
         },
-        DataTable: true, Pagination: true, Select: true, Icon: true
+        DataTable: true, Pagination: true, Select: true, Icon: true, RouterLink: true
       }
     }
   })
@@ -72,15 +72,65 @@ describe('operation log clear-all', () => {
     expect(wrapper.find('input[inputmode="numeric"]').exists()).toBe(false)
   })
 
-  it('requires enabled TOTP before showing confirmation', async () => {
+  it('offers the profile setup path when TOTP is not configured', async () => {
     getStatus.mockResolvedValue({ enabled: false })
     const wrapper = createView()
     await flushPromises()
     await clearButton(wrapper).trigger('click')
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith('stepUp.notEnabled')
+    expect(wrapper.text()).toContain('admin.audit.clearConfirm.setupHint')
+    expect(wrapper.findComponent({ name: 'RouterLink' }).props('to')).toBe('/profile')
     expect(wrapper.text()).not.toContain('admin.audit.clearConfirm.title')
     expect(clear).not.toHaveBeenCalled()
+  })
+
+  it('points to system settings when the TOTP feature is disabled', async () => {
+    getStatus.mockResolvedValue({ enabled: false, feature_enabled: false })
+    const wrapper = createView()
+    await flushPromises()
+    await clearButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.audit.clearConfirm.featureDisabledHint')
+    expect(wrapper.findComponent({ name: 'RouterLink' }).props('to')).toBe('/admin/settings')
+    expect(clear).not.toHaveBeenCalled()
+  })
+
+  it('disables the action while checking status and ignores duplicate clicks', async () => {
+    let finish!: (value: { enabled: boolean }) => void
+    getStatus.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = createView()
+    await flushPromises()
+    const button = clearButton(wrapper)
+    await button.trigger('click')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.text()).toContain('common.loading')
+    await button.trigger('click')
+    expect(getStatus).toHaveBeenCalledOnce()
+    finish({ enabled: true })
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.audit.clearConfirm.title')
+  })
+
+  it('does not submit non-digit codes using Enter', async () => {
+    const wrapper = createView()
+    await enterTotp(wrapper)
+    const input = wrapper.find('input[inputmode="numeric"]')
+    await input.setValue('abcdef')
+    expect(clearButton(wrapper).attributes('disabled')).toBeDefined()
+    await input.trigger('keyup.enter')
+    expect(clear).not.toHaveBeenCalled()
+  })
+
+  it('does not restore pre-clear rows when an older list request finishes late', async () => {
+    let finishOld!: (value: unknown) => void
+    list.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const wrapper = createView()
+    await enterTotp(wrapper)
+    await clearButton(wrapper).trigger('click')
+    await flushPromises()
+    finishOld({ items: [{ id: 1, action: 'deleted-old-operation' }], total: 1 })
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'DataTable' }).props('data')).toEqual([])
   })
 
   it('keeps the verification prompt open and clears the code after failure', async () => {

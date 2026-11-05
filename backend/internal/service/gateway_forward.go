@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 // 重试相关常量
@@ -87,7 +88,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 }
 
 // Forward 转发请求到Claude API
-func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (*ForwardResult, error) {
+func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (result *ForwardResult, forwardErr error) {
 	startTime := time.Now()
 	if parsed == nil {
 		return nil, fmt.Errorf("parse request: empty request")
@@ -122,6 +123,20 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	if account != nil && s.shouldEmulateWebSearch(ctx, account, parsed.GroupID, parsed.Body.Bytes()) {
 		return s.handleWebSearchEmulation(ctx, c, account, parsed)
 	}
+	// Keep speed metadata across native, passthrough and partial stream results.
+	// Prefer the provider's explicit speed (including standard) over the request.
+	defer func() {
+		if result == nil || account == nil || account.Platform != PlatformAnthropic || account.IsBedrock() {
+			return
+		}
+		speed := normalizeAnthropicSpeed(result.Usage.Speed)
+		if speed == "" {
+			speed = normalizeAnthropicSpeed(gjson.GetBytes(parsed.Body.Bytes(), "speed").String())
+		}
+		if speed != "" {
+			result.ServiceTier = &speed
+		}
+	}()
 
 	if account != nil && account.IsAnthropicAPIKeyPassthroughEnabled() {
 		passthroughBody := parsed.Body.Bytes()

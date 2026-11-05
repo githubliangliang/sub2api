@@ -45,6 +45,11 @@ export default {
       message: '此操作将永久删除所有操作日志，且不可恢复。清理动作本身会被留痕记录。确定继续吗？',
       totpTitle: '输入二次验证码',
       totpHint: '清理操作日志需要现场验证 TOTP 验证码。',
+      setupTitle: '先启用双重验证',
+      setupHint: '清理全部操作日志需要双重验证。请先在个人资料绑定验证器，启用后再返回清理。',
+      featureDisabledHint: '请先在系统设置开启双重验证，再到个人资料绑定验证器，之后即可验证并清理操作日志。',
+      openProfile: '前往个人资料',
+      openSettings: '前往系统设置',
       success: '已清理 {count} 条操作日志',
       failed: '清理操作日志失败'
     }
