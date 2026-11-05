@@ -28,6 +28,10 @@ Codex/OpenAI的`priority`→Fast展示与上游声明优先规则原本已有，
 | 真实浏览器 | 全新临时SQLite+miniredis实例，实际构建二进制/登录/SPA；未配置TOTP引导、实际TOTP绑定与清理、清理后刷新和移动屏幕验收通过 |
 | 实际清理后数据库 | 删除3条，等待writer后仅1条`admin.audit_log.clear`同步留痕 |
 
-浏览器账号、用量及管理员gate均为新建测试夹具，现场验证码通过本地新建验证器生成。只清理该临时数据库；自建浏览器/服务已关闭。测试曾使用过于宽松的日志动作断言`audit_log.clear`而失败，核对常量后按实际`admin.audit_log.clear`确认数据库结果；产品动作名未修改。初轮新增流式Standard反例发现speed未经过patch入口，补齐该生产入口后定向/race和完整门禁通过。无业务实例清理、部署、提交或push。
+浏览器账号、用量及管理员gate均为新建测试夹具，现场验证码通过本地新建验证器生成。只清理该临时数据库；自建浏览器/服务已关闭。测试曾使用过于宽松的日志动作断言`audit_log.clear`而失败，核对常量后按实际`admin.audit_log.clear`确认数据库结果；产品动作名未修改。初轮新增流式Standard反例发现speed未经过patch入口，补齐该生产入口后定向/race和完整门禁通过。上述验收阶段未操作业务实例，也未创建提交或推送。用户随后授权提交并推送main。
 
 完整命令与检查输出见[检查索引](logging-fixes-2026-11-05/checks.json)。受保护历史/依赖/迁移/Ent/Wire共3134文件保持哈希，最终范围见[scope.json](logging-fixes-2026-11-05/scope.json)。
+
+## 提交记录
+
+实现提交：`e3f98da7385ca40800eeeb8bb7bea7fe0d571554`。14个产品/测试文件与受测哈希一致，见[提交核对](logging-fixes-2026-11-05/implementation-commit.json)。scope.json保留提交前验收快照；本次推送main，不创建新版本、tag或业务实例部署。
