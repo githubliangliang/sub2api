@@ -1,0 +1,274 @@
+diff --git a/backend/internal/pkg/apicompat/responses_reasoning.go b/backend/internal/pkg/apicompat/responses_reasoning.go
+new file mode 100644
+index 000000000..1ab8798e6
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/responses_reasoning.go
+@@ -0,0 +1,22 @@
++package apicompat
++
++import "strings"
++
++// responsesReasoningText prefers the visible summary, falling back to raw
++// reasoning text from compatible upstreams that leave the summary empty.
++func responsesReasoningText(item ResponsesOutput) string {
++	var text strings.Builder
++	for _, part := range item.Summary {
++		if part.Type == "summary_text" {
++			_, _ = text.WriteString(part.Text)
++		}
++	}
++	if text.Len() == 0 {
++		for _, part := range item.Content {
++			if part.Type == "reasoning_text" {
++				_, _ = text.WriteString(part.Text)
++			}
++		}
++	}
++	return text.String()
++}
+diff --git a/backend/internal/pkg/apicompat/responses_reasoning_content_test.go b/backend/internal/pkg/apicompat/responses_reasoning_content_test.go
+new file mode 100644
+index 000000000..c8b5c54a6
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/responses_reasoning_content_test.go
+@@ -0,0 +1,118 @@
++package apicompat
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestResponsesReasoningContentFallback(t *testing.T) {
++	tests := []struct {
++		name      string
++		reasoning string
++		want      string
++		signature string
++	}{
++		{
++			name:      "empty_summary",
++			reasoning: `{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"think "},{"type":"reasoning_text","text":"more"}],"encrypted_content":null}`,
++			want:      "think more",
++		},
++		{
++			name:      "missing_summary",
++			reasoning: `{"type":"reasoning","content":[{"type":"reasoning_text","text":"raw reasoning"}]}`,
++			want:      "raw reasoning",
++		},
++		{
++			name:      "empty_summary_text",
++			reasoning: `{"type":"reasoning","summary":[{"type":"summary_text","text":""}],"content":[{"type":"reasoning_text","text":"raw reasoning"}]}`,
++			want:      "raw reasoning",
++		},
++		{
++			name:      "summary_takes_precedence",
++			reasoning: `{"type":"reasoning","summary":[{"type":"summary_text","text":"short "},{"type":"summary_text","text":"summary"}],"content":[{"type":"reasoning_text","text":"full reasoning"}],"encrypted_content":"opaque-signature"}`,
++			want:      "short summary",
++			signature: "opaque-signature",
++		},
++		{
++			name:      "only_reasoning_text_is_used",
++			reasoning: `{"type":"reasoning","summary":null,"content":[{"type":"output_text","text":"not reasoning"},{"type":"reasoning_text","text":"reasoning"}]}`,
++			want:      "reasoning",
++		},
++		{
++			name:      "signature_only",
++			reasoning: `{"type":"reasoning","content":[{"type":"output_text","text":"not reasoning"}],"encrypted_content":"opaque-signature"}`,
++			signature: "opaque-signature",
++		},
++		{
++			name:      "no_plaintext_or_signature",
++			reasoning: `{"type":"reasoning","content":[{"type":"output_text","text":"not reasoning"}]}`,
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			var resp ResponsesResponse
++			require.NoError(t, json.Unmarshal([]byte(`{"id":"resp_reasoning","status":"completed","output":[`+tt.reasoning+`,{"type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]}],"usage":{"input_tokens":20,"output_tokens":15,"total_tokens":35,"output_tokens_details":{"reasoning_tokens":10}}}`), &resp))
++
++			chat := ResponsesToChatCompletions(&resp, "reasoning-model")
++			require.Len(t, chat.Choices, 1)
++			require.Equal(t, tt.want, chat.Choices[0].Message.ReasoningContent)
++			require.JSONEq(t, `"answer"`, string(chat.Choices[0].Message.Content))
++			require.Equal(t, "stop", chat.Choices[0].FinishReason)
++			require.Equal(t, 15, chat.Usage.CompletionTokens)
++			require.Equal(t, 10, chat.Usage.CompletionTokensDetails.ReasoningTokens)
++
++			anthropic := ResponsesToAnthropic(&resp, "reasoning-model")
++			if tt.want != "" || tt.signature != "" {
++				require.Len(t, anthropic.Content, 2)
++				require.Equal(t, AnthropicContentBlock{Type: "thinking", Thinking: tt.want, Signature: tt.signature}, anthropic.Content[0])
++			} else {
++				require.Len(t, anthropic.Content, 1)
++			}
++			require.Equal(t, AnthropicContentBlock{Type: "text", Text: "answer"}, anthropic.Content[len(anthropic.Content)-1])
++			require.Equal(t, "end_turn", *anthropic.StopReason)
++			require.Equal(t, 15, anthropic.Usage.OutputTokens)
++		})
++	}
++}
++
++func TestResponsesReasoningContentFallbackPerItem(t *testing.T) {
++	var resp ResponsesResponse
++	require.NoError(t, json.Unmarshal([]byte(`{"status":"completed","output":[
++		{"type":"reasoning","summary":[{"type":"summary_text","text":"summary "}],"content":[{"type":"reasoning_text","text":"ignored"}]},
++		{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"raw reasoning"}],"encrypted_content":"signature"},
++		{"type":"function_call","call_id":"call_tool","name":"lookup","arguments":"{}"}
++	]}`), &resp))
++
++	chat := ResponsesToChatCompletions(&resp, "reasoning-model")
++	require.Equal(t, "summary raw reasoning", chat.Choices[0].Message.ReasoningContent)
++	require.Equal(t, "tool_calls", chat.Choices[0].FinishReason)
++	require.Len(t, chat.Choices[0].Message.ToolCalls, 1)
++	require.Equal(t, "call_tool", chat.Choices[0].Message.ToolCalls[0].ID)
++
++	anthropic := ResponsesToAnthropic(&resp, "reasoning-model")
++	require.Len(t, anthropic.Content, 3)
++	require.Equal(t, "summary ", anthropic.Content[0].Thinking)
++	require.Equal(t, "raw reasoning", anthropic.Content[1].Thinking)
++	require.Equal(t, "signature", anthropic.Content[1].Signature)
++	require.Equal(t, "tool_use", anthropic.Content[2].Type)
++	require.Equal(t, "lookup", anthropic.Content[2].Name)
++	require.Equal(t, "tool_use", *anthropic.StopReason)
++
++	// The fallback must preserve the same bytes as the existing streamed deltas.
++	state := NewResponsesEventToChatState()
++	var streamed strings.Builder
++	for _, delta := range []string{"summary ", "raw reasoning"} {
++		for _, chunk := range ResponsesEventToChatChunks(&ResponsesStreamEvent{Type: "response.reasoning_text.delta", Delta: delta}, state) {
++			for _, choice := range chunk.Choices {
++				if choice.Delta.ReasoningContent != nil {
++					_, _ = streamed.WriteString(*choice.Delta.ReasoningContent)
++				}
++			}
++		}
++	}
++	require.Equal(t, streamed.String(), chat.Choices[0].Message.ReasoningContent)
++}
+diff --git a/backend/internal/pkg/apicompat/responses_to_anthropic.go b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+index 976d01de8..5eab6d948 100644
+--- a/backend/internal/pkg/apicompat/responses_to_anthropic.go
++++ b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+@@ -27,19 +27,14 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
+ 	for _, item := range resp.Output {
+ 		switch item.Type {
+ 		case "reasoning":
+-			summaryText := ""
+-			for _, s := range item.Summary {
+-				if s.Type == "summary_text" && s.Text != "" {
+-					summaryText += s.Text
+-				}
+-			}
++			reasoningText := responsesReasoningText(item)
+ 			// Always surface encrypted_content as thinking.signature so Claude
+ 			// Code / multi-turn clients can send it back. Signature-only
+ 			// thinking blocks are valid when the model omits a visible summary.
+-			if summaryText != "" || strings.TrimSpace(item.EncryptedContent) != "" {
++			if reasoningText != "" || strings.TrimSpace(item.EncryptedContent) != "" {
+ 				blocks = append(blocks, AnthropicContentBlock{
+ 					Type:      "thinking",
+-					Thinking:  summaryText,
++					Thinking:  reasoningText,
+ 					Signature: item.EncryptedContent,
+ 				})
+ 			}
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index 0c9afd8ea..3616da328 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -57,11 +57,7 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
+ 				},
+ 			})
+ 		case "reasoning":
+-			for _, s := range item.Summary {
+-				if s.Type == "summary_text" && s.Text != "" {
+-					reasoningText += s.Text
+-				}
+-			}
++			reasoningText += responsesReasoningText(item)
+ 		case "web_search_call":
+ 			// silently consumed — results already incorporated into text output
+ 		}
+diff --git a/backend/internal/service/openai_gateway_buffered_reasoning_content_test.go b/backend/internal/service/openai_gateway_buffered_reasoning_content_test.go
+new file mode 100644
+index 000000000..ba759db11
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_buffered_reasoning_content_test.go
+@@ -0,0 +1,72 @@
++package service
++
++import (
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestOpenAICompatBufferedReasoningContent(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++
++	// A populated terminal output prevents the accumulator from reconstructing
++	// the reasoning from deltas, as in vLLM's Responses stream (#8546/#8547).
++	const stream = `data: {"type":"response.reasoning_text.delta","output_index":0,"delta":"think "}
++
++data: {"type":"response.reasoning_text.delta","output_index":0,"delta":"more"}
++
++data: {"type":"response.output_text.delta","output_index":1,"delta":"answer"}
++
++data: {"type":"response.completed","response":{"id":"resp_reasoning","model":"reasoning-model","status":"completed","output":[{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"think more"}],"encrypted_content":null,"status":"completed"},{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"answer"}]}],"usage":{"input_tokens":20,"output_tokens":15,"total_tokens":35,"output_tokens_details":{"reasoning_tokens":10}}}}
++
++`
++	for _, path := range []string{"/v1/chat/completions", "/v1/messages"} {
++		t.Run(path, func(t *testing.T) {
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(rec)
++			c.Request = httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"reasoning-model","stream":false}`))
++			resp := &http.Response{
++				StatusCode: http.StatusOK,
++				Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "X-Request-Id": []string{"reasoning-rid"}},
++				Body:       io.NopCloser(strings.NewReader(stream)),
++			}
++			account := &Account{ID: 40, Name: "responses-api-key", Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
++			svc := &OpenAIGatewayService{}
++			handle := svc.handleChatBufferedStreamingResponse
++			if path == "/v1/messages" {
++				handle = svc.handleAnthropicBufferedStreamingResponse
++			}
++			result, err := handle(resp, c, account, "reasoning-model", "reasoning-model", "reasoning-model", time.Now())
++			require.NoError(t, err)
++			require.NotNil(t, result)
++			require.Equal(t, http.StatusOK, rec.Code)
++			require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
++			require.Equal(t, "reasoning-rid", result.RequestID)
++			require.False(t, result.Stream)
++			require.Equal(t, 20, result.Usage.InputTokens)
++			require.Equal(t, 15, result.Usage.OutputTokens)
++
++			body := rec.Body.Bytes()
++			if path == "/v1/chat/completions" {
++				require.Equal(t, "think more", gjson.GetBytes(body, "choices.0.message.reasoning_content").String())
++				require.Equal(t, "answer", gjson.GetBytes(body, "choices.0.message.content").String())
++				require.Equal(t, "stop", gjson.GetBytes(body, "choices.0.finish_reason").String())
++				require.EqualValues(t, 15, gjson.GetBytes(body, "usage.completion_tokens").Int())
++				require.EqualValues(t, 10, gjson.GetBytes(body, "usage.completion_tokens_details.reasoning_tokens").Int())
++			} else {
++				require.EqualValues(t, 2, gjson.GetBytes(body, "content.#").Int())
++				require.JSONEq(t, `{"type":"thinking","thinking":"think more","signature":""}`, gjson.GetBytes(body, "content.0").Raw)
++				require.Equal(t, "answer", gjson.GetBytes(body, "content.1.text").String())
++				require.Equal(t, "end_turn", gjson.GetBytes(body, "stop_reason").String())
++				require.EqualValues(t, 15, gjson.GetBytes(body, "usage.output_tokens").Int())
++			}
++		})
++	}
++}

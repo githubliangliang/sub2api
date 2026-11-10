@@ -110,6 +110,9 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				AbortWithError(c, http.StatusServiceUnavailable, "API_KEY_AUTH_OVERLOADED", "API key authentication is temporarily unavailable")
 				return
 			}
+			if abortIfAPIKeyLookupClientGone(c) {
+				return
+			}
 			AbortWithError(c, 500, "INTERNAL_ERROR", "Failed to validate API key")
 			return
 		}
@@ -446,4 +449,14 @@ func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool)
 		return "GROUP_DISABLED", "API Key 所属分组已停用", false
 	}
 	return "", "", true
+}
+
+// A cancelled request cannot receive an authentication response. Only inspect
+// the request context: an internal lookup timeout on a live request stays 500.
+func abortIfAPIKeyLookupClientGone(c *gin.Context) bool {
+	if c.Request.Context().Err() != nil {
+		c.AbortWithStatus(499)
+		return true
+	}
+	return false
 }

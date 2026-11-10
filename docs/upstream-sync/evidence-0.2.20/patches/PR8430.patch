@@ -1,0 +1,528 @@
+diff --git a/backend/internal/pkg/antigravity/gemini_types.go b/backend/internal/pkg/antigravity/gemini_types.go
+index 599119618..fb773449d 100644
+--- a/backend/internal/pkg/antigravity/gemini_types.go
++++ b/backend/internal/pkg/antigravity/gemini_types.go
+@@ -54,9 +54,15 @@ type GeminiFunctionCall struct {
+ 
+ // GeminiFunctionResponse Gemini 函数响应
+ type GeminiFunctionResponse struct {
+-	Name     string         `json:"name"`
+-	Response map[string]any `json:"response"`
+-	ID       string         `json:"id,omitempty"`
++	Parts    []GeminiFunctionResponsePart `json:"parts,omitempty"`
++	Name     string                       `json:"name"`
++	Response map[string]any               `json:"response"`
++	ID       string                       `json:"id,omitempty"`
++}
++
++// GeminiFunctionResponsePart contains inline tool media, not message text.
++type GeminiFunctionResponsePart struct {
++	InlineData *GeminiInlineData `json:"inlineData,omitempty"`
+ }
+ 
+ // GeminiGenerationConfig Gemini 生成配置
+diff --git a/backend/internal/pkg/antigravity/request_transformer.go b/backend/internal/pkg/antigravity/request_transformer.go
+index ea6717ccd..0b3396edb 100644
+--- a/backend/internal/pkg/antigravity/request_transformer.go
++++ b/backend/internal/pkg/antigravity/request_transformer.go
+@@ -13,6 +13,7 @@ import (
+ 	"sync"
+ 	"time"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
+ 	"github.com/google/uuid"
+ )
+ 
+@@ -111,7 +112,7 @@ func TransformClaudeToGeminiWithOptions(claudeReq *ClaudeRequest, projectID, map
+ 	allowDummyThought := strings.HasPrefix(targetModel, "gemini-")
+ 
+ 	// 1. 构建 contents
+-	contents, messageSystemParts, strippedThinking, err := buildContents(claudeReq.Messages, toolIDToName, isThinkingEnabled, allowDummyThought)
++	contents, messageSystemParts, strippedThinking, err := buildContents(claudeReq.Messages, toolIDToName, isThinkingEnabled, allowDummyThought, gemini.SupportsMultimodalFunctionResponses(targetModel))
+ 	if err != nil {
+ 		return nil, fmt.Errorf("build contents: %w", err)
+ 	}
+@@ -419,7 +420,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
+ }
+ 
+ // buildContents 构建 contents
+-func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isThinkingEnabled, allowDummyThought bool) ([]GeminiContent, []GeminiPart, bool, error) {
++func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isThinkingEnabled, allowDummyThought, multimodalToolResults bool) ([]GeminiContent, []GeminiPart, bool, error) {
+ 	var contents []GeminiContent
+ 	var systemParts []GeminiPart
+ 	strippedThinking := false
+@@ -430,7 +431,7 @@ func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isT
+ 			role = "model"
+ 		}
+ 
+-		parts, strippedThisMsg, err := buildParts(msg.Content, toolIDToName, allowDummyThought)
++		parts, strippedThisMsg, err := buildParts(msg.Content, toolIDToName, allowDummyThought, multimodalToolResults)
+ 		if err != nil {
+ 			return nil, nil, false, fmt.Errorf("build parts for message %d: %w", i, err)
+ 		}
+@@ -484,7 +485,7 @@ const DummyThoughtSignature = "skip_thought_signature_validator"
+ 
+ // buildParts 构建消息的 parts
+ // allowDummyThought: 只有 Gemini 模型支持 dummy thought signature
+-func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDummyThought bool) ([]GeminiPart, bool, error) {
++func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDummyThought, multimodalToolResults bool) ([]GeminiPart, bool, error) {
+ 	var parts []GeminiPart
+ 	strippedThinking := false
+ 
+@@ -580,16 +581,21 @@ func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDu
+ 			// 解析 content
+ 			resultContent := parseToolResultContent(block.Content, block.IsError)
+ 
+-			parts = append(parts, GeminiPart{
+-				FunctionResponse: &GeminiFunctionResponse{
+-					Name: funcName,
+-					Response: map[string]any{
+-						"result": resultContent,
+-					},
+-					ID: block.ToolUseID,
+-				},
+-			})
+-			parts = append(parts, extractToolResultInlineParts(block.Content)...)
++			response := &GeminiFunctionResponse{
++				Name:     funcName,
++				Response: map[string]any{"result": resultContent},
++				ID:       block.ToolUseID,
++			}
++			media := extractToolResultInlineParts(block.Content)
++			if multimodalToolResults {
++				for _, part := range media {
++					response.Parts = append(response.Parts, GeminiFunctionResponsePart{InlineData: part.InlineData})
++				}
++			}
++			parts = append(parts, GeminiPart{FunctionResponse: response})
++			if !multimodalToolResults {
++				parts = append(parts, media...)
++			}
+ 		}
+ 	}
+ 
+diff --git a/backend/internal/pkg/antigravity/request_transformer_test.go b/backend/internal/pkg/antigravity/request_transformer_test.go
+index 7bdb40914..eb703da14 100644
+--- a/backend/internal/pkg/antigravity/request_transformer_test.go
++++ b/backend/internal/pkg/antigravity/request_transformer_test.go
+@@ -55,7 +55,7 @@ func TestBuildParts_ThinkingBlockWithoutSignature(t *testing.T) {
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+ 			toolIDToName := make(map[string]string)
+-			parts, _, err := buildParts(json.RawMessage(tt.content), toolIDToName, tt.allowDummyThought)
++			parts, _, err := buildParts(json.RawMessage(tt.content), toolIDToName, tt.allowDummyThought, false)
+ 
+ 			if err != nil {
+ 				t.Fatalf("buildParts() error = %v", err)
+@@ -105,7 +105,7 @@ func TestBuildParts_ToolUseSignatureHandling(t *testing.T) {
+ 
+ 	t.Run("Gemini preserves provided tool_use signature", func(t *testing.T) {
+ 		toolIDToName := make(map[string]string)
+-		parts, _, err := buildParts(json.RawMessage(content), toolIDToName, true)
++		parts, _, err := buildParts(json.RawMessage(content), toolIDToName, true, false)
+ 		if err != nil {
+ 			t.Fatalf("buildParts() error = %v", err)
+ 		}
+@@ -122,7 +122,7 @@ func TestBuildParts_ToolUseSignatureHandling(t *testing.T) {
+ 			{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}
+ 		]`
+ 		toolIDToName := make(map[string]string)
+-		parts, _, err := buildParts(json.RawMessage(contentNoSig), toolIDToName, true)
++		parts, _, err := buildParts(json.RawMessage(contentNoSig), toolIDToName, true, false)
+ 		if err != nil {
+ 			t.Fatalf("buildParts() error = %v", err)
+ 		}
+@@ -136,7 +136,7 @@ func TestBuildParts_ToolUseSignatureHandling(t *testing.T) {
+ 
+ 	t.Run("Claude model - preserve valid signature for tool_use", func(t *testing.T) {
+ 		toolIDToName := make(map[string]string)
+-		parts, _, err := buildParts(json.RawMessage(content), toolIDToName, false)
++		parts, _, err := buildParts(json.RawMessage(content), toolIDToName, false, false)
+ 		if err != nil {
+ 			t.Fatalf("buildParts() error = %v", err)
+ 		}
+@@ -651,7 +651,7 @@ func TestBuildParts_DocumentBecomesInlineData(t *testing.T) {
+ 		{"type":"text","text":"read this"},
+ 		{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERi0="}}
+ 	]`
+-	parts, stripped, err := buildParts(json.RawMessage(content), map[string]string{}, true)
++	parts, stripped, err := buildParts(json.RawMessage(content), map[string]string{}, true, false)
+ 	require.NoError(t, err)
+ 	require.False(t, stripped)
+ 	require.Len(t, parts, 2)
+diff --git a/backend/internal/pkg/antigravity/tool_result_images_test.go b/backend/internal/pkg/antigravity/tool_result_images_test.go
+new file mode 100644
+index 000000000..87e359450
+--- /dev/null
++++ b/backend/internal/pkg/antigravity/tool_result_images_test.go
+@@ -0,0 +1,103 @@
++package antigravity
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestResponsesToolResultImagesStayWithTheirCalls(t *testing.T) {
++	for _, model := range []string{"gemini-3.8-flash", "gemini-4-argon"} {
++		t.Run(model, func(t *testing.T) {
++			raw := []byte(`{"model":"gemini-3.8-flash-low","input":[
++ {"type":"function_call","call_id":"call_A","name":"images","arguments":"{}"},
++ {"type":"function_call","call_id":"call_B","name":"images","arguments":"{}"},
++ {"type":"function_call_output","call_id":"call_A","output":[{"type":"input_text","text":"first pair"},{"type":"input_image","image_url":"data:image/png;base64,AQID"},{"type":"input_image","image_url":"data:image/webp;base64,BAUG"}]},
++ {"type":"function_call_output","call_id":"call_B","output":[{"type":"input_image","image_url":"data:image/jpeg;base64,BwgJ"}]}
++ ]}`)
++			var req apicompat.ResponsesRequest
++			require.NoError(t, json.Unmarshal(raw, &req))
++			anthropic, err := apicompat.ResponsesToAnthropicRequest(&req)
++			require.NoError(t, err)
++			body, err := json.Marshal(anthropic)
++			require.NoError(t, err)
++			var claude ClaudeRequest
++			require.NoError(t, json.Unmarshal(body, &claude))
++			wire, err := TransformClaudeToGeminiWithOptions(&claude, "test-project", model, TransformOptions{})
++			require.NoError(t, err)
++			responses := map[string]gjson.Result{}
++			for _, content := range gjson.GetBytes(wire, "request.contents").Array() {
++				for _, part := range content.Get("parts").Array() {
++					if fr := part.Get("functionResponse"); fr.Exists() {
++						responses[fr.Get("id").String()] = fr
++					}
++					require.False(t, part.Get("inlineData").Exists(), "tool images must remain nested in their response")
++				}
++			}
++			require.Len(t, responses, 2)
++			a := responses["call_A"]
++			b := responses["call_B"]
++			require.Equal(t, "images", a.Get("name").String())
++			require.Equal(t, "first pair", a.Get("response.result").String())
++			require.Len(t, a.Get("parts").Array(), 2)
++			require.Equal(t, "image/png", a.Get("parts.0.inlineData.mimeType").String())
++			require.Equal(t, "AQID", a.Get("parts.0.inlineData.data").String())
++			require.Equal(t, "image/webp", a.Get("parts.1.inlineData.mimeType").String())
++			require.Equal(t, "BAUG", a.Get("parts.1.inlineData.data").String())
++			require.Len(t, b.Get("parts").Array(), 1)
++			require.Equal(t, "image/jpeg", b.Get("parts.0.inlineData.mimeType").String())
++			require.Equal(t, "BwgJ", b.Get("parts.0.inlineData.data").String())
++		})
++	}
++}
++
++func TestToolResultTextAndOlderModelWireUnchanged(t *testing.T) {
++	for _, model := range []string{"gemini-3.8-flash", "gemini-2.5-flash", "claude-sonnet-4-6"} {
++		t.Run(model, func(t *testing.T) {
++			req := &ClaudeRequest{Model: model, Messages: []ClaudeMessage{
++				{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":"call_1","name":"read","input":{}}]`)},
++				{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"call_1","content":"plain text"}]`)},
++			}}
++			wire, err := TransformClaudeToGeminiWithOptions(req, "test-project", model, TransformOptions{})
++			require.NoError(t, err)
++			fr := gjson.GetBytes(wire, "request.contents.1.parts.0.functionResponse")
++			require.Equal(t, "plain text", fr.Get("response.result").String())
++			require.False(t, fr.Get("parts").Exists())
++		})
++	}
++}
++
++func TestToolResultMediaPlacement(t *testing.T) {
++	for _, model := range []string{"gemini-3-flash", "gemini-4-argon", "gemini-2.5-flash", "claude-sonnet-4-6"} {
++		t.Run(model, func(t *testing.T) {
++			req := &ClaudeRequest{Messages: []ClaudeMessage{
++				{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":"call_1","name":"read","input":{}}]`)},
++				{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"call_1","content":[
++ {"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQID"}},
++ {"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"BAUG"}},
++ {"type":"image","source":{"type":"base64","media_type":"image/png","data":""}}
++ ]}]`)},
++			}}
++			wire, err := TransformClaudeToGeminiWithOptions(req, "offline-project", model, TransformOptions{})
++			require.NoError(t, err)
++			parts := gjson.GetBytes(wire, "request.contents.1.parts").Array()
++			nested := model == "gemini-3-flash" || model == "gemini-4-argon"
++			var media []gjson.Result
++			if nested {
++				require.Len(t, parts, 1)
++				media = parts[0].Get("functionResponse.parts").Array()
++			} else {
++				require.Len(t, parts, 3)
++				require.False(t, parts[0].Get("functionResponse.parts").Exists())
++				media = parts[1:]
++			}
++			require.Len(t, media, 2)
++			require.Equal(t, "AQID", media[0].Get("inlineData.data").String())
++			require.Equal(t, "application/pdf", media[1].Get("inlineData.mimeType").String())
++			require.Equal(t, "BAUG", media[1].Get("inlineData.data").String())
++		})
++	}
++}
+diff --git a/backend/internal/pkg/gemini/function_response.go b/backend/internal/pkg/gemini/function_response.go
+new file mode 100644
+index 000000000..908ac6ae2
+--- /dev/null
++++ b/backend/internal/pkg/gemini/function_response.go
+@@ -0,0 +1,20 @@
++package gemini
++
++import (
++	"strconv"
++	"strings"
++)
++
++// SupportsMultimodalFunctionResponses reports whether tool media can remain
++// inside functionResponse.parts (Gemini 3 and later).
++func SupportsMultimodalFunctionResponses(model string) bool {
++	model = strings.TrimPrefix(model, "models/")
++	version, ok := strings.CutPrefix(model, "gemini-")
++	if !ok {
++		return false
++	}
++	major, _, _ := strings.Cut(version, "-")
++	major, _, _ = strings.Cut(major, ".")
++	n, err := strconv.Atoi(major)
++	return err == nil && n >= 3
++}
+diff --git a/backend/internal/pkg/gemini/function_response_test.go b/backend/internal/pkg/gemini/function_response_test.go
+new file mode 100644
+index 000000000..d464a327b
+--- /dev/null
++++ b/backend/internal/pkg/gemini/function_response_test.go
+@@ -0,0 +1,17 @@
++package gemini
++
++import "testing"
++
++func TestSupportsMultimodalFunctionResponses(t *testing.T) {
++	for model, want := range map[string]bool{
++		"gemini-3-pro": true, "gemini-3.8-flash": true, "gemini-4-argon": true,
++		"models/gemini-3-flash-preview": true, "gemini-2.5-flash": false,
++		"claude-sonnet-4-6": false, "client-alias": false, "": false,
++	} {
++		t.Run(model, func(t *testing.T) {
++			if got := SupportsMultimodalFunctionResponses(model); got != want {
++				t.Fatalf("got %v, want %v", got, want)
++			}
++		})
++	}
++}
+diff --git a/backend/internal/service/antigravity_gateway_compat.go b/backend/internal/service/antigravity_gateway_compat.go
+index fcc782a8f..f1ebe1966 100644
+--- a/backend/internal/service/antigravity_gateway_compat.go
++++ b/backend/internal/service/antigravity_gateway_compat.go
+@@ -313,7 +313,7 @@ func (s *AntigravityGatewayService) buildAntigravityCompatGeminiBody(
+ 	mappedModel string,
+ ) ([]byte, error) {
+ 	if strings.HasPrefix(strings.ToLower(mappedModel), "gemini-") {
+-		body, err := convertClaudeMessagesToGeminiGenerateContent(claudeBody)
++		body, err := convertClaudeMessagesToGeminiGenerateContent(claudeBody, mappedModel)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+diff --git a/backend/internal/service/antigravity_tool_result_images_test.go b/backend/internal/service/antigravity_tool_result_images_test.go
+new file mode 100644
+index 000000000..b254c18da
+--- /dev/null
++++ b/backend/internal/service/antigravity_tool_result_images_test.go
+@@ -0,0 +1,64 @@
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestAntigravityResponsesToolResultImages(t *testing.T) {
++	for _, model := range []string{"gemini-3.8-flash", "gemini-4-argon"} {
++		t.Run(model, func(t *testing.T) {
++			raw := []byte(`{"model":"client-alias","input":[
++ {"type":"function_call","call_id":"call_A","name":"images","arguments":"{}"},
++ {"type":"function_call","call_id":"call_B","name":"images","arguments":"{}"},
++ {"type":"function_call_output","call_id":"call_A","output":[{"type":"input_text","text":"first pair"},{"type":"input_image","image_url":"data:image/png;base64,AQID"},{"type":"input_image","image_url":"data:image/webp;base64,BAUG"}]},
++ {"type":"function_call_output","call_id":"call_B","output":[{"type":"input_image","image_url":"data:image/jpeg;base64,BwgJ"}]}
++ ]}`)
++			wire := toolImageCompatWire(t, raw, model)
++			responses := []gjson.Result{}
++			for _, content := range gjson.GetBytes(wire, "request.contents").Array() {
++				for _, part := range content.Get("parts").Array() {
++					if fr := part.Get("functionResponse"); fr.Exists() {
++						responses = append(responses, fr)
++					}
++					require.False(t, part.Get("inlineData").Exists())
++				}
++			}
++			require.Len(t, responses, 2)
++			a, b := responses[0], responses[1]
++			require.Equal(t, "images", a.Get("name").String())
++			require.Equal(t, "images", b.Get("name").String())
++			require.Equal(t, "first pair", a.Get("response.content").String())
++			require.Len(t, a.Get("parts").Array(), 2)
++			require.Equal(t, "image/png", a.Get("parts.0.inlineData.mimeType").String())
++			require.Equal(t, "AQID", a.Get("parts.0.inlineData.data").String())
++			require.Equal(t, "image/webp", a.Get("parts.1.inlineData.mimeType").String())
++			require.Equal(t, "BAUG", a.Get("parts.1.inlineData.data").String())
++			require.Len(t, b.Get("parts").Array(), 1)
++			require.Equal(t, "image/jpeg", b.Get("parts.0.inlineData.mimeType").String())
++			require.Equal(t, "BwgJ", b.Get("parts.0.inlineData.data").String())
++		})
++	}
++}
++
++func toolImageCompatWire(t *testing.T, raw []byte, model string) []byte {
++	t.Helper()
++	var req apicompat.ResponsesRequest
++	require.NoError(t, json.Unmarshal(raw, &req))
++	a, err := apicompat.ResponsesToAnthropicRequest(&req)
++	require.NoError(t, err)
++	body, err := json.Marshal(a)
++	require.NoError(t, err)
++	var claude antigravity.ClaudeRequest
++	require.NoError(t, json.Unmarshal(body, &claude))
++	service := &AntigravityGatewayService{}
++	wire, err := service.buildAntigravityCompatGeminiBody(context.Background(), body, &claude, "offline-project", model)
++	require.NoError(t, err)
++	return wire
++}
+diff --git a/backend/internal/service/gemini_chat_completions_compat_service.go b/backend/internal/service/gemini_chat_completions_compat_service.go
+index 0a339d766..f0716e003 100644
+--- a/backend/internal/service/gemini_chat_completions_compat_service.go
++++ b/backend/internal/service/gemini_chat_completions_compat_service.go
+@@ -95,7 +95,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+ 		mappedModel = account.GetMappedModel(req.Model)
+ 	}
+ 
+-	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(claudeBody)
++	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(claudeBody, mappedModel)
+ 	if err != nil {
+ 		return nil, s.writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 	}
+diff --git a/backend/internal/service/gemini_compat_thinking_test.go b/backend/internal/service/gemini_compat_thinking_test.go
+index 46cb64581..5c68bec9e 100644
+--- a/backend/internal/service/gemini_compat_thinking_test.go
++++ b/backend/internal/service/gemini_compat_thinking_test.go
+@@ -258,7 +258,7 @@ func TestConvertClaudeMessagesToGemini_DropsHistoryThinkingBlocks(t *testing.T)
+ 		{"role":"assistant","content":[{"type":"thinking","thinking":"ONLY_THOUGHT","signature":""},{"type":"redacted_thinking","data":"opaque"}]},
+ 		{"role":"user","content":"last"}
+ 	]}`)
+-	out, err := convertClaudeMessagesToGeminiGenerateContent(body)
++	out, err := convertClaudeMessagesToGeminiGenerateContent(body, "gemini-2.5-flash")
+ 	require.NoError(t, err)
+ 	require.NotContains(t, string(out), "PRIOR_THOUGHT")
+ 	require.NotContains(t, string(out), "ONLY_THOUGHT")
+diff --git a/backend/internal/service/gemini_messages_compat_service.go b/backend/internal/service/gemini_messages_compat_service.go
+index 9c1ff6d8c..1e86598d8 100644
+--- a/backend/internal/service/gemini_messages_compat_service.go
++++ b/backend/internal/service/gemini_messages_compat_service.go
+@@ -21,6 +21,7 @@ import (
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+@@ -551,7 +552,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+ 		mappedModel = account.GetMappedModel(req.Model)
+ 	}
+ 
+-	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(body)
++	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(body, mappedModel)
+ 	if err != nil {
+ 		return nil, s.writeClaudeError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 	}
+@@ -795,7 +796,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+ 					stageName = "thinking+tools"
+ 					signatureRetryStage = 2
+ 				}
+-				retryGeminiReq, txErr := convertClaudeMessagesToGeminiGenerateContent(strippedClaudeBody)
++				retryGeminiReq, txErr := convertClaudeMessagesToGeminiGenerateContent(strippedClaudeBody, mappedModel)
+ 				if txErr == nil {
+ 					logger.LegacyPrintf("service.gemini_messages_compat", "Gemini account %d: detected signature-related 400, retrying with downgraded Claude blocks (%s)", account.ID, stageName)
+ 					// 降级只改写历史块，思考参数沿用客户端原始请求。
+@@ -3468,7 +3469,7 @@ func mapGeminiFinishReasonToClaudeStopReason(finishReason string) string {
+ 	}
+ }
+ 
+-func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
++func convertClaudeMessagesToGeminiGenerateContent(body []byte, model string) ([]byte, error) {
+ 	var req map[string]any
+ 	if err := json.Unmarshal(body, &req); err != nil {
+ 		return nil, err
+@@ -3477,7 +3478,7 @@ func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
+ 	toolUseIDToName := make(map[string]string)
+ 
+ 	systemText := extractClaudeSystemText(req["system"])
+-	contents, err := convertClaudeMessagesToGeminiContents(req["messages"], toolUseIDToName)
++	contents, err := convertClaudeMessagesToGeminiContents(req["messages"], toolUseIDToName, gemini.SupportsMultimodalFunctionResponses(model))
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -3557,7 +3558,7 @@ func extractClaudeSystemText(system any) string {
+ 	}
+ }
+ 
+-func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[string]string) ([]any, error) {
++func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[string]string, multimodalToolResults bool) ([]any, error) {
+ 	arr, ok := messages.([]any)
+ 	if !ok {
+ 		return nil, errors.New("messages must be an array")
+@@ -3633,18 +3634,19 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
+ 					}
+ 					text := extractClaudeContentText(bm["content"])
+ 					images := extractClaudeToolResultImageParts(bm["content"])
+-					if text == "" && len(images) > 0 {
++					if text == "" && len(images) > 0 && !multimodalToolResults {
+ 						text = "[image attached below]"
+ 					}
+-					parts = append(parts, map[string]any{
+-						"functionResponse": map[string]any{
+-							"name": name,
+-							"response": map[string]any{
+-								"content": text,
+-							},
+-						},
+-					})
+-					toolImageParts = append(toolImageParts, images...)
++					response := map[string]any{
++						"name":     name,
++						"response": map[string]any{"content": text},
++					}
++					if multimodalToolResults && len(images) > 0 {
++						response["parts"] = images
++					} else {
++						toolImageParts = append(toolImageParts, images...)
++					}
++					parts = append(parts, map[string]any{"functionResponse": response})
+ 				case "image":
+ 					if src, ok := bm["source"].(map[string]any); ok {
+ 						if srcType, _ := src["type"].(string); srcType == "base64" {
+diff --git a/backend/internal/service/gemini_messages_compat_service_test.go b/backend/internal/service/gemini_messages_compat_service_test.go
+index e20ed2210..a207153b7 100644
+--- a/backend/internal/service/gemini_messages_compat_service_test.go
++++ b/backend/internal/service/gemini_messages_compat_service_test.go
+@@ -911,7 +911,7 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
+ 	}
+ 	b, _ := json.Marshal(claudeReq)
+ 
+-	out, err := convertClaudeMessagesToGeminiGenerateContent(b)
++	out, err := convertClaudeMessagesToGeminiGenerateContent(b, "gemini-2.5-flash")
+ 	if err != nil {
+ 		t.Fatalf("convert failed: %v", err)
+ 	}
+@@ -979,7 +979,7 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t
+ 	body, err := json.Marshal(claudeReq)
+ 	require.NoError(t, err)
+ 
+-	converted, err := convertClaudeMessagesToGeminiGenerateContent(body)
++	converted, err := convertClaudeMessagesToGeminiGenerateContent(body, "gemini-2.5-flash")
+ 	require.NoError(t, err)
+ 
+ 	var geminiReq map[string]any

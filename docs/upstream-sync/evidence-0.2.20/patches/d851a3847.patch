@@ -1,0 +1,289 @@
+diff --git a/.github/workflows/backend-ci.yml b/.github/workflows/backend-ci.yml
+index c9a140f88..d1b420aa9 100644
+--- a/.github/workflows/backend-ci.yml
++++ b/.github/workflows/backend-ci.yml
+@@ -54,7 +54,7 @@ jobs:
+       - name: Setup Node.js
+         uses: actions/setup-node@v6
+         with:
+-          node-version: '20'
++          node-version: '24'
+           cache: 'pnpm'
+           cache-dependency-path: frontend/pnpm-lock.yaml
+       - name: Install frontend dependencies
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 9cef765b6..9f2ef5dd7 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -92,7 +92,7 @@ jobs:
+           version: 9
+       - uses: actions/setup-node@v6
+         with:
+-          node-version: '20'
++          node-version: '24'
+           cache: pnpm
+           cache-dependency-path: frontend/pnpm-lock.yaml
+       - run: pnpm install --frozen-lockfile
+diff --git a/.github/workflows/security-scan.yml b/.github/workflows/security-scan.yml
+index 88da184e5..703e10354 100644
+--- a/.github/workflows/security-scan.yml
++++ b/.github/workflows/security-scan.yml
+@@ -41,7 +41,7 @@ jobs:
+       - name: Set up Node.js
+         uses: actions/setup-node@v6
+         with:
+-          node-version: '20'
++          node-version: '24'
+           cache: 'pnpm'
+           cache-dependency-path: frontend/pnpm-lock.yaml
+       - name: Install dependencies
+diff --git a/frontend/package.json b/frontend/package.json
+index fa12747fa..ef38431a7 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -32,12 +32,12 @@
+     "vue": "^3.5.43",
+     "vue-chartjs": "^5.3.0",
+     "vue-draggable-plus": "^0.6.1",
+-    "vue-i18n": "^9.14.5",
++    "vue-i18n": "^11.4.16",
+     "vue-router": "^4.2.5",
+     "xlsx": "^0.18.5"
+   },
+   "devDependencies": {
+-    "@intlify/message-compiler": "9.14.5",
++    "@intlify/message-compiler": "11.4.16",
+     "@types/dompurify": "^3.0.5",
+     "@types/file-saver": "^2.0.7",
+     "@types/mdx": "^2.0.13",
+@@ -67,7 +67,8 @@
+       "postcss@<8.5.18": ">=8.5.18",
+       "dompurify@<3.4.17": ">=3.4.17",
+       "source-map-js@<1.2.2": ">=1.2.2",
+-      "follow-redirects@<1.16.1": ">=1.16.1"
++      "follow-redirects@<1.16.1": ">=1.16.1",
++      "decode-uri-component@<0.5.1": ">=0.5.1"
+     }
+   }
+ }
+diff --git a/frontend/pnpm-lock.yaml b/frontend/pnpm-lock.yaml
+index d2714896a..a6f4b6042 100644
+--- a/frontend/pnpm-lock.yaml
++++ b/frontend/pnpm-lock.yaml
+@@ -11,6 +11,7 @@ overrides:
+   dompurify@<3.4.17: '>=3.4.17'
+   source-map-js@<1.2.2: '>=1.2.2'
+   follow-redirects@<1.16.1: '>=1.16.1'
++  decode-uri-component@<0.5.1: '>=0.5.1'
+ 
+ importers:
+ 
+@@ -65,8 +66,8 @@ importers:
+         specifier: ^0.6.1
+         version: 0.6.1(@types/sortablejs@1.15.9)
+       vue-i18n:
+-        specifier: ^9.14.5
+-        version: 9.14.5(vue@3.5.43(typescript@5.6.3))
++        specifier: ^11.4.16
++        version: 11.4.16(vue@3.5.43(typescript@5.6.3))
+       vue-router:
+         specifier: ^4.2.5
+         version: 4.6.4(vue@3.5.43(typescript@5.6.3))
+@@ -75,8 +76,8 @@ importers:
+         version: 0.18.5
+     devDependencies:
+       '@intlify/message-compiler':
+-        specifier: 9.14.5
+-        version: 9.14.5
++        specifier: 11.4.16
++        version: 11.4.16
+       '@types/dompurify':
+         specifier: ^3.0.5
+         version: 3.2.0
+@@ -626,17 +627,21 @@ packages:
+   '@iconify/utils@3.1.0':
+     resolution: {integrity: sha512-Zlzem1ZXhI1iHeeERabLNzBHdOa4VhQbqAcOQaMKuTuyZCpwKbC2R4Dd0Zo3g9EAc+Y4fiarO8HIHRAth7+skw==}
+ 
+-  '@intlify/core-base@9.14.5':
+-    resolution: {integrity: sha512-5ah5FqZG4pOoHjkvs8mjtv+gPKYU0zCISaYNjBNNqYiaITxW8ZtVih3GS/oTOqN8d9/mDLyrjD46GBApNxmlsA==}
+-    engines: {node: '>= 16'}
++  '@intlify/core-base@11.4.16':
++    resolution: {integrity: sha512-xB8nMdMRLNx7b0zPvrHy0+N9uq9Vfi1aUxHqWgn2e2/TbjCKy8HfoFpnUXXxVP8I0p1ccd6LFSC3XsFjZ3vweA==}
++    engines: {node: '>= 22'}
+ 
+-  '@intlify/message-compiler@9.14.5':
+-    resolution: {integrity: sha512-IHzgEu61/YIpQV5Pc3aRWScDcnFKWvQA9kigcINcCBXN8mbW+vk9SK+lDxA6STzKQsVJxUPg9ACC52pKKo3SVQ==}
+-    engines: {node: '>= 16'}
++  '@intlify/devtools-types@11.4.16':
++    resolution: {integrity: sha512-Bl7arICsKgwcSEQuZJun3swenN4jwSpg35lCpijFznYbW9GvkfH4wLxcI5+gz7d/EHqu66UT9CZDIdnQdgMAGg==}
++    engines: {node: '>= 22'}
+ 
+-  '@intlify/shared@9.14.5':
+-    resolution: {integrity: sha512-9gB+E53BYuAEMhbCAxVgG38EZrk59sxBtv3jSizNL2hEWlgjBjAw1AwpLHtNaeda12pe6W20OGEa0TwuMSRbyQ==}
+-    engines: {node: '>= 16'}
++  '@intlify/message-compiler@11.4.16':
++    resolution: {integrity: sha512-p4lDWmBAsi3ja+PuEfPRavYyvqkYn/Upxz7UpnyI9LgIIy8XawcGIDzN+k99Z+99etO3HmDXGeTxnJIJGgSZ+g==}
++    engines: {node: '>= 22'}
++
++  '@intlify/shared@11.4.16':
++    resolution: {integrity: sha512-xehmkbEgbbNh/V+d8r3hFup0ViaN29YTJSAfRr28C54rxjyZEO0RNQKqW7VVajj16gLdglotNjiq+sIVNtHGzw==}
++    engines: {node: '>= 22'}
+ 
+   '@isaacs/cliui@8.0.2':
+     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
+@@ -2285,8 +2290,8 @@ packages:
+   decode-named-character-reference@1.3.0:
+     resolution: {integrity: sha512-GtpQYB283KrPp6nRw50q3U9/VfOutZOe103qlN7BPP6Ad27xYnOIWv4lPzo8HCAL+mMZofJ9KEy30fq6MfaK6Q==}
+ 
+-  decode-uri-component@0.4.1:
+-    resolution: {integrity: sha512-+8VxcR21HhTy8nOt6jf20w0c9CADrw1O8d+VZ/YzzCt4bJ3uBjw+D1q2osAB8RnpwwaeYBxy0HyKQxD5JBMuuQ==}
++  decode-uri-component@0.5.1:
++    resolution: {integrity: sha512-vWHQkXgg2cE3BB4rR0c+PYw9BCQzLoNIRMI7AunIkZst74tw/vpPp7VLoYtsR/cy1f55g3XDWUslfeCZjiZJyA==}
+     engines: {node: '>=14.16'}
+ 
+   deep-eql@5.0.2:
+@@ -4411,10 +4416,9 @@ packages:
+     peerDependencies:
+       eslint: '>=6.0.0'
+ 
+-  vue-i18n@9.14.5:
+-    resolution: {integrity: sha512-0jQ9Em3ymWngyiIkj0+c/k7WgaPO+TNzjKSNq9BvBQaKJECqn9cd9fL4tkDhB5G1QBskGl9YxxbDAhgbFtpe2g==}
+-    engines: {node: '>= 16'}
+-    deprecated: v9 and v10 no longer supported. please migrate to v11. about maintenance status, see https://vue-i18n.intlify.dev/guide/maintenance.html
++  vue-i18n@11.4.16:
++    resolution: {integrity: sha512-Kv9tp6iTmaAeOwop7hkAo28N1IBsbSVpnxyE26b6gqc4Q2E9Ke3ZHHA3oqqwS6/cYLT1henZU4etTaLQxrK98Q==}
++    engines: {node: '>= 22'}
+     peerDependencies:
+       vue: ^3.0.0
+ 
+@@ -5032,17 +5036,23 @@ snapshots:
+       '@iconify/types': 2.0.0
+       mlly: 1.8.2
+ 
+-  '@intlify/core-base@9.14.5':
++  '@intlify/core-base@11.4.16':
++    dependencies:
++      '@intlify/devtools-types': 11.4.16
++      '@intlify/message-compiler': 11.4.16
++      '@intlify/shared': 11.4.16
++
++  '@intlify/devtools-types@11.4.16':
+     dependencies:
+-      '@intlify/message-compiler': 9.14.5
+-      '@intlify/shared': 9.14.5
++      '@intlify/core-base': 11.4.16
++      '@intlify/shared': 11.4.16
+ 
+-  '@intlify/message-compiler@9.14.5':
++  '@intlify/message-compiler@11.4.16':
+     dependencies:
+-      '@intlify/shared': 9.14.5
++      '@intlify/shared': 11.4.16
+       source-map-js: 1.2.2
+ 
+-  '@intlify/shared@9.14.5': {}
++  '@intlify/shared@11.4.16': {}
+ 
+   '@isaacs/cliui@8.0.2':
+     dependencies:
+@@ -6969,7 +6979,7 @@ snapshots:
+     dependencies:
+       character-entities: 2.0.2
+ 
+-  decode-uri-component@0.4.1: {}
++  decode-uri-component@0.5.1: {}
+ 
+   deep-eql@5.0.2: {}
+ 
+@@ -8705,7 +8715,7 @@ snapshots:
+ 
+   query-string@9.3.1:
+     dependencies:
+-      decode-uri-component: 0.4.1
++      decode-uri-component: 0.5.1
+       filter-obj: 5.1.0
+       split-on-first: 3.0.0
+ 
+@@ -9609,10 +9619,11 @@ snapshots:
+     transitivePeerDependencies:
+       - supports-color
+ 
+-  vue-i18n@9.14.5(vue@3.5.43(typescript@5.6.3)):
++  vue-i18n@11.4.16(vue@3.5.43(typescript@5.6.3)):
+     dependencies:
+-      '@intlify/core-base': 9.14.5
+-      '@intlify/shared': 9.14.5
++      '@intlify/core-base': 11.4.16
++      '@intlify/devtools-types': 11.4.16
++      '@intlify/shared': 11.4.16
+       '@vue/devtools-api': 6.6.4
+       vue: 3.5.43(typescript@5.6.3)
+ 
+diff --git a/frontend/src/components/payment/__tests__/SubscriptionPlanCard.spec.ts b/frontend/src/components/payment/__tests__/SubscriptionPlanCard.spec.ts
+index 853af980b..af7eceec4 100644
+--- a/frontend/src/components/payment/__tests__/SubscriptionPlanCard.spec.ts
++++ b/frontend/src/components/payment/__tests__/SubscriptionPlanCard.spec.ts
+@@ -69,13 +69,13 @@ describe("SubscriptionPlanCard", () => {
+   });
+ 
+   // #4607：管理端保存的单位是复数（months/weeks），此前用户侧只匹配单数
+-  // 'month'，「1 个月」的套餐卡片被显示成「1天」。测试环境的 vue-i18n 为
+-  // runtime-only 构建，t() 原样返回 key，故按 key 断言单位分支。
++  // 'month'，「1 个月」的套餐卡片被显示成「1天」。按上方测试消息渲染出的
++  // 单位文案断言各分支。
+   it("renders plural admin-form validity units instead of mislabeled days (#4607)", () => {
+-    expect(mountPlanCard("openai", { validity_days: 1, validity_unit: "months" }).text()).toContain("/ payment.perMonth");
+-    expect(mountPlanCard("openai", { validity_days: 3, validity_unit: "months" }).text()).toContain("/ 3payment.months");
+-    expect(mountPlanCard("openai", { validity_days: 2, validity_unit: "weeks" }).text()).toContain("/ 2payment.weeks");
+-    expect(mountPlanCard("openai", { validity_days: 30, validity_unit: "day" }).text()).toContain("/ 30payment.days");
++    expect(mountPlanCard("openai", { validity_days: 1, validity_unit: "months" }).text()).toContain("/ month");
++    expect(mountPlanCard("openai", { validity_days: 3, validity_unit: "months" }).text()).toContain("/ 3months");
++    expect(mountPlanCard("openai", { validity_days: 2, validity_unit: "weeks" }).text()).toContain("/ 2weeks");
++    expect(mountPlanCard("openai", { validity_days: 30, validity_unit: "day" }).text()).toContain("/ 30days");
+   });
+ 
+   it("uses the configured currency symbol while preserving USD for legacy plans", () => {
+@@ -126,11 +126,11 @@ describe("SubscriptionPlanCard", () => {
+       "items-center",
+       "justify-end",
+     ]));
+-    expect(badge?.element.parentElement?.textContent).toContain("/ 30payment.days");
++    expect(badge?.element.parentElement?.textContent).toContain("/ 30days");
+     expect(badge?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
+     expect(price?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
+     expect(wrapper.get("p").text()).toBe("Includes advanced models and priority support.");
+-    expect(wrapper.get("button").text()).toBe("payment.subscribeNow");
++    expect(wrapper.get("button").text()).toBe("Subscribe now");
+   });
+ 
+   it("keeps short plan titles compact and aligned", () => {
+@@ -146,6 +146,6 @@ describe("SubscriptionPlanCard", () => {
+       "items-center",
+       "justify-end",
+     ]));
+-    expect(badge?.element.parentElement?.textContent).toContain("/ 30payment.days");
++    expect(badge?.element.parentElement?.textContent).toContain("/ 30days");
+   });
+ });
+diff --git a/frontend/vite.config.ts b/frontend/vite.config.ts
+index 5df99b8fa..5e109ead0 100644
+--- a/frontend/vite.config.ts
++++ b/frontend/vite.config.ts
+@@ -94,15 +94,11 @@ export default defineConfig(({ mode }) => {
+   resolve: {
+     alias: {
+       '@': resolve(__dirname, 'src'),
+-      // 使用 vue-i18n 运行时版本，避免 CSP unsafe-eval 问题
++      // 使用 vue-i18n 运行时版本，避免 CSP unsafe-eval 问题；
++      // v10 起 JIT 编译恒开启，消息编译为 AST 对象而非 JS 代码，无需 unsafe-eval
+       'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js'
+     }
+   },
+-  define: {
+-    // 启用 vue-i18n JIT 编译，在 CSP 环境下处理消息插值
+-    // JIT 编译器生成 AST 对象而非 JS 代码，无需 unsafe-eval
+-    __INTLIFY_JIT_COMPILATION__: true
+-  },
+   build: {
+     outDir: '../backend/internal/web/dist',
+     emptyOutDir: true,

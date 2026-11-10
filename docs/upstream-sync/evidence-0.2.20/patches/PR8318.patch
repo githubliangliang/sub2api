@@ -1,0 +1,506 @@
+diff --git a/backend/internal/pkg/antigravity/attribution_test.go b/backend/internal/pkg/antigravity/attribution_test.go
+index 79cc3c7ab..1eee22738 100644
+--- a/backend/internal/pkg/antigravity/attribution_test.go
++++ b/backend/internal/pkg/antigravity/attribution_test.go
+@@ -27,6 +27,22 @@ func TestTransformClaudeToGemini_AttributionSystemText(t *testing.T) {
+ 		{"different field", "x-anthropic-billing-header-extra: keep", "x-anthropic-billing-header-extra: keep"},
+ 		{"quoted within instructions", "Explain this metadata: " + attribution, "Explain this metadata: " + attribution},
+ 		{"later line", "Example:\n" + attribution, "Example:\n" + attribution},
++		{"Codex GPT 5", "You are Codex, based on GPT-5. Keep GPT-5 model ids.", "You are an AI agent. Keep GPT-5 model ids."},
++		{"Codex GPT 5.6", "You are Codex, a coding agent based on GPT-5.6.\nKeep indentation.", "You are an AI agent.\nKeep indentation."},
++		{"Codex GPT 6", "You are Codex, based on GPT-6.", "You are an AI agent."},
++		{"Codex GPT 6 agent", "You are Codex, an agent based on GPT-6. Rest.", "You are an AI agent. Rest."},
++		{"CLI comma", "You are GPT-5.6 running in the Codex CLI, a terminal-based coding assistant.", "You are an AI agent, a terminal-based coding assistant."},
++		{"Codex model suffix", "You are Codex, based on GPT-5.6-Codex. Rest.", "You are an AI agent. Rest."},
++		{"CLI GPT 5.6", "You are GPT-5.6 running in the Codex CLI. Rest.", "You are an AI agent. Rest."},
++		{"CLI GPT 6", " \nYou are GPT-6 running in the Codex CLI\nRest.", "You are an AI agent.\nRest."},
++		{"Claude CLI", "You are Claude Code, Anthropic's official CLI for Claude. Rest.", "You are an AI agent. Rest."},
++		{"Claude SDK", "You are a Claude agent, built on Anthropic's Claude Agent SDK. Rest.", "You are an AI agent. Rest."},
++		{"attribution before GPT", attribution + "\r\nYou are Codex, based on GPT-6. Rest.", "You are an AI agent. Rest."},
++		{"quoted GPT", `"You are Codex, based on GPT-6."`, `"You are Codex, based on GPT-6."`},
++		{"later GPT", "Example:\nYou are GPT-6 running in the Codex CLI.", "Example:\nYou are GPT-6 running in the Codex CLI."},
++		{"vendor mentions", "Use OpenAI GPT-5.6 and Anthropic Claude; preserve gpt-6.", "Use OpenAI GPT-5.6 and Anthropic Claude; preserve gpt-6."},
++		{"not identity", "You are Codex, do not claim to be based on GPT-6.", "You are Codex, do not claim to be based on GPT-6."},
++		{"model token boundary", "You are Codex, based on GPT-6example.", "You are Codex, based on GPT-6example."},
+ 	}
+ 	for _, tt := range tests {
+ 		for _, arrayForm := range []bool{false, true} {
+@@ -39,12 +55,13 @@ func TestTransformClaudeToGemini_AttributionSystemText(t *testing.T) {
+ 			t.Run(name, func(t *testing.T) {
+ 				systemJSON, err := json.Marshal(system)
+ 				require.NoError(t, err)
+-				userJSON, err := json.Marshal(attribution)
++				userText := strings.TrimSpace(tt.text)
++				userJSON, err := json.Marshal(userText)
+ 				require.NoError(t, err)
+ 				input := &ClaudeRequest{
+ 					Model: "gemini-3.8-flash-high", System: systemJSON,
+ 					Messages: []ClaudeMessage{{Role: "user", Content: userJSON}},
+-					Tools: []ClaudeTool{{Name: "example", Description: attribution,
++					Tools: []ClaudeTool{{Name: "example", Description: tt.text,
+ 						InputSchema: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}}}},
+ 				}
+ 				before, err := json.Marshal(input)
+@@ -68,8 +85,8 @@ func TestTransformClaudeToGemini_AttributionSystemText(t *testing.T) {
+ 				}
+ 				require.Equal(t, want, texts)
+ 				// The same literal text in user content and tool descriptions is not metadata.
+-				require.Equal(t, attribution, got.Request.Contents[0].Parts[0].Text)
+-				require.Equal(t, attribution, got.Request.Tools[0].FunctionDeclarations[0].Description)
++				require.Equal(t, userText, got.Request.Contents[0].Parts[0].Text)
++				require.Equal(t, tt.text, got.Request.Tools[0].FunctionDeclarations[0].Description)
+ 				after, err := json.Marshal(input)
+ 				require.NoError(t, err)
+ 				require.JSONEq(t, string(before), string(after), "do not mutate the incoming request")
+@@ -124,7 +141,7 @@ func TestNeutralizeClaudeIdentity(t *testing.T) {
+ 	}
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+-			require.Equal(t, tt.want, neutralizeClaudeIdentity(tt.text))
++			require.Equal(t, tt.want, NeutralizeSystemIdentity(tt.text))
+ 		})
+ 	}
+ }
+@@ -135,7 +152,7 @@ func TestAttributionAndIdentityTogether(t *testing.T) {
+ 	attribution := "x-anthropic-billing-header: cc_version=2.1.278.0a9; cc_entrypoint=claude-vscode;"
+ 	identity := "You are a Claude agent, built on Anthropic's Claude Agent SDK."
+ 	require.Equal(t, "", stripClaudeAttribution(attribution))
+-	require.Equal(t, "You are an AI agent.", neutralizeClaudeIdentity(identity))
++	require.Equal(t, "You are an AI agent.", NeutralizeSystemIdentity(identity))
+ }
+ 
+ // End-to-end through the transformer: the attribution block and the identity
+diff --git a/backend/internal/pkg/antigravity/request_transformer.go b/backend/internal/pkg/antigravity/request_transformer.go
+index a13748926..ea6717ccd 100644
+--- a/backend/internal/pkg/antigravity/request_transformer.go
++++ b/backend/internal/pkg/antigravity/request_transformer.go
+@@ -294,27 +294,28 @@ func filterOpenCodePrompt(text string) string {
+ 	return ""
+ }
+ 
+-// stripClaudeAttribution removes the leading Claude Code attribution metadata line
+-// from Antigravity system text. This is prompt metadata, not an HTTP header; it
+-// can trigger RESOURCE_EXHAUSTED on the Google upstream. Keep this scoped to the
+-// Antigravity transformer: native Anthropic OAuth may require the attribution.
+-// claudeIdentityOpeners 是部分 Anthropic 客户端放在系统块开头的 Claude Agent SDK 身份语句。
+-// 仅移除 x-anthropic-billing-header 行还不够：如果系统文本仍以这些语句开头，
+-// Google 上游仍会返回 429 RESOURCE_EXHAUSTED。
+-//
+ // The patterns are anchored at the start of a system block on purpose, so user
+-// instructions that merely mention Claude or Anthropic are left untouched.
+-var claudeIdentityOpeners = []*regexp.Regexp{
++// instructions that merely mention Claude, GPT or their vendors are left untouched.
++var systemIdentityOpeners = []*regexp.Regexp{
+ 	regexp.MustCompile(`(?i)^[ \t\r\n]*You are a Claude agent, built on Anthropic'?s Claude Agent SDK\.?`),
+ 	regexp.MustCompile(`(?i)^[ \t\r\n]*You are Claude Code, Anthropic'?s official CLI for Claude\.?`),
++	regexp.MustCompile(`(?i)^[ \t\r\n]*You are Codex,? (?:a coding agent |an agent )?based on GPT-[0-9]+(?:\.[0-9]+)*(?:-[a-z0-9]+)*\.?`),
++	regexp.MustCompile(`(?i)^[ \t\r\n]*You are GPT-[0-9]+(?:\.[0-9]+)*(?:-[a-z0-9]+)* running in the Codex CLI\.?`),
+ }
+ 
+-// neutralizeClaudeIdentity rewrites a leading vendor identity sentence into a
+-// vendor-neutral one. It keeps the rest of the block, including any user
+-// instructions that follow.
+-func neutralizeClaudeIdentity(text string) string {
+-	for _, re := range claudeIdentityOpeners {
++// NeutralizeSystemIdentity removes leading client attribution and rewrites a
++// leading vendor identity sentence, preserving the rest of the system block.
++// Only Antigravity forwarding should use this; native Anthropic may require attribution.
++func NeutralizeSystemIdentity(text string) string {
++	text = stripClaudeAttribution(text)
++	for _, re := range systemIdentityOpeners {
+ 		if loc := re.FindStringIndex(text); loc != nil {
++			if strings.HasPrefix(text[loc[1]:], ",") {
++				return "You are an AI agent" + text[loc[1]:]
++			}
++			if loc[1] < len(text) && !strings.ContainsAny(text[loc[1]:loc[1]+1], " \t\r\n") {
++				continue
++			}
+ 			return "You are an AI agent." + text[loc[1]:]
+ 		}
+ 	}
+@@ -349,7 +350,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
+ 		// 尝试解析为字符串
+ 		var sysStr string
+ 		if err := json.Unmarshal(system, &sysStr); err == nil {
+-			sysStr = neutralizeClaudeIdentity(stripClaudeAttribution(sysStr))
++			sysStr = NeutralizeSystemIdentity(sysStr)
+ 			if strings.TrimSpace(sysStr) != "" {
+ 				if strings.Contains(sysStr, "You are Antigravity") {
+ 					userHasAntigravityIdentity = true
+@@ -365,7 +366,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
+ 			var sysBlocks []SystemBlock
+ 			if err := json.Unmarshal(system, &sysBlocks); err == nil {
+ 				for _, block := range sysBlocks {
+-					block.Text = neutralizeClaudeIdentity(stripClaudeAttribution(block.Text))
++					block.Text = NeutralizeSystemIdentity(block.Text)
+ 					if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+ 						if strings.Contains(block.Text, "You are Antigravity") {
+ 							userHasAntigravityIdentity = true
+diff --git a/backend/internal/service/antigravity_gateway_compat.go b/backend/internal/service/antigravity_gateway_compat.go
+index f4e041adc..fcc782a8f 100644
+--- a/backend/internal/service/antigravity_gateway_compat.go
++++ b/backend/internal/service/antigravity_gateway_compat.go
+@@ -13,6 +13,8 @@ import (
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+ 	"github.com/gin-gonic/gin"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
+ )
+ 
+ type antigravityCompatProtocol uint8
+@@ -75,7 +77,7 @@ func (s *AntigravityGatewayService) ForwardAsChatCompletions(
+ 	if err != nil {
+ 		return nil, s.writeAntigravityCompatError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 	}
+-	claudeRequest, err := apicompat.ResponsesToAnthropicRequest(responsesRequest)
++	claudeRequest, err := convertAntigravityCompatResponsesToAnthropic(responsesRequest)
+ 	if err != nil {
+ 		return nil, s.writeAntigravityCompatError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 	}
+@@ -118,7 +120,7 @@ func (s *AntigravityGatewayService) ForwardAsResponses(
+ 		return nil, s.writeAntigravityCompatError(c, http.StatusBadRequest, "invalid_request_error", "model is required")
+ 	}
+ 
+-	claudeRequest, err := apicompat.ResponsesToAnthropicRequest(&request)
++	claudeRequest, err := convertAntigravityCompatResponsesToAnthropic(&request)
+ 	if err != nil {
+ 		return nil, s.writeAntigravityCompatError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 	}
+@@ -151,6 +153,48 @@ func (s *AntigravityGatewayService) validateAntigravityCompatAccount(c *gin.Cont
+ 	)
+ }
+ 
++func convertAntigravityCompatResponsesToAnthropic(request *apicompat.ResponsesRequest) (*apicompat.AnthropicRequest, error) {
++	request.Instructions = antigravity.NeutralizeSystemIdentity(request.Instructions)
++	neutralizeText := func(path string, text gjson.Result) error {
++		if text.Type != gjson.String {
++			return nil
++		}
++		neutral := antigravity.NeutralizeSystemIdentity(text.String())
++		if neutral == text.String() {
++			return nil
++		}
++		var err error
++		request.Input, err = sjson.SetBytes(request.Input, path, neutral)
++		return err
++	}
++	for itemIndex, item := range gjson.ParseBytes(request.Input).Array() {
++		role := item.Get("role").String()
++		if role != "system" && role != "developer" {
++			continue
++		}
++		content := item.Get("content")
++		path := fmt.Sprintf("%d.content", itemIndex)
++		if content.Type == gjson.String {
++			if err := neutralizeText(path, content); err != nil {
++				return nil, err
++			}
++			continue
++		}
++		if !content.IsArray() {
++			continue
++		}
++		for partIndex, part := range content.Array() {
++			switch part.Get("type").String() {
++			case "text", "input_text", "output_text":
++				if err := neutralizeText(fmt.Sprintf("%s.%d.text", path, partIndex), part.Get("text")); err != nil {
++					return nil, err
++				}
++			}
++		}
++	}
++	return apicompat.ResponsesToAnthropicRequest(request)
++}
++
+ func preserveChatCompletionTokenLimit(request *apicompat.ChatCompletionsRequest, claudeRequest *apicompat.AnthropicRequest) {
+ 	if request == nil || claudeRequest == nil {
+ 		return
+diff --git a/backend/internal/service/antigravity_gateway_compat_test.go b/backend/internal/service/antigravity_gateway_compat_test.go
+index 825997e4f..bccbe2472 100644
+--- a/backend/internal/service/antigravity_gateway_compat_test.go
++++ b/backend/internal/service/antigravity_gateway_compat_test.go
+@@ -4,6 +4,7 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"encoding/json"
++	"fmt"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -131,6 +132,234 @@ func antigravityCompatSuccessResponse() *http.Response {
+ 	}
+ }
+ 
++func TestAntigravitySystemIdentityAcrossProtocols(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const task = "\nKeep GPT-5.6, gpt-6 and Claude model ids unchanged."
++	for _, identity := range []string{"You are Codex, based on GPT-5.6.", "You are Codex, an agent based on GPT-6.", "You are GPT-6 running in the Codex CLI.", "You are Claude Code, Anthropic's official CLI for Claude."} {
++		for _, model := range []string{"gemini-3.1-pro-high", "claude-sonnet-4-6"} {
++			for _, protocol := range []string{"responses", "chat", "messages"} {
++				for _, arraySystem := range []bool{false, true} {
++					t.Run(fmt.Sprintf("%s/%s/%s/array=%t", identity, model, protocol, arraySystem), func(t *testing.T) {
++						text := "x-anthropic-billing-header: cc_version=example;\n" + identity + task
++						var system any = text
++						if arraySystem {
++							system = []map[string]any{{"type": "text", "text": text}}
++						}
++						request := map[string]any{"model": model, "max_tokens": 128}
++						switch protocol {
++						case "responses":
++							request["input"] = identity
++							request["instructions"] = text
++							if arraySystem {
++								delete(request, "instructions")
++								request["input"] = []map[string]any{
++									{"type": "message", "role": "developer", "content": []map[string]string{{"type": "input_text", "text": text}}},
++									{"type": "message", "role": "user", "content": identity},
++								}
++							}
++						case "chat":
++							request["messages"] = []map[string]any{{"role": "system", "content": system}, {"role": "user", "content": identity}}
++						case "messages":
++							request["system"] = system
++							request["messages"] = []map[string]any{{"role": "user", "content": identity}}
++						}
++						body, err := json.Marshal(request)
++						require.NoError(t, err)
++						var forwarded []byte
++						upstream := &queuedHTTPUpstreamStub{
++							responses: []*http.Response{antigravityCompatSuccessResponse()},
++							onCall: func(req *http.Request, _ *queuedHTTPUpstreamStub) {
++								forwarded, err = io.ReadAll(req.Body)
++								require.NoError(t, err)
++							},
++						}
++						svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
++						account := newAntigravityCompatAccount(AccountTypeOAuth)
++						c, _ := newAntigravityCompatContext(http.MethodPost, "/v1/"+protocol, body)
++						switch protocol {
++						case "responses":
++							_, err = svc.ForwardAsResponses(context.Background(), c, account, body, nil)
++						case "chat":
++							_, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, nil)
++						case "messages":
++							_, err = svc.Forward(context.Background(), c, account, body, false)
++						}
++						require.NoError(t, err)
++						systemText := gjson.GetBytes(forwarded, "request.systemInstruction.parts").Raw
++						require.Contains(t, systemText, "You are an AI agent.")
++						require.Contains(t, systemText, "Keep GPT-5.6, gpt-6 and Claude model ids unchanged.")
++						require.NotContains(t, systemText, identity)
++						require.NotContains(t, systemText, "x-anthropic-billing-header:")
++						require.Equal(t, identity, gjson.GetBytes(forwarded, "request.contents.0.parts.0.text").String())
++						require.Equal(t, model, gjson.GetBytes(forwarded, "model").String())
++					})
++				}
++			}
++		}
++	}
++}
++
++func TestAntigravitySystemIdentityMultipleBlocksForward(test *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const model = "gemini-3.1-pro-high"
++	const stale = "You are Codex, based on GPT-6."
++	const otherStale = "You are Claude Code, Anthropic's official CLI for Claude."
++	const benign = "Keep GPT-5.6, gpt-6 and Claude model ids unchanged."
++	const quoted = `"You are Codex, based on GPT-6."`
++	const embedded = "Example identity:\nYou are Codex, based on GPT-6."
++	const userText = stale + "\n" + otherStale
++	for _, scenario := range []struct {
++		name   string
++		blocks []string
++	}{
++		{"benign_then_stale", []string{benign, stale}},
++		{"native_then_stale", []string{"You are Antigravity, a helpful assistant.", stale}},
++		{"multiple_stale", []string{stale, otherStale}},
++	} {
++		for _, protocol := range []string{"responses", "chat", "messages"} {
++			for _, separateMessages := range []bool{false, true} {
++				if protocol == "messages" && separateMessages {
++					continue
++				}
++				test.Run(fmt.Sprintf("%s/%s/separate=%t", scenario.name, protocol, separateMessages), func(test *testing.T) {
++					texts := append(append([]string{}, scenario.blocks...), quoted, embedded, benign)
++					blocks := make([]map[string]any, 0, len(texts))
++					for _, text := range texts {
++						blocks = append(blocks, map[string]any{"type": "text", "text": text})
++					}
++					request := map[string]any{"model": model, "max_tokens": 128}
++					tool := map[string]any{"name": "example", "description": userText, "parameters": map[string]any{"type": "object"}}
++					switch protocol {
++					case "responses", "chat":
++						if protocol == "responses" {
++							for _, block := range blocks {
++								block["type"] = "input_text"
++							}
++							tool["type"] = "function"
++							request["tools"] = []any{tool}
++						} else {
++							request["tools"] = []any{map[string]any{"type": "function", "function": tool}}
++						}
++						messages := []map[string]any{{"role": "system", "content": blocks}}
++						if separateMessages {
++							messages = nil
++							for index, text := range texts {
++								role := "system"
++								if index%2 == 1 {
++									role = "developer"
++								}
++								if protocol == "responses" && index == 0 {
++									request["instructions"] = text
++									continue
++								}
++								messages = append(messages, map[string]any{"role": role, "content": text})
++							}
++						}
++						messages = append(messages, map[string]any{"role": "user", "content": userText})
++						if protocol == "responses" {
++							request["input"] = messages
++						} else {
++							request["messages"] = messages
++						}
++					case "messages":
++						request["system"] = blocks
++						request["messages"] = []map[string]any{{"role": "user", "content": userText}}
++						request["tools"] = []any{map[string]any{"name": "example", "description": userText, "input_schema": map[string]any{"type": "object"}}}
++					}
++					body, err := json.Marshal(request)
++					require.NoError(test, err)
++					var forwarded []byte
++					upstream := &queuedHTTPUpstreamStub{
++						responses: []*http.Response{antigravityCompatSuccessResponse()},
++						onCall: func(req *http.Request, _ *queuedHTTPUpstreamStub) {
++							forwarded, err = io.ReadAll(req.Body)
++							require.NoError(test, err)
++						},
++					}
++					svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
++					account := newAntigravityCompatAccount(AccountTypeOAuth)
++					requestContext, _ := newAntigravityCompatContext(http.MethodPost, "/v1/"+protocol, body)
++					switch protocol {
++					case "responses":
++						_, err = svc.ForwardAsResponses(context.Background(), requestContext, account, body, nil)
++					case "chat":
++						_, err = svc.ForwardAsChatCompletions(context.Background(), requestContext, account, body, nil)
++					case "messages":
++						_, err = svc.Forward(context.Background(), requestContext, account, body, false)
++					}
++					require.NoError(test, err)
++					parts := gjson.GetBytes(forwarded, "request.systemInstruction.parts").Array()
++					var systemTexts []string
++					for _, part := range parts {
++						systemTexts = append(systemTexts, part.Get("text").String())
++					}
++					require.NotEmpty(test, systemTexts)
++					wantTexts := append([]string{}, texts...)
++					for index, text := range wantTexts {
++						if text == stale || text == otherStale {
++							wantTexts[index] = "You are an AI agent."
++						}
++					}
++					if scenario.name != "native_then_stale" {
++						require.Contains(test, systemTexts[0], "You are Antigravity")
++						systemTexts = systemTexts[1:]
++						if protocol == "messages" {
++							require.GreaterOrEqual(test, len(systemTexts), 2)
++							require.Contains(test, systemTexts[0], "Below are your system instructions.")
++							require.Equal(test, "\n--- [SYSTEM_PROMPT_END] ---", systemTexts[len(systemTexts)-1])
++							systemTexts = systemTexts[1 : len(systemTexts)-1]
++						}
++					}
++					separator := "\n\n"
++					if protocol == "messages" {
++						separator = "\n"
++					}
++					require.Equal(test, strings.Join(wantTexts, separator), strings.Join(systemTexts, "\n"))
++					require.Equal(test, userText, gjson.GetBytes(forwarded, "request.contents.0.parts.0.text").String())
++					require.Equal(test, userText, gjson.GetBytes(forwarded, "request.tools.0.functionDeclarations.0.description").String())
++					require.Equal(test, model, gjson.GetBytes(forwarded, "model").String())
++				})
++			}
++		}
++	}
++}
++
++func TestInjectAntigravityGeminiSystemIdentity(t *testing.T) {
++	const identity = "You are Codex, based on GPT-6."
++	const mention = "Example: You are GPT-5.6 running in the Codex CLI."
++	for _, existingIdentity := range []bool{false, true} {
++		t.Run(fmt.Sprintf("existing identity=%t", existingIdentity), func(t *testing.T) {
++			parts := []map[string]any{
++				{"text": "x-anthropic-billing-header: cc_version=example;"},
++				{"text": identity, "custom": "preserved"},
++				{"text": mention},
++				{"text": `"You are Codex, based on GPT-6."`},
++			}
++			if existingIdentity {
++				parts = append([]map[string]any{{"text": "You are Antigravity."}}, parts...)
++			}
++			body, err := json.Marshal(map[string]any{
++				"systemInstruction": map[string]any{"parts": parts},
++				"contents":          []map[string]any{{"role": "user", "parts": []map[string]string{{"text": identity}}}},
++				"tools":             []map[string]any{{"functionDeclarations": []map[string]string{{"name": "example", "description": identity}}}},
++			})
++			require.NoError(t, err)
++			got, err := injectIdentityPatchToGeminiRequest(body)
++			require.NoError(t, err)
++			require.Equal(t, "You are an AI agent.", gjson.GetBytes(got, "systemInstruction.parts.2.text").String())
++			require.Equal(t, "preserved", gjson.GetBytes(got, "systemInstruction.parts.2.custom").String())
++			require.Equal(t, mention, gjson.GetBytes(got, "systemInstruction.parts.3.text").String())
++			require.Equal(t, `"You are Codex, based on GPT-6."`, gjson.GetBytes(got, "systemInstruction.parts.4.text").String())
++			for _, field := range []string{"contents", "tools"} {
++				require.JSONEq(t, gjson.GetBytes(body, field).Raw, gjson.GetBytes(got, field).Raw)
++			}
++			again, err := injectIdentityPatchToGeminiRequest(got)
++			require.NoError(t, err)
++			require.Equal(t, string(got), string(again))
++		})
++	}
++}
++
+ func TestAntigravityCompatOAuthUsesNativeTokenAndRoute(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 
+diff --git a/backend/internal/service/antigravity_gateway_service.go b/backend/internal/service/antigravity_gateway_service.go
+index 66a0f02cd..d2a4d81b1 100644
+--- a/backend/internal/service/antigravity_gateway_service.go
++++ b/backend/internal/service/antigravity_gateway_service.go
+@@ -641,21 +641,33 @@ func injectIdentityPatchToGeminiRequest(body []byte) ([]byte, error) {
+ 		return nil, fmt.Errorf("解析 Gemini 请求失败: %w", err)
+ 	}
+ 
++	identityFound := false
++	systemChanged := false
+ 	// 检查现有 systemInstruction 是否已包含身份提示词
+ 	if sysInst, ok := request["systemInstruction"].(map[string]any); ok {
+ 		if parts, ok := sysInst["parts"].([]any); ok {
+ 			for _, part := range parts {
+ 				if partMap, ok := part.(map[string]any); ok {
+ 					if text, ok := partMap["text"].(string); ok {
+-						if strings.Contains(text, "You are Antigravity") {
+-							// 已包含身份提示词，直接返回原始请求
+-							return body, nil
++						neutral := antigravity.NeutralizeSystemIdentity(text)
++						if neutral != text {
++							partMap["text"] = neutral
++							systemChanged = true
++						}
++						if strings.Contains(neutral, "You are Antigravity") {
++							identityFound = true
+ 						}
+ 					}
+ 				}
+ 			}
+ 		}
+ 	}
++	if identityFound {
++		if systemChanged {
++			return json.Marshal(request)
++		}
++		return body, nil
++	}
+ 
+ 	// 获取默认身份提示词
+ 	identityPatch := antigravity.GetDefaultIdentityPatch()

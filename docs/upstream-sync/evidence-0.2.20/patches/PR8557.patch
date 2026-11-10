@@ -1,0 +1,926 @@
+diff --git a/README_CN.md b/README_CN.md
+index b174abb0d..a651b78e4 100644
+--- a/README_CN.md
++++ b/README_CN.md
+@@ -747,11 +747,13 @@ go generate ./cmd/server
+ 
+ ## OpenAI 图片模型
+ 
+-支持 `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst` 及其 `2026-09-08` 日期快照，可通过 `/v1/images/generations`、`/v1/images/edits` 调用。`quality` 支持 `xhigh`、`max`、`auto`，合法自定义尺寸和图片 usage 明细保持透传。
++支持 `gpt-image-2.6-flare`、`gpt-image-2.6-sunburst`，以及 `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst` 和 2.5 的 `2026-09-08` 日期快照，可通过 `/v1/images/generations`、`/v1/images/edits` 调用。保留显式 `complexity`（`low` / `medium` / `high`）；省略时不注入默认值。`quality`、自定义尺寸和图片 usage 明细保持透传。
+ 
+-OAuth / Setup Token 图片请求使用 Responses 主控模型调用 `image_generation` 工具，默认主控为 `gpt-5.6-luna`。可设置 `SUB2API_IMAGES_MAIN_MODEL` 切换为账号支持的文本模型；Docker Compose 用户修改 `.env` 后执行 `docker compose up -d` 重建容器。该配置不会替换所选图片模型，也不会覆盖 `/v1/responses` 请求中已经提供的文本主控模型。
++OAuth / Setup Token 的 1.5、2、2.5 和 2.6 图片请求使用 Codex 原生 Images 端点。旧模型遇到端点 404 / 405 时仍可回退到 Responses；2.6 不回退，避免桥接层忽略图片模型或注入不支持的 `complexity`。其余模型继续通过 Responses 的 `image_generation` 工具调用，默认文本主控为 `gpt-5.6-luna`，可设置 `SUB2API_IMAGES_MAIN_MODEL` 切换。该配置仅影响 Responses 桥接。
+ 
+-升级后，无模型限制的账号自动支持新模型。已有显式账号映射或分组白名单需要加入两个 2.5 模型（日期快照按需加入）；升级不会自动扩大管理员设置的模型权限。新模型内置价格包含官方文本输入、图片输入和图片输出 token 费率，远端价格表尚未更新时使用内置 2.5 价格；实际按次或按 token 计费仍由既有分组/渠道配置决定。
++原生端点保留 JSON / multipart 编辑的 `markup`（图片 URL 或上传文件）、GIF 帧参数及 SVG author 参数；`response_format=url` 使用上游实际输出格式的 MIME。GIF / SVG 可用性和参数生效情况由上游账号权限及端点决定，转发支持不代表上游一定输出该格式。若编辑端点对流式请求返回完整 JSON，网关会转换为完成事件并保留 usage。
++
++升级后，无模型限制的账号自动支持新模型。已有显式账号映射或分组白名单需要主动加入两个 2.6 模型；升级不会扩大已保存的模型权限。2.6 内置官方文本输入、图片输入、缓存及图片输出 token 费率，远端价格表缺失或动态价格服务不可用时仍可兜底；实际按张或按 token 计费继续由既有分组/渠道配置决定。无需数据库迁移或新增环境变量。
+ 
+ ## 简易模式
+ 
+diff --git a/backend/internal/pkg/openai/constants.go b/backend/internal/pkg/openai/constants.go
+index f213459ec..692a33ac9 100644
+--- a/backend/internal/pkg/openai/constants.go
++++ b/backend/internal/pkg/openai/constants.go
+@@ -41,6 +41,8 @@ var DefaultModels = []Model{
+ 	{ID: "gpt-image-2", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2"},
+ 	{ID: "gpt-image-2.5-flare", Object: "model", Created: 1788825600, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2.5 Flare"},
+ 	{ID: "gpt-image-2.5-sunburst", Object: "model", Created: 1788825600, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2.5 Sunburst"},
++	{ID: "gpt-image-2.6-flare", Object: "model", Created: 1793750400, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2.6 Flare"},
++	{ID: "gpt-image-2.6-sunburst", Object: "model", Created: 1793750400, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2.6 Sunburst"},
+ }
+ 
+ // DefaultModelIDs returns the default model ID list
+diff --git a/backend/internal/pkg/openai/constants_test.go b/backend/internal/pkg/openai/constants_test.go
+index 1c3ccf3db..48dc9a330 100644
+--- a/backend/internal/pkg/openai/constants_test.go
++++ b/backend/internal/pkg/openai/constants_test.go
+@@ -28,9 +28,11 @@ func TestDefaultModelsPreferConcreteGPT56SolForAccountTests(t *testing.T) {
+ 	require.Equal(t, "gpt-5.6-sol", DefaultModels[0].ID)
+ }
+ 
+-func TestDefaultModelsIncludeGPTImage25(t *testing.T) {
++func TestDefaultModelsIncludeGPTImage25And26(t *testing.T) {
+ 	require.Contains(t, DefaultModelIDs(), "gpt-image-2.5-flare")
+ 	require.Contains(t, DefaultModelIDs(), "gpt-image-2.5-sunburst")
++	require.Contains(t, DefaultModelIDs(), "gpt-image-2.6-flare")
++	require.Contains(t, DefaultModelIDs(), "gpt-image-2.6-sunburst")
+ }
+ 
+ func TestGPT6SolLunaModelIdentity(t *testing.T) {
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index f66293ba0..63e8d0a03 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -1048,6 +1048,14 @@ func (s *BillingService) initFallbackPricing() {
+ // getFallbackPricing 根据模型系列获取回退价格
+ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+ 	modelLower := normalizeAntigravityClaudeTierAlias(strings.ToLower(model))
++	if modelLower == "gpt-image-2.6-flare" || modelLower == "gpt-image-2.6-sunburst" {
++		p := openAIGPTImage25FallbackPricing
++		return &ModelPricing{
++			InputPricePerToken: p.InputCostPerToken, CacheReadPricePerToken: p.CacheReadInputTokenCost,
++			ImageInputPricePerToken: p.InputCostPerImageToken, ImageCacheReadPricePerToken: p.CacheReadInputImageTokenCost,
++			ImageOutputPricePerToken: p.OutputCostPerImageToken,
++		}
++	}
+ 	if modelLower == "jev-latest" {
+ 		return s.fallbackPrices["jev-latest"]
+ 	}
+diff --git a/backend/internal/service/openai_image_dimensions.go b/backend/internal/service/openai_image_dimensions.go
+index b297aeaf6..329c35638 100644
+--- a/backend/internal/service/openai_image_dimensions.go
++++ b/backend/internal/service/openai_image_dimensions.go
+@@ -6,6 +6,7 @@ import (
+ 	"encoding/binary"
+ 	"fmt"
+ 	"image"
++	_ "image/gif"
+ 	_ "image/jpeg"
+ 	_ "image/png"
+ 	"io"
+diff --git a/backend/internal/service/openai_images.go b/backend/internal/service/openai_images.go
+index bd5b85aa0..cc15aedfb 100644
+--- a/backend/internal/service/openai_images.go
++++ b/backend/internal/service/openai_images.go
+@@ -86,6 +86,7 @@ type OpenAIImagesRequest struct {
+ 	SizeTier           string
+ 	ResponseFormat     string
+ 	Quality            string
++	Complexity         string
+ 	Background         string
+ 	OutputFormat       string
+ 	Moderation         string
+@@ -93,6 +94,9 @@ type OpenAIImagesRequest struct {
+ 	Style              string
+ 	OutputCompression  *int
+ 	PartialImages      *int
++	FrameCount         *int
++	FrameDurationMS    *int
++	SVG                *OpenAIImagesSVGOptions
+ 	HasMask            bool
+ 	HasNativeOptions   bool
+ 	RequiredCapability OpenAIImagesCapability
+@@ -100,10 +104,20 @@ type OpenAIImagesRequest struct {
+ 	MaskImageURL       string
+ 	Uploads            []OpenAIImagesUpload
+ 	MaskUpload         *OpenAIImagesUpload
++	MarkupImageURL     string
++	MarkupUpload       *OpenAIImagesUpload
+ 	Body               []byte
+ 	bodyHash           string
+ }
+ 
++// Keep SVG author options separate from the image model and its complexity.
++type OpenAIImagesSVGOptions struct {
++	Model     string `json:"model"`
++	Reasoning *struct {
++		Effort string `json:"effort,omitempty"`
++	} `json:"reasoning,omitempty"`
++}
++
+ func (r *OpenAIImagesRequest) ModerationBody() []byte {
+ 	if r == nil {
+ 		return nil
+@@ -150,6 +164,14 @@ func (r *OpenAIImagesRequest) moderationImages() []map[string]string {
+ 			images = append(images, map[string]string{"image_url": dataURL})
+ 		}
+ 	}
++	if markupURL := strings.TrimSpace(r.MarkupImageURL); markupURL != "" {
++		images = append(images, map[string]string{"image_url": markupURL})
++	}
++	if r.MarkupUpload != nil {
++		if dataURL := r.MarkupUpload.ModerationDataURL(); dataURL != "" {
++			images = append(images, map[string]string{"image_url": dataURL})
++		}
++	}
+ 	return images
+ }
+ 
+@@ -274,6 +296,7 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
+ 	}
+ 	req.ResponseFormat = strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "response_format").String()))
+ 	req.Quality = strings.TrimSpace(gjson.GetBytes(body, "quality").String())
++	req.Complexity = strings.TrimSpace(gjson.GetBytes(body, "complexity").String())
+ 	req.Background = strings.TrimSpace(gjson.GetBytes(body, "background").String())
+ 	req.OutputFormat = strings.TrimSpace(gjson.GetBytes(body, "output_format").String())
+ 	req.Moderation = strings.TrimSpace(gjson.GetBytes(body, "moderation").String())
+@@ -294,6 +317,20 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
+ 		v := int(partialImages.Int())
+ 		req.PartialImages = &v
+ 	}
++	for _, field := range []struct {
++		name string
++		dest any
++	}{
++		{"frame_count", &req.FrameCount},
++		{"frame_duration_ms", &req.FrameDurationMS},
++		{"svg", &req.SVG},
++	} {
++		if value := gjson.GetBytes(body, field.name); value.Exists() {
++			if err := json.Unmarshal([]byte(value.Raw), field.dest); err != nil {
++				return fmt.Errorf("invalid %s field: %w", field.name, err)
++			}
++		}
++	}
+ 	if req.IsEdits() {
+ 		images := gjson.GetBytes(body, "images")
+ 		if images.Exists() {
+@@ -317,6 +354,18 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
+ 		if gjson.GetBytes(body, "mask.file_id").Exists() {
+ 			return fmt.Errorf("mask.file_id is not supported (use mask.image_url instead)")
+ 		}
++		if markup := gjson.GetBytes(body, "markup"); markup.Exists() && markup.Type != gjson.Null {
++			if !markup.IsObject() {
++				return fmt.Errorf("invalid markup field type")
++			}
++			if markup.Get("file_id").Exists() {
++				return fmt.Errorf("markup.file_id is not supported (use markup.image_url instead)")
++			}
++			req.MarkupImageURL = strings.TrimSpace(markup.Get("image_url").String())
++			if req.MarkupImageURL == "" {
++				return fmt.Errorf("markup.image_url is required")
++			}
++		}
+ 		if len(req.InputImageURLs) == 0 {
+ 			return fmt.Errorf("images[].image_url is required")
+ 		}
+@@ -366,10 +415,9 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+ 		fileName := strings.TrimSpace(part.FileName())
+ 		if fileName != "" {
+ 			partContentType := strings.TrimSpace(part.Header.Get("Content-Type"))
+-			if name == "mask" && len(data) > 0 {
+-				req.HasMask = true
++			if (name == "mask" || name == "markup") && len(data) > 0 {
+ 				width, height := parseOpenAIImageDimensions(part.Header)
+-				maskUpload := OpenAIImagesUpload{
++				upload := OpenAIImagesUpload{
+ 					FieldName:   name,
+ 					FileName:    fileName,
+ 					ContentType: partContentType,
+@@ -377,7 +425,13 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+ 					Width:       width,
+ 					Height:      height,
+ 				}
+-				req.MaskUpload = &maskUpload
++				if name == "mask" {
++					req.HasMask = true
++					req.MaskUpload = &upload
++				} else {
++					req.HasNativeOptions = true
++					req.MarkupUpload = &upload
++				}
+ 			}
+ 			if name == "image" || strings.HasPrefix(name, "image[") {
+ 				width, height := parseOpenAIImageDimensions(part.Header)
+@@ -420,6 +474,9 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+ 		case "quality":
+ 			req.Quality = value
+ 			req.HasNativeOptions = true
++		case "complexity":
++			req.Complexity = value
++			req.HasNativeOptions = true
+ 		case "background":
+ 			req.Background = value
+ 			req.HasNativeOptions = true
+@@ -449,6 +506,22 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+ 			}
+ 			req.PartialImages = &n
+ 			req.HasNativeOptions = true
++		case "frame_count", "frame_duration_ms":
++			n, err := strconv.Atoi(value)
++			if err != nil {
++				return fmt.Errorf("invalid %s field value", name)
++			}
++			if name == "frame_count" {
++				req.FrameCount = &n
++			} else {
++				req.FrameDurationMS = &n
++			}
++			req.HasNativeOptions = true
++		case "svg":
++			if err := json.Unmarshal(data, &req.SVG); err != nil {
++				return fmt.Errorf("invalid svg field: %w", err)
++			}
++			req.HasNativeOptions = true
+ 		default:
+ 			if isOpenAINativeImageOption(name) && value != "" {
+ 				req.HasNativeOptions = true
+@@ -574,12 +647,17 @@ func hasOpenAINativeImageOptions(exists func(path string) bool) bool {
+ 	for _, path := range []string{
+ 		"background",
+ 		"quality",
++		"complexity",
+ 		"style",
+ 		"output_format",
+ 		"output_compression",
+ 		"moderation",
+ 		"input_fidelity",
+ 		"partial_images",
++		"frame_count",
++		"frame_duration_ms",
++		"svg",
++		"markup",
+ 	} {
+ 		if exists(path) {
+ 			return true
+@@ -590,7 +668,7 @@ func hasOpenAINativeImageOptions(exists func(path string) bool) bool {
+ 
+ func isOpenAINativeImageOption(name string) bool {
+ 	switch strings.TrimSpace(strings.ToLower(name)) {
+-	case "background", "quality", "style", "output_format", "output_compression", "moderation", "input_fidelity", "partial_images":
++	case "background", "quality", "complexity", "style", "output_format", "output_compression", "moderation", "input_fidelity", "partial_images", "frame_count", "frame_duration_ms", "svg", "markup":
+ 		return true
+ 	default:
+ 		return false
+@@ -996,7 +1074,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+ ) (OpenAIUsage, int, []string, *int, error) {
+ 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+ 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+-	if contentType == "" {
++	if direct != nil || contentType == "" {
+ 		contentType = "text/event-stream"
+ 	}
+ 	c.Status(resp.StatusCode)
+@@ -1156,9 +1234,6 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+ 	}
+ 
+ 	finalizeFallbackBody := func() {
+-		if direct != nil {
+-			return
+-		}
+ 		if seenSSEData || fallbackBody.Len() == 0 {
+ 			return
+ 		}
+@@ -1166,6 +1241,26 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+ 		if len(body) == 0 {
+ 			return
+ 		}
++		if direct != nil {
++			// Codex edits can return a complete JSON image despite stream=true.
++			// Deliver it as completion events before marking it successful, so a
++			// paid image is neither discarded nor retried on another account.
++			results, err := parseCodexDirectImagesResponse(body)
++			if err != nil {
++				streamErr = err
++				return
++			}
++			createdAt := gjson.GetBytes(body, "created").Int()
++			usageRaw := []byte(gjson.GetBytes(body, "usage").Raw)
++			for i, result := range results {
++				var eventUsage []byte
++				if i == len(results)-1 {
++					eventUsage = usageRaw
++				}
++				processSSEData(buildOpenAIImagesStreamCompletedPayload(openAIImagesStreamPrefix(direct)+".completed", result, direct.ResponseFormat, createdAt, eventUsage))
++			}
++			return
++		}
+ 		mergeOpenAIUsage(&usage, body)
+ 		imageCounter.AddJSONResponse(body)
+ 	}
+diff --git a/backend/internal/service/openai_images26_test.go b/backend/internal/service/openai_images26_test.go
+new file mode 100644
+index 000000000..4961fa58e
+--- /dev/null
++++ b/backend/internal/service/openai_images26_test.go
+@@ -0,0 +1,303 @@
++package service
++
++import (
++	"bytes"
++	"context"
++	"encoding/base64"
++	"fmt"
++	"image"
++	"image/gif"
++	"io"
++	"mime/multipart"
++	"net/http"
++	"net/textproto"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestGPTImage26ComplexityAcrossImageEndpoints(t *testing.T) {
++	for _, model := range []string{"gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
++		for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken} {
++			for _, format := range []string{"generation", "json-edit", "multipart-edit"} {
++				for _, complexity := range []string{"", "low", "medium", "high"} {
++					t.Run(strings.Join([]string{model, accountType, format, complexity}, "/"), func(t *testing.T) {
++						body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"draw","quality":"medium"`, model))
++						if complexity != "" {
++							body = append(body, []byte(fmt.Sprintf(`,"complexity":%q`, complexity))...)
++						}
++						if format == "json-edit" {
++							body = append(body, []byte(`,"images":[{"image_url":"data:image/png;base64,AA=="}]`)...)
++						}
++						body = append(body, '}')
++						contentType := "application/json"
++						if format == "multipart-edit" {
++							var buf bytes.Buffer
++							writer := multipart.NewWriter(&buf)
++							for key, value := range map[string]string{"model": model, "prompt": "draw", "quality": "medium"} {
++								require.NoError(t, writer.WriteField(key, value))
++							}
++							if complexity != "" {
++								require.NoError(t, writer.WriteField("complexity", complexity))
++							}
++							part, err := writer.CreateFormFile("image", "input.png")
++							require.NoError(t, err)
++							_, err = part.Write([]byte("image-bytes"))
++							require.NoError(t, err)
++							require.NoError(t, writer.Close())
++							body, contentType = buf.Bytes(), writer.FormDataContentType()
++						}
++						c, _ := newOpenAIImagesTestContext(t, body)
++						c.Request.Header.Set("Content-Type", contentType)
++						endpoint := "/backend-api/codex/images/generations"
++						if format != "generation" {
++							c.Request.URL.Path = openAIImagesEditsEndpoint
++							endpoint = "/backend-api/codex/images/edits"
++						}
++						upstream := &httpUpstreamRecorder{resp: openAIImagesJSONResponse()}
++						svc := newOpenAIImagesTestService(upstream)
++						parsed, err := svc.ParseOpenAIImagesRequest(c, body)
++						require.NoError(t, err)
++						account := directImagesTestAccount()
++						account.Type = accountType
++						result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
++						require.NoError(t, err)
++						require.Equal(t, endpoint, result.UpstreamEndpoint)
++						require.Equal(t, model, result.UpstreamModel)
++						require.Equal(t, "medium", gjson.GetBytes(upstream.lastBody, "quality").String())
++						require.Equal(t, complexity, gjson.GetBytes(upstream.lastBody, "complexity").String())
++						require.Equal(t, complexity != "", gjson.GetBytes(upstream.lastBody, "complexity").Exists())
++						require.False(t, gjson.GetBytes(upstream.lastBody, "reasoning").Exists())
++						if format != "generation" {
++							require.Len(t, gjson.GetBytes(upstream.lastBody, "images").Array(), 1)
++						}
++					})
++				}
++			}
++		}
++	}
++}
++
++func TestGPTImage26DoesNotFallbackToResponses(t *testing.T) {
++	for _, model := range []string{"gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
++		for _, status := range []int{400, 404, 405, 429} {
++			t.Run(fmt.Sprintf("%s/%d", model, status), func(t *testing.T) {
++				calls := 0
++				upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
++					calls++
++					require.Equal(t, "/backend-api/codex/images/generations", req.URL.Path)
++					return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","message":"unsupported image option"}}`))}, nil
++				}}
++				body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"draw","complexity":"low"}`, model))
++				c, rec := newOpenAIImagesTestContext(t, body)
++				svc := newOpenAIImagesTestService(upstream)
++				parsed, err := svc.ParseOpenAIImagesRequest(c, body)
++				require.NoError(t, err)
++				result, err := svc.ForwardImages(context.Background(), c, directImagesTestAccount(), body, parsed, "")
++				require.Error(t, err)
++				require.Nil(t, result)
++				require.Equal(t, 1, calls)
++				if status == 400 {
++					require.Equal(t, 400, rec.Code)
++				}
++			})
++		}
++	}
++}
++
++func TestOpenAIImagesComplexityLegacyBridgeAndAPIKey(t *testing.T) {
++	body := []byte(`{"model":"gpt-image-1","prompt":"draw","complexity":"low","quality":"high","custom_option":{"keep":true}}`)
++	for _, apiKey := range []bool{false, true} {
++		t.Run(fmt.Sprint(apiKey), func(t *testing.T) {
++			c, _ := newOpenAIImagesTestContext(t, body)
++			upstream := &httpUpstreamRecorder{resp: openAIImagesJSONResponse()}
++			svc := newOpenAIImagesTestService(upstream)
++			parsed, err := svc.ParseOpenAIImagesRequest(c, body)
++			require.NoError(t, err)
++			if apiKey {
++				_, err = svc.ForwardImages(context.Background(), c, newOpenAIImagesAPIKeyAccount(), body, parsed, "")
++				require.NoError(t, err)
++				require.JSONEq(t, string(body), string(upstream.lastBody))
++			} else {
++				payload, target, err := buildOpenAIImagesOAuthPayload(parsed, parsed.Model)
++				require.NoError(t, err)
++				require.Equal(t, chatgptCodexURL, target)
++				require.Equal(t, "low", gjson.GetBytes(payload, "tools.0.complexity").String())
++				require.Equal(t, "medium", gjson.GetBytes(payload, "reasoning.effort").String())
++			}
++		})
++	}
++	c, _ := newOpenAIImagesTestContext(t, []byte(`{"prompt":"draw","complexity":"low"}`))
++	parsed, err := newOpenAIImagesTestService(nil).ParseOpenAIImagesRequest(c, []byte(`{"prompt":"draw","complexity":"low"}`))
++	require.NoError(t, err)
++	require.Equal(t, OpenAIImagesCapabilityNative, parsed.RequiredCapability)
++}
++
++func TestGPTImage26OutputFormats(t *testing.T) {
++	for _, format := range []string{"gif", "svg"} {
++		t.Run(format, func(t *testing.T) {
++			body := []byte(fmt.Sprintf(`{"model":"gpt-image-2.6-flare","prompt":"draw","output_format":%q,"response_format":"url"}`, format))
++			c, rec := newOpenAIImagesTestContext(t, body)
++			response := fmt.Sprintf(`{"output_format":%q,"data":[{"b64_json":"AA=="}],"usage":{"input_tokens":10,"output_tokens":20}}`, format)
++			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(response))}}
++			svc := newOpenAIImagesTestService(upstream)
++			parsed, err := svc.ParseOpenAIImagesRequest(c, body)
++			require.NoError(t, err)
++			result, err := svc.ForwardImages(context.Background(), c, directImagesTestAccount(), body, parsed, "")
++			require.NoError(t, err)
++			require.Equal(t, 1, result.ImageCount)
++			mime := "image/gif"
++			if format == "svg" {
++				mime = "image/svg+xml"
++			}
++			require.Equal(t, "data:"+mime+";base64,AA==", gjson.GetBytes(rec.Body.Bytes(), "data.0.url").String())
++		})
++	}
++	var buf bytes.Buffer
++	require.NoError(t, gif.Encode(&buf, image.NewGray(image.Rect(0, 0, 64, 32)), nil))
++	require.Equal(t, "64x32", detectOpenAIImageResultSize("data:image/gif;base64,"+base64.StdEncoding.EncodeToString(buf.Bytes())))
++}
++
++func TestGPTImage26NativeOptions(t *testing.T) {
++	for _, options := range []string{
++		`"output_format":"gif","frame_count":2,"frame_duration_ms":100`,
++		`"output_format":"svg","svg":{"model":"gpt-6-astra","reasoning":{"effort":"high"},"ignored":true}`,
++	} {
++		body := []byte(`{"model":"gpt-image-2.6-sunburst","prompt":"draw",` + options + `}`)
++		c, _ := newOpenAIImagesTestContext(t, body)
++		parsed, err := newOpenAIImagesTestService(nil).ParseOpenAIImagesRequest(c, body)
++		require.NoError(t, err)
++		payload, _, err := buildOpenAIImagesOAuthPayload(parsed, parsed.Model)
++		require.NoError(t, err)
++		if parsed.OutputFormat == "gif" {
++			require.EqualValues(t, 2, gjson.GetBytes(payload, "frame_count").Int())
++			require.EqualValues(t, 100, gjson.GetBytes(payload, "frame_duration_ms").Int())
++		} else {
++			require.Equal(t, "gpt-6-astra", gjson.GetBytes(payload, "svg.model").String())
++			require.Equal(t, "high", gjson.GetBytes(payload, "svg.reasoning.effort").String())
++			require.False(t, gjson.GetBytes(payload, "svg.ignored").Exists())
++		}
++		_, err = buildOpenAIImagesResponsesRequest(parsed, parsed.Model)
++		require.ErrorContains(t, err, "native Images endpoint", "native options must not disappear during a legacy fallback")
++		upstream := &httpUpstreamRecorder{resp: openAIImagesJSONResponse()}
++		_, err = newOpenAIImagesTestService(upstream).ForwardImages(context.Background(), c, newOpenAIImagesAPIKeyAccount(), body, parsed, "")
++		require.NoError(t, err)
++		require.JSONEq(t, string(body), string(upstream.lastBody), "API-key requests must retain the original options")
++	}
++	for _, multipartInput := range []bool{false, true} {
++		t.Run(fmt.Sprintf("markup/multipart=%t", multipartInput), func(t *testing.T) {
++			body := []byte(`{"model":"gpt-image-2.6-flare","prompt":"edit","complexity":"low","images":[{"image_url":"data:image/png;base64,aW1hZ2U="}],"markup":{"image_url":"data:image/png;base64,bWFya3Vw"}}`)
++			contentType := "application/json"
++			if multipartInput {
++				var buf bytes.Buffer
++				writer := multipart.NewWriter(&buf)
++				for key, value := range map[string]string{"model": "gpt-image-2.6-flare", "prompt": "edit", "complexity": "low", "frame_count": "2", "frame_duration_ms": "100"} {
++					require.NoError(t, writer.WriteField(key, value))
++				}
++				for _, name := range []string{"image", "markup"} {
++					header := textproto.MIMEHeader{}
++					header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename="input.png"`, name))
++					header.Set("Content-Type", "image/png")
++					part, err := writer.CreatePart(header)
++					require.NoError(t, err)
++					_, err = part.Write([]byte(name))
++					require.NoError(t, err)
++				}
++				require.NoError(t, writer.Close())
++				body, contentType = buf.Bytes(), writer.FormDataContentType()
++			}
++			c, _ := newOpenAIImagesTestContext(t, body)
++			c.Request.URL.Path = openAIImagesEditsEndpoint
++			c.Request.Header.Set("Content-Type", contentType)
++			parsed, err := newOpenAIImagesTestService(nil).ParseOpenAIImagesRequest(c, body)
++			require.NoError(t, err)
++			require.Equal(t, OpenAIImagesCapabilityNative, parsed.RequiredCapability)
++			payload, target, err := buildOpenAIImagesOAuthPayload(parsed, parsed.Model)
++			require.NoError(t, err)
++			require.Equal(t, "https://chatgpt.com/backend-api/codex/images/edits", target)
++			require.Equal(t, "data:image/png;base64,bWFya3Vw", gjson.GetBytes(payload, "markup.image_url").String())
++			require.Equal(t, "low", gjson.GetBytes(payload, "complexity").String())
++			require.Len(t, gjson.GetBytes(parsed.ModerationBody(), "images").Array(), 2)
++			_, err = buildOpenAIImagesResponsesRequest(parsed, parsed.Model)
++			require.ErrorContains(t, err, "native Images endpoint")
++		})
++	}
++}
++
++func TestGPTImage26StreamedJSONEdits(t *testing.T) {
++	for _, model := range []string{"gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
++		for _, disconnect := range []bool{false, true} {
++			t.Run(fmt.Sprintf("%s/disconnect=%t", model, disconnect), func(t *testing.T) {
++				body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"edit","images":[{"image_url":"data:image/png;base64,AA=="}],"n":2,"stream":true,"response_format":"url"}`, model))
++				c, rec := newOpenAIImagesTestContext(t, body)
++				c.Request.URL.Path = openAIImagesEditsEndpoint
++				if disconnect {
++					c.Writer = &failingOpenAIImageWriter{ResponseWriter: c.Writer, failAfter: 1}
++				}
++				response := `{"created":1710000000,"size":"1024x1024","output_format":"png","data":[{"b64_json":"AA=="},{"b64_json":"AQ=="}],"usage":{"input_tokens":100,"input_tokens_details":{"image_tokens":80},"output_tokens":40}}`
++				upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(response))}}
++				svc := newOpenAIImagesTestService(upstream)
++				parsed, err := svc.ParseOpenAIImagesRequest(c, body)
++				require.NoError(t, err)
++				result, err := svc.ForwardImages(context.Background(), c, directImagesTestAccount(), body, parsed, "")
++				require.NoError(t, err)
++				require.Equal(t, 2, result.ImageCount)
++				require.Equal(t, 40, result.Usage.ImageOutputTokens)
++				require.Equal(t, 80, result.Usage.ImageInputTokens)
++				require.Len(t, upstream.requests, 1)
++				if !disconnect {
++					require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
++					require.Equal(t, 2, strings.Count(rec.Body.String(), "event: image_edit.completed"))
++					require.Equal(t, 1, strings.Count(rec.Body.String(), `"usage"`))
++					require.Contains(t, rec.Body.String(), "data:image/png;base64,AQ==")
++				}
++			})
++		}
++	}
++	for _, response := range []string{`{}`, `{"data":[]}`, `{"data":[{"b64_json":""}]}`, `{"error":{"type":"invalid_request_error","message":"bad image"}}`, `not json`} {
++		t.Run(response, func(t *testing.T) {
++			body := []byte(`{"model":"gpt-image-2.6-flare","prompt":"draw","stream":true}`)
++			c, rec := newOpenAIImagesTestContext(t, body)
++			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(response))}}
++			svc := newOpenAIImagesTestService(upstream)
++			parsed, err := svc.ParseOpenAIImagesRequest(c, body)
++			require.NoError(t, err)
++			result, err := svc.ForwardImages(context.Background(), c, directImagesTestAccount(), body, parsed, "")
++			require.Error(t, err)
++			require.Nil(t, result)
++			require.NotContains(t, rec.Body.String(), "event: image_generation.completed")
++		})
++	}
++}
++
++func TestGPTImage26InvalidNativeOptions(t *testing.T) {
++	for _, options := range []string{
++		`"frame_count":"2"`, `"frame_count":2.5`, `"frame_duration_ms":true`,
++		`"svg":[]`, `"svg":{"reasoning":"high"}`,
++		`"markup":[]`, `"markup":{"file_id":"file-1"}`, `"markup":{}`,
++	} {
++		t.Run(options, func(t *testing.T) {
++			body := []byte(`{"model":"gpt-image-2.6-flare","prompt":"edit","images":[{"image_url":"data:image/png;base64,AA=="}],` + options + `}`)
++			c, _ := newOpenAIImagesTestContext(t, body)
++			c.Request.URL.Path = openAIImagesEditsEndpoint
++			_, err := newOpenAIImagesTestService(nil).ParseOpenAIImagesRequest(c, body)
++			require.Error(t, err)
++		})
++	}
++}
++
++func TestGPTImage26BillingWithoutDynamicPricing(t *testing.T) {
++	svc := &BillingService{}
++	for _, model := range []string{"gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
++		p, err := svc.GetModelPricing(model)
++		require.NoError(t, err)
++		require.Equal(t, 5e-6, p.InputPricePerToken)
++		require.Equal(t, 1.25e-6, p.CacheReadPricePerToken)
++		require.Equal(t, 8e-6, p.ImageInputPricePerToken)
++		require.Equal(t, 2e-6, p.ImageCacheReadPricePerToken)
++		require.Equal(t, 30e-6, p.ImageOutputPricePerToken)
++		require.Zero(t, p.OutputPricePerToken)
++	}
++}
+diff --git a/backend/internal/service/openai_images_direct.go b/backend/internal/service/openai_images_direct.go
+index 3ed7a0f07..b93009157 100644
+--- a/backend/internal/service/openai_images_direct.go
++++ b/backend/internal/service/openai_images_direct.go
+@@ -31,6 +31,7 @@ func isOpenAIImagesForceResponses(ctx context.Context) bool {
+ func usesCodexDirectImages(model string) bool {
+ 	switch strings.TrimSpace(model) {
+ 	case "gpt-image-1.5", "gpt-image-2",
++		"gpt-image-2.6-flare", "gpt-image-2.6-sunburst",
+ 		"gpt-image-2.5-flare", "gpt-image-2.5-sunburst",
+ 		"gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08":
+ 		return true
+@@ -39,6 +40,17 @@ func usesCodexDirectImages(model string) bool {
+ 	}
+ }
+ 
++// Codex Responses binds image_generation to an internal model and cannot
++// preserve the requested 2.6 model. Do not fall back to that bridge for 2.6.
++func requiresCodexDirectImages(model string) bool {
++	switch strings.TrimSpace(model) {
++	case "gpt-image-2.6-flare", "gpt-image-2.6-sunburst":
++		return true
++	default:
++		return false
++	}
++}
++
+ // 正式转发与后台测试共用同一份端点选择和请求构造。
+ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([]byte, string, error) {
+ 	if parsed == nil {
+@@ -65,7 +77,7 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
+ 		key   string
+ 		value string
+ 	}{
+-		{"size", parsed.Size}, {"quality", parsed.Quality},
++		{"size", parsed.Size}, {"quality", parsed.Quality}, {"complexity", parsed.Complexity},
+ 		{"background", parsed.Background}, {"output_format", parsed.OutputFormat},
+ 		{"moderation", parsed.Moderation}, {"input_fidelity", parsed.InputFidelity},
+ 		{"style", parsed.Style},
+@@ -83,6 +95,15 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
+ 	if parsed.PartialImages != nil {
+ 		payload["partial_images"] = *parsed.PartialImages
+ 	}
++	if parsed.FrameCount != nil {
++		payload["frame_count"] = *parsed.FrameCount
++	}
++	if parsed.FrameDurationMS != nil {
++		payload["frame_duration_ms"] = *parsed.FrameDurationMS
++	}
++	if parsed.SVG != nil {
++		payload["svg"] = parsed.SVG
++	}
+ 	if parsed.Stream {
+ 		payload["stream"] = true
+ 	}
+@@ -118,6 +139,17 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
+ 		if mask != "" {
+ 			payload["mask"] = map[string]string{"image_url": mask}
+ 		}
++		markup := strings.TrimSpace(parsed.MarkupImageURL)
++		if parsed.MarkupUpload != nil {
++			var err error
++			markup, err = openAIImageUploadToDataURL(*parsed.MarkupUpload)
++			if err != nil {
++				return nil, "", err
++			}
++		}
++		if markup != "" {
++			payload["markup"] = map[string]string{"image_url": markup}
++		}
+ 	}
+ 	body, err := json.Marshal(payload)
+ 	if err != nil {
+diff --git a/backend/internal/service/openai_images_direct_payload_test.go b/backend/internal/service/openai_images_direct_payload_test.go
+index 9f99737f8..a8e0c7f9f 100644
+--- a/backend/internal/service/openai_images_direct_payload_test.go
++++ b/backend/internal/service/openai_images_direct_payload_test.go
+@@ -54,7 +54,7 @@ func TestCodexDirectImagesMultipartEdit(t *testing.T) {
+ 
+ func TestCodexDirectImagesPricingAndUsage(t *testing.T) {
+ 	prices := &PricingService{pricingData: map[string]*LiteLLMModelPricing{"gpt-image-2": {InputCostPerToken: 1}}}
+-	for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08"} {
++	for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
+ 		price := prices.matchOpenAIModel(model)
+ 		require.Equal(t, 5e-6, price.InputCostPerToken)
+ 		require.Equal(t, 8e-6, price.InputCostPerImageToken)
+diff --git a/backend/internal/service/openai_images_direct_test.go b/backend/internal/service/openai_images_direct_test.go
+index ea723f501..aa5e410d0 100644
+--- a/backend/internal/service/openai_images_direct_test.go
++++ b/backend/internal/service/openai_images_direct_test.go
+@@ -18,7 +18,7 @@ func directImagesTestAccount() *Account {
+ }
+ 
+ func TestCodexDirectImagesRouting(t *testing.T) {
+-	for _, model := range []string{"gpt-image-1.5", "gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08"} {
++	for _, model := range []string{"gpt-image-1.5", "gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
+ 		t.Run(model, func(t *testing.T) {
+ 			body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"  原样保留 prompt  ","quality":"max","size":"auto","response_format":"url","extra":{"preserve":true}}`, model))
+ 			c, rec := newOpenAIImagesTestContext(t, body)
+@@ -111,15 +111,19 @@ func TestCodexDirectImagesHTTPErrorFallbacksOnlyWhenEndpointUnavailable(t *testi
+ 	}
+ }
+ 
+-func TestCodexDirectImagesStreamRejectsPlainJSON(t *testing.T) {
++func TestCodexDirectImagesStreamDeliversPlainJSON(t *testing.T) {
+ 	body := []byte(`{"model":"gpt-image-2","prompt":"draw","stream":true}`)
+-	c, _ := newOpenAIImagesTestContext(t, body)
++	c, rec := newOpenAIImagesTestContext(t, body)
+ 	svc := newOpenAIImagesTestService(&httpUpstreamRecorder{resp: openAIImagesJSONResponse()})
+ 	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+ 	require.NoError(t, err)
+ 	result, err := svc.ForwardImages(context.Background(), c, directImagesTestAccount(), body, parsed, "")
+-	require.Error(t, err, "未收到 SSE 完成事件，不能把未转发的 JSON 当作成功")
+-	require.Nil(t, result)
++	require.NoError(t, err)
++	require.Equal(t, 1, result.ImageCount)
++	require.Equal(t, 20, result.Usage.ImageOutputTokens)
++	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
++	require.Contains(t, rec.Body.String(), "event: image_generation.completed")
++	require.Contains(t, rec.Body.String(), `"b64_json":"aGVsbG8="`)
+ }
+ 
+ func TestCodexDirectImagesMultipleOutputs(t *testing.T) {
+diff --git a/backend/internal/service/openai_images_model_test.go b/backend/internal/service/openai_images_model_test.go
+index 5a829cf10..674d9c387 100644
+--- a/backend/internal/service/openai_images_model_test.go
++++ b/backend/internal/service/openai_images_model_test.go
+@@ -84,8 +84,8 @@ func TestOpenAIImagesRejectedDriverDoesNotCoolImageModel(t *testing.T) {
+ 	}
+ }
+ 
+-func TestGPTImage25PricingDoesNotUseLegacyImageRates(t *testing.T) {
+-	for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08"} {
++func TestGPTImage25And26PricingDoesNotUseLegacyImageRates(t *testing.T) {
++	for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
+ 		svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{"gpt-image-2": {InputCostPerToken: 2.5e-6, OutputCostPerImageToken: 15e-6}}}
+ 		p := svc.GetModelPricing(model)
+ 		require.NotNil(t, p)
+@@ -100,9 +100,9 @@ func TestGPTImage25PricingDoesNotUseLegacyImageRates(t *testing.T) {
+ 	}
+ }
+ 
+-func TestGPTImage25AccountModelPermissions(t *testing.T) {
++func TestGPTImage25And26AccountModelPermissions(t *testing.T) {
+ 	for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken} {
+-		for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"} {
++		for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
+ 			for _, mapping := range []map[string]any{nil, {model: model}} {
+ 				account := &Account{Platform: PlatformOpenAI, Type: accountType, Credentials: map[string]any{"model_mapping": mapping}}
+ 				require.True(t, account.IsModelSupported(model))
+diff --git a/backend/internal/service/openai_images_responses.go b/backend/internal/service/openai_images_responses.go
+index 63db0668a..5effc98bc 100644
+--- a/backend/internal/service/openai_images_responses.go
++++ b/backend/internal/service/openai_images_responses.go
+@@ -319,6 +319,10 @@ func openAIImageOutputMIMEType(outputFormat string) string {
+ 		return "image/jpeg"
+ 	case "webp":
+ 		return "image/webp"
++	case "gif":
++		return "image/gif"
++	case "svg":
++		return "image/svg+xml"
+ 	default:
+ 		return "image/png"
+ 	}
+@@ -359,6 +363,9 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
+ 	if parsed == nil {
+ 		return nil, fmt.Errorf("parsed images request is required")
+ 	}
++	if parsed.MarkupImageURL != "" || parsed.MarkupUpload != nil || parsed.SVG != nil || parsed.FrameCount != nil || parsed.FrameDurationMS != nil {
++		return nil, fmt.Errorf("markup, SVG author options and GIF frame controls require the native Images endpoint")
++	}
+ 	prompt := strings.TrimSpace(parsed.Prompt)
+ 	if prompt == "" {
+ 		return nil, fmt.Errorf("prompt is required")
+@@ -411,6 +418,7 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
+ 	}{
+ 		{path: "size", value: parsed.Size},
+ 		{path: "quality", value: parsed.Quality},
++		{path: "complexity", value: parsed.Complexity},
+ 		{path: "background", value: parsed.Background},
+ 		{path: "output_format", value: parsed.OutputFormat},
+ 		{path: "moderation", value: parsed.Moderation},
+@@ -1914,7 +1922,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+ 		respBody := s.readUpstreamErrorBody(resp)
+ 		_ = resp.Body.Close()
+ 		respBody = s.redactAgentIdentitySensitiveBody(upstreamCtx, account, respBody)
+-		if direct && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed) {
++		if direct && !requiresCodexDirectImages(upstreamModel) && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed) {
+ 			return s.forwardOpenAIImagesOAuth(withOpenAIImagesForceResponses(ctx), c, account, parsed, channelMappedModel)
+ 		}
+ 		if !agentIdentityTaskRecoveryWasTried(ctx) && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {
+diff --git a/backend/internal/service/pricing_service.go b/backend/internal/service/pricing_service.go
+index 08f7f9d6b..a0a65d8bf 100644
+--- a/backend/internal/service/pricing_service.go
++++ b/backend/internal/service/pricing_service.go
+@@ -38,7 +38,7 @@ var (
+ 	// cache_creation_input_token_cost_above_1hr_above_200k_tokens 等）。
+ 	// 组 1 为基础价字段名主干，组 2 为 1h 缓存时长段（可为空），组 3 为服务档后缀（可为空）。
+ 	cacheTierPricePattern = regexp.MustCompile(`^(cache_(?:creation|read)_input_token_cost)(_above_1hr)?_above_\d+k_tokens((?:_[a-z]+)?)$`)
+-	// Official GPT Image 2.5 token rates (2026-09-08):
++	// Official GPT Image 2.5 / 2.6 token rates (verified 2026-11-06):
+ 	// https://developers.openai.com/api/docs/pricing#image-generation-models
+ 	openAIGPTImage25FallbackPricing = &LiteLLMModelPricing{
+ 		InputCostPerToken:       5e-06,
+@@ -1688,8 +1688,11 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
+ 		return openAIGPT54FallbackPricing
+ 	}
+ 
+-	// Remote price mirrors can lag new releases. Never bill GPT Image 2.5
++	// Remote price mirrors can lag new releases. Never bill GPT Image 2.5 / 2.6
+ 	// using the older image model's rates when its entry is absent.
++	if model == "gpt-image-2.6-flare" || model == "gpt-image-2.6-sunburst" {
++		return openAIGPTImage25FallbackPricing
++	}
+ 	for _, imageModel := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"} {
+ 		if model == imageModel || model == imageModel+"-2026-09-08" {
+ 			return openAIGPTImage25FallbackPricing
+diff --git a/backend/resources/model-pricing/model_prices_and_context_window.json b/backend/resources/model-pricing/model_prices_and_context_window.json
+index cd1e84434..bbe05a937 100644
+--- a/backend/resources/model-pricing/model_prices_and_context_window.json
++++ b/backend/resources/model-pricing/model_prices_and_context_window.json
+@@ -6713,6 +6713,22 @@
+     "supports_vision": true,
+     "supports_web_search": true
+   },
++    "gpt-image-2.6-flare": {
++        "cache_read_input_image_token_cost": 2e-06,
++        "cache_read_input_token_cost": 1.25e-06,
++        "input_cost_per_image_token": 8e-06,
++        "input_cost_per_token": 5e-06,
++        "litellm_provider": "openai",
++        "mode": "image_generation",
++        "output_cost_per_image_token": 3e-05,
++        "output_cost_per_token": 0,
++        "supported_endpoints": [
++            "/v1/images/generations",
++            "/v1/images/edits"
++        ],
++        "supports_vision": true,
++        "supports_prompt_caching": true
++    },
+     "gpt-image-2.5-flare": {
+         "cache_read_input_image_token_cost": 2e-06,
+         "cache_read_input_token_cost": 1.25e-06,
+@@ -6745,6 +6761,22 @@
+         "supports_vision": true,
+         "supports_prompt_caching": true
+     },
++    "gpt-image-2.6-sunburst": {
++        "cache_read_input_image_token_cost": 2e-06,
++        "cache_read_input_token_cost": 1.25e-06,
++        "input_cost_per_image_token": 8e-06,
++        "input_cost_per_token": 5e-06,
++        "litellm_provider": "openai",
++        "mode": "image_generation",
++        "output_cost_per_image_token": 3e-05,
++        "output_cost_per_token": 0,
++        "supported_endpoints": [
++            "/v1/images/generations",
++            "/v1/images/edits"
++        ],
++        "supports_vision": true,
++        "supports_prompt_caching": true
++    },
+     "gpt-image-2.5-sunburst": {
+         "cache_read_input_image_token_cost": 2e-06,
+         "cache_read_input_token_cost": 1.25e-06,
+diff --git a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+index 4b1e44546..05461070e 100644
+--- a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
++++ b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+@@ -50,6 +50,8 @@ describe('useModelWhitelist', () => {
+     expect(models).toContain('gpt-6.1-terra')
+     expect(models).toContain('gpt-6-sol')
+     expect(models).toContain('gpt-6-luna')
++    expect(models).toContain('gpt-image-2.6-flare')
++    expect(models).toContain('gpt-image-2.6-sunburst')
+   })
+ 
+   it('openai 预设映射包含 GPT-6 别名和 Astra', () => {
+diff --git a/frontend/src/composables/useModelWhitelist.ts b/frontend/src/composables/useModelWhitelist.ts
+index 00cf9e16e..5702773c9 100644
+--- a/frontend/src/composables/useModelWhitelist.ts
++++ b/frontend/src/composables/useModelWhitelist.ts
+@@ -21,7 +21,8 @@ const openaiModels = [
+   'gpt-5.3-codex-spark', 'codex-auto-review',
+   'gpt-4o-audio-preview', 'gpt-4o-realtime-preview',
+   // GPT Image 系列
+-  'gpt-image-1', 'gpt-image-1.5', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'
++  'gpt-image-1', 'gpt-image-1.5', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst',
++  'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'
+ ]
+ 
+ // Anthropic Claude

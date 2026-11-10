@@ -1,0 +1,316 @@
+{
+  "clusters": [
+    {
+      "id": "F01",
+      "title": "Claude setup-token 周用量",
+      "sources": [
+        "PR8553"
+      ],
+      "capability": "claude-usage-windows",
+      "behavior": "Setup-token 查询 SHALL 使用已有被动采样，成功响应缺少5h头及429早退也保留7d/7d_oi；不要求profile权限或主动调用usage API。",
+      "gap": "单账号GetUsage只走5h估算；UpdateSessionWindow在无5h-status时直接返回，现有getPassiveUsageForAccount已能展示周窗口。隔离探针确认SevenDay为nil。",
+      "acceptance": "无5h、有效/过期5h、显式0、无样本、429以及单查/force/passive/batch一致；SQLite Extra与固定quota窗口不回退。"
+    },
+    {
+      "id": "F02",
+      "title": "Codex 强制模式停止多余探测",
+      "sources": [
+        "PR8445"
+      ],
+      "capability": "codex-gateway-correctness",
+      "behavior": "系统 SHALL 在force_responses或force_chat_completions模式跳过能力探测；auto及无效模式按现有规则探测。",
+      "gap": "ProbeOpenAIAPIKeyResponsesSupport未检查responses模式；模拟transport确认两个强制模式仍发请求并写探测结果，auto三个对照通过。",
+      "acceptance": "两个强制模式请求数/写Extra数均0；auto/非法/非字符串模式仍探测，凭据覆写和取消正常。"
+    },
+    {
+      "id": "F03",
+      "title": "WebSocket 每轮首 token 时间",
+      "sources": [
+        "PR8520"
+      ],
+      "capability": "codex-gateway-correctness",
+      "behavior": "系统 SHALL 为每个WS轮次独立记录首token耗时，无response.id的delta归属当前活跃轮次。",
+      "gap": "activeTurn计时受连接级firstTokenMs==nil闸门限制；确定性两轮探针第二轮为nil，第一轮700ms正常。",
+      "acceptance": "至少两轮无ID delta、带ID delta、负时差、重复terminal与取消；保留Fast每轮service_tier/模型冲突和usage隔离。"
+    },
+    {
+      "id": "F04",
+      "title": "Codex WS→HTTP 桥接指纹",
+      "sources": [
+        "PR8464"
+      ],
+      "capability": "codex-gateway-correctness",
+      "behavior": "系统 SHALL 在Codex WS HTTP桥接构建上游请求前设置账号级指纹，重试和切换账号时清除旧暂存值。",
+      "gap": "桥接proxyOpenAIWSHTTPBridgeTurn缺stageCodexFingerprintIDs调用；HTTP Forward已有实现，上游builder只读暂存ID，导致桥接遗漏账号级缓存身份。",
+      "acceptance": "最终HTTP请求header/body同账号稳定、跨账号隔离；无prompt_cache_key/显式客户端key/API Key/Grok负对照；Fast策略不变。"
+    },
+    {
+      "id": "F05",
+      "title": "缓冲 Responses reasoning 保真",
+      "sources": [
+        "PR8563"
+      ],
+      "capability": "responses-compatibility",
+      "behavior": "Responses转Messages/Chat SHALL 优先保留非空summary，否则保留content.reasoning_text；encrypted_content签名独立保留。",
+      "gap": "两条转换器只读summary，隔离探针显示有可见reasoning_text时输出仍为空；22行helper可共享。",
+      "acceptance": "summary优先、不重复拼接、仅reasoning_text、仅签名、普通文本及两条真实缓冲网关路径；usage/dedup不重复。"
+    },
+    {
+      "id": "F06",
+      "title": "Responses 完成消息字段",
+      "sources": [
+        "PR8429"
+      ],
+      "capability": "responses-compatibility",
+      "behavior": "完成响应与流式item SHALL 使用一致message序列化，空content为数组，refusal、annotations及logprobs保持字段语义。",
+      "gap": "ResponsesOutput.MarshalJSON仅特判tool_search_call；空message省略content；messageContentWire将refusal写成text。两个探针分别失败。",
+      "acceptance": "空message、output_text、refusal、annotation/logprobs、tool_search/function_call；JSON及SSE终态一致，序号0不被省略。"
+    },
+    {
+      "id": "F07",
+      "title": "鉴权取消分类",
+      "sources": [
+        "PR8471"
+      ],
+      "capability": "gateway-errors",
+      "behavior": "API Key查询因当前请求上下文取消而失败时 SHALL 按客户端离开结束；有效请求的真正仓储错误仍500，业务错误保持原分类，日志不含凭据。",
+      "gap": "普通及Google鉴权middleware在业务错误之后直接500，未区分请求ctx已取消。非法UTF-8引发PG500的原始理由不适用于SQLite，单列排除。",
+      "acceptance": "取消/截止、真实DB失败、格式错误Key、503过载及401错误；不把所有context错误无条件吞成499，不记录Key。"
+    },
+    {
+      "id": "F08",
+      "title": "413 透传规则优先级",
+      "sources": [
+        "PR8437"
+      ],
+      "capability": "gateway-errors",
+      "behavior": "耗尽failover后，已有管理员413透传规则 SHALL 先于内置body-too-large响应生效，账号切换行为保持。",
+      "gap": "handleFailoverExhausted的body-too-large分支早于MatchRule返回，现有413规则不可达。",
+      "acceptance": "有/无匹配规则、自定义状态/文案、skip-monitoring、已开始SSE及Retry-After；不提前终止账号failover。"
+    },
+    {
+      "id": "F09",
+      "title": "Antigravity 直连 SSE 响应",
+      "sources": [
+        "PR8441"
+      ],
+      "capability": "antigravity-correctness",
+      "behavior": "流转换器 SHALL 按response信封是否存在选择解包形态，直接Gemini响应的文本、工具和用量不能静默丢失。",
+      "gap": "直接响应也能成功Unmarshal成V1InternalResponse但字段空，旧代码只有反序列化报错才尝试直接形态；探针仅返回message_start。",
+      "acceptance": "直接/包装响应、空/非法JSON、工具、usage和错误尾帧；普通流与缓冲兼容路径不产生假完成。"
+    },
+    {
+      "id": "F10",
+      "title": "Antigravity JSON Schema 参数",
+      "sources": [
+        "PR8409"
+      ],
+      "capability": "antigravity-correctness",
+      "behavior": "Antigravity转发 SHALL 将responseJsonSchema转换成上游支持的responseSchema，已有responseSchema优先。",
+      "gap": "cleanGeminiRequest没有schema映射，隔离探针确认目标字段缺失。",
+      "acceptance": "camel/snake命名、双字段优先、非object、undefined清理、原body不变正例；不修改原生Gemini协议。"
+    },
+    {
+      "id": "F11",
+      "title": "GPT Image 账号测试参数",
+      "sources": [
+        "PR8432"
+      ],
+      "capability": "account-test-correctness",
+      "behavior": "既有GPT Image API Key账号测试 SHALL 不发送被上游拒绝的response_format，并继续解析默认base64响应。",
+      "gap": "testOpenAIImageAPIKey仍构造response_format=b64_json；新GPT Image2.6链路不是修此参数的前提。",
+      "acceptance": "严格模拟上游检查无response_format、模型/prompt/n保留、有效图片解析、上游错误；不新增模型/尺寸路由。"
+    },
+    {
+      "id": "F12",
+      "title": "Anthropic兼容 Cloudflare REST URL",
+      "sources": [
+        "PR8420"
+      ],
+      "capability": "claude-endpoint-compatibility",
+      "behavior": "现有Anthropic自定义base URL消费者 SHALL 仅在精确Cloudflare账号REST messages路径省略beta查询，其余上游保持原行为。",
+      "gap": "普通转发、API Key透传和账号测试都无条件追加?beta=true；是既有兼容URL缺陷，不需新增Cloudflare平台。",
+      "acceptance": "精确HTTPS host/443/账号路径、相似域名/额外path/query/fragment/rawpath/userinfo负例、Cloudflare native gateway保留beta；三条调用链一致。"
+    },
+    {
+      "id": "F13",
+      "title": "Bedrock EventStream 分配前边界",
+      "sources": [
+        "PR8518"
+      ],
+      "capability": "gateway-resource-safety",
+      "behavior": "EventStream解码 SHALL 在分配和切片前验证headers长度、payload长度及总长关系；合法帧继续校验CRC。",
+      "gap": "仅16字节、合法CRC、headers_length=100的帧已复现slice panic；源码totalLength直接控制make分配，未执行大内存攻击。",
+      "acceptance": "header越界、total<16、header>128KiB、payload>16MiB、truncated/CRC、合法frame；大长度仅喂prelude，证实分配前拒绝。"
+    },
+    {
+      "id": "S01",
+      "title": "Codex Responses非流式与instructions回显",
+      "sources": [
+        "PR7979",
+        "PR8499"
+      ],
+      "capability": "codex-responses-end-to-end",
+      "behavior": "网关 SHALL 保留客户端原stream选择，将非流式SSE的completed/incomplete/cancelled转换成单JSON；缺Content-Type的OAuth SSE可识别。允许空instructions进入既有规范化，并将网关改写的instructions回显还原为客户端值。",
+      "gap": "OAuth规范化后覆盖reqStream，SSE转JSON只提取completed；本地empty instructions拒绝探针命中，incomplete原样返回SSE。两PR改同一响应链需合并适配。",
+      "acceptance": "HTTP/透传/普通/compact，stream省略/false/true；incomplete/cancelled/canceled、失败终态仍失败；instructions缺失/null/空/多行与failover隔离；回显不泄漏注入内容，usage只落一次。"
+    },
+    {
+      "id": "S02",
+      "title": "Grok 委派消息最小适配",
+      "sources": [
+        "PR8465"
+      ],
+      "capability": "grok-delegation-input",
+      "behavior": "既有Grok Responses入口 SHALL 将agent_message的input_text及明文encrypted_content按原顺序转为user消息，空消息跳过，不尝试解密。",
+      "gap": "实际patchGrokResponsesBodyWithClientTools保留agent_message原样。上游sanitizeGrokResponsesModelInput本地不存在；v0.2.19基座562行、源acce29af2是大混合提交，不能整取。",
+      "acceptance": "封套+正文顺序、空/非文本片段、字符串content、非委派item字节/大整数保真；additional_tools原提升规则、Chat对照、HTTP/Grok usage和模型审计保持。"
+    },
+    {
+      "id": "S03",
+      "title": "已使用 Terra 的目录与计费后续",
+      "sources": [
+        "PR8365"
+      ],
+      "capability": "terra-existing-model-followup",
+      "behavior": "已接入Terra SHALL 使用冻结tag中的Codex descriptor作为受限fallback，Codex默认low及500000窗口与max_context_window=872000区分，API兼容默认medium/none仍合法，minimal明确400。OAuth/setup-token长上下文豁免按最终发送模型决定，API Key保留272k严格边界与Fast结算。",
+      "gap": "本地Terra仍使用1050000窗口/默认medium目录、minimal不拒绝、订阅豁免仅Sol；模型已在a541d0b61选定落地，故本次属第二档维护，不再把它当未选新模型。",
+      "acceptance": "none/minimal/max/ultra的API与Codex不同标尺；别名/映射后校验，账号raw/metadata/空目录优先、ETag；271999/272000/272001×OAuth/setup-token/API Key×default/priority/ultrafast/Free Fast/显式零价与SQLite去重。"
+    },
+    {
+      "id": "S04",
+      "title": "请求体预算、读写超时与错误分类",
+      "sources": [
+        "PR8484",
+        "PR8518",
+        "PR8457"
+      ],
+      "capability": "gateway-ingress-limits",
+      "behavior": "所有既有网关入口 SHALL 共享实例级请求体内存预算，读取/解压/修补/异步移交/failover释放按实际所有权计数；超预算503+Retry-After，超时408、断开499、截断/解码失败保持安全分类。超时按单次读写停滞计，不限制正常SSE总时长。",
+      "gap": "当前只有单请求MaxBytesReader与64MiB解压上限，无实例预算；#8484单取有异步生命周期/重试累积缺陷，#8518修正必需，#8457统一错误分类。",
+      "acceptance": "1GiB限制环境测RSS/并发吞吐/503恢复；gzip/zstd/lenient/unknown长度、读取/写入停滞、正常长流、WS Hijack、重试100轮/取消无残留；日志无正文/密钥。默认值须量测，不能直接照搬1GiB预算或500MiB行上限。"
+    },
+    {
+      "id": "S05",
+      "title": "上游流、drain与会话缓存有界",
+      "sources": [
+        "PR8484",
+        "PR8518"
+      ],
+      "capability": "gateway-stream-resource-limits",
+      "behavior": "既有上游流 SHALL 限制SSE队列字节/单行/累计事件，非流式读取有界；客户端离开后的usage drain有总时限，缓存按数量和字节逐出并释放后台任务。",
+      "gap": "Gemini多处ReadString、Antigravity ForwardUpstream io.ReadAll无界；会话缓存sync.Map只按访问过期，未整体限制数量/字节。断开用量不能靠无期限drain保障。",
+      "acceptance": "持续短行/长行/慢消费/取消均有界；超大单条事件不越行上限；截止前已观测用量仍入SQLite且去重，截止后不虚构完整用量；缓存键含账号/会话隔离，过期/逐出/关闭无goroutine泄漏。"
+    },
+    {
+      "id": "S06",
+      "title": "Antigravity 系统身份保留任务",
+      "sources": [
+        "PR8318"
+      ],
+      "capability": "antigravity-system-input",
+      "behavior": "Antigravity路径 SHALL 仅规范化开头的已知客户端身份和attribution，保留附随任务及中间引用；原生Anthropic不受影响。",
+      "gap": "现有Claude身份处理没有Codex开头，Responses→Anthropic转换前未中和，可能丢带任务的前导；Gemini已有身份时提前返回遗漏其它系统块清理。",
+      "acceptance": "Claude/Codex多种前导、紧邻逗号/任务、引用/相似字符串、双身份、string/parts、native Anthropic对照；失败与成功请求body归属不混。"
+    },
+    {
+      "id": "S07",
+      "title": "图片 INTERNAL500 不牵连整账号",
+      "sources": [
+        "PR8521"
+      ],
+      "capability": "antigravity-model-cooldown",
+      "behavior": "现有Antigravity图片模型重试耗尽INTERNAL500 SHALL 只冷却最终映射模型，并同步缓存；文本模型仍用既有账号惩罚。",
+      "gap": "retry loop一律handleInternal500RetryExhausted，图片错误计入整账号永久禁用阶梯；本地已有模型级限流仓储与缓存能力。",
+      "acceptance": "alias映射图片/文本、相同模型计时、其他模型仍可调度、SetModelRateLimit失败、SQLite Extra/调度缓存一致；不增加账号处罚计数。"
+    },
+    {
+      "id": "S08",
+      "title": "Gemini 工具媒体原生承载",
+      "sources": [
+        "PR8430"
+      ],
+      "capability": "gemini-tool-media",
+      "behavior": "Gemini3及以后已使用模型的工具媒体 SHALL 保留在functionResponse.parts；旧模型按已有分离图片回退，关联工具名/顺序保持。",
+      "gap": "当前tool_result图片被抽出到另条user消息，native functionResponse关联丢失；不是新增生图或新Gemini平台。",
+      "acceptance": "Gemini2.5/3/4和别名、base64/URI/text混合、未知工具ID、重试去签名、原输入不变、tool_order及图片用量/dedup不重复。"
+    },
+    {
+      "id": "S09",
+      "title": "使用记录导出限流恢复",
+      "sources": [
+        "PR8436"
+      ],
+      "capability": "usage-export-resilience",
+      "behavior": "现有用户导出 SHALL 每页至多1000条，在429时有界等待并重试同一页；重试耗尽或取消不能下载部分结果。",
+      "gap": "用户UsageView导出仍100条逐页、不处理429；API client包装错误丢Retry-After。",
+      "acceptance": "数字/缺失/日期/非法Retry-After、上限等待/重试、分页过滤一致、关闭/卸载/换号取消、不重下/漏行；实际浏览器保存导出及失败恢复。"
+    },
+    {
+      "id": "S10",
+      "title": "Antigravity 测试提示词贯通",
+      "sources": [
+        "PR8531"
+      ],
+      "capability": "account-test-correctness",
+      "behavior": "已有账号测试 SHALL 将管理员输入提示词传至Antigravity Claude/Gemini请求，并返回真实回复；空值沿用默认提示词。",
+      "gap": "routeAntigravityTest已有prompt却丢给不接收prompt的testAntigravityAccountConnection；底层固定点号和1 token。上游WithPrompt基座本地缺失，不能将两文件补丁判第一档。",
+      "acceptance": "自定义/空/Unicode/多行prompt、Claude/Gemini模型、响应文本/错误/取消、定时测试旧调用兼容；真实本地HTTP捕获body，外部账号测试不自动执行。"
+    },
+    {
+      "id": "S11",
+      "title": "RPM空覆盖缓存与既有JSON预检",
+      "sources": [
+        "PR8518"
+      ],
+      "capability": "gateway-hotpath-maintenance",
+      "behavior": "鉴权快照 SHALL 区分已加载的nil RPM覆盖与加载失败，并按group隔离；既有thinking/委派预检仅在可证明无修改时跳过解析，不能改变输出语义。",
+      "gap": "snapshotFromAPIKey只存非nil覆盖，checkRPM遇nil逐请求查库；filterThinkingBlocksInternal和normalizeCodexDelegationBootstrap有现存消费者。优化收益需实施benchmark，不能引用上游数字。",
+      "acceptance": "nil/0/正值/错误/跨group、失效与并发、miniredis+SQLite查询次数；escaped/重复键/非法JSON/长输入byte等价，benchmark ns/op+B/op+allocs/op前后实测，无收益不落优化hunk。"
+    }
+  ],
+  "candidate_judgments": {
+    "a9240d501": "第四档：上游VERSION，不改fork版本",
+    "PR7979": "第二档 S01：OAuth非流式/终态JSON",
+    "PR8389": "第三档：管理MCP/OAuth新能力；支付操作子集第四档；249迁移不取",
+    "d851a3847": "已满足/N/A：vue-i18n11.4.16、compiler、decode-uri、Node24本地已有；保留更强本地维护",
+    "PR8476": "第四档：未引入受限管理员Key框架；该整能力仍第三档，不能为修补导入",
+    "PR8465": "第二档 S02：Grok委派消息；量出缺基座后局部适配",
+    "PR8503": "第四档：Kimi原生账号/并发消费者不存在",
+    "PR8436": "第二档 S09：已有使用记录导出429恢复",
+    "PR8318": "第二档 S06：Antigravity身份规范化保留任务",
+    "PR8499": "第二档 S01：Codex空instructions与回显还原",
+    "PR8462": "第三档：图片1K/2K/4K选号新策略；其sticky溢出修复依附新策略，本地无此缺陷",
+    "PR8504": "第三档：注册邮箱精确黑名单/批量禁用新能力",
+    "e353c8322": "第四档：上游赞助商/宣传资源",
+    "251094436": "第四档：上游赞助商/宣传资源",
+    "876b96d20": "第四档：上游赞助商/宣传资源",
+    "PR8484": "第二档 S04/S05：既有网关资源治理；不存在路由与新平台部分不取",
+    "PR8495": "第三档/被后续取代：CC Switch默认5.6-sol由#8380再改6.1-sol，不独立落中间值",
+    "25608d216": "第四档：上游赞助商/宣传资源",
+    "PR8549": "第四档：本地无transcript阻断算法；保留显式会话ID策略，不顺带升级两项依赖",
+    "PR8543": "第三档：关闭OpenAI传输错误冷却的新开关",
+    "PR8518": "第一档 F13；第二档 S04/S05/S11；完整ojson/COW/目录外消费者第三档或第四档",
+    "e6c19082f": "第四档：上游赞助商/宣传资源",
+    "PR8563": "第一档 F05：缓冲reasoning完整性",
+    "PR8429": "第一档 F06：Responses完成消息字段",
+    "PR8531": "第二档 S10：prompt参数链本地缺前置，需手工贯通",
+    "PR8521": "第二档 S07图片模型冷却；环境可调惩罚第三档",
+    "PR8437": "第一档 F08：413规则优先级",
+    "PR8430": "第二档 S08：已有Gemini工具媒体；不新增模型/生图能力",
+    "PR8557": "第三档：GPT Image2.6原生链、complexity与编辑扩展；F11无需此基座",
+    "PR8457": "第二档 S04：请求体错误分类及预算修复；Grok Voice/缺失route修补第四档",
+    "PR8522": "第三档：新的真实quota-summary API和窗口展示；不是SQLite后台修复前置",
+    "PR8553": "第一档 F01：setup-token周用量",
+    "PR8441": "第一档 F09：直接Gemini SSE解包",
+    "PR8432": "第一档 F11：已有GPT Image测试无效参数",
+    "PR8445": "第一档 F02：forced模式停止探测",
+    "PR8520": "第一档 F03：每轮首token时间，不引入额外计时接口",
+    "PR8464": "第一档 F04：WS HTTP桥接指纹",
+    "PR8471": "第一档 F07取消分类；PG非法UTF-8故障理由不适用，防御性校验不作为已确认SQLite缺陷",
+    "PR8409": "第一档 F10：Antigravity responseJsonSchema",
+    "PR8420": "第一档 F12：既有Anthropic兼容自定义URL",
+    "PR8380": "第三档：导出默认模型/API Key mode/live search/native image配置策略；需用户选择用途",
+    "PR8365": "第二档 S03：已选Terra后续；目录API/Codex标尺及账号Fast声明分开"
+  }
+}

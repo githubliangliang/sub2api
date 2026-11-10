@@ -1,5 +1,19 @@
 # 上游合并指南
 
+v0.2.20第一档已完成（2026-11-10）：F01–F13，44/44任务；[验收](../../openspec/changes/port-upstream-0.2.20-tier1/verification.md) / [实施证据](./implementation-0.2.20-tier1/README.md)。基于Fast已完成`326513cdc`，54包unit、embed build、lint0、六包race、实际HTTP/SQLite结算去重与周用量通过。VERSION1.1.23/Go1.27.3/SQLite228、依赖/前端/生成代码不变；实现随本次提交保存、等待归档，第二档仍未实施，无发布或业务部署。下方评估段落保留实施前历史状态。
+
+最新评估（2026-11-10）：[PORTING-0.2.20.md](./PORTING-0.2.20.md)，v0.2.19→v0.2.20，基线Fast已完成提交`326513cdc` / VERSION1.1.23 / Go1.27.3 / SQLite228。72非merge、35PR+7直接提交，562候选文件态A3/C330/X157/N72。建议[第一档13簇](../../openspec/changes/port-upstream-0.2.20-tier1/README.md)、[第二档11簇](../../openspec/changes/port-upstream-0.2.20-tier2/README.md)，**两提案未实施**。优先Claude/Codex/Grok及Bedrock边界、资源治理；10包定向基线、77前端测试通过，14个顶层缺陷探针按新行为预期失败，负对照通过。[完整证据](./evidence-0.2.20/MANIFEST.md)。产品与历史证据未修改，无发布/推送/部署；main发布后#8610/#8606另列观察。
+
+本轮待办：两份OpenSpec实施任务全部未勾选；第三档按实际用途选定，第四档及支付不做。Fast/Terra/Grok诊断/历史兼容/TPS分布按当前完成记录核销，旧段落保留历史时点。
+
+v0.2.20通用教训（[§9](./PORTING-0.2.20.md#9-本轮新增通用教训)）：
+
+- annotated tag对象与源码commit分列；并发提交以产品哈希确认基线一致。
+- Release说明的`security.*`与tag实际`gateway.*`配置有差异，核对真实消费者后再写部署说明。
+- 资源预算必须和后续所有权/failover修复组合；1GiB实例不能照搬1GiB预算与500MiB行上限。
+- 来源测试缺接口先适配本地复现，不能靠引入新能力“修测试”；Grok562行基座也可拆成窄委派转换。
+- 当前依赖审计与历史风险分开，本轮生产12moderate/2low不等于全量无风险。
+
 用户选定 Fast/Free Fast/Ultrafast 已完整整合（2026-11-10）：[范围](./PORTING-fast-tiers.md)、[OpenSpec](../../openspec/changes/port-upstream-fast-tiers/README.md)、[使用与验收](./implementation-fast-tiers/README.md)。补齐各入口转发/目录/计价/分组与渠道配置，SQLite228、鉴权快照20；VERSION1.1.23、Go1.27.3、依赖不变。全量unit、race、构建、lint、真实SQLite与浏览器验证通过，变更保留工作区。历史文档保持原状态快照，其它第三档能力独立；没有发布或业务部署。
 
 用户选定窗口输出TPS已实现（2026-11-04）：[补充范围与patch sites](./PORTING-output-tps-distribution.md)、[OpenSpec](../../openspec/changes/port-upstream-output-tps-distribution/README.md)、[实际验收证据](./implementation-output-tps-distribution/README.md)。历史#7911日志TPS已完成，本次补齐运维整窗口P5/P10/P50/均值/样本数，采用SQLite连续插值，raw/auto/preagg口径一致；自身2秒超时保留概览，父取消/截止和其它数据库错误传播。54包backend unit、embed build、lint0、三包定向race及SQLite/adminHTTP通过；frontend2174/2既有跳过、typecheck/lint/build/critical及真实浏览器桌面/全屏/移动/筛选/刷新通过。保留VERSION1.1.22、Go1.27.3、SQLite227和依赖/生成代码，实现已提交`f333aa5f3`，未部署业务实例；本次第三档已获用户选择，其它按需能力独立。新增通用经验：窗口分位数必须由逐请求样本计算，不能合并小时分位数；SQLite取消可能丢弃连接，执行中断测试不能依赖连接私有内存库。

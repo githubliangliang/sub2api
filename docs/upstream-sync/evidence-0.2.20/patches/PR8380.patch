@@ -1,0 +1,447 @@
+diff --git a/frontend/src/components/keys/UseKeyModal.vue b/frontend/src/components/keys/UseKeyModal.vue
+index c0dfa1afd..459ae082a 100644
+--- a/frontend/src/components/keys/UseKeyModal.vue
++++ b/frontend/src/components/keys/UseKeyModal.vue
+@@ -275,6 +275,7 @@ import Icon from '@/components/icons/Icon.vue'
+ import { useClipboard } from '@/composables/useClipboard'
+ import { buildCodexModelCatalogUrl, fetchCodexModelsManifest } from '@/api/codex'
+ import type { GroupPlatform } from '@/types'
++import { buildCodexApiKeyAuthConfig } from '@/utils/codexAuthConfig'
+ import {
+   findCodexCatalogModel,
+   formatCodexReasoningEffortTomlLine,
+@@ -318,7 +319,7 @@ const copiedIndex = ref<number | null>(null)
+ const activeTab = ref<string>('unix')
+ const activeClientTab = ref<string>('claude')
+ type CodexAuthMode = 'legacy' | 'api-key'
+-const codexAuthMode = ref<CodexAuthMode>('legacy')
++const codexAuthMode = ref<CodexAuthMode>('api-key')
+ type CodexModelManifestState = 'idle' | 'loading' | 'ready' | 'error'
+ const codexModelManifestState = ref<CodexModelManifestState>('idle')
+ const codexModelManifestContent = ref('')
+@@ -376,12 +377,12 @@ const defaultClientTab = computed(() => {
+ watch(() => [props.platform, props.claudeCodeOnly], () => {
+   activeTab.value = 'unix'
+   activeClientTab.value = defaultClientTab.value
+-  codexAuthMode.value = 'legacy'
++  codexAuthMode.value = 'api-key'
+ }, { immediate: true })
+ 
+ watch(() => props.show, (show) => {
+   if (show) {
+-    codexAuthMode.value = 'legacy'
++    codexAuthMode.value = 'api-key'
+   } else {
+     resetCodexModelManifest()
+   }
+@@ -1027,13 +1028,14 @@ function generateOpenAIFiles(baseUrl: string, apiKey: string): FileConfig[] {
+   const isWindows = activeTab.value === 'windows'
+   const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+ 
+-  const model = selectCodexCatalogModel('gpt-5.5')
++  const model = selectCodexCatalogModel('gpt-6.1-sol')
+   const reasoningEffortLine = codexReasoningEffortTomlLine(model)
+ 
+   // config.toml content
+   const configContent = `model_provider = "OpenAI"
+ model = "${model}"
+ review_model = "${model}"
++web_search = "live"
+ ${reasoningEffortLine}disable_response_storage = true
+ ${codexLocalCatalogToml.value}network_access = "enabled"
+ windows_wsl_setup_acknowledged = true
+@@ -1045,16 +1047,14 @@ ${codexModelCatalogMode.value === 'remote' ? `model_catalog_url = "${escapeTomlB
+ ${generateCodexProviderAuthConfig(apiKey)}
+ 
+ [features]
+-${codexModelCatalogMode.value === 'remote' ? 'api_key_model_discovery = true\n' : ''}goals = true`
++${codexModelCatalogMode.value === 'remote' ? 'api_key_model_discovery = true\n' : ''}${codexAuthMode.value === 'api-key' ? 'image_generation = true\n' : ''}goals = true`
+ 
+   return buildOpenAICodexFileConfigs(configDir, configContent, apiKey)
+ }
+ 
+ function generateCodexProviderAuthConfig(apiKey: string): string {
+   if (codexAuthMode.value === 'api-key') {
+-    return `requires_openai_auth = false
+-experimental_bearer_token = "${escapeTomlBasicString(apiKey)}"
+-http_headers = { "x-openai-actor-authorization" = "local-image-extension" }`
++    return buildCodexApiKeyAuthConfig(apiKey)
+   }
+ 
+   return 'requires_openai_auth = true'
+@@ -1309,7 +1309,7 @@ function generateRoutedCodexFiles(
+   const isWindows = activeTab.value === 'windows'
+   const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+   const preferredModels: Partial<Record<GroupPlatform, string>> = {
+-    openai: 'gpt-5.5',
++    openai: 'gpt-6.1-sol',
+     anthropic: 'claude-sonnet-4-6',
+     gemini: 'gemini-2.5-pro',
+     antigravity: 'claude-sonnet-4-6',
+@@ -1319,7 +1319,7 @@ function generateRoutedCodexFiles(
+     deepseek: 'deepseek-v4-pro',
+     minimax: 'MiniMax-M3',
+     opencode_go: 'glm-5.3',
+-    composite: 'gpt-5.5'
++    composite: 'gpt-6.1-sol'
+   }
+   const preferredModel = preferredModels[platform] || ''
+   const model = selectCodexCatalogModel(preferredModel)
+@@ -1375,13 +1375,14 @@ supports_websockets = false${codexModelCatalogMode.value === 'remote' ? '\n\n[fe
+ function generateOpenAIWsFiles(baseUrl: string, apiKey: string): FileConfig[] {
+   const isWindows = activeTab.value === 'windows'
+   const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+-  const model = selectCodexCatalogModel('gpt-5.5')
++  const model = selectCodexCatalogModel('gpt-6.1-sol')
+   const reasoningEffortLine = codexReasoningEffortTomlLine(model)
+ 
+   // config.toml content with WebSocket v2
+   const configContent = `model_provider = "OpenAI"
+ model = "${model}"
+ review_model = "${model}"
++web_search = "live"
+ ${reasoningEffortLine}disable_response_storage = true
+ ${codexLocalCatalogToml.value}network_access = "enabled"
+ windows_wsl_setup_acknowledged = true
+@@ -1394,7 +1395,7 @@ supports_websockets = true
+ ${generateCodexProviderAuthConfig(apiKey)}
+ 
+ [features]
+-${codexModelCatalogMode.value === 'remote' ? 'api_key_model_discovery = true\n' : ''}responses_websockets_v2 = true
++${codexModelCatalogMode.value === 'remote' ? 'api_key_model_discovery = true\n' : ''}${codexAuthMode.value === 'api-key' ? 'image_generation = true\n' : ''}responses_websockets_v2 = true
+ goals = true`
+ 
+   return buildOpenAICodexFileConfigs(configDir, configContent, apiKey)
+diff --git a/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts b/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
+index 34adf3fb9..a1602020d 100644
+--- a/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
++++ b/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
+@@ -379,7 +379,7 @@ describe('UseKeyModal', () => {
+     expect(codeBlocks.join('\n')).toContain('experimental_bearer_token = "sk-grok-codex-test"')
+   })
+ 
+-  it('keeps legacy OpenAI Codex config as the default', () => {
++  it('keeps legacy OpenAI Codex config available when selected', async () => {
+     const wrapper = mount(UseKeyModal, {
+       props: {
+         show: true,
+@@ -399,15 +399,19 @@ describe('UseKeyModal', () => {
+       }
+     })
+ 
++    await wrapper.get('[data-testid="codex-auth-mode-legacy"]').trigger('click')
++    await nextTick()
++
+     const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+     const configToml = codeBlocks.find((content) => content.includes('model_provider = "OpenAI"'))
+ 
+     expect(configToml).toBeDefined()
+-    expect(configToml).toContain('model = "gpt-5.5"')
+-    expect(configToml).toContain('review_model = "gpt-5.5"')
++    expect(configToml).toContain('model = "gpt-6.1-sol"')
++    expect(configToml).toContain('review_model = "gpt-6.1-sol"')
+     expect(configToml).not.toContain('model = "gpt-5.4"')
+     expect(configToml).not.toContain('model_context_window')
+     expect(configToml).not.toContain('model_auto_compact_token_limit')
++    expect(configToml?.split('[model_providers.')[0]).toContain('web_search = "live"')
+     expect(configToml).toContain('requires_openai_auth = true')
+     expect(configToml).not.toContain('experimental_bearer_token')
+     expect(configToml).not.toContain('x-openai-actor-authorization')
+@@ -462,7 +466,7 @@ describe('UseKeyModal', () => {
+     expect(claudeConfig).toContain('ANTHROPIC_BASE_URL="https://example.com"')
+   })
+ 
+-  it('renders API Key Mode authorization in OpenAI Codex config', async () => {
++  it('defaults to API Key Mode with native image generation in OpenAI Codex config', async () => {
+     const wrapper = mount(UseKeyModal, {
+       props: {
+         show: true,
+@@ -483,7 +487,6 @@ describe('UseKeyModal', () => {
+     })
+ 
+     const apiKeyMode = wrapper.get('[data-testid="codex-auth-mode-api-key"]')
+-    await apiKeyMode.trigger('click')
+     await nextTick()
+ 
+     const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+@@ -492,12 +495,13 @@ describe('UseKeyModal', () => {
+     expect(apiKeyMode.attributes('aria-checked')).toBe('true')
+     expect(configToml).toBeDefined()
+     expect(configToml).toContain('requires_openai_auth = false')
++    expect(configToml?.split('[model_providers.')[0]).toContain('web_search = "live"')
+     expect(configToml).toContain('experimental_bearer_token = "sk-test"')
+     expect(configToml).toContain('http_headers = { "x-openai-actor-authorization" = "local-image-extension" }')
+     expect(configToml).toContain('model_catalog_url = "https://example.com/v1/models"')
+     expect(configToml).not.toContain('model_catalog_json')
+     expect(configToml).not.toContain('env_key')
+-    expect(configToml).not.toContain('image_generation')
++    expect(configToml?.split('[features]\n')[1]).toContain('image_generation = true')
+     expect(codeBlocks).not.toContain('{\n  "OPENAI_API_KEY": "sk-test"\n}')
+     expect(wrapper.text()).not.toContain('auth.json')
+ 
+@@ -515,7 +519,7 @@ describe('UseKeyModal', () => {
+     )
+   })
+ 
+-  it('keeps legacy OpenAI Codex WebSocket config as the default', async () => {
++  it('keeps legacy OpenAI Codex WebSocket config available when selected', async () => {
+     const wrapper = mount(UseKeyModal, {
+       props: {
+         show: true,
+@@ -535,6 +539,8 @@ describe('UseKeyModal', () => {
+       }
+     })
+ 
++    await wrapper.get('[data-testid="codex-auth-mode-legacy"]').trigger('click')
++
+     const wsTab = wrapper.findAll('button').find((button) =>
+       button.text().includes('keys.useKeyModal.cliTabs.codexCliWs')
+     )
+@@ -547,11 +553,12 @@ describe('UseKeyModal', () => {
+     const configToml = codeBlocks.find((content) => content.includes('supports_websockets = true'))
+ 
+     expect(configToml).toBeDefined()
+-    expect(configToml).toContain('model = "gpt-5.5"')
+-    expect(configToml).toContain('review_model = "gpt-5.5"')
++    expect(configToml).toContain('model = "gpt-6.1-sol"')
++    expect(configToml).toContain('review_model = "gpt-6.1-sol"')
+     expect(configToml).not.toContain('model = "gpt-5.4"')
+     expect(configToml).not.toContain('model_context_window')
+     expect(configToml).not.toContain('model_auto_compact_token_limit')
++    expect(configToml?.split('[model_providers.')[0]).toContain('web_search = "live"')
+     expect(configToml).toContain('requires_openai_auth = true')
+     expect(configToml).not.toContain('experimental_bearer_token')
+     expect(configToml).not.toContain('x-openai-actor-authorization')
+@@ -603,10 +610,11 @@ describe('UseKeyModal', () => {
+     expect(wrapper.get('[data-testid="codex-auth-mode-api-key"]').attributes('aria-checked')).toBe('true')
+     expect(configToml).toBeDefined()
+     expect(configToml).toContain('requires_openai_auth = false')
++    expect(configToml?.split('[model_providers.')[0]).toContain('web_search = "live"')
+     expect(configToml).toContain('experimental_bearer_token = "sk-test"')
+     expect(configToml).toContain('http_headers = { "x-openai-actor-authorization" = "local-image-extension" }')
+     expect(configToml).not.toContain('env_key')
+-    expect(configToml).not.toContain('image_generation')
++    expect(configToml?.split('[features]\n')[1]).toContain('image_generation = true')
+     expect(configToml).toContain('supports_websockets = true')
+     const features = configToml?.split('[features]\n')[1]?.split('\n[')[0]
+     expect(features).toContain('responses_websockets_v2 = true')
+@@ -635,21 +643,21 @@ describe('UseKeyModal', () => {
+       }
+     })
+ 
+-    await wrapper.get('[data-testid="codex-auth-mode-api-key"]').trigger('click')
++    await wrapper.get('[data-testid="codex-auth-mode-legacy"]').trigger('click')
+     await wrapper.setProps({ show: false })
+     await wrapper.setProps({ show: true })
+     await nextTick()
+ 
+-    expect(wrapper.get('[data-testid="codex-auth-mode-legacy"]').attributes('aria-checked')).toBe('true')
+-    expect(wrapper.findAll('pre code').map((code) => code.text()).join('\n')).toContain('requires_openai_auth = true')
++    expect(wrapper.get('[data-testid="codex-auth-mode-api-key"]').attributes('aria-checked')).toBe('true')
++    expect(wrapper.findAll('pre code').map((code) => code.text()).join('\n')).toContain('requires_openai_auth = false')
+ 
+-    await wrapper.get('[data-testid="codex-auth-mode-api-key"]').trigger('click')
++    await wrapper.get('[data-testid="codex-auth-mode-legacy"]').trigger('click')
+     await wrapper.setProps({ platform: 'gemini' })
+     await wrapper.setProps({ platform: 'openai' })
+     await nextTick()
+ 
+-    expect(wrapper.get('[data-testid="codex-auth-mode-legacy"]').attributes('aria-checked')).toBe('true')
+-    expect(wrapper.findAll('pre code').map((code) => code.text()).join('\n')).not.toContain('x-openai-actor-authorization')
++    expect(wrapper.get('[data-testid="codex-auth-mode-api-key"]').attributes('aria-checked')).toBe('true')
++    expect(wrapper.findAll('pre code').map((code) => code.text()).join('\n')).toContain('x-openai-actor-authorization')
+   })
+ 
+   it('renders GPT-5.4 mini entry in OpenCode config', async () => {
+@@ -967,7 +975,7 @@ describe('UseKeyModal', () => {
+       text: async () => JSON.stringify({
+         models: [
+           { slug: 'claude-opus-4-8' },
+-          { slug: 'gpt-5.5' }
++          { slug: 'gpt-6.1-sol' }
+         ]
+       })
+     }))
+@@ -1002,8 +1010,8 @@ describe('UseKeyModal', () => {
+     const config = wrapper.findAll('pre code')
+       .map((code) => code.text())
+       .find((content) => content.includes('[model_providers.sub2api]'))
+-    expect(config).toContain('model = "gpt-5.5"')
+-    expect(config).toContain('review_model = "gpt-5.5"')
++    expect(config).toContain('model = "gpt-6.1-sol"')
++    expect(config).toContain('review_model = "gpt-6.1-sol"')
+   })
+ 
+   it('offers remote and optional file catalogs for OpenAI in both transport modes and on both platforms', async () => {
+@@ -1035,10 +1043,10 @@ describe('UseKeyModal', () => {
+         const configToml = wrapper.findAll('pre code')
+           .map((code) => code.text())
+           .find((content) => content.includes('model_provider = "OpenAI"'))
+-        expect(configToml).toContain('model = "gpt-5.5"')
++        expect(configToml).toContain('model = "gpt-6.1-sol"')
+         expect(configToml).toContain('[model_providers.OpenAI]\nname = "OpenAI"\nbase_url = "https://example.com/v1"\nmodel_catalog_url = "https://example.com/v1/models"')
+         expect(configToml).not.toContain('model_catalog_json')
+-        expect(configToml).toContain('requires_openai_auth = true')
++        expect(configToml).toContain('requires_openai_auth = false')
+         expect(configToml).not.toContain('client_version')
+         expect(wrapper.find('[data-testid="codex-model-catalog"]').exists()).toBe(true)
+ 
+diff --git a/frontend/src/i18n/locales/en/dashboard.ts b/frontend/src/i18n/locales/en/dashboard.ts
+index d06cda279..3fa5b7fd2 100644
+--- a/frontend/src/i18n/locales/en/dashboard.ts
++++ b/frontend/src/i18n/locales/en/dashboard.ts
+@@ -168,10 +168,10 @@ export default {
+       openai: {
+         description: 'Add the following configuration files to your Codex CLI config directory.',
+         authModeTitle: 'Codex authentication mode',
+-        authModeDescription: 'Compatibility mode keeps the existing setup for older Codex clients. API Key Mode authorizes the client-side image executor.',
++        authModeDescription: 'The configuration enables live web search. API Key mode supports native Codex image generation by default. Choose compatibility mode for older clients.',
+         authModeLegacy: 'Compatibility mode',
+-        authModeApiKey: 'API Key Mode',
+-        authModeApiKeyRestartNotice: 'After saving this configuration, completely quit and restart Codex Desktop or CLI, then create a new task so the client can rebuild its tool registry.',
++        authModeApiKey: 'API Key Mode (recommended)',
++        authModeApiKeyRestartNotice: 'This configuration contains your API key; do not share it or commit it. Save it and test in a new conversation; restart Codex if it has not loaded. Image generation still requires group permission, available balance, and upstream support.',
+         configTomlHint: 'Make sure the following content is at the beginning of the config.toml file',
+         note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it.',
+         noteWindows: 'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist.',
+diff --git a/frontend/src/i18n/locales/zh/dashboard.ts b/frontend/src/i18n/locales/zh/dashboard.ts
+index 4ca5a30ca..2e9f47274 100644
+--- a/frontend/src/i18n/locales/zh/dashboard.ts
++++ b/frontend/src/i18n/locales/zh/dashboard.ts
+@@ -168,10 +168,10 @@ export default {
+       openai: {
+         description: '将以下配置文件添加到 Codex CLI 配置目录中。',
+         authModeTitle: 'Codex 认证模式',
+-        authModeDescription: '兼容模式保留旧版 Codex 配置；API Key Mode 用于授权客户端图片执行器。',
++        authModeDescription: '配置默认启用实时联网搜索；API Key 模式支持 Codex 原生生图，旧版客户端可选择兼容模式。',
+         authModeLegacy: '兼容模式',
+-        authModeApiKey: 'API Key Mode',
+-        authModeApiKeyRestartNotice: '保存此配置后，必须完全退出并重启 Codex Desktop 或 CLI，然后新建 task，让客户端重新构建工具注册表。',
++        authModeApiKey: 'API Key 模式（推荐）',
++        authModeApiKeyRestartNotice: '此配置包含 API 密钥，请勿共享或提交到仓库。保存后新建会话验证；若配置未加载，再重启 Codex。生图仍需分组权限、可用余额和上游支持。',
+         configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分',
+         note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录。',
+         noteWindows:
+diff --git a/frontend/src/utils/__tests__/ccswitchImport.spec.ts b/frontend/src/utils/__tests__/ccswitchImport.spec.ts
+index fd178f76f..daa952d46 100644
+--- a/frontend/src/utils/__tests__/ccswitchImport.spec.ts
++++ b/frontend/src/utils/__tests__/ccswitchImport.spec.ts
+@@ -14,7 +14,7 @@ function paramsFromDeeplink(deeplink: string): URLSearchParams {
+ 
+ describe('ccswitchImport utils', () => {
+   it('defaults OpenAI CC Switch imports to the current Codex model', () => {
+-    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.5')
++    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-6.1-sol')
+   })
+ 
+   it('defaults Grok Build imports to the current Grok model', () => {
+@@ -48,6 +48,32 @@ describe('ccswitchImport utils', () => {
+     expect(params.get('endpoint')).toBe(endpoint)
+     expect(params.get('model')).toBe(OPENAI_CC_SWITCH_CODEX_MODEL)
+     expect(atob(params.get('usageScript') || '')).toBe(baseInput.usageScript)
++    const payload = JSON.parse(atob(params.get('config') || '')) as { config: string }
++    expect(params.get('configFormat')).toBe('json')
++    expect(payload.config).toContain(`base_url = "${endpoint}"`)
++    expect(payload.config).toContain(`model = "${OPENAI_CC_SWITCH_CODEX_MODEL}"`)
++    expect(payload.config.split('[model_providers.')[0]).toContain('web_search = "live"')
++    expect(payload.config).toContain('requires_openai_auth = false')
++    expect(payload.config).toContain('experimental_bearer_token = "sk-test"')
++    expect(payload.config).toContain('"x-openai-actor-authorization" = "local-image-extension"')
++    // Global feature choices are preserved by CC Switch, not imported per provider.
++    expect(payload.config).not.toContain('[features]')
++  })
++
++  it('encodes embedded Codex configuration as UTF-8 and escapes TOML strings', () => {
++    const apiKey = 'sk-"test\\key'
++    const params = paramsFromDeeplink(buildCcSwitchImportDeeplink({
++      ...baseInput,
++      apiKey,
++      baseUrl: 'https://example.com/网关',
++      platform: 'openai',
++      clientType: 'claude'
++    }))
++    const bytes = Uint8Array.from(atob(params.get('config') || ''), (char) => char.charCodeAt(0))
++    const payload = JSON.parse(new TextDecoder().decode(bytes)) as { config: string }
++    expect(payload.config).toContain('base_url = "https://example.com/网关"')
++    expect(payload.config).toContain(`experimental_bearer_token = ${JSON.stringify(apiKey)}`)
++    expect(params.get('apiKey')).toBe(apiKey)
+   })
+ 
+   it.each([
+@@ -68,6 +94,7 @@ describe('ccswitchImport utils', () => {
+     expect(params.get('app')).toBe('grokbuild')
+     expect(params.get('endpoint')).toBe('https://api.example.com/v1')
+     expect(params.get('model')).toBe(GROK_CC_SWITCH_MODEL)
++    expect(params.has('config')).toBe(false)
+   })
+ 
+   it.each([
+@@ -85,6 +112,7 @@ describe('ccswitchImport utils', () => {
+     expect(params.get('app')).toBe(app)
+     expect(params.get('endpoint')).toBe(baseInput.baseUrl)
+     expect(params.has('model')).toBe(false)
++    expect(params.has('config')).toBe(false)
+   })
+ 
+   it('keeps Antigravity imports on the selected client endpoint without a model parameter', () => {
+@@ -99,6 +127,7 @@ describe('ccswitchImport utils', () => {
+     expect(params.get('app')).toBe('gemini')
+     expect(params.get('endpoint')).toBe(`${baseInput.baseUrl}/antigravity`)
+     expect(params.has('model')).toBe(false)
++    expect(params.has('config')).toBe(false)
+   })
+ })
+ 
+diff --git a/frontend/src/utils/ccswitchImport.ts b/frontend/src/utils/ccswitchImport.ts
+index 8314c2698..8e4945f6c 100644
+--- a/frontend/src/utils/ccswitchImport.ts
++++ b/frontend/src/utils/ccswitchImport.ts
+@@ -1,6 +1,7 @@
+ import type { GroupPlatform } from '@/types'
++import { buildCodexApiKeyAuthConfig } from '@/utils/codexAuthConfig'
+ 
+-export const OPENAI_CC_SWITCH_CODEX_MODEL = 'gpt-5.6-sol'
++export const OPENAI_CC_SWITCH_CODEX_MODEL = 'gpt-6.1-sol'
+ export const GROK_CC_SWITCH_MODEL = 'grok-4.5'
+ 
+ export type CcSwitchClientType = 'claude' | 'gemini'
+@@ -111,5 +112,23 @@ export function buildCcSwitchImportDeeplink(input: CcSwitchImportDeeplinkInput):
+     entries.splice(2, 0, ['model', config.model])
+   }
+ 
++  if (config.app === 'codex') {
++    // CC Switch's embedded-config import preserves provider auth and headers.
++    // It deliberately leaves global [features] settings to the user.
++    const codexConfig = `model_provider = "sub2api"
++model = ${JSON.stringify(config.model)}
++web_search = "live"
++
++[model_providers.sub2api]
++name = "Sub2API"
++base_url = ${JSON.stringify(config.endpoint)}
++wire_api = "responses"
++${buildCodexApiKeyAuthConfig(input.apiKey)}
++`
++    const payload = JSON.stringify({ config: codexConfig })
++    const bytes = new TextEncoder().encode(payload)
++    entries.push(['config', btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''))])
++  }
++
+   return `ccswitch://v1/import?${new URLSearchParams(entries).toString()}`
+ }
+diff --git a/frontend/src/utils/codexAuthConfig.ts b/frontend/src/utils/codexAuthConfig.ts
+new file mode 100644
+index 000000000..4143825a0
+--- /dev/null
++++ b/frontend/src/utils/codexAuthConfig.ts
+@@ -0,0 +1,10 @@
++/**
++ * Codex 0.164 checks a static actor header when registering its native image
++ * extension for a custom API-key provider. The marker is not a credential;
++ * requests authenticate with the provider's normal bearer token.
++ */
++export function buildCodexApiKeyAuthConfig(apiKey: string): string {
++  return `requires_openai_auth = false
++experimental_bearer_token = ${JSON.stringify(apiKey)}
++http_headers = { "x-openai-actor-authorization" = "local-image-extension" }`
++}

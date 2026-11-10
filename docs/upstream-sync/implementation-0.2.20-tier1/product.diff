@@ -1,0 +1,954 @@
+diff --git a/backend/internal/handler/fast_tier_sqlite_test.go b/backend/internal/handler/fast_tier_sqlite_test.go
+index aa15668fb..fd199d771 100644
+--- a/backend/internal/handler/fast_tier_sqlite_test.go
++++ b/backend/internal/handler/fast_tier_sqlite_test.go
+@@ -65,7 +65,7 @@ func TestFastTierAsyncUsageSQLiteSettlementAndDedup(t *testing.T) {
+ 					require.NoError(t, err)
+ 				}
+ 				cfg := &config.Config{Default: config.DefaultConfig{RateMultiplier: 1}, Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false, AllowInsecureHTTP: true}}}
+-				response := `{"id":"resp_terra_sqlite","model":"gpt-6.1-terra","status":"completed","service_tier":"priority","output":[{"id":"fc_terra","type":"function_call","call_id":"call_lookup","name":"lookup","arguments":"{}"}],"usage":{"input_tokens":1000,"output_tokens":10,"input_tokens_details":{"cached_tokens":200,"cache_write_tokens":300}}}`
++				response := `{"id":"resp_terra_sqlite","model":"gpt-6.1-terra","status":"completed","service_tier":"priority","output":[{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"buffered thinking"}]},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]},{"id":"fc_terra","type":"function_call","call_id":"call_lookup","name":"lookup","arguments":"{}"}],"usage":{"input_tokens":1000,"output_tokens":10,"input_tokens_details":{"cached_tokens":200,"cache_write_tokens":300}}}`
+ 				response = strings.ReplaceAll(response, `"service_tier":"priority"`, `"service_tier":"`+tier+`"`)
+ 				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 					payload, err := io.ReadAll(r.Body)
+@@ -103,7 +103,8 @@ func TestFastTierAsyncUsageSQLiteSettlementAndDedup(t *testing.T) {
+ 				body = strings.ReplaceAll(body, `"service_tier":"priority"`, `"service_tier":"`+tier+`"`)
+ 				parent, cancelParent := context.WithCancel(context.WithValue(context.Background(), ctxkey.ClientRequestID, "terra-client-"+protocol+"-"+effort))
+ 				t.Cleanup(cancelParent)
+-				c, _ := gin.CreateTestContext(httptest.NewRecorder())
++				recorder := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(recorder)
+ 				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body)).WithContext(parent)
+ 				c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 2})
+ 				var result *service.OpenAIForwardResult
+@@ -115,6 +116,15 @@ func TestFastTierAsyncUsageSQLiteSettlementAndDedup(t *testing.T) {
+ 					result, err = svc.Forward(parent, c, account, []byte(body))
+ 				}
+ 				require.NoError(t, err)
++				if protocol == "chat-buffered" {
++					require.Equal(t, "buffered thinking", gjson.GetBytes(recorder.Body.Bytes(), "choices.0.message.reasoning_content").String())
++					require.Equal(t, "answer", gjson.GetBytes(recorder.Body.Bytes(), "choices.0.message.content").String())
++				}
++				if protocol == "messages-buffered" {
++					require.Equal(t, "thinking", gjson.GetBytes(recorder.Body.Bytes(), "content.0.type").String())
++					require.Equal(t, "buffered thinking", gjson.GetBytes(recorder.Body.Bytes(), "content.0.thinking").String())
++					require.Equal(t, "answer", gjson.GetBytes(recorder.Body.Bytes(), "content.1.text").String())
++				}
+ 				require.NotNil(t, result.ReasoningEffort)
+ 				require.Equal(t, effort, *result.ReasoningEffort)
+ 				require.Equal(t, "gpt-6.1-terra", result.UpstreamResponseModel)
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index 425658b61..00a18f32c 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -3162,7 +3162,11 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
+ 		h.handleFailoverExhaustedSimple(c, http.StatusBadGateway, streamStarted)
+ 		return
+ 	}
++	copyFailoverRetryAfter(c, failoverErr.ResponseHeaders)
+ 	if failoverErr.IsOpenAIRequestBodyTooLarge() {
++		if h.applyOpenAIFailoverPassthroughRule(c, failoverErr.StatusCode, failoverErr.ResponseBody, streamStarted) {
++			return
++		}
+ 		service.SetOpsUpstreamError(c, http.StatusRequestEntityTooLarge, service.OpenAIRequestBodyTooLargeClientMessage, "")
+ 		h.handleStreamingAwareErrorWithCode(
+ 			c,
+@@ -3175,7 +3179,6 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
+ 		)
+ 		return
+ 	}
+-	copyFailoverRetryAfter(c, failoverErr.ResponseHeaders)
+ 	if failoverErr.IsCredentialFailure() {
+ 		status, message := credentialFailoverClientResponse(failoverErr)
+ 		h.handleStreamingAwareErrorWithCode(c, status, "upstream_error", "", message, streamStarted, streamStarted)
+@@ -3190,27 +3193,8 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
+ 	}
+ 
+ 	// 先检查透传规则
+-	if h.errorPassthroughService != nil && len(responseBody) > 0 {
+-		if rule := h.errorPassthroughService.MatchRule("openai", statusCode, responseBody); rule != nil {
+-			// 确定响应状态码
+-			respCode := statusCode
+-			if !rule.PassthroughCode && rule.ResponseCode != nil {
+-				respCode = *rule.ResponseCode
+-			}
+-
+-			// 确定响应消息
+-			msg := service.ExtractUpstreamErrorMessage(responseBody)
+-			if !rule.PassthroughBody && rule.CustomMessage != nil {
+-				msg = *rule.CustomMessage
+-			}
+-
+-			if rule.SkipMonitoring {
+-				c.Set(service.OpsSkipPassthroughKey, true)
+-			}
+-
+-			h.handleStreamingAwareErrorWithCode(c, respCode, "upstream_error", "", msg, streamStarted, streamStarted)
+-			return
+-		}
++	if h.applyOpenAIFailoverPassthroughRule(c, statusCode, responseBody, streamStarted) {
++		return
+ 	}
+ 
+ 	// 记录原始上游状态码，以便 ops 错误日志捕获真实的上游错误
+@@ -3222,6 +3206,45 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
+ 	h.handleStreamingAwareErrorWithCode(c, status, errType, "", errMsg, streamStarted, streamStarted)
+ }
+ 
++// applyOpenAIFailoverPassthroughRule applies a configured error passthrough
++// rule to an exhausted OpenAI failover. It reports whether a rule matched and
++// the client response has been written; callers must return when it does.
++//
++// Rules are operator opt-in overrides, so they take precedence over the
++// gateway's built-in mapping for the same upstream status, including the
++// body-too-large branch that otherwise returns a fixed 413.
++func (h *OpenAIGatewayHandler) applyOpenAIFailoverPassthroughRule(
++	c *gin.Context,
++	statusCode int,
++	responseBody []byte,
++	streamStarted bool,
++) bool {
++	if h.errorPassthroughService == nil || statusCode <= 0 || len(responseBody) == 0 {
++		return false
++	}
++	rule := h.errorPassthroughService.MatchRule("openai", statusCode, responseBody)
++	if rule == nil {
++		return false
++	}
++
++	respCode := statusCode
++	if !rule.PassthroughCode && rule.ResponseCode != nil {
++		respCode = *rule.ResponseCode
++	}
++
++	msg := service.ExtractUpstreamErrorMessage(responseBody)
++	if !rule.PassthroughBody && rule.CustomMessage != nil {
++		msg = *rule.CustomMessage
++	}
++
++	if rule.SkipMonitoring {
++		c.Set(service.OpsSkipPassthroughKey, true)
++	}
++
++	h.handleStreamingAwareErrorWithCode(c, respCode, "upstream_error", "", msg, streamStarted, streamStarted)
++	return true
++}
++
+ func credentialFailoverClientResponse(failoverErr *service.UpstreamFailoverError) (int, string) {
+ 	if failoverErr != nil && failoverErr.Reason == service.AntigravityCredentialRejectedReason {
+ 		return http.StatusBadGateway, service.AntigravityCredentialRejectedClientMessage
+diff --git a/backend/internal/pkg/antigravity/stream_transformer.go b/backend/internal/pkg/antigravity/stream_transformer.go
+index 6b52ba882..5a1cdaa81 100644
+--- a/backend/internal/pkg/antigravity/stream_transformer.go
++++ b/backend/internal/pkg/antigravity/stream_transformer.go
+@@ -87,8 +87,15 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
+ 
+ 	// 解包 v1internal 响应
+ 	var v1Resp V1InternalResponse
+-	if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
+-		// 尝试直接解析为 GeminiResponse
++	var envelope struct {
++		Response json.RawMessage `json:"response"`
++	}
++	if err := json.Unmarshal([]byte(data), &envelope); err != nil {
++		return nil
++	}
++	if len(envelope.Response) == 0 {
++		// A direct response also unmarshals into V1InternalResponse without
++		// an error, but leaves Response empty. Select the shape explicitly.
+ 		var directResp GeminiResponse
+ 		if err2 := json.Unmarshal([]byte(data), &directResp); err2 != nil {
+ 			return nil
+@@ -96,6 +103,8 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
+ 		v1Resp.Response = directResp
+ 		v1Resp.ResponseID = directResp.ResponseID
+ 		v1Resp.ModelVersion = directResp.ModelVersion
++	} else if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
++		return nil
+ 	}
+ 
+ 	geminiResp := &v1Resp.Response
+diff --git a/backend/internal/pkg/apicompat/responses_stream_event_wire.go b/backend/internal/pkg/apicompat/responses_stream_event_wire.go
+index c2ebcd3ee..79c8777a9 100644
+--- a/backend/internal/pkg/apicompat/responses_stream_event_wire.go
++++ b/backend/internal/pkg/apicompat/responses_stream_event_wire.go
+@@ -214,7 +214,14 @@ func messageContentWire(parts []ResponsesContentPart) []map[string]any {
+ 		if typ == "" {
+ 			typ = "output_text"
+ 		}
+-		out = append(out, map[string]any{"type": typ, "text": p.Text})
++		switch typ {
++		case "output_text":
++			out = append(out, outputTextPartWire(&p))
++		case "refusal":
++			out = append(out, map[string]any{"type": typ, "refusal": p.Refusal})
++		default:
++			out = append(out, map[string]any{"type": typ, "text": p.Text})
++		}
+ 	}
+ 	return out
+ }
+diff --git a/backend/internal/pkg/apicompat/responses_to_anthropic.go b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+index 424affde7..6ff8c2d6f 100644
+--- a/backend/internal/pkg/apicompat/responses_to_anthropic.go
++++ b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+@@ -27,19 +27,14 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
+ 	for _, item := range resp.Output {
+ 		switch item.Type {
+ 		case "reasoning":
+-			summaryText := ""
+-			for _, s := range item.Summary {
+-				if s.Type == "summary_text" && s.Text != "" {
+-					summaryText += s.Text
+-				}
+-			}
++			reasoningText := responsesReasoningText(item)
+ 			// Always surface encrypted_content as thinking.signature so Claude
+ 			// Code / multi-turn clients can send it back. Signature-only
+ 			// thinking blocks are valid when the model omits a visible summary.
+-			if summaryText != "" || strings.TrimSpace(item.EncryptedContent) != "" {
++			if reasoningText != "" || strings.TrimSpace(item.EncryptedContent) != "" {
+ 				blocks = append(blocks, AnthropicContentBlock{
+ 					Type:      "thinking",
+-					Thinking:  summaryText,
++					Thinking:  reasoningText,
+ 					Signature: item.EncryptedContent,
+ 				})
+ 			}
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index 61a4d2ccd..a3ce7017f 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -57,11 +57,7 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
+ 				},
+ 			})
+ 		case "reasoning":
+-			for _, s := range item.Summary {
+-				if s.Type == "summary_text" && s.Text != "" {
+-					reasoningText += s.Text
+-				}
+-			}
++			reasoningText += responsesReasoningText(item)
+ 		case "web_search_call":
+ 			// silently consumed — results already incorporated into text output
+ 		}
+diff --git a/backend/internal/pkg/apicompat/types.go b/backend/internal/pkg/apicompat/types.go
+index 874ae52d4..c85367855 100644
+--- a/backend/internal/pkg/apicompat/types.go
++++ b/backend/internal/pkg/apicompat/types.go
+@@ -421,26 +421,14 @@ type ResponsesOutput struct {
+ 	Action *WebSearchAction `json:"action,omitempty"`
+ }
+ 
+-// MarshalJSON 处理 tool_search_call 项的线上形态（复用 CallID/Arguments 字段）：
+-// execution 固定为 "client"（codex 的必填字段，非 client 的调用会被静默忽略），
+-// arguments 是 JSON 对象而非 function_call 语义下的字符串。其余类型走默认结构体
+-// 序列化，输出逐字节不变。
++// MarshalJSON keeps message and tool_search_call items consistent with their
++// streamed representation. Other output types retain their default encoding.
+ func (o ResponsesOutput) MarshalJSON() ([]byte, error) {
+-	type responsesOutputAlias ResponsesOutput
+-	if o.Type != "tool_search_call" {
+-		return json.Marshal(responsesOutputAlias(o))
+-	}
+-	m := map[string]any{
+-		"type":      o.Type,
+-		"id":        o.ID,
+-		"call_id":   o.CallID,
+-		"execution": "client",
+-		"arguments": toolSearchCallArgumentsJSON(o.Arguments),
++	if o.Type == "message" || o.Type == "tool_search_call" {
++		return json.Marshal(responsesItemWire(&o))
+ 	}
+-	if o.Status != "" {
+-		m["status"] = o.Status
+-	}
+-	return json.Marshal(m)
++	type responsesOutputAlias ResponsesOutput
++	return json.Marshal(responsesOutputAlias(o))
+ }
+ 
+ // UnmarshalJSON accepts both the Responses function-call string form and the
+diff --git a/backend/internal/server/middleware/api_key_auth.go b/backend/internal/server/middleware/api_key_auth.go
+index a595fbdb3..30a42aa8e 100644
+--- a/backend/internal/server/middleware/api_key_auth.go
++++ b/backend/internal/server/middleware/api_key_auth.go
+@@ -110,6 +110,9 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
+ 				AbortWithError(c, http.StatusServiceUnavailable, "API_KEY_AUTH_OVERLOADED", "API key authentication is temporarily unavailable")
+ 				return
+ 			}
++			if abortIfAPIKeyLookupClientGone(c) {
++				return
++			}
+ 			AbortWithError(c, 500, "INTERNAL_ERROR", "Failed to validate API key")
+ 			return
+ 		}
+@@ -447,3 +450,13 @@ func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool)
+ 	}
+ 	return "", "", true
+ }
++
++// A cancelled request cannot receive an authentication response. Only inspect
++// the request context: an internal lookup timeout on a live request stays 500.
++func abortIfAPIKeyLookupClientGone(c *gin.Context) bool {
++	if c.Request.Context().Err() != nil {
++		c.AbortWithStatus(499)
++		return true
++	}
++	return false
++}
+diff --git a/backend/internal/server/middleware/api_key_auth_google.go b/backend/internal/server/middleware/api_key_auth_google.go
+index 9efbbcb2c..54d0df49c 100644
+--- a/backend/internal/server/middleware/api_key_auth_google.go
++++ b/backend/internal/server/middleware/api_key_auth_google.go
+@@ -71,6 +71,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
+ 				abortWithGoogleError(c, 503, "API key authentication is temporarily unavailable")
+ 				return
+ 			}
++			if abortIfAPIKeyLookupClientGone(c) {
++				return
++			}
+ 			abortWithGoogleError(c, 500, "Failed to validate API key")
+ 			return
+ 		}
+diff --git a/backend/internal/server/middleware/api_key_auth_test.go b/backend/internal/server/middleware/api_key_auth_test.go
+index 964fe8041..34b33d2f0 100644
+--- a/backend/internal/server/middleware/api_key_auth_test.go
++++ b/backend/internal/server/middleware/api_key_auth_test.go
+@@ -6,6 +6,7 @@ import (
+ 	"context"
+ 	"encoding/json"
+ 	"errors"
++	"fmt"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"strings"
+@@ -1792,3 +1793,90 @@ func (r *stubUserSubscriptionRepo) IncrementUsage(ctx context.Context, id int64,
+ func (r *stubUserSubscriptionRepo) BatchUpdateExpiredStatus(ctx context.Context) (int64, error) {
+ 	return 0, errors.New("not implemented")
+ }
++
++func TestAPIKeyAuthLookupFailureWhenClientGoneReturns499(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	cfg := &config.Config{RunMode: config.RunModeSimple}
++
++	for _, tc := range []struct {
++		name   string
++		cancel bool
++		want   int
++	}{
++		{name: "client gone", cancel: true, want: 499},
++		{name: "server failure", cancel: false, want: http.StatusInternalServerError},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			var cancel context.CancelFunc
++			repo := &stubApiKeyRepo{getByKey: func(lookupCtx context.Context, _ string) (*service.APIKey, error) {
++				if tc.cancel {
++					// 查库期间客户端断开：net/http 取消请求 ctx，驱动返回 context 错误。
++					cancel()
++					return nil, lookupCtx.Err()
++				}
++				return nil, errors.New("db unavailable")
++			}}
++			svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
++
++			for _, mw := range []gin.HandlerFunc{
++				gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg)),
++				APIKeyAuthWithSubscriptionGoogle(svc, nil, cfg),
++			} {
++				var ctx context.Context
++				ctx, cancel = context.WithCancel(context.Background())
++				r := gin.New()
++				r.Use(mw)
++				r.GET("/t", func(c *gin.Context) { c.Status(http.StatusOK) })
++				w := httptest.NewRecorder()
++				req := httptest.NewRequest(http.MethodGet, "/t", nil).WithContext(ctx)
++				req.Header.Set("x-api-key", "sk-test-key")
++				req.Header.Set("x-goog-api-key", "sk-test-key")
++				r.ServeHTTP(w, req)
++				require.Equal(t, tc.want, w.Code)
++				cancel()
++			}
++		})
++	}
++}
++
++func TestAPIKeyAuthLookupDeadlineAndBusinessClassification(t *testing.T) {
++	for _, tc := range []struct {
++		name           string
++		requestExpired bool
++		err            error
++		want           int
++	}{
++		{"request deadline", true, context.DeadlineExceeded, 499},
++		{"internal deadline", false, context.DeadlineExceeded, 500},
++		{"missing key", false, service.ErrAPIKeyNotFound, 401},
++		{"overloaded", false, service.ErrAPIKeyAuthOverloaded, 503},
++	} {
++		for _, google := range []bool{false, true} {
++			t.Run(fmt.Sprintf("%s/google=%t", tc.name, google), func(t *testing.T) {
++				ctx := context.Background()
++				if tc.requestExpired {
++					var cancel context.CancelFunc
++					ctx, cancel = context.WithDeadline(ctx, time.Now().Add(-time.Second))
++					defer cancel()
++				}
++				repo := &stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) { return nil, tc.err }}
++				cfg := &config.Config{RunMode: config.RunModeSimple}
++				svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
++				mw := gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg))
++				if google {
++					mw = APIKeyAuthWithSubscriptionGoogle(svc, nil, cfg)
++				}
++				router := gin.New()
++				router.Use(mw)
++				router.GET("/t", func(c *gin.Context) { t.Error("rejected auth reached handler") })
++				rec := httptest.NewRecorder()
++				req := httptest.NewRequest(http.MethodGet, "/t", nil).WithContext(ctx)
++				req.Header.Set("x-api-key", "sk-synthetic-secret")
++				req.Header.Set("x-goog-api-key", "sk-synthetic-secret")
++				router.ServeHTTP(rec, req)
++				require.Equal(t, tc.want, rec.Code)
++				require.NotContains(t, rec.Body.String(), "sk-synthetic-secret")
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/account_test_service.go b/backend/internal/service/account_test_service.go
+index 15c8fd332..e5ef93b67 100644
+--- a/backend/internal/service/account_test_service.go
++++ b/backend/internal/service/account_test_service.go
+@@ -357,7 +357,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
+ 		if err != nil {
+ 			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
+ 		}
+-		apiURL = strings.TrimSuffix(normalizedBaseURL, "/") + "/v1/messages?beta=true"
++		apiURL = buildAnthropicMessagesURL(normalizedBaseURL)
+ 	} else {
+ 		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported account type: %s", account.Type))
+ 	}
+@@ -2853,10 +2853,9 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+ 	s.sendEvent(c, TestEvent{Type: "test_start", Model: modelID})
+ 
+ 	payload := map[string]any{
+-		"model":           modelID,
+-		"prompt":          prompt,
+-		"n":               1,
+-		"response_format": "b64_json",
++		"model":  modelID,
++		"prompt": prompt,
++		"n":      1,
+ 	}
+ 	payloadBytes, _ := json.Marshal(payload)
+ 
+diff --git a/backend/internal/service/account_test_service_openai_image_test.go b/backend/internal/service/account_test_service_openai_image_test.go
+index 9c24070c2..0b6df33ca 100644
+--- a/backend/internal/service/account_test_service_openai_image_test.go
++++ b/backend/internal/service/account_test_service_openai_image_test.go
+@@ -2,6 +2,7 @@ package service
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -91,3 +92,50 @@ func TestAccountTestService_OpenAIImageAPIKeyUsesConfiguredV1BaseURL(t *testing.
+ 	require.Contains(t, rec.Body.String(), "data:image/png;base64,aGVsbG8=")
+ 	require.Contains(t, rec.Body.String(), "\"success\":true")
+ }
++
++func TestAccountTestService_OpenAIImageAPIKeyOmitsUnsupportedResponseFormat(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++
++	for _, model := range []string{
++		"gpt-image-1",
++		"gpt-image-1-mini",
++		"gpt-image-1.5",
++		"gpt-image-2",
++		"gpt-image-2-2026-04-21",
++		"gpt-image-2.5-flare",
++	} {
++		t.Run(model, func(t *testing.T) {
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(rec)
++			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/1/test", nil)
++
++			upstream := &httpUpstreamRecorder{
++				resp: &http.Response{
++					StatusCode: http.StatusOK,
++					Header:     http.Header{"Content-Type": []string{"application/json"}},
++					Body:       io.NopCloser(strings.NewReader(`{"data":[{"b64_json":"aGVsbG8="}]}`)),
++				},
++			}
++			svc := &AccountTestService{httpUpstream: upstream, cfg: &config.Config{}}
++			account := &Account{
++				ID: 54, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
++				Credentials: map[string]any{"api_key": "test-api-key"},
++			}
++
++			err := svc.testOpenAIAccountConnection(c, account, model, "draw a cat", AccountTestModeDefault)
++
++			require.NoError(t, err)
++			require.NotNil(t, upstream.lastReq)
++			require.Equal(t, "https://api.openai.com/v1/images/generations", upstream.lastReq.URL.String())
++			var payload map[string]any
++			require.NoError(t, json.Unmarshal(upstream.lastBody, &payload))
++			require.Equal(t, model, payload["model"])
++			require.Equal(t, "draw a cat", payload["prompt"])
++			require.Equal(t, float64(1), payload["n"])
++			// GPT Image models always return base64 images and reject this legacy parameter.
++			require.NotContains(t, payload, "response_format")
++			require.Contains(t, rec.Body.String(), "data:image/png;base64,aGVsbG8=")
++			require.Contains(t, rec.Body.String(), `"success":true`)
++		})
++	}
++}
+diff --git a/backend/internal/service/account_usage_service.go b/backend/internal/service/account_usage_service.go
+index 084d153ff..161adbf94 100644
+--- a/backend/internal/service/account_usage_service.go
++++ b/backend/internal/service/account_usage_service.go
+@@ -477,10 +477,12 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+ 		return usage, nil
+ 	}
+ 
+-	// Setup Token账号：根据session_window推算（没有profile scope，无法调用usage API）
++	// Setup Token 没有 profile scope，复用响应头采样的窗口数据，不能主动调用 usage API。
+ 	if account.Type == AccountTypeSetupToken {
++		if supportsAnthropicPassiveUsage(account) {
++			return s.getPassiveUsageForAccount(ctx, account)
++		}
+ 		usage := s.estimateSetupTokenUsage(account)
+-		// 添加窗口统计
+ 		s.addWindowStats(ctx, account, usage)
+ 		return usage, nil
+ 	}
+@@ -491,7 +493,7 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+ 
+ // GetUsage 获取账号使用量
+ // OAuth账号: 调用Anthropic API获取真实数据（需要profile scope），API响应缓存10分钟，窗口统计缓存1分钟
+-// Setup Token账号: 根据session_window推算5h窗口，7d数据不可用（没有profile scope）
++// Setup Token账号: 返回响应头采样的5h/7d窗口；无5h采样时回退到session_window估算
+ // API Key账号: 不支持usage查询
+ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, force ...bool) (*UsageInfo, error) {
+ 	forceProbe := len(force) > 0 && force[0]
+@@ -1750,7 +1752,6 @@ func (s *AccountUsageService) estimateSetupTokenUsage(account *Account) *UsageIn
+ 		}
+ 	}
+ 
+-	// Setup Token无法获取7d数据
+ 	return info
+ }
+ 
+diff --git a/backend/internal/service/antigravity_gateway_gemini.go b/backend/internal/service/antigravity_gateway_gemini.go
+index c40c93f18..785043a20 100644
+--- a/backend/internal/service/antigravity_gateway_gemini.go
++++ b/backend/internal/service/antigravity_gateway_gemini.go
+@@ -501,6 +501,11 @@ func cleanGeminiRequest(body []byte) ([]byte, error) {
+ 		}
+ 	}
+ 
++	// 2. 结构化输出 Schema
++	if normalizeGeminiResponseSchema(payload) {
++		modified = true
++	}
++
+ 	if !modified {
+ 		return body, nil
+ 	}
+@@ -508,6 +513,37 @@ func cleanGeminiRequest(body []byte) ([]byte, error) {
+ 	return json.Marshal(payload)
+ }
+ 
++// normalizeGeminiResponseSchema 将 generationConfig.responseJsonSchema 改写为 responseSchema。
++// Antigravity 上游接受 responseJsonSchema 字段但静默忽略（返回普通文本而非 JSON），只有 responseSchema 生效；
++// 而 @ai-sdk/google >= 4.0.70 等客户端只发送 responseJsonSchema。已有 responseSchema 时以其为准。
++func normalizeGeminiResponseSchema(payload map[string]any) bool {
++	changed := false
++	for _, configKey := range []string{"generationConfig", "generation_config"} {
++		config, ok := payload[configKey].(map[string]any)
++		if !ok {
++			continue
++		}
++		for _, schemaKey := range []string{"responseJsonSchema", "response_json_schema"} {
++			raw, exists := config[schemaKey]
++			if !exists {
++				continue
++			}
++			delete(config, schemaKey)
++			changed = true
++			_, hasSchema := config["responseSchema"]
++			_, hasSnakeSchema := config["response_schema"]
++			if hasSchema || hasSnakeSchema {
++				continue
++			}
++			if schema, ok := raw.(map[string]any); ok {
++				antigravity.DeepCleanUndefined(schema)
++				config["responseSchema"] = antigravity.CleanJSONSchema(schema)
++			}
++		}
++	}
++	return changed
++}
++
+ // filterEmptyPartsFromGeminiRequest 过滤掉 parts 为空的消息
+ // Gemini API 不接受空 parts，需要在请求前过滤
+ func filterEmptyPartsFromGeminiRequest(body []byte) ([]byte, error) {
+diff --git a/backend/internal/service/bedrock_stream.go b/backend/internal/service/bedrock_stream.go
+index 98196d27e..b759888be 100644
+--- a/backend/internal/service/bedrock_stream.go
++++ b/backend/internal/service/bedrock_stream.go
+@@ -241,6 +241,12 @@ type bedrockEventStreamDecoder struct {
+ 	reader *bufio.Reader
+ }
+ 
++// Bound untrusted EventStream lengths before allocating the frame body.
++const (
++	bedrockEventStreamMaxHeadersLength = 128 << 10
++	bedrockEventStreamMaxPayloadLength = 16 << 20
++)
++
+ func newBedrockEventStreamDecoder(r io.Reader) *bedrockEventStreamDecoder {
+ 	return &bedrockEventStreamDecoder{
+ 		reader: bufio.NewReaderSize(r, 64*1024),
+@@ -269,6 +275,13 @@ func (d *bedrockEventStreamDecoder) Decode() ([]byte, error) {
+ 			return nil, fmt.Errorf("invalid eventstream frame: total_length=%d", totalLength)
+ 		}
+ 
++		if headersLength > bedrockEventStreamMaxHeadersLength || headersLength > totalLength-16 {
++			return nil, fmt.Errorf("invalid eventstream frame: headers_length=%d total_length=%d", headersLength, totalLength)
++		}
++		if totalLength-16-headersLength > bedrockEventStreamMaxPayloadLength {
++			return nil, fmt.Errorf("invalid eventstream frame: payload too large, total_length=%d", totalLength)
++		}
++
+ 		// 读取 headers + payload + message_crc
+ 		remaining := int(totalLength) - 12
+ 		if remaining <= 0 {
+diff --git a/backend/internal/service/bedrock_stream_test.go b/backend/internal/service/bedrock_stream_test.go
+index 3d0661379..d2c63552b 100644
+--- a/backend/internal/service/bedrock_stream_test.go
++++ b/backend/internal/service/bedrock_stream_test.go
+@@ -243,6 +243,45 @@ func TestBedrockEventStreamDecoder(t *testing.T) {
+ 	})
+ }
+ 
++func TestBedrockEventStreamDecoderRejectsUntrustedLengths(t *testing.T) {
++	// Only the prelude is sent: the decoder must reject the declared lengths
++	// before allocating or reading the frame body.
++	prelude := func(totalLen, headersLen uint32) []byte {
++		var buf bytes.Buffer
++		_ = binary.Write(&buf, binary.BigEndian, totalLen)
++		_ = binary.Write(&buf, binary.BigEndian, headersLen)
++		_ = binary.Write(&buf, binary.BigEndian, crc32.Checksum(buf.Bytes(), crc32.MakeTable(crc32.IEEE)))
++		return buf.Bytes()
++	}
++	for _, tc := range []struct {
++		name       string
++		totalLen   uint32
++		headersLen uint32
++	}{
++		{name: "payload over protocol limit", totalLen: 16 + bedrockEventStreamMaxPayloadLength + 1},
++		{name: "maximum total length", totalLen: ^uint32(0)},
++		{name: "headers beyond frame", totalLen: 64, headersLen: 49},
++		{name: "headers over protocol limit", totalLen: 16 + bedrockEventStreamMaxHeadersLength + 1, headersLen: bedrockEventStreamMaxHeadersLength + 1},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			decoder := newBedrockEventStreamDecoder(bytes.NewReader(prelude(tc.totalLen, tc.headersLen)))
++			_, err := decoder.Decode()
++			require.Error(t, err)
++			assert.Contains(t, err.Error(), "invalid eventstream frame")
++		})
++	}
++
++	t.Run("headers filling the frame are accepted", func(t *testing.T) {
++		var frame bytes.Buffer
++		_, _ = frame.Write(prelude(16+4, 4))
++		_, _ = frame.Write([]byte{0, 0, 0, 0}) // empty-name, unknown-type header bytes
++		_ = binary.Write(&frame, binary.BigEndian, crc32.Checksum(frame.Bytes(), crc32.MakeTable(crc32.IEEE)))
++		decoder := newBedrockEventStreamDecoder(bytes.NewReader(frame.Bytes()))
++		_, err := decoder.Decode()
++		assert.Equal(t, io.EOF, err)
++	})
++}
++
+ func TestBuildBedrockURL(t *testing.T) {
+ 	t.Run("stream URL with colon in model ID", func(t *testing.T) {
+ 		url := BuildBedrockURL("us-east-1", "us.anthropic.claude-opus-4-5-20251101-v1:0", true)
+diff --git a/backend/internal/service/gateway_anthropic_passthrough.go b/backend/internal/service/gateway_anthropic_passthrough.go
+index db3c48554..c3d84ea38 100644
+--- a/backend/internal/service/gateway_anthropic_passthrough.go
++++ b/backend/internal/service/gateway_anthropic_passthrough.go
+@@ -298,7 +298,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
+ 		if err != nil {
+ 			return nil, nil, err
+ 		}
+-		targetURL = validatedURL + "/v1/messages?beta=true"
++		targetURL = buildAnthropicMessagesURL(validatedURL)
+ 	}
+ 
+ 	// 能力维度 body sanitize：透传路径上 anthropic-beta header 原样透传客户端值，
+diff --git a/backend/internal/service/gateway_upstream_request.go b/backend/internal/service/gateway_upstream_request.go
+index e34f699be..763bbfe22 100644
+--- a/backend/internal/service/gateway_upstream_request.go
++++ b/backend/internal/service/gateway_upstream_request.go
+@@ -52,7 +52,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
+ 			if err != nil {
+ 				return nil, nil, err
+ 			}
+-			targetURL = validatedURL + "/v1/messages?beta=true"
++			targetURL = buildAnthropicMessagesURL(validatedURL)
+ 		}
+ 	} else if account.IsCustomBaseURLEnabled() {
+ 		customURL := account.GetCustomBaseURL()
+diff --git a/backend/internal/service/openai_apikey_responses_probe.go b/backend/internal/service/openai_apikey_responses_probe.go
+index e1758dfc4..e5d5fd9f2 100644
+--- a/backend/internal/service/openai_apikey_responses_probe.go
++++ b/backend/internal/service/openai_apikey_responses_probe.go
+@@ -132,6 +132,11 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
+ 		return
+ 	}
+ 
++	// force_responses / force_chat_completions 下 ResolveResponsesSupport 优先读 mode，探测标记不可达，探测只会白跑一次上游调用，直接跳过。
++	if mode, _ := account.Extra[openai_compat.ExtraKeyResponsesMode].(string); openai_compat.NormalizeResponsesSupportMode(mode) != openai_compat.ResponsesSupportModeAuto {
++		return
++	}
++
+ 	apiKey := account.GetOpenAIApiKey()
+ 	if apiKey == "" {
+ 		logger.LegacyPrintf("service.openai_probe", "probe_skip_no_apikey: account_id=%d", accountID)
+diff --git a/backend/internal/service/openai_apikey_responses_probe_test.go b/backend/internal/service/openai_apikey_responses_probe_test.go
+index fac351a0e..14084b189 100644
+--- a/backend/internal/service/openai_apikey_responses_probe_test.go
++++ b/backend/internal/service/openai_apikey_responses_probe_test.go
+@@ -118,3 +118,54 @@ func TestSelectResponsesProbeModel(t *testing.T) {
+ 	}}
+ 	require.Equal(t, openai.DefaultTestModel, selectResponsesProbeModel(acctAllWild))
+ }
++
++func TestProbeOpenAIAPIKeyResponsesSupportSkipsForcedModes(t *testing.T) {
++	cases := []struct {
++		name      string
++		mode      any
++		wantProbe bool
++	}{
++		{name: "force_responses skips probe", mode: string(openai_compat.ResponsesSupportModeForceResponses), wantProbe: false},
++		{name: "force_chat_completions skips probe", mode: string(openai_compat.ResponsesSupportModeForceChatCompletions), wantProbe: false},
++		{name: "auto probes", mode: string(openai_compat.ResponsesSupportModeAuto), wantProbe: true},
++		{name: "invalid mode falls back to auto and probes", mode: "bogus", wantProbe: true},
++		{name: "non-string mode falls back to auto and probes", mode: nil, wantProbe: true},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			updateCalls := make(chan map[string]any, 1)
++			account := Account{
++				ID:          301,
++				Platform:    PlatformOpenAI,
++				Type:        AccountTypeAPIKey,
++				Concurrency: 1,
++				Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://compat-upstream.example/v1"},
++				Extra:       map[string]any{openai_compat.ExtraKeyResponsesMode: tc.mode},
++			}
++			repo := &snapshotUpdateAccountRepo{
++				stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
++				updateExtraCalls:      updateCalls,
++			}
++			upstream := &httpUpstreamRecorder{resp: &http.Response{
++				StatusCode: http.StatusOK,
++				Header:     make(http.Header),
++				Body:       io.NopCloser(strings.NewReader(`{"output":[{"type":"function_call","name":"probe_ping"}]}`)),
++			}}
++			svc := &AccountTestService{
++				accountRepo:  repo,
++				httpUpstream: upstream,
++				cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
++			}
++
++			svc.ProbeOpenAIAPIKeyResponsesSupport(context.Background(), account.ID)
++
++			if !tc.wantProbe {
++				require.Nil(t, upstream.lastReq)
++				require.Empty(t, updateCalls)
++				return
++			}
++			require.NotNil(t, upstream.lastReq)
++			require.Equal(t, true, (<-updateCalls)[openai_compat.ExtraKeyResponsesSupported])
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_ws_http_bridge.go b/backend/internal/service/openai_ws_http_bridge.go
+index 1f4b9b5e1..ab356df78 100644
+--- a/backend/internal/service/openai_ws_http_bridge.go
++++ b/backend/internal/service/openai_ws_http_bridge.go
+@@ -373,6 +373,28 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
+ 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
+ 	}
+ 
++	// Codex fingerprint convergence, same as Forward / forwardOpenAIPassthrough. Builders only read
++	// staged IDs; without staging, the bridge sends no account-level session_id, so clients without
++	// prompt_cache_key get random upstream prompt-cache routing and rarely hit the cache.
++	stageCodexFingerprintIDs(c, nil)
++	if account.UsesOpenAICodexProtocol() {
++		var clientHeaders http.Header
++		if c != nil && c.Request != nil {
++			clientHeaders = c.Request.Header
++		}
++		fpIDs := resolveCodexFingerprintIDsFromRequest(account, clientHeaders)
++		if fpIDs != nil {
++			fpBody, fpChanged, fpErr := applyCodexFingerprintClientMetadataRaw(body, fpIDs)
++			if fpErr != nil {
++				return nil, fmt.Errorf("apply http bridge codex fingerprint: %w", fpErr)
++			}
++			if fpChanged {
++				body = fpBody
++			}
++		}
++		stageCodexFingerprintIDs(c, fpIDs)
++	}
++
+ 	// Lite 请求必须 parallel_tool_calls: false，否则上游 400 unsupported_value。
+ 	// 位置必须在构建上游请求之前：本仓库这条路径下面第 248/250 行就把 body 交给
+ 	// buildGrokResponsesRequest / buildUpstreamRequestOpenAIPassthrough 了。
+diff --git a/backend/internal/service/openai_ws_http_bridge_test.go b/backend/internal/service/openai_ws_http_bridge_test.go
+index 9b9c03a4e..c587f70f8 100644
+--- a/backend/internal/service/openai_ws_http_bridge_test.go
++++ b/backend/internal/service/openai_ws_http_bridge_test.go
+@@ -1726,3 +1726,59 @@ func TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver(t *t
+ 		})
+ 	}
+ }
++
++func TestProxyOpenAIWSHTTPBridgeTurn_StagesCodexFingerprint(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	bridgeFingerprintAccount := func(id int64, extra map[string]any) *Account {
++		return &Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: extra, Credentials: map[string]any{"access_token": "test-token"}}
++	}
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
++	run := func(account *Account, cacheKey string) *http.Request {
++		sse := `data: {"type":"response.completed","response":{"id":"resp_fp","model":"gpt-5.5","status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
++		upstream := &httpUpstreamRecorder{resp: &http.Response{
++			StatusCode: http.StatusOK,
++			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++			Body:       io.NopCloser(strings.NewReader(sse)),
++		}}
++		svc := &OpenAIGatewayService{
++			cfg:          &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
++			httpUpstream: upstream,
++		}
++		payload := []byte(fmt.Sprintf(`{"type":"response.create","model":"gpt-5.5","store":false,"input":"hi","prompt_cache_key":%q}`, cacheKey))
++		_, err := svc.proxyOpenAIWSHTTPBridgeTurn(
++			context.Background(), c, account, "test-token", payload, len(payload),
++			"gpt-5.5", "", "", "", "", 1,
++			func([]byte) error { return nil },
++		)
++		require.NoError(t, err)
++		require.NotNil(t, upstream.lastReq)
++		ids := resolveCodexFingerprintIDsFromRequest(account, c.Request.Header)
++		if account.UsesOpenAICodexProtocol() && ids != nil {
++			require.Equal(t, ids.sessionID, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
++		} else {
++			require.Empty(t, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
++		}
++		if cacheKey != "" {
++			require.Equal(t, cacheKey, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
++		}
++		return upstream.lastReq
++	}
++
++	full := bridgeFingerprintAccount(7101, map[string]any{"codex_fingerprint_mode": "full"})
++	ids := resolveCodexFingerprintIDsFromRequest(full, nil)
++	require.NotNil(t, ids)
++	first := run(full, "")
++	require.Equal(t, ids.sessionID, first.Header.Get("session_id"))
++	require.Equal(t, ids.installationID, first.Header.Get("x-codex-installation-id"))
++	// Every bridge request carries the same account-level session_id, keeping upstream cache routing stable
++	require.Equal(t, first.Header.Get("session_id"), run(full, "").Header.Get("session_id"))
++
++	off := bridgeFingerprintAccount(7102, map[string]any{"codex_fingerprint_mode": "off"})
++	require.Empty(t, run(off, "").Header.Get("session_id"), "accounts without convergence get no session_id")
++
++	other := bridgeFingerprintAccount(7103, map[string]any{"codex_fingerprint_mode": "full"})
++	require.NotEqual(t, first.Header.Get("session_id"), run(other, "explicit-cache-key").Header.Get("session_id"))
++	apiKey := &Account{ID: 7104, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "test", "base_url": "https://api.openai.com"}}
++	require.Empty(t, run(apiKey, "explicit-cache-key").Header.Get("session_id"))
++}
+diff --git a/backend/internal/service/openai_ws_v2/passthrough_relay.go b/backend/internal/service/openai_ws_v2/passthrough_relay.go
+index 6d652ec81..83bda5dd4 100644
+--- a/backend/internal/service/openai_ws_v2/passthrough_relay.go
++++ b/backend/internal/service/openai_ws_v2/passthrough_relay.go
+@@ -707,12 +707,6 @@ func observeUpstreamMessage(
+ 		if ms >= 0 {
+ 			state.firstTokenMs = &ms
+ 		}
+-		if state.activeTurn != nil && state.activeTurn.firstTokenMs == nil {
+-			tms := int(now.Sub(state.activeTurn.startAt).Milliseconds())
+-			if tms >= 0 {
+-				state.activeTurn.firstTokenMs = &tms
+-			}
+-		}
+ 	}
+ 	parsedUsage := parseUsageAndAccumulate(state, message, eventType, onUsageParseFailure)
+ 	observed := observedUpstreamEvent{
+@@ -723,15 +717,17 @@ func observeUpstreamMessage(
+ 	var turnTiming *relayTurnTiming
+ 	if responseID != "" {
+ 		turnTiming = openAIWSRelayGetOrInitTurnTiming(state, responseID, now)
+-		if turnTiming != nil && turnTiming.firstTokenMs == nil && isTokenEvent(eventType) {
+-			ms := int(now.Sub(turnTiming.startAt).Milliseconds())
+-			if ms >= 0 {
+-				turnTiming.firstTokenMs = &ms
+-			}
+-		}
+ 	} else {
+ 		turnTiming = state.activeTurn
+ 	}
++	// Deltas without a response ID belong to the active turn. Each turn records
++	// its own first token even after the connection has seen an earlier token.
++	if turnTiming != nil && turnTiming.firstTokenMs == nil && isTokenEvent(eventType) {
++		ms := int(now.Sub(turnTiming.startAt).Milliseconds())
++		if ms >= 0 {
++			turnTiming.firstTokenMs = &ms
++		}
++	}
+ 	observeRelayTurnResponseModel(turnTiming, firstRelayResponseModel(message), isTerminalEvent(eventType))
+ 	if turnTiming != nil {
+ 		for _, path := range []string{"response.service_tier", "service_tier"} {
+diff --git a/backend/internal/service/ratelimit_service.go b/backend/internal/service/ratelimit_service.go
+index 7b3fe7a49..cc5bb265a 100644
+--- a/backend/internal/service/ratelimit_service.go
++++ b/backend/internal/service/ratelimit_service.go
+@@ -340,6 +340,8 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
+ 	// otherwise a broad "rate limit" keyword rule can shorten a multi-hour
+ 	// cooldown to a local temporary pause.
+ 	if statusCode == http.StatusTooManyRequests && account.Platform == PlatformAnthropic {
++		// 429 也携带最新用量；在窗口限流分支提前返回前保留耗尽时的周额度。
++		s.samplePassiveUsageFromHeaders(ctx, account, headers)
+ 		// Fable may be rejected because the organization has no usage credits for
+ 		// this model. Anthropic reports that as 429, but it is a model entitlement
+ 		// failure rather than a shared account window exhaustion.
+@@ -1576,10 +1578,6 @@ func (s *RateLimitService) persistAnthropicFableWindowLimit(ctx context.Context,
+ 	if limit == nil {
+ 		return false
+ 	}
+-	// 429 响应头本身携带最新的窗口用量（7d_oi utilization=1.0）。限流期内
+-	// Fable 请求不再调度到该账号，若不在此处采样，7d F 进度条会冻结在
+-	// 限流前的旧值直到窗口重置。
+-	s.samplePassiveUsageFromHeaders(ctx, account, headers)
+ 	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, anthropicFableRateLimitKey, limit.resetAt, limit.reason); err != nil {
+ 		slog.Warn("anthropic_fable_window_rate_limit_set_failed",
+ 			"account_id", account.ID,
+@@ -1935,10 +1933,12 @@ func (s *RateLimitService) handle529(ctx context.Context, account *Account) {
+ 	slog.Info("account_overloaded", "account_id", account.ID, "until", until)
+ }
+ 
+-// UpdateSessionWindow 从成功响应更新5h窗口状态
++// UpdateSessionWindow 从成功响应更新5h窗口状态并采样可用的额度窗口。
+ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Account, headers http.Header) {
+ 	status := headers.Get("anthropic-ratelimit-unified-5h-status")
+ 	if status == "" {
++		// Ultra 等账号可能仅返回周窗口；不能因缺少 5h 状态而丢弃真实的 7d 用量。
++		s.samplePassiveUsageFromHeaders(ctx, account, headers)
+ 		return
+ 	}
+ 

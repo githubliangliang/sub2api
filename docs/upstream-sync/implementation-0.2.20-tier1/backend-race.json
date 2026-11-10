@@ -1,0 +1,23 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-race",
+    "-tags=unit",
+    "./internal/service",
+    "./internal/handler",
+    "./internal/server/middleware",
+    "./internal/service/openai_ws_v2",
+    "./internal/pkg/apicompat",
+    "./internal/pkg/antigravity",
+    "-run",
+    "Test.*(SetupToken|Weekly|NoQuotaHeaders|ForcedModes|CodexFingerprint|ReasoningContent|MessageContent|MessageRefusal|EmptyMessage|BodyLimitFailover|ResponseShapes|GeminiRequest|OpenAIImageAPIKey|AnthropicMessagesURL|Cloudflare|APIKeyAuth|FirstToken|BedrockEventStreamDecoder|FastTierAsyncUsageSQLite|Relay.*Turn|Relay_ContextCanceled|Relay.*Tier)",
+    "-count=1",
+    "-timeout=240s"
+  ],
+  "cwd": "backend",
+  "finished_at_utc": "2026-11-10T12:25:30.826389+00:00",
+  "duration_seconds": 130.54,
+  "exit_code": 0,
+  "log": "backend-race.log"
+}

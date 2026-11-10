@@ -1,0 +1,2981 @@
+diff --git a/backend/internal/handler/admin/admin_service_stub_test.go b/backend/internal/handler/admin/admin_service_stub_test.go
+index c808d1a18..628fd1813 100644
+--- a/backend/internal/handler/admin/admin_service_stub_test.go
++++ b/backend/internal/handler/admin/admin_service_stub_test.go
+@@ -208,6 +208,14 @@ func (s *stubAdminService) BatchUpdateLimits(ctx context.Context, userIDs []int6
+ 	return len(userIDs), nil
+ }
+ 
++func (s *stubAdminService) FindActiveUsersByBlacklistedEmails(ctx context.Context, emails []string) ([]service.User, error) {
++	return []service.User{}, nil
++}
++
++func (s *stubAdminService) BatchDisableUsers(ctx context.Context, userIDs []int64) (int, error) {
++	return len(userIDs), nil
++}
++
+ func (s *stubAdminService) GetUserAPIKeys(ctx context.Context, userID int64, page, pageSize int, sortBy, sortOrder string) ([]service.APIKey, int64, error) {
+ 	return s.apiKeys, int64(len(s.apiKeys)), nil
+ }
+diff --git a/backend/internal/handler/admin/email_blacklist_handler_test.go b/backend/internal/handler/admin/email_blacklist_handler_test.go
+new file mode 100644
+index 000000000..e7ad5dac6
+--- /dev/null
++++ b/backend/internal/handler/admin/email_blacklist_handler_test.go
+@@ -0,0 +1,179 @@
++package admin
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++type emailBlacklistSettingRepoStub struct {
++	*settingHandlerRepoStub
++	setCalls int
++}
++
++func (s *emailBlacklistSettingRepoStub) Set(_ context.Context, key, value string) error {
++	s.setCalls++
++	s.values[key] = value
++	return nil
++}
++
++type emailBlacklistAdminServiceStub struct {
++	*stubAdminService
++	findEmails   []string
++	matched      []service.User
++	disableIDs   []int64
++	disableCalls int
++}
++
++func (s *emailBlacklistAdminServiceStub) FindActiveUsersByBlacklistedEmails(_ context.Context, emails []string) ([]service.User, error) {
++	s.findEmails = append([]string(nil), emails...)
++	return s.matched, nil
++}
++
++func (s *emailBlacklistAdminServiceStub) BatchDisableUsers(_ context.Context, userIDs []int64) (int, error) {
++	s.disableCalls++
++	s.disableIDs = append([]int64(nil), userIDs...)
++	return len(userIDs), nil
++}
++
++func serveEmailBlacklistJSON(t *testing.T, router *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {
++	t.Helper()
++	var reader *bytes.Reader
++	if raw, ok := body.(string); ok {
++		reader = bytes.NewReader([]byte(raw))
++	} else {
++		raw, err := json.Marshal(body)
++		require.NoError(t, err)
++		reader = bytes.NewReader(raw)
++	}
++	recorder := httptest.NewRecorder()
++	request := httptest.NewRequest(method, path, reader)
++	request.Header.Set("Content-Type", "application/json")
++	router.ServeHTTP(recorder, request)
++	return recorder
++}
++
++func setupEmailBlacklistSettingRouter(repo *emailBlacklistSettingRepoStub) *gin.Engine {
++	gin.SetMode(gin.TestMode)
++	svc := service.NewSettingService(repo, &config.Config{})
++	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
++	router := gin.New()
++	router.GET("/api/v1/admin/settings/registration-email-blacklist", handler.GetRegistrationEmailBlacklist)
++	router.PUT("/api/v1/admin/settings/registration-email-blacklist", handler.UpdateRegistrationEmailBlacklist)
++	return router
++}
++
++func TestUpdateRegistrationEmailBlacklist_RequiresEmailsField(t *testing.T) {
++	repo := &emailBlacklistSettingRepoStub{settingHandlerRepoStub: &settingHandlerRepoStub{values: map[string]string{
++		service.SettingKeyRegistrationEmailBlacklist: `["keep@gmail.com"]`,
++	}}}
++	router := setupEmailBlacklistSettingRouter(repo)
++
++	rec := serveEmailBlacklistJSON(t, router, http.MethodPut, "/api/v1/admin/settings/registration-email-blacklist", `{}`)
++	require.Equal(t, http.StatusBadRequest, rec.Code)
++	require.Zero(t, repo.setCalls)
++}
++
++func TestUpdateRegistrationEmailBlacklist_ReturnsSavedAndAdded(t *testing.T) {
++	repo := &emailBlacklistSettingRepoStub{settingHandlerRepoStub: &settingHandlerRepoStub{values: map[string]string{
++		service.SettingKeyRegistrationEmailBlacklist: `["keep@gmail.com"]`,
++	}}}
++	router := setupEmailBlacklistSettingRouter(repo)
++
++	rec := serveEmailBlacklistJSON(t, router, http.MethodPut, "/api/v1/admin/settings/registration-email-blacklist",
++		map[string]any{"emails": []string{"keep@gmail.com", "NEW@gmail.com"}})
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++
++	var resp struct {
++		Data UpdateRegistrationEmailBlacklistResponse `json:"data"`
++	}
++	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
++	require.Equal(t, []string{"keep@gmail.com", "new@gmail.com"}, resp.Data.Emails)
++	require.Equal(t, []string{"new@gmail.com"}, resp.Data.Added)
++	require.Equal(t, service.MaxRegistrationEmailBlacklistSize, resp.Data.Max)
++
++	rec = serveEmailBlacklistJSON(t, router, http.MethodGet, "/api/v1/admin/settings/registration-email-blacklist", `{}`)
++	require.Equal(t, http.StatusOK, rec.Code)
++	require.Contains(t, rec.Body.String(), "new@gmail.com")
++}
++
++func TestUpdateRegistrationEmailBlacklist_InvalidEntryRejected(t *testing.T) {
++	repo := &emailBlacklistSettingRepoStub{settingHandlerRepoStub: &settingHandlerRepoStub{values: map[string]string{}}}
++	router := setupEmailBlacklistSettingRouter(repo)
++
++	rec := serveEmailBlacklistJSON(t, router, http.MethodPut, "/api/v1/admin/settings/registration-email-blacklist",
++		map[string]any{"emails": []string{"ok@gmail.com", "broken"}})
++	require.Equal(t, http.StatusBadRequest, rec.Code)
++	require.Contains(t, rec.Body.String(), "EMAIL_BLACKLIST_INVALID_ENTRY")
++	require.Zero(t, repo.setCalls)
++}
++
++func setupEmailBlacklistUserRouter(stub service.AdminService) *gin.Engine {
++	gin.SetMode(gin.TestMode)
++	handler := NewUserHandler(stub, nil, nil, nil, nil, nil, nil)
++	router := gin.New()
++	router.POST("/api/v1/admin/users/blacklist-matches", handler.FindBlacklistedEmailUsers)
++	router.POST("/api/v1/admin/users/batch-disable", handler.BatchDisable)
++	return router
++}
++
++func TestFindBlacklistedEmailUsers_ReturnsMatchedUsers(t *testing.T) {
++	stub := &emailBlacklistAdminServiceStub{
++		stubAdminService: newStubAdminService(),
++		matched:          []service.User{{ID: 3, Email: "a.b@gmail.com", Username: "ab", PasswordHash: "secret"}},
++	}
++	router := setupEmailBlacklistUserRouter(stub)
++
++	rec := serveEmailBlacklistJSON(t, router, http.MethodPost, "/api/v1/admin/users/blacklist-matches",
++		map[string]any{"emails": []string{"ab@gmail.com"}})
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++	require.Equal(t, []string{"ab@gmail.com"}, stub.findEmails)
++
++	var resp struct {
++		Data struct {
++			Items []map[string]any `json:"items"`
++			Total int              `json:"total"`
++		} `json:"data"`
++	}
++	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
++	require.Equal(t, 1, resp.Data.Total)
++	require.Equal(t, map[string]any{"id": float64(3), "email": "a.b@gmail.com", "username": "ab"}, resp.Data.Items[0])
++}
++
++func TestFindBlacklistedEmailUsers_RejectsOversizedRequest(t *testing.T) {
++	stub := &emailBlacklistAdminServiceStub{stubAdminService: newStubAdminService()}
++	router := setupEmailBlacklistUserRouter(stub)
++
++	emails := make([]string, service.MaxRegistrationEmailBlacklistSize+1)
++	for i := range emails {
++		emails[i] = "x@gmail.com"
++	}
++	rec := serveEmailBlacklistJSON(t, router, http.MethodPost, "/api/v1/admin/users/blacklist-matches",
++		map[string]any{"emails": emails})
++	require.Equal(t, http.StatusBadRequest, rec.Code)
++	require.Nil(t, stub.findEmails)
++}
++
++func TestBatchDisable_ValidatesAndForwards(t *testing.T) {
++	stub := &emailBlacklistAdminServiceStub{stubAdminService: newStubAdminService()}
++	router := setupEmailBlacklistUserRouter(stub)
++
++	rec := serveEmailBlacklistJSON(t, router, http.MethodPost, "/api/v1/admin/users/batch-disable",
++		map[string]any{"user_ids": []int64{}})
++	require.Equal(t, http.StatusBadRequest, rec.Code)
++	require.Zero(t, stub.disableCalls)
++
++	rec = serveEmailBlacklistJSON(t, router, http.MethodPost, "/api/v1/admin/users/batch-disable",
++		map[string]any{"user_ids": []int64{4, 5}})
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++	require.Equal(t, []int64{4, 5}, stub.disableIDs)
++	require.Contains(t, rec.Body.String(), `"affected":2`)
++}
+diff --git a/backend/internal/handler/admin/setting_handler_email_blacklist.go b/backend/internal/handler/admin/setting_handler_email_blacklist.go
+new file mode 100644
+index 000000000..f562531cf
+--- /dev/null
++++ b/backend/internal/handler/admin/setting_handler_email_blacklist.go
+@@ -0,0 +1,65 @@
++package admin
++
++import (
++	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++
++	"github.com/gin-gonic/gin"
++)
++
++// RegistrationEmailBlacklistResponse 精确邮箱黑名单
++type RegistrationEmailBlacklistResponse struct {
++	Emails []string `json:"emails"`
++	Max    int      `json:"max"`
++}
++
++// UpdateRegistrationEmailBlacklistRequest 整体替换精确邮箱黑名单；emails 必须显式提交，
++// 传空数组表示清空。
++type UpdateRegistrationEmailBlacklistRequest struct {
++	Emails *[]string `json:"emails"`
++}
++
++// UpdateRegistrationEmailBlacklistResponse 保存后的名单，added 为相对旧名单新增的项。
++type UpdateRegistrationEmailBlacklistResponse struct {
++	Emails []string `json:"emails"`
++	Added  []string `json:"added"`
++	Max    int      `json:"max"`
++}
++
++// GetRegistrationEmailBlacklist 获取精确邮箱黑名单
++// GET /api/v1/admin/settings/registration-email-blacklist
++func (h *SettingHandler) GetRegistrationEmailBlacklist(c *gin.Context) {
++	emails, err := h.settingService.GetRegistrationEmailBlacklist(c.Request.Context())
++	if err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	response.Success(c, RegistrationEmailBlacklistResponse{
++		Emails: emails,
++		Max:    service.MaxRegistrationEmailBlacklistSize,
++	})
++}
++
++// UpdateRegistrationEmailBlacklist 整体替换精确邮箱黑名单
++// PUT /api/v1/admin/settings/registration-email-blacklist
++func (h *SettingHandler) UpdateRegistrationEmailBlacklist(c *gin.Context) {
++	var req UpdateRegistrationEmailBlacklistRequest
++	if err := c.ShouldBindJSON(&req); err != nil {
++		response.BadRequest(c, "Invalid request: "+err.Error())
++		return
++	}
++	if req.Emails == nil {
++		response.BadRequest(c, "emails is required")
++		return
++	}
++	saved, added, err := h.settingService.SetRegistrationEmailBlacklist(c.Request.Context(), *req.Emails)
++	if err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	response.Success(c, UpdateRegistrationEmailBlacklistResponse{
++		Emails: saved,
++		Added:  added,
++		Max:    service.MaxRegistrationEmailBlacklistSize,
++	})
++}
+diff --git a/backend/internal/handler/admin/user_handler_email_blacklist.go b/backend/internal/handler/admin/user_handler_email_blacklist.go
+new file mode 100644
+index 000000000..be59b03d3
+--- /dev/null
++++ b/backend/internal/handler/admin/user_handler_email_blacklist.go
+@@ -0,0 +1,77 @@
++package admin
++
++import (
++	"fmt"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++
++	"github.com/gin-gonic/gin"
++)
++
++// FindBlacklistedEmailUsersRequest 待核对的黑名单邮箱
++type FindBlacklistedEmailUsersRequest struct {
++	Emails []string `json:"emails"`
++}
++
++// BlacklistedEmailUser 收件箱身份命中黑名单、仍处于启用状态的普通用户
++type BlacklistedEmailUser struct {
++	ID       int64  `json:"id"`
++	Email    string `json:"email"`
++	Username string `json:"username"`
++}
++
++// BatchDisableUsersRequest 批量禁用用户
++type BatchDisableUsersRequest struct {
++	UserIDs []int64 `json:"user_ids" binding:"required"`
++}
++
++// FindBlacklistedEmailUsers 查找邮箱命中给定黑名单项的启用中普通用户
++// POST /api/v1/admin/users/blacklist-matches
++func (h *UserHandler) FindBlacklistedEmailUsers(c *gin.Context) {
++	var req FindBlacklistedEmailUsersRequest
++	if err := c.ShouldBindJSON(&req); err != nil {
++		response.BadRequest(c, "Invalid request: "+err.Error())
++		return
++	}
++	if len(req.Emails) > service.MaxRegistrationEmailBlacklistSize {
++		response.BadRequest(c, fmt.Sprintf("emails cannot exceed %d", service.MaxRegistrationEmailBlacklistSize))
++		return
++	}
++
++	users, err := h.adminService.FindActiveUsersByBlacklistedEmails(c.Request.Context(), req.Emails)
++	if err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	items := make([]BlacklistedEmailUser, 0, len(users))
++	for _, user := range users {
++		items = append(items, BlacklistedEmailUser{ID: user.ID, Email: user.Email, Username: user.Username})
++	}
++	response.Success(c, gin.H{"items": items, "total": len(items)})
++}
++
++// BatchDisable 批量禁用用户（管理员与已禁用用户跳过）
++// POST /api/v1/admin/users/batch-disable
++func (h *UserHandler) BatchDisable(c *gin.Context) {
++	var req BatchDisableUsersRequest
++	if err := c.ShouldBindJSON(&req); err != nil {
++		response.BadRequest(c, "Invalid request: "+err.Error())
++		return
++	}
++	if len(req.UserIDs) == 0 {
++		response.BadRequest(c, "user_ids is required")
++		return
++	}
++	if len(req.UserIDs) > service.MaxBatchDisableUsers {
++		response.BadRequest(c, fmt.Sprintf("user_ids cannot exceed %d", service.MaxBatchDisableUsers))
++		return
++	}
++
++	affected, err := h.adminService.BatchDisableUsers(c.Request.Context(), req.UserIDs)
++	if err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	response.Success(c, gin.H{"affected": affected})
++}
+diff --git a/backend/internal/repository/user_repo_email_blacklist.go b/backend/internal/repository/user_repo_email_blacklist.go
+new file mode 100644
+index 000000000..29709e873
+--- /dev/null
++++ b/backend/internal/repository/user_repo_email_blacklist.go
+@@ -0,0 +1,137 @@
++package repository
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"slices"
++	"time"
++
++	dbent "github.com/Wei-Shaw/sub2api/ent"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/lib/pq"
++)
++
++var _ service.UserEmailBlacklistRepository = (*userRepository)(nil)
++
++// listActiveUsersByEmailAliasProbeKeysSQL 把每个用户邮箱折成与 service.EmailAliasProbeKey
++// 相同的形态（小写、去首尾空白与域名根点、本地部分去 "+后缀"、本地与域名都去点）后与探针键做
++// 哈希连接；去点会在 Gmail 系之外过度匹配，由 service 层按收件箱身份复核。
++const listActiveUsersByEmailAliasProbeKeysSQL = `
++WITH probes AS (
++	SELECT DISTINCT unnest($1::text[]) AS probe
++), candidates AS (
++	SELECT id, email, username,
++		split_part(RTRIM(LOWER(TRIM(email)), '.'), '@', 1) AS local_part,
++		split_part(RTRIM(LOWER(TRIM(email)), '.'), '@', 2) AS domain_part
++	FROM users
++	WHERE deleted_at IS NULL AND status = $2 AND role <> $3
++)
++SELECT c.id, c.email, c.username
++FROM candidates c
++JOIN probes p ON p.probe =
++	REPLACE(
++		CASE WHEN strpos(c.local_part, '+') > 1 THEN split_part(c.local_part, '+', 1) ELSE c.local_part END,
++		'.', ''
++	) || '@' || REPLACE(c.domain_part, '.', '')
++ORDER BY c.id`
++
++// ListActiveUsersByEmailAliasProbeKeys 见 service.UserEmailBlacklistRepository。
++func (r *userRepository) ListActiveUsersByEmailAliasProbeKeys(ctx context.Context, keys []string) ([]service.User, error) {
++	if len(keys) == 0 {
++		return []service.User{}, nil
++	}
++	if r.sql == nil {
++		return nil, fmt.Errorf("sql executor is not configured")
++	}
++	rows, err := r.sql.QueryContext(ctx, listActiveUsersByEmailAliasProbeKeysSQL, pq.Array(keys), service.StatusActive, service.RoleAdmin)
++	if err != nil {
++		return nil, fmt.Errorf("list users by email alias probes: %w", err)
++	}
++	defer func() { _ = rows.Close() }()
++
++	users := make([]service.User, 0)
++	for rows.Next() {
++		var user service.User
++		if err := rows.Scan(&user.ID, &user.Email, &user.Username); err != nil {
++			return nil, fmt.Errorf("scan user by email alias probe: %w", err)
++		}
++		user.Status = service.StatusActive
++		users = append(users, user)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, fmt.Errorf("iterate users by email alias probes: %w", err)
++	}
++	return users, nil
++}
++
++// BatchDisableUsers 见 service.UserEmailBlacklistRepository。
++//
++// 与 userRepository.Update 停用单个用户的口径一致：停用与吊销 MCP 授权在同一事务内分两条语句
++// 执行，恢复账号后旧授权不会复活。吊销语句在停用语句拿到用户行锁之后才取快照，能看到持有该行锁
++// 并发新建、随后提交的授权。
++func (r *userRepository) BatchDisableUsers(ctx context.Context, userIDs []int64) ([]int64, error) {
++	if len(userIDs) == 0 {
++		return []int64{}, nil
++	}
++	if r.client == nil {
++		return nil, fmt.Errorf("ent client is not configured")
++	}
++	tx, err := r.client.Tx(ctx)
++	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
++		return nil, err
++	}
++	txCtx := ctx
++	if err == nil {
++		defer func() { _ = tx.Rollback() }()
++		txCtx = dbent.NewTxContext(ctx, tx)
++	}
++	exec := txAwareSQLExecutor(txCtx, r.sql, r.client)
++	if exec == nil {
++		return nil, fmt.Errorf("sql executor is not configured")
++	}
++
++	disabled, err := batchDisableUserRows(txCtx, exec, userIDs)
++	if err != nil {
++		return nil, err
++	}
++	if len(disabled) > 0 {
++		if _, err := exec.ExecContext(txCtx,
++			`UPDATE mcp_oauth_grants SET revoked_at = $2 WHERE user_id = ANY($1) AND revoked_at IS NULL`,
++			pq.Array(disabled), time.Now().UTC(),
++		); err != nil {
++			return nil, fmt.Errorf("revoke mcp grants of disabled users: %w", err)
++		}
++	}
++	if tx != nil {
++		if err := tx.Commit(); err != nil {
++			return nil, err
++		}
++	}
++	return disabled, nil
++}
++
++func batchDisableUserRows(ctx context.Context, exec sqlQueryExecutor, userIDs []int64) ([]int64, error) {
++	rows, err := exec.QueryContext(ctx, `
++UPDATE users SET status = $1, updated_at = NOW()
++WHERE id = ANY($2) AND deleted_at IS NULL AND role <> $3 AND status <> $1
++RETURNING id`, service.StatusDisabled, pq.Array(userIDs), service.RoleAdmin)
++	if err != nil {
++		return nil, fmt.Errorf("batch disable users: %w", err)
++	}
++	defer func() { _ = rows.Close() }()
++
++	disabled := make([]int64, 0, len(userIDs))
++	for rows.Next() {
++		var id int64
++		if err := rows.Scan(&id); err != nil {
++			return nil, fmt.Errorf("scan disabled user id: %w", err)
++		}
++		disabled = append(disabled, id)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, fmt.Errorf("iterate disabled user ids: %w", err)
++	}
++	slices.Sort(disabled)
++	return disabled, nil
++}
+diff --git a/backend/internal/repository/user_repo_email_blacklist_integration_test.go b/backend/internal/repository/user_repo_email_blacklist_integration_test.go
+new file mode 100644
+index 000000000..a29831d7b
+--- /dev/null
++++ b/backend/internal/repository/user_repo_email_blacklist_integration_test.go
+@@ -0,0 +1,163 @@
++//go:build integration
++
++package repository
++
++import (
++	"context"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++)
++
++func emailBlacklistProbeKeys(emails ...string) []string {
++	keys := make([]string, 0, 2*len(emails))
++	for _, email := range emails {
++		for _, probe := range service.EmailAliasDedupProbes(email) {
++			keys = append(keys, service.EmailAliasProbeKey(probe))
++		}
++	}
++	return keys
++}
++
++func (s *UserRepoSuite) TestListActiveUsersByEmailAliasProbeKeys_MatchesInboxVariants() {
++	dotted := s.mustCreateUser(&service.User{Email: "bl.target@gmail.com"})
++	plusGooglemail := s.mustCreateUser(&service.User{Email: "bltarget+promo@googlemail.com"})
++	upperRootDot := s.mustCreateUser(&service.User{Email: "BL.Tar.Get@Gmail.com."})
++	nonGmailDotted := s.mustCreateUser(&service.User{Email: "bl.target@company.example"})
++	s.mustCreateUser(&service.User{Email: "bltarget2@gmail.com"})
++	s.mustCreateUser(&service.User{Email: "b.l.target@gmail.com", Status: service.StatusDisabled})
++	s.mustCreateUser(&service.User{Email: "bltarget@gmail.com", Role: service.RoleAdmin})
++	deleted := s.mustCreateUser(&service.User{Email: "bltar.get+x@gmail.com"})
++	s.Require().NoError(s.repo.Delete(s.ctx, deleted.ID))
++
++	users, err := s.repo.ListActiveUsersByEmailAliasProbeKeys(s.ctx,
++		emailBlacklistProbeKeys("bltarget@googlemail.com", "bltarget@company.example"))
++	s.Require().NoError(err)
++
++	ids := make([]int64, 0, len(users))
++	for _, user := range users {
++		s.Require().Equal(service.StatusActive, user.Status)
++		ids = append(ids, user.ID)
++	}
++	// 仓储层按去点形态过度匹配非 Gmail 域名（bl.target@company.example），由 service 层复核。
++	s.Require().ElementsMatch([]int64{dotted.ID, plusGooglemail.ID, upperRootDot.ID, nonGmailDotted.ID}, ids)
++}
++
++func (s *UserRepoSuite) TestListActiveUsersByEmailAliasProbeKeys_EmptyKeys() {
++	s.mustCreateUser(&service.User{Email: "bl-empty@gmail.com"})
++
++	users, err := s.repo.ListActiveUsersByEmailAliasProbeKeys(s.ctx, nil)
++	s.Require().NoError(err)
++	s.Require().Empty(users)
++}
++
++func (s *UserRepoSuite) TestBatchDisableUsers_SkipsAdminDisabledAndDeleted() {
++	active := s.mustCreateUser(&service.User{Email: "bl-disable-active@example.com"})
++	admin := s.mustCreateUser(&service.User{Email: "bl-disable-admin@example.com", Role: service.RoleAdmin})
++	already := s.mustCreateUser(&service.User{Email: "bl-disable-already@example.com", Status: service.StatusDisabled})
++	deleted := s.mustCreateUser(&service.User{Email: "bl-disable-deleted@example.com"})
++	s.Require().NoError(s.repo.Delete(s.ctx, deleted.ID))
++
++	disabled, err := s.repo.BatchDisableUsers(s.ctx, []int64{active.ID, admin.ID, already.ID, deleted.ID, 99999999})
++	s.Require().NoError(err)
++	s.Require().Equal([]int64{active.ID}, disabled)
++
++	got, err := s.repo.GetByID(s.ctx, active.ID)
++	s.Require().NoError(err)
++	s.Require().Equal(service.StatusDisabled, got.Status)
++
++	gotAdmin, err := s.repo.GetByID(s.ctx, admin.ID)
++	s.Require().NoError(err)
++	s.Require().Equal(service.StatusActive, gotAdmin.Status)
++}
++
++// 批量禁用与单个禁用一样持久吊销 MCP 授权：恢复账号后旧授权与令牌不会复活，被跳过的用户授权不受影响。
++func TestBatchDisableUsers_RevokesMCPGrantsPersistently(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
++	defer cancel()
++	target := newMCPOAuthIntegrationFixture(t, ctx)
++	skippedAdmin := newMCPOAuthIntegrationFixture(t, ctx)
++	issued, err := target.oauth.Token(ctx, target.input, mcpIntegrationResource)
++	require.NoError(t, err)
++
++	users := NewUserRepository(integrationEntClient, integrationDB)
++	admin, err := users.GetByID(ctx, skippedAdmin.userID)
++	require.NoError(t, err)
++	admin.Role = service.RoleAdmin
++	require.NoError(t, users.Update(ctx, admin, service.UserUpdateFields{Role: true}))
++
++	blacklistRepo, ok := users.(service.UserEmailBlacklistRepository)
++	require.True(t, ok)
++	disabled, err := blacklistRepo.BatchDisableUsers(ctx, []int64{target.userID, skippedAdmin.userID})
++	require.NoError(t, err)
++	require.Equal(t, []int64{target.userID}, disabled)
++
++	requireRevoked := func(f mcpOAuthIntegrationFixture, revoked bool) {
++		t.Helper()
++		grant, err := f.repo.GetGrant(ctx, f.grantID)
++		require.NoError(t, err)
++		require.Equal(t, revoked, grant.RevokedAt != nil, f.grantID)
++	}
++	requireRevoked(target, true)
++	requireRevoked(skippedAdmin, false)
++
++	user, err := users.GetByID(ctx, target.userID)
++	require.NoError(t, err)
++	user.Status = service.StatusActive
++	require.NoError(t, users.Update(ctx, user, service.UserUpdateFields{Status: true}))
++	requireRevoked(target, true)
++	_, err = target.oauth.Authenticate(ctx, issued.AccessToken)
++	require.ErrorIs(t, err, service.ErrMCPOAuthInvalidToken)
++}
++
++// 授权创建持有用户行锁时发起批量禁用：禁用等锁释放后执行，并吊销对方刚提交的授权。
++func TestBatchDisableUsers_RevokesGrantCommittedWhileWaitingForUserLock(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
++	defer cancel()
++	f := newMCPOAuthIntegrationFixture(t, ctx)
++
++	// 与 mcpOAuthRepository.CreateAuthorization 相同的加锁顺序：先锁用户行，再插入授权。
++	lockTx, err := integrationDB.BeginTx(ctx, nil)
++	require.NoError(t, err)
++	defer func() { _ = lockTx.Rollback() }()
++	_, err = lockTx.ExecContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, f.userID)
++	require.NoError(t, err)
++	now := time.Now().UTC()
++	const racingGrantID = "bl-race-grant-0000000000000000"
++	_, err = lockTx.ExecContext(ctx, `
++INSERT INTO mcp_oauth_grants (id, client_id, client_name, user_id, token_version, resource, scope, read_only, created_at, expires_at)
++VALUES ($1, $2, 'racing client', $3, 1, $4, 'user', TRUE, $5, $6)`,
++		racingGrantID, f.input.ClientID, f.userID, mcpIntegrationResource, now, now.Add(time.Hour))
++	require.NoError(t, err)
++
++	users := NewUserRepository(integrationEntClient, integrationDB).(service.UserEmailBlacklistRepository)
++	type batchResult struct {
++		disabled []int64
++		err      error
++	}
++	done := make(chan batchResult, 1)
++	go func() {
++		disabled, err := users.BatchDisableUsers(ctx, []int64{f.userID})
++		done <- batchResult{disabled: disabled, err: err}
++	}()
++
++	require.Eventually(t, func() bool {
++		var waiting int
++		err := integrationDB.QueryRowContext(ctx, `
++SELECT COUNT(*) FROM pg_stat_activity
++WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%UPDATE users SET status%'`).Scan(&waiting)
++		return err == nil && waiting > 0
++	}, 10*time.Second, 10*time.Millisecond, "batch disable should wait for the user row lock")
++	require.NoError(t, lockTx.Commit())
++
++	result := <-done
++	require.NoError(t, result.err)
++	require.Equal(t, []int64{f.userID}, result.disabled)
++	for _, id := range []string{f.grantID, racingGrantID} {
++		grant, err := f.repo.GetGrant(ctx, id)
++		require.NoError(t, err)
++		require.NotNil(t, grant.RevokedAt, id)
++	}
++}
+diff --git a/backend/internal/server/routes/admin.go b/backend/internal/server/routes/admin.go
+index fbeac5fe1..51efcd36a 100644
+--- a/backend/internal/server/routes/admin.go
++++ b/backend/internal/server/routes/admin.go
+@@ -316,6 +316,8 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+ 		users.GET("/:id/rpm-status", h.Admin.User.GetUserRPMStatus)
+ 		users.POST("/batch-concurrency", h.Admin.User.BatchUpdateConcurrency)
+ 		users.POST("/batch-limits", h.Admin.User.BatchUpdateLimits)
++		users.POST("/batch-disable", h.Admin.User.BatchDisable)
++		users.POST("/blacklist-matches", h.Admin.User.FindBlacklistedEmailUsers)
+ 		users.GET("/:id/platform-quotas", h.Admin.User.GetUserPlatformQuotas)
+ 		users.PUT("/:id/platform-quotas", h.Admin.User.UpdateUserPlatformQuotas)
+ 		users.POST("/:id/platform-quotas/reset", h.Admin.User.ResetUserPlatformQuotaWindow)
+@@ -593,6 +595,9 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpA
+ 		// OpenAI OAuth image-tool unavailable cooldown configuration
+ 		adminSettings.GET("/openai-images-oauth-unavailable-cooldown", h.Admin.Setting.GetOpenAIImagesOAuthUnavailableCooldownSettings)
+ 		adminSettings.PUT("/openai-images-oauth-unavailable-cooldown", h.Admin.Setting.UpdateOpenAIImagesOAuthUnavailableCooldownSettings)
++		// 注册邮箱精确黑名单
++		adminSettings.GET("/registration-email-blacklist", h.Admin.Setting.GetRegistrationEmailBlacklist)
++		adminSettings.PUT("/registration-email-blacklist", h.Admin.Setting.UpdateRegistrationEmailBlacklist)
+ 		// 面板 API 限流配置
+ 		adminSettings.GET("/panel-rate-limit", h.Admin.Setting.GetPanelRateLimitSettings)
+ 		adminSettings.PUT("/panel-rate-limit", h.Admin.Setting.UpdatePanelRateLimitSettings)
+diff --git a/backend/internal/service/admin_service.go b/backend/internal/service/admin_service.go
+index 89ae03f07..ade1b59c5 100644
+--- a/backend/internal/service/admin_service.go
++++ b/backend/internal/service/admin_service.go
+@@ -22,6 +22,10 @@ type AdminService interface {
+ 	UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string) (*User, error)
+ 	BatchUpdateConcurrency(ctx context.Context, userIDs []int64, value int, mode string) (int, error)
+ 	BatchUpdateLimits(ctx context.Context, userIDs []int64, concurrency, rpmLimit *int) (int, error)
++	// FindActiveUsersByBlacklistedEmails 按收件箱身份查找命中给定邮箱的未禁用普通用户。
++	FindActiveUsersByBlacklistedEmails(ctx context.Context, emails []string) ([]User, error)
++	// BatchDisableUsers 批量禁用普通用户，返回实际禁用的人数。
++	BatchDisableUsers(ctx context.Context, userIDs []int64) (int, error)
+ 	GetUserAPIKeys(ctx context.Context, userID int64, page, pageSize int, sortBy, sortOrder string) ([]APIKey, int64, error)
+ 	GetUserUsageStats(ctx context.Context, userID int64, period string) (any, error)
+ 	GetUserRPMStatus(ctx context.Context, userID int64) (*UserRPMStatus, error)
+diff --git a/backend/internal/service/admin_user_email_blacklist.go b/backend/internal/service/admin_user_email_blacklist.go
+new file mode 100644
+index 000000000..84583b6db
+--- /dev/null
++++ b/backend/internal/service/admin_user_email_blacklist.go
+@@ -0,0 +1,111 @@
++package service
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
++)
++
++// MaxBatchDisableUsers 是单次批量禁用的用户数上限。
++const MaxBatchDisableUsers = MaxRegistrationEmailBlacklistSize
++
++// UserEmailBlacklistRepository 是精确邮箱黑名单关联已注册用户所需的仓储能力。
++type UserEmailBlacklistRepository interface {
++	// ListActiveUsersByEmailAliasProbeKeys 返回未删除、状态为 active、非管理员且邮箱折叠后
++	// 命中任一 EmailAliasProbeKey 的用户。结果会过度匹配，调用方需按收件箱身份复核。
++	ListActiveUsersByEmailAliasProbeKeys(ctx context.Context, keys []string) ([]User, error)
++	// BatchDisableUsers 把未删除、非管理员且尚未禁用的用户置为 disabled，并在同一事务内吊销这些用户的
++	// 全部 MCP 授权，返回实际变更的用户 ID。
++	BatchDisableUsers(ctx context.Context, userIDs []int64) ([]int64, error)
++}
++
++// EmailAliasProbeKey 把探针拼成仓储层比对用的 "本地部分@域名" 键（两侧均已去点）。
++func EmailAliasProbeKey(probe EmailAliasProbe) string {
++	return probe.Local + "@" + probe.Domain
++}
++
++// FindActiveUsersByBlacklistedEmails 返回收件箱身份命中给定邮箱的未禁用普通用户；
++// 格式不合法的邮箱忽略。
++func (s *adminServiceImpl) FindActiveUsersByBlacklistedEmails(ctx context.Context, emails []string) ([]User, error) {
++	repo, ok := s.userRepo.(UserEmailBlacklistRepository)
++	if !ok {
++		return nil, ErrServiceUnavailable
++	}
++
++	normalized := make([]string, 0, len(emails))
++	for _, raw := range emails {
++		if email, valid := NormalizeRegistrationEmailBlacklistEntry(raw); valid {
++			normalized = append(normalized, email)
++		}
++	}
++	identities := RegistrationEmailBlacklistIdentities(normalized)
++	if len(identities) == 0 {
++		return []User{}, nil
++	}
++
++	keySet := make(map[string]struct{}, 2*len(normalized))
++	keys := make([]string, 0, 2*len(normalized))
++	for _, email := range normalized {
++		for _, probe := range EmailAliasDedupProbes(email) {
++			key := EmailAliasProbeKey(probe)
++			if _, dup := keySet[key]; dup {
++				continue
++			}
++			keySet[key] = struct{}{}
++			keys = append(keys, key)
++		}
++	}
++
++	candidates, err := repo.ListActiveUsersByEmailAliasProbeKeys(ctx, keys)
++	if err != nil {
++		return nil, err
++	}
++	matched := make([]User, 0, len(candidates))
++	for _, candidate := range candidates {
++		if _, hit := identities[NormalizeEmailForAliasDedup(candidate.Email)]; hit {
++			matched = append(matched, candidate)
++		}
++	}
++	return matched, nil
++}
++
++// BatchDisableUsers 批量禁用普通用户（管理员与已禁用用户跳过），返回实际禁用的人数。
++func (s *adminServiceImpl) BatchDisableUsers(ctx context.Context, userIDs []int64) (int, error) {
++	cleaned := make([]int64, 0, len(userIDs))
++	seen := make(map[int64]struct{}, len(userIDs))
++	for _, userID := range userIDs {
++		if userID <= 0 {
++			continue
++		}
++		if _, dup := seen[userID]; dup {
++			continue
++		}
++		seen[userID] = struct{}{}
++		cleaned = append(cleaned, userID)
++	}
++	if len(cleaned) == 0 {
++		return 0, nil
++	}
++	if len(cleaned) > MaxBatchDisableUsers {
++		return 0, fmt.Errorf("user_ids cannot exceed %d", MaxBatchDisableUsers)
++	}
++
++	repo, ok := s.userRepo.(UserEmailBlacklistRepository)
++	if !ok {
++		return 0, ErrServiceUnavailable
++	}
++	disabled, err := repo.BatchDisableUsers(ctx, cleaned)
++	if err != nil {
++		return 0, err
++	}
++	if s.authCacheInvalidator != nil {
++		// 状态已落库，缓存失效不随请求取消中断，否则未清到的用户在缓存 TTL 内仍能用 API Key。
++		invalidateCtx := context.WithoutCancel(ctx)
++		for _, userID := range disabled {
++			s.authCacheInvalidator.InvalidateAuthCacheByUserID(invalidateCtx, userID)
++		}
++	}
++	logger.LegacyPrintf("service.admin", "audit: batch disable users requested=%d disabled=%d", len(cleaned), len(disabled))
++	return len(disabled), nil
++}
+diff --git a/backend/internal/service/admin_user_email_blacklist_test.go b/backend/internal/service/admin_user_email_blacklist_test.go
+new file mode 100644
+index 000000000..e200bd796
+--- /dev/null
++++ b/backend/internal/service/admin_user_email_blacklist_test.go
+@@ -0,0 +1,125 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"errors"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++type emailBlacklistUserRepoStub struct {
++	*userRepoStub
++	probeKeys   []string
++	candidates  []User
++	listErr     error
++	disableIDs  []int64
++	disabled    []int64
++	disableErr  error
++	listCalls   int
++	disableCall int
++}
++
++func (s *emailBlacklistUserRepoStub) ListActiveUsersByEmailAliasProbeKeys(_ context.Context, keys []string) ([]User, error) {
++	s.listCalls++
++	s.probeKeys = append([]string(nil), keys...)
++	return s.candidates, s.listErr
++}
++
++func (s *emailBlacklistUserRepoStub) BatchDisableUsers(_ context.Context, userIDs []int64) ([]int64, error) {
++	s.disableCall++
++	s.disableIDs = append([]int64(nil), userIDs...)
++	return s.disabled, s.disableErr
++}
++
++func TestAdminService_FindActiveUsersByBlacklistedEmails_FiltersProbeOvermatch(t *testing.T) {
++	repo := &emailBlacklistUserRepoStub{
++		userRepoStub: &userRepoStub{},
++		candidates: []User{
++			{ID: 1, Email: "a.b@gmail.com"},
++			{ID: 2, Email: "ab+x@googlemail.com"},
++			{ID: 3, Email: "first.last@company.example"},
++			{ID: 4, Email: "firstlast@company.example"},
++		},
++	}
++	svc := &adminServiceImpl{userRepo: repo}
++
++	users, err := svc.FindActiveUsersByBlacklistedEmails(context.Background(), []string{
++		"AB@googlemail.com", "firstlast@company.example", "not-an-email", "ab@gmail.com",
++	})
++	require.NoError(t, err)
++	ids := make([]int64, 0, len(users))
++	for _, user := range users {
++		ids = append(ids, user.ID)
++	}
++	require.Equal(t, []int64{1, 2, 4}, ids)
++	require.ElementsMatch(t, []string{"ab@gmailcom", "ab@googlemailcom", "firstlast@companyexample"}, repo.probeKeys)
++}
++
++func TestAdminService_FindActiveUsersByBlacklistedEmails_NoValidEmailSkipsQuery(t *testing.T) {
++	repo := &emailBlacklistUserRepoStub{userRepoStub: &userRepoStub{}}
++	svc := &adminServiceImpl{userRepo: repo}
++
++	users, err := svc.FindActiveUsersByBlacklistedEmails(context.Background(), []string{"", "bad"})
++	require.NoError(t, err)
++	require.Empty(t, users)
++	require.Zero(t, repo.listCalls)
++}
++
++func TestAdminService_FindActiveUsersByBlacklistedEmails_RequiresRepositoryCapability(t *testing.T) {
++	svc := &adminServiceImpl{userRepo: &userRepoStub{}}
++	_, err := svc.FindActiveUsersByBlacklistedEmails(context.Background(), []string{"a@gmail.com"})
++	require.ErrorIs(t, err, ErrServiceUnavailable)
++}
++
++func TestAdminService_BatchDisableUsers_InvalidatesOnlyDisabledUsers(t *testing.T) {
++	repo := &emailBlacklistUserRepoStub{userRepoStub: &userRepoStub{}, disabled: []int64{7}}
++	invalidator := &authCacheInvalidatorStub{}
++	svc := &adminServiceImpl{userRepo: repo, authCacheInvalidator: invalidator}
++
++	affected, err := svc.BatchDisableUsers(context.Background(), []int64{7, 0, 7, 9, -3})
++	require.NoError(t, err)
++	require.Equal(t, 1, affected)
++	require.Equal(t, []int64{7, 9}, repo.disableIDs)
++	require.Equal(t, []int64{7}, invalidator.userIDs)
++}
++
++func TestAdminService_BatchDisableUsers_EmptyAndErrors(t *testing.T) {
++	repo := &emailBlacklistUserRepoStub{userRepoStub: &userRepoStub{}}
++	svc := &adminServiceImpl{userRepo: repo}
++
++	affected, err := svc.BatchDisableUsers(context.Background(), []int64{0, -1})
++	require.NoError(t, err)
++	require.Zero(t, affected)
++	require.Zero(t, repo.disableCall)
++
++	repo.disableErr = errors.New("db down")
++	_, err = svc.BatchDisableUsers(context.Background(), []int64{5})
++	require.Error(t, err)
++}
++
++type ctxRecordingAuthCacheInvalidator struct {
++	authCacheInvalidatorStub
++	ctxErrs []error
++}
++
++func (s *ctxRecordingAuthCacheInvalidator) InvalidateAuthCacheByUserID(ctx context.Context, userID int64) {
++	s.ctxErrs = append(s.ctxErrs, ctx.Err())
++	s.authCacheInvalidatorStub.InvalidateAuthCacheByUserID(ctx, userID)
++}
++
++func TestAdminService_BatchDisableUsers_InvalidatesCacheAfterRequestCanceled(t *testing.T) {
++	repo := &emailBlacklistUserRepoStub{userRepoStub: &userRepoStub{}, disabled: []int64{4, 5}}
++	invalidator := &ctxRecordingAuthCacheInvalidator{}
++	svc := &adminServiceImpl{userRepo: repo, authCacheInvalidator: invalidator}
++
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	affected, err := svc.BatchDisableUsers(ctx, []int64{4, 5})
++	require.NoError(t, err)
++	require.Equal(t, 2, affected)
++	require.Equal(t, []int64{4, 5}, invalidator.userIDs)
++	require.Equal(t, []error{nil, nil}, invalidator.ctxErrs)
++}
+diff --git a/backend/internal/service/auth_email_oauth_auto.go b/backend/internal/service/auth_email_oauth_auto.go
+index 655c39b36..0b0e5b3ad 100644
+--- a/backend/internal/service/auth_email_oauth_auto.go
++++ b/backend/internal/service/auth_email_oauth_auto.go
+@@ -85,7 +85,8 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
+ 	if isReservedEmail(email) {
+ 		return nil, nil, ErrEmailReserved
+ 	}
+-	if err := s.validateRegistrationEmailPolicy(ctx, email); err != nil {
++	// 精确黑名单只拦新建账号（见 createEmailOAuthUser），已有账号能否登录由账号状态决定。
++	if err := s.validateRegistrationEmailSuffixPolicy(ctx, email); err != nil {
+ 		return nil, nil, err
+ 	}
+ 
+@@ -158,6 +159,9 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
+ 	if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
+ 		return nil, ErrRegDisabled
+ 	}
++	if s.settingService.IsRegistrationEmailBlacklisted(ctx, email) {
++		return nil, ErrEmailBlocked
++	}
+ 	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode)
+ 	if err != nil {
+ 		if errors.Is(err, ErrInvitationCodeRequired) {
+diff --git a/backend/internal/service/auth_email_oauth_blacklist_test.go b/backend/internal/service/auth_email_oauth_blacklist_test.go
+new file mode 100644
+index 000000000..07aac5139
+--- /dev/null
++++ b/backend/internal/service/auth_email_oauth_blacklist_test.go
+@@ -0,0 +1,60 @@
++//go:build unit
++
++package service_test
++
++import (
++	"context"
++	"testing"
++
++	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++)
++
++func TestLoginOrRegisterVerifiedEmailOAuth_BlacklistedExistingUserCanStillSignIn(t *testing.T) {
++	svc, repo, _ := newAuthServiceForEmailBindWithRefreshCache(t, map[string]string{
++		service.SettingKeyRegistrationEnabled:        "true",
++		service.SettingKeyRegistrationEmailBlacklist: `["kept.user@gmail.com"]`,
++	}, nil, nil, newEmailBindRefreshTokenCacheStub())
++	ctx := context.Background()
++
++	existing := &service.User{
++		Email:        "kept.user@gmail.com",
++		PasswordHash: "hash",
++		Role:         service.RoleUser,
++		Status:       service.StatusActive,
++		Concurrency:  1,
++	}
++	require.NoError(t, repo.Create(ctx, existing))
++
++	tokens, user, err := svc.LoginOrRegisterVerifiedEmailOAuth(ctx, service.EmailOAuthIdentityInput{
++		ProviderType:    "github",
++		ProviderSubject: "gh-kept-user",
++		Email:           "kept.user@gmail.com",
++		EmailVerified:   true,
++		Username:        "kept",
++	})
++	require.NoError(t, err)
++	require.NotNil(t, tokens)
++	require.Equal(t, existing.ID, user.ID)
++}
++
++func TestLoginOrRegisterVerifiedEmailOAuth_BlacklistedNewEmailRejected(t *testing.T) {
++	svc, _, client := newAuthServiceForEmailBindWithRefreshCache(t, map[string]string{
++		service.SettingKeyRegistrationEnabled:        "true",
++		service.SettingKeyRegistrationEmailBlacklist: `["blocked.user@gmail.com"]`,
++	}, nil, nil, newEmailBindRefreshTokenCacheStub())
++	ctx := context.Background()
++
++	_, _, err := svc.LoginOrRegisterVerifiedEmailOAuth(ctx, service.EmailOAuthIdentityInput{
++		ProviderType:    "google",
++		ProviderSubject: "google-blocked-user",
++		Email:           "blockeduser+x@googlemail.com",
++		EmailVerified:   true,
++	})
++	require.ErrorIs(t, err, service.ErrEmailBlocked)
++
++	count, err := client.User.Query().Where(dbuser.EmailEQ("blockeduser+x@googlemail.com")).Count(ctx)
++	require.NoError(t, err)
++	require.Zero(t, count)
++}
+diff --git a/backend/internal/service/auth_registration_email_blacklist_test.go b/backend/internal/service/auth_registration_email_blacklist_test.go
+new file mode 100644
+index 000000000..6cde4cb51
+--- /dev/null
++++ b/backend/internal/service/auth_registration_email_blacklist_test.go
+@@ -0,0 +1,62 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"testing"
++
++	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
++	"github.com/stretchr/testify/require"
++)
++
++func TestAuthService_Register_BlacklistedEmailAliasRejected(t *testing.T) {
++	repo := &userRepoStub{nextID: 9}
++	svc := newAuthService(repo, map[string]string{
++		SettingKeyRegistrationEnabled:        "true",
++		SettingKeyRegistrationEmailBlacklist: `["spam.user@gmail.com"]`,
++	}, nil, nil)
++
++	_, _, err := svc.Register(context.Background(), "SpamUser+1@googlemail.com", "password")
++	require.ErrorIs(t, err, ErrEmailBlocked)
++	require.Equal(t, "EMAIL_BLOCKED", infraerrors.FromError(err).Reason)
++	require.Empty(t, repo.created)
++}
++
++func TestAuthService_Register_BlacklistOverridesSuffixWhitelist(t *testing.T) {
++	repo := &userRepoStub{nextID: 9}
++	svc := newAuthService(repo, map[string]string{
++		SettingKeyRegistrationEnabled:              "true",
++		SettingKeyRegistrationEmailSuffixWhitelist: `["@gmail.com"]`,
++		SettingKeyRegistrationEmailBlacklist:       `["blocked@gmail.com"]`,
++	}, nil, nil)
++
++	_, _, err := svc.Register(context.Background(), "blocked@gmail.com", "password")
++	require.ErrorIs(t, err, ErrEmailBlocked)
++	require.Empty(t, repo.created)
++
++	_, user, err := svc.Register(context.Background(), "allowed@gmail.com", "password")
++	require.NoError(t, err)
++	require.Equal(t, "allowed@gmail.com", user.Email)
++}
++
++func TestAuthService_SendVerifyCode_BlacklistedEmailRejected(t *testing.T) {
++	svc := newAuthService(&userRepoStub{}, map[string]string{
++		SettingKeyRegistrationEnabled:        "true",
++		SettingKeyEmailVerifyEnabled:         "true",
++		SettingKeyRegistrationEmailBlacklist: `["blocked@example.com"]`,
++	}, nil, nil)
++
++	require.ErrorIs(t, svc.SendVerifyCode(context.Background(), "blocked+x@example.com"), ErrEmailBlocked)
++	_, err := svc.SendVerifyCodeAsync(context.Background(), "blocked@example.com")
++	require.ErrorIs(t, err, ErrEmailBlocked)
++}
++
++func TestAuthService_ValidateRegistrationEmailPolicy_BlacklistedEmailRejected(t *testing.T) {
++	svc := newAuthService(&userRepoStub{}, map[string]string{
++		SettingKeyRegistrationEmailBlacklist: `["bind.target@gmail.com"]`,
++	}, nil, nil)
++
++	require.ErrorIs(t, svc.validateRegistrationEmailPolicy(context.Background(), "bindtarget@gmail.com"), ErrEmailBlocked)
++	require.NoError(t, svc.validateRegistrationEmailPolicy(context.Background(), "someone@gmail.com"))
++}
+diff --git a/backend/internal/service/auth_service.go b/backend/internal/service/auth_service.go
+index d121e2301..ded56e1e1 100644
+--- a/backend/internal/service/auth_service.go
++++ b/backend/internal/service/auth_service.go
+@@ -1202,7 +1202,19 @@ func inferLegacySignupSource(email string) string {
+ 	}
+ }
+ 
++// validateRegistrationEmailPolicy 校验邮箱能否用于新建账号或绑定为账号邮箱：精确黑名单与域名白名单。
+ func (s *AuthService) validateRegistrationEmailPolicy(ctx context.Context, email string) error {
++	if s.settingService == nil {
++		return nil
++	}
++	if s.settingService.IsRegistrationEmailBlacklisted(ctx, email) {
++		return ErrEmailBlocked
++	}
++	return s.validateRegistrationEmailSuffixPolicy(ctx, email)
++}
++
++// validateRegistrationEmailSuffixPolicy 只校验域名白名单。
++func (s *AuthService) validateRegistrationEmailSuffixPolicy(ctx context.Context, email string) error {
+ 	if s.settingService == nil {
+ 		return nil
+ 	}
+@@ -1213,13 +1225,16 @@ func (s *AuthService) validateRegistrationEmailPolicy(ctx context.Context, email
+ 	return nil
+ }
+ 
+-// validateRegistrationEmailQuota 保留白名单为空时的全放行行为；配置白名单后，
+-// 非白名单域名默认直接拒绝（严格白名单模式）；仅当域名限量注册开关开启时，
++// validateRegistrationEmailQuota 精确黑名单命中直接拒绝；保留白名单为空时的全放行行为；
++// 配置白名单后，非白名单域名默认直接拒绝（严格白名单模式）；仅当域名限量注册开关开启时，
+ // 非白名单域名每个最多允许一个账户。
+ func (s *AuthService) validateRegistrationEmailQuota(ctx context.Context, email string) error {
+ 	if s.settingService == nil {
+ 		return nil
+ 	}
++	if s.settingService.IsRegistrationEmailBlacklisted(ctx, email) {
++		return ErrEmailBlocked
++	}
+ 	whitelist := s.settingService.GetRegistrationEmailSuffixWhitelist(ctx)
+ 	if !IsRegistrationEmailSuffixLimited(email, whitelist) {
+ 		return nil
+diff --git a/backend/internal/service/domain_constants.go b/backend/internal/service/domain_constants.go
+index ad9e63d3c..c1068de28 100644
+--- a/backend/internal/service/domain_constants.go
++++ b/backend/internal/service/domain_constants.go
+@@ -223,6 +223,7 @@ const (
+ 	// 白名单非空时，是否放行非白名单域名按主域名限量注册（每域名 1 个账户）。
+ 	// 默认 false：非白名单域名直接拒绝（白名单严格模式）。
+ 	SettingKeyRegistrationEmailDomainQuotaEnabled = "registration_email_domain_quota_enabled"
++	SettingKeyRegistrationEmailBlacklist          = "registration_email_blacklist"     // 注册邮箱精确黑名单（JSON 数组，按收件箱身份匹配；不进 SystemSettings，由专用接口读写）
+ 	SettingKeyPromoCodeEnabled                    = "promo_code_enabled"               // 是否启用优惠码功能
+ 	SettingKeyPasswordResetEnabled                = "password_reset_enabled"           // 是否启用忘记密码功能（需要先开启邮件验证）
+ 	SettingKeyFrontendURL                         = "frontend_url"                     // 前端基础URL，用于生成邮件中的重置密码链接
+diff --git a/backend/internal/service/registration_email_blacklist.go b/backend/internal/service/registration_email_blacklist.go
+new file mode 100644
+index 000000000..e96f7e9d9
+--- /dev/null
++++ b/backend/internal/service/registration_email_blacklist.go
+@@ -0,0 +1,268 @@
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"log/slog"
++	"strconv"
++	"strings"
++	"time"
++	"unicode"
++
++	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
++)
++
++// 注册邮箱精确黑名单。
++//
++// 名单项是完整邮箱地址，匹配按收件箱身份（NormalizeEmailForAliasDedup）进行：
++// 拉黑 a.b@gmail.com 同时拦截 ab@googlemail.com、a.b+x@gmail.com 等投递到同一收件箱的
++// 变体；Gmail 系之外点号仍有意义，只折叠 "+后缀"。名单原样保存管理员录入的地址，
++// 身份归一只发生在匹配时。
++
++// MaxRegistrationEmailBlacklistSize 是精确黑名单的条数上限。
++const MaxRegistrationEmailBlacklistSize = 20000
++
++const (
++	registrationEmailBlacklistLocalMaxLen = 64
++	registrationEmailBlacklistMaxLen      = 254
++	registrationEmailBlacklistErrorSample = 10
++)
++
++var ErrEmailBlocked = infraerrors.BadRequest("EMAIL_BLOCKED", "this email address is not allowed")
++
++// NormalizeRegistrationEmailBlacklistEntry 把一条录入归一为小写、去首尾空白、去域名根点的
++// 邮箱地址；格式不合法时返回 false。
++func NormalizeRegistrationEmailBlacklistEntry(raw string) (string, bool) {
++	local, domain, ok := splitEmailForPolicy(raw)
++	if !ok {
++		return "", false
++	}
++	if len(local) > registrationEmailBlacklistLocalMaxLen || !isValidRegistrationEmailDomain(domain) {
++		return "", false
++	}
++	for _, r := range local {
++		if unicode.IsSpace(r) || unicode.IsControl(r) {
++			return "", false
++		}
++	}
++	email := local + "@" + domain
++	if len(email) > registrationEmailBlacklistMaxLen {
++		return "", false
++	}
++	return email, true
++}
++
++// NormalizeRegistrationEmailBlacklist 校验并归一管理员提交的名单：按归一后的地址去重并保持
++// 原有顺序；任一项格式不合法或超过条数上限都整体拒绝。
++func NormalizeRegistrationEmailBlacklist(raw []string) ([]string, error) {
++	out := make([]string, 0, len(raw))
++	seen := make(map[string]struct{}, len(raw))
++	var invalid []string
++	for _, item := range raw {
++		if strings.TrimSpace(item) == "" {
++			continue
++		}
++		email, ok := NormalizeRegistrationEmailBlacklistEntry(item)
++		if !ok {
++			invalid = append(invalid, strings.TrimSpace(item))
++			continue
++		}
++		if _, dup := seen[email]; dup {
++			continue
++		}
++		seen[email] = struct{}{}
++		out = append(out, email)
++	}
++	if len(invalid) > 0 {
++		sample := invalid
++		if len(sample) > registrationEmailBlacklistErrorSample {
++			sample = sample[:registrationEmailBlacklistErrorSample]
++		}
++		return nil, infraerrors.BadRequest(
++			"EMAIL_BLACKLIST_INVALID_ENTRY",
++			fmt.Sprintf("invalid email address (%d): %s", len(invalid), strings.Join(sample, ", ")),
++		).WithMetadata(map[string]string{
++			"invalid_count":   strconv.Itoa(len(invalid)),
++			"invalid_entries": strings.Join(sample, ","),
++		})
++	}
++	if len(out) > MaxRegistrationEmailBlacklistSize {
++		return nil, infraerrors.BadRequest(
++			"EMAIL_BLACKLIST_TOO_LARGE",
++			fmt.Sprintf("email blacklist cannot exceed %d entries", MaxRegistrationEmailBlacklistSize),
++		).WithMetadata(map[string]string{
++			"max": strconv.Itoa(MaxRegistrationEmailBlacklistSize),
++		})
++	}
++	return out, nil
++}
++
++// ParseRegistrationEmailBlacklist 解析已持久化的 JSON 名单；非法项被跳过，不影响其余项生效。
++func ParseRegistrationEmailBlacklist(raw string) []string {
++	raw = strings.TrimSpace(raw)
++	if raw == "" {
++		return []string{}
++	}
++	var items []string
++	if err := json.Unmarshal([]byte(raw), &items); err != nil {
++		return []string{}
++	}
++	out := make([]string, 0, len(items))
++	seen := make(map[string]struct{}, len(items))
++	for _, item := range items {
++		email, ok := NormalizeRegistrationEmailBlacklistEntry(item)
++		if !ok {
++			continue
++		}
++		if _, dup := seen[email]; dup {
++			continue
++		}
++		seen[email] = struct{}{}
++		out = append(out, email)
++	}
++	return out
++}
++
++// RegistrationEmailBlacklistIdentities 返回名单项对应的收件箱身份集合。
++func RegistrationEmailBlacklistIdentities(emails []string) map[string]struct{} {
++	identities := make(map[string]struct{}, len(emails))
++	for _, email := range emails {
++		if identity := NormalizeEmailForAliasDedup(email); identity != "" {
++			identities[identity] = struct{}{}
++		}
++	}
++	return identities
++}
++
++const (
++	registrationEmailBlacklistCacheTTL  = 60 * time.Second
++	registrationEmailBlacklistErrorTTL  = 5 * time.Second
++	registrationEmailBlacklistDBTimeout = 5 * time.Second
++)
++
++// registrationEmailBlacklistIndex 是精确黑名单的进程内缓存条目：只保留收件箱身份集合，
++// 不保留原始 JSON。
++type registrationEmailBlacklistIndex struct {
++	identities map[string]struct{}
++	expiresAt  int64 // unix nano
++}
++
++func (idx *registrationEmailBlacklistIndex) contains(email string) bool {
++	if idx == nil || len(idx.identities) == 0 {
++		return false
++	}
++	if _, _, ok := splitEmailForPolicy(email); !ok {
++		return false
++	}
++	_, hit := idx.identities[NormalizeEmailForAliasDedup(email)]
++	return hit
++}
++
++func (s *SettingService) storeRegistrationEmailBlacklistIndex(identities map[string]struct{}, ttl time.Duration) *registrationEmailBlacklistIndex {
++	idx := &registrationEmailBlacklistIndex{
++		identities: identities,
++		expiresAt:  time.Now().Add(ttl).UnixNano(),
++	}
++	s.registrationEmailBlacklistCache.Store(idx)
++	return idx
++}
++
++// registrationEmailBlacklistIndexCached 返回精确黑名单索引（进程内缓存，60s TTL）。
++// 公开的注册与发码接口每次请求都会调用，名单最多两万项，不能每次都从 DB 读出整份 JSON。
++// DB 读取失败时沿用最近一次已知名单（没有则视为空名单），并以短 TTL 快速重试。
++func (s *SettingService) registrationEmailBlacklistIndexCached(ctx context.Context) *registrationEmailBlacklistIndex {
++	if cached, ok := s.registrationEmailBlacklistCache.Load().(*registrationEmailBlacklistIndex); ok && cached != nil {
++		if time.Now().UnixNano() < cached.expiresAt {
++			return cached
++		}
++	}
++	result, _, _ := s.registrationEmailBlacklistSF.Do("registration_email_blacklist", func() (any, error) {
++		s.registrationEmailBlacklistMu.Lock()
++		defer s.registrationEmailBlacklistMu.Unlock()
++		prior, _ := s.registrationEmailBlacklistCache.Load().(*registrationEmailBlacklistIndex)
++		if prior != nil && time.Now().UnixNano() < prior.expiresAt {
++			return prior, nil
++		}
++		// 独立 context：断开请求取消链，避免客户端断连污染缓存
++		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), registrationEmailBlacklistDBTimeout)
++		defer cancel()
++
++		raw, err := s.settingRepo.GetValue(dbCtx, SettingKeyRegistrationEmailBlacklist)
++		switch {
++		case err == nil:
++			return s.storeRegistrationEmailBlacklistIndex(
++				RegistrationEmailBlacklistIdentities(ParseRegistrationEmailBlacklist(raw)),
++				registrationEmailBlacklistCacheTTL,
++			), nil
++		case errors.Is(err, ErrSettingNotFound):
++			return s.storeRegistrationEmailBlacklistIndex(map[string]struct{}{}, registrationEmailBlacklistCacheTTL), nil
++		default:
++			slog.Warn("failed to get registration email blacklist", "error", err)
++			fallback := map[string]struct{}{}
++			if prior != nil {
++				fallback = prior.identities
++			}
++			return s.storeRegistrationEmailBlacklistIndex(fallback, registrationEmailBlacklistErrorTTL), nil
++		}
++	})
++	idx, _ := result.(*registrationEmailBlacklistIndex)
++	return idx
++}
++
++// GetRegistrationEmailBlacklist 返回已保存的精确邮箱黑名单。
++func (s *SettingService) GetRegistrationEmailBlacklist(ctx context.Context) ([]string, error) {
++	raw, err := s.settingRepo.GetValue(ctx, SettingKeyRegistrationEmailBlacklist)
++	if err != nil {
++		if errors.Is(err, ErrSettingNotFound) {
++			return []string{}, nil
++		}
++		return nil, fmt.Errorf("get registration email blacklist: %w", err)
++	}
++	return ParseRegistrationEmailBlacklist(raw), nil
++}
++
++// SetRegistrationEmailBlacklist 整体替换精确邮箱黑名单，返回保存后的名单与相对旧名单新增的项。
++func (s *SettingService) SetRegistrationEmailBlacklist(ctx context.Context, emails []string) (saved []string, added []string, err error) {
++	normalized, err := NormalizeRegistrationEmailBlacklist(emails)
++	if err != nil {
++		return nil, nil, err
++	}
++	previous, err := s.GetRegistrationEmailBlacklist(ctx)
++	if err != nil {
++		return nil, nil, err
++	}
++	previousSet := make(map[string]struct{}, len(previous))
++	for _, email := range previous {
++		previousSet[email] = struct{}{}
++	}
++	added = make([]string, 0)
++	for _, email := range normalized {
++		if _, existed := previousSet[email]; !existed {
++			added = append(added, email)
++		}
++	}
++
++	data, err := json.Marshal(normalized)
++	if err != nil {
++		return nil, nil, fmt.Errorf("marshal registration email blacklist: %w", err)
++	}
++	if err := s.settingRepo.Set(ctx, SettingKeyRegistrationEmailBlacklist, string(data)); err != nil {
++		return nil, nil, fmt.Errorf("save registration email blacklist: %w", err)
++	}
++	identities := RegistrationEmailBlacklistIdentities(normalized)
++	s.registrationEmailBlacklistMu.Lock()
++	s.storeRegistrationEmailBlacklistIndex(identities, registrationEmailBlacklistCacheTTL)
++	s.registrationEmailBlacklistMu.Unlock()
++	return normalized, added, nil
++}
++
++// IsRegistrationEmailBlacklisted 判断邮箱（含同一收件箱的别名变体）是否在精确黑名单中。
++// 名单在本实例保存后立即生效，其它实例最迟在缓存 TTL 后生效；从未读到名单时不拦截。
++func (s *SettingService) IsRegistrationEmailBlacklisted(ctx context.Context, email string) bool {
++	if s == nil || s.settingRepo == nil {
++		return false
++	}
++	return s.registrationEmailBlacklistIndexCached(ctx).contains(email)
++}
+diff --git a/backend/internal/service/registration_email_blacklist_test.go b/backend/internal/service/registration_email_blacklist_test.go
+new file mode 100644
+index 000000000..98316711d
+--- /dev/null
++++ b/backend/internal/service/registration_email_blacklist_test.go
+@@ -0,0 +1,311 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
++	"github.com/stretchr/testify/require"
++)
++
++type writableSettingRepoStub struct {
++	*settingRepoStub
++	setCalls int
++	setErr   error
++}
++
++func newWritableSettingRepoStub(values map[string]string) *writableSettingRepoStub {
++	if values == nil {
++		values = map[string]string{}
++	}
++	return &writableSettingRepoStub{settingRepoStub: &settingRepoStub{values: values}}
++}
++
++func (s *writableSettingRepoStub) Set(_ context.Context, key, value string) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.setCalls++
++	if s.setErr != nil {
++		return s.setErr
++	}
++	s.values[key] = value
++	return nil
++}
++
++func TestNormalizeRegistrationEmailBlacklistEntry(t *testing.T) {
++	cases := []struct {
++		raw  string
++		want string
++		ok   bool
++	}{
++		{raw: "  Alice@Gmail.COM ", want: "alice@gmail.com", ok: true},
++		{raw: "a.b+tag@googlemail.com", want: "a.b+tag@googlemail.com", ok: true},
++		{raw: "user@example.com.", want: "user@example.com", ok: true},
++		{raw: "", ok: false},
++		{raw: "@gmail.com", ok: false},
++		{raw: "user@", ok: false},
++		{raw: "user", ok: false},
++		{raw: "a@b@gmail.com", ok: false},
++		{raw: "user@localhost", ok: false},
++		{raw: "us er@gmail.com", ok: false},
++		{raw: "user@bad_domain.com", ok: false},
++		{raw: fmt.Sprintf("%065d@gmail.com", 0), ok: false},
++	}
++	for _, tc := range cases {
++		got, ok := NormalizeRegistrationEmailBlacklistEntry(tc.raw)
++		require.Equal(t, tc.ok, ok, tc.raw)
++		require.Equal(t, tc.want, got, tc.raw)
++	}
++}
++
++func TestNormalizeRegistrationEmailBlacklist_DedupesAndKeepsOrder(t *testing.T) {
++	got, err := NormalizeRegistrationEmailBlacklist([]string{
++		"B@gmail.com", " ", "a@googlemail.com", "b@gmail.com", "A@googlemail.com",
++	})
++	require.NoError(t, err)
++	require.Equal(t, []string{"b@gmail.com", "a@googlemail.com"}, got)
++}
++
++func TestNormalizeRegistrationEmailBlacklist_RejectsInvalidEntries(t *testing.T) {
++	_, err := NormalizeRegistrationEmailBlacklist([]string{"ok@gmail.com", "bad", "also bad@gmail.com"})
++	require.Error(t, err)
++	appErr := infraerrors.FromError(err)
++	require.Equal(t, "EMAIL_BLACKLIST_INVALID_ENTRY", appErr.Reason)
++	require.Equal(t, "2", appErr.Metadata["invalid_count"])
++	require.Contains(t, appErr.Message, "bad")
++}
++
++func TestNormalizeRegistrationEmailBlacklist_RejectsOversizedList(t *testing.T) {
++	emails := make([]string, MaxRegistrationEmailBlacklistSize+1)
++	for i := range emails {
++		emails[i] = fmt.Sprintf("u%d@example.com", i)
++	}
++	_, err := NormalizeRegistrationEmailBlacklist(emails)
++	require.Error(t, err)
++	require.Equal(t, "EMAIL_BLACKLIST_TOO_LARGE", infraerrors.FromError(err).Reason)
++
++	got, err := NormalizeRegistrationEmailBlacklist(emails[:MaxRegistrationEmailBlacklistSize])
++	require.NoError(t, err)
++	require.Len(t, got, MaxRegistrationEmailBlacklistSize)
++}
++
++func TestParseRegistrationEmailBlacklist_SkipsInvalidAndMalformed(t *testing.T) {
++	require.Equal(t, []string{}, ParseRegistrationEmailBlacklist(""))
++	require.Equal(t, []string{}, ParseRegistrationEmailBlacklist("not json"))
++	require.Equal(t,
++		[]string{"a@gmail.com", "b@example.com"},
++		ParseRegistrationEmailBlacklist(`["A@gmail.com","bad","b@example.com","a@gmail.com"]`),
++	)
++}
++
++func TestSettingService_IsRegistrationEmailBlacklisted_MatchesInboxIdentity(t *testing.T) {
++	repo := &settingRepoStub{values: map[string]string{
++		SettingKeyRegistrationEmailBlacklist: `["john.doe@gmail.com","sales@company.example"]`,
++	}}
++	svc := NewSettingService(repo, &config.Config{})
++	ctx := context.Background()
++
++	for _, email := range []string{
++		"john.doe@gmail.com",
++		"JohnDoe@gmail.com",
++		"j.o.h.n.d.o.e+spam@googlemail.com",
++		"johndoe@gmail.com.",
++		"sales@company.example",
++		"sales+x@company.example",
++	} {
++		require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, email), email)
++	}
++	for _, email := range []string{
++		"john.doe2@gmail.com",
++		"s.ales@company.example",
++		"sales@other.example",
++		"not-an-email",
++		"",
++	} {
++		require.False(t, svc.IsRegistrationEmailBlacklisted(ctx, email), email)
++	}
++}
++
++func expireRegistrationEmailBlacklistCache(svc *SettingService) {
++	if cached, ok := svc.registrationEmailBlacklistCache.Load().(*registrationEmailBlacklistIndex); ok && cached != nil {
++		svc.registrationEmailBlacklistCache.Store(&registrationEmailBlacklistIndex{identities: cached.identities})
++	}
++}
++
++func TestSettingService_IsRegistrationEmailBlacklisted_CachesUntilTTL(t *testing.T) {
++	repo := &settingRepoStub{values: map[string]string{
++		SettingKeyRegistrationEmailBlacklist: `["first@gmail.com"]`,
++	}}
++	svc := NewSettingService(repo, &config.Config{})
++	ctx := context.Background()
++
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "first@gmail.com"))
++	require.False(t, svc.IsRegistrationEmailBlacklisted(ctx, "other@gmail.com"))
++	require.Equal(t, 1, repo.getValueCalls)
++
++	repo.mu.Lock()
++	repo.values[SettingKeyRegistrationEmailBlacklist] = `["second@gmail.com"]`
++	repo.mu.Unlock()
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "first@gmail.com"), "cached list is served within TTL")
++	require.Equal(t, 1, repo.getValueCalls)
++
++	expireRegistrationEmailBlacklistCache(svc)
++	require.False(t, svc.IsRegistrationEmailBlacklisted(ctx, "first@gmail.com"))
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "second@gmail.com"))
++	require.Equal(t, 2, repo.getValueCalls)
++}
++
++func TestSettingService_IsRegistrationEmailBlacklisted_CachesMissingSetting(t *testing.T) {
++	repo := &settingRepoStub{values: map[string]string{}}
++	svc := NewSettingService(repo, &config.Config{})
++	ctx := context.Background()
++
++	require.False(t, svc.IsRegistrationEmailBlacklisted(ctx, "anyone@gmail.com"))
++	require.False(t, svc.IsRegistrationEmailBlacklisted(ctx, "anyone@gmail.com"))
++	require.Equal(t, 1, repo.getValueCalls)
++}
++
++func TestSettingService_IsRegistrationEmailBlacklisted_ReadFailureDoesNotBlock(t *testing.T) {
++	svc := NewSettingService(&settingRepoStub{err: errors.New("db down")}, &config.Config{})
++	require.False(t, svc.IsRegistrationEmailBlacklisted(context.Background(), "anyone@gmail.com"))
++}
++
++func TestSettingService_IsRegistrationEmailBlacklisted_ReadFailureKeepsLastKnownList(t *testing.T) {
++	repo := &settingRepoStub{values: map[string]string{
++		SettingKeyRegistrationEmailBlacklist: `["blocked@gmail.com"]`,
++	}}
++	svc := NewSettingService(repo, &config.Config{})
++	ctx := context.Background()
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "blocked@gmail.com"))
++
++	repo.mu.Lock()
++	repo.err = errors.New("db down")
++	repo.mu.Unlock()
++	expireRegistrationEmailBlacklistCache(svc)
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "blocked@gmail.com"))
++
++	cached, ok := svc.registrationEmailBlacklistCache.Load().(*registrationEmailBlacklistIndex)
++	require.True(t, ok)
++	require.LessOrEqual(t, cached.expiresAt, time.Now().Add(registrationEmailBlacklistErrorTTL).UnixNano())
++}
++
++// blockingBlacklistRepoStub 让下一次读取名单停在返回旧值之前，用来构造刷新与保存交错的时序。
++type blockingBlacklistRepoStub struct {
++	*writableSettingRepoStub
++	blockNext bool
++	entered   chan struct{}
++	release   chan struct{}
++	saved     chan struct{}
++}
++
++func (s *blockingBlacklistRepoStub) GetValue(ctx context.Context, key string) (string, error) {
++	value, err := s.writableSettingRepoStub.GetValue(ctx, key)
++	s.mu.Lock()
++	block := s.blockNext
++	s.blockNext = false
++	s.mu.Unlock()
++	if block {
++		close(s.entered)
++		<-s.release
++	}
++	return value, err
++}
++
++func (s *blockingBlacklistRepoStub) Set(ctx context.Context, key, value string) error {
++	err := s.writableSettingRepoStub.Set(ctx, key, value)
++	close(s.saved)
++	return err
++}
++
++func TestSettingService_SetRegistrationEmailBlacklist_NotOverwrittenByInFlightRefresh(t *testing.T) {
++	repo := &blockingBlacklistRepoStub{
++		writableSettingRepoStub: newWritableSettingRepoStub(map[string]string{
++			SettingKeyRegistrationEmailBlacklist: `["old@gmail.com"]`,
++		}),
++		entered: make(chan struct{}),
++		release: make(chan struct{}),
++		saved:   make(chan struct{}),
++	}
++	svc := NewSettingService(repo, &config.Config{})
++	ctx := context.Background()
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "old@gmail.com"))
++	expireRegistrationEmailBlacklistCache(svc)
++
++	repo.mu.Lock()
++	repo.blockNext = true
++	repo.mu.Unlock()
++	refreshDone := make(chan struct{})
++	go func() {
++		defer close(refreshDone)
++		svc.IsRegistrationEmailBlacklisted(ctx, "old@gmail.com")
++	}()
++	<-repo.entered
++
++	saveDone := make(chan error, 1)
++	go func() {
++		_, _, err := svc.SetRegistrationEmailBlacklist(ctx, []string{"new@gmail.com"})
++		saveDone <- err
++	}()
++	<-repo.saved
++	close(repo.release)
++	<-refreshDone
++	require.NoError(t, <-saveDone)
++
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "new@gmail.com"))
++	require.False(t, svc.IsRegistrationEmailBlacklisted(ctx, "old@gmail.com"))
++}
++
++func TestSettingService_SetRegistrationEmailBlacklist_ReportsAddedAndPersists(t *testing.T) {
++	repo := newWritableSettingRepoStub(map[string]string{
++		SettingKeyRegistrationEmailBlacklist: `["old@gmail.com","keep@gmail.com"]`,
++	})
++	svc := NewSettingService(repo, &config.Config{})
++	ctx := context.Background()
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "old@gmail.com"))
++
++	saved, added, err := svc.SetRegistrationEmailBlacklist(ctx, []string{"Keep@gmail.com", "new@gmail.com", "new@gmail.com"})
++	require.NoError(t, err)
++	require.Equal(t, []string{"keep@gmail.com", "new@gmail.com"}, saved)
++	require.Equal(t, []string{"new@gmail.com"}, added)
++
++	var stored []string
++	require.NoError(t, json.Unmarshal([]byte(repo.values[SettingKeyRegistrationEmailBlacklist]), &stored))
++	require.Equal(t, saved, stored)
++	require.True(t, svc.IsRegistrationEmailBlacklisted(ctx, "n.e.w@googlemail.com"))
++	require.False(t, svc.IsRegistrationEmailBlacklisted(ctx, "old@gmail.com"))
++
++	saved, added, err = svc.SetRegistrationEmailBlacklist(ctx, []string{})
++	require.NoError(t, err)
++	require.Empty(t, saved)
++	require.Empty(t, added)
++	require.Equal(t, "[]", repo.values[SettingKeyRegistrationEmailBlacklist])
++}
++
++func TestSettingService_SetRegistrationEmailBlacklist_InvalidEntryDoesNotWrite(t *testing.T) {
++	repo := newWritableSettingRepoStub(map[string]string{
++		SettingKeyRegistrationEmailBlacklist: `["old@gmail.com"]`,
++	})
++	svc := NewSettingService(repo, &config.Config{})
++
++	_, _, err := svc.SetRegistrationEmailBlacklist(context.Background(), []string{"ok@gmail.com", "broken"})
++	require.Error(t, err)
++	require.Zero(t, repo.setCalls)
++	require.Equal(t, `["old@gmail.com"]`, repo.values[SettingKeyRegistrationEmailBlacklist])
++}
++
++func TestSettingService_SetRegistrationEmailBlacklist_ReadFailureDoesNotWrite(t *testing.T) {
++	repo := newWritableSettingRepoStub(nil)
++	repo.err = errors.New("db down")
++	svc := NewSettingService(repo, &config.Config{})
++
++	_, _, err := svc.SetRegistrationEmailBlacklist(context.Background(), []string{"ok@gmail.com"})
++	require.Error(t, err)
++	require.Zero(t, repo.setCalls)
++}
+diff --git a/backend/internal/service/setting_service.go b/backend/internal/service/setting_service.go
+index c8c0ad1e9..082d99946 100644
+--- a/backend/internal/service/setting_service.go
++++ b/backend/internal/service/setting_service.go
+@@ -145,6 +145,14 @@ type SettingService struct {
+ 	panelRateLimitCache atomic.Value
+ 	panelRateLimitSF    singleflight.Group
+ 
++	// registrationEmailBlacklistCache 精确邮箱黑名单进程内缓存（*registrationEmailBlacklistIndex，60s TTL）。
++	// 公开的注册与发码接口每次请求都会读取，禁止在热路径上直接访问 DB。
++	// registrationEmailBlacklistMu 串行化刷新时的「读 DB + 写缓存」与保存后的写缓存，
++	// 避免进行中的刷新用旧名单覆盖刚保存的名单。
++	registrationEmailBlacklistMu    sync.Mutex
++	registrationEmailBlacklistCache atomic.Value
++	registrationEmailBlacklistSF    singleflight.Group
++
+ 	// openAIQuotaAutoPauseSettingsCache holds the most recently observed quota auto-pause
+ 	// settings. GetOpenAIQuotaAutoPauseSettings reads this atomic.Value on the request hot
+ 	// path without ever blocking on the DB; when the cached entry expires, a background
+diff --git a/frontend/src/api/__tests__/admin.emailBlacklist.spec.ts b/frontend/src/api/__tests__/admin.emailBlacklist.spec.ts
+new file mode 100644
+index 000000000..1d9c44f73
+--- /dev/null
++++ b/frontend/src/api/__tests__/admin.emailBlacklist.spec.ts
+@@ -0,0 +1,50 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++
++const { get, post, put } = vi.hoisted(() => ({
++  get: vi.fn(),
++  post: vi.fn(),
++  put: vi.fn()
++}))
++
++vi.mock('@/api/client', () => ({
++  apiClient: { get, post, put }
++}))
++
++import {
++  getRegistrationEmailBlacklist,
++  updateRegistrationEmailBlacklist
++} from '@/api/admin/settings'
++import { batchDisable, findBlacklistedEmailUsers } from '@/api/admin/users'
++
++describe('admin email blacklist api', () => {
++  beforeEach(() => {
++    get.mockReset()
++    post.mockReset()
++    put.mockReset()
++  })
++
++  it('reads and replaces the exact email blacklist', async () => {
++    get.mockResolvedValue({ data: { emails: ['a@gmail.com'], max: 20000 } })
++    put.mockResolvedValue({ data: { emails: [], added: [], max: 20000 } })
++
++    await expect(getRegistrationEmailBlacklist()).resolves.toEqual({ emails: ['a@gmail.com'], max: 20000 })
++    expect(get).toHaveBeenCalledWith('/admin/settings/registration-email-blacklist')
++
++    await expect(updateRegistrationEmailBlacklist([])).resolves.toEqual({ emails: [], added: [], max: 20000 })
++    expect(put).toHaveBeenCalledWith('/admin/settings/registration-email-blacklist', { emails: [] })
++  })
++
++  it('finds blacklisted users and disables them in batch', async () => {
++    post.mockResolvedValueOnce({ data: { items: [{ id: 3, email: 'a.b@gmail.com', username: '' }], total: 1 } })
++    post.mockResolvedValueOnce({ data: { affected: 1 } })
++
++    await expect(findBlacklistedEmailUsers(['ab@gmail.com'])).resolves.toEqual({
++      items: [{ id: 3, email: 'a.b@gmail.com', username: '' }],
++      total: 1
++    })
++    expect(post).toHaveBeenNthCalledWith(1, '/admin/users/blacklist-matches', { emails: ['ab@gmail.com'] })
++
++    await expect(batchDisable([3])).resolves.toEqual({ affected: 1 })
++    expect(post).toHaveBeenNthCalledWith(2, '/admin/users/batch-disable', { user_ids: [3] })
++  })
++})
+diff --git a/frontend/src/api/admin/settings.ts b/frontend/src/api/admin/settings.ts
+index c760d45f1..184cc9170 100644
+--- a/frontend/src/api/admin/settings.ts
++++ b/frontend/src/api/admin/settings.ts
+@@ -1359,6 +1359,35 @@ export interface PanelRateLimitSettings {
+   public_ip_rpm: number;
+ }
+ 
++/** Exact registration email blacklist (matched by inbox identity). */
++export interface RegistrationEmailBlacklist {
++  emails: string[];
++  max: number;
++}
++
++export interface UpdateRegistrationEmailBlacklistResponse extends RegistrationEmailBlacklist {
++  /** Entries not present in the previously saved list. */
++  added: string[];
++}
++
++export async function getRegistrationEmailBlacklist(): Promise<RegistrationEmailBlacklist> {
++  const { data } = await apiClient.get<RegistrationEmailBlacklist>(
++    "/admin/settings/registration-email-blacklist",
++  );
++  return data;
++}
++
++/** Replace the whole exact email blacklist; an empty array clears it. */
++export async function updateRegistrationEmailBlacklist(
++  emails: string[],
++): Promise<UpdateRegistrationEmailBlacklistResponse> {
++  const { data } = await apiClient.put<UpdateRegistrationEmailBlacklistResponse>(
++    "/admin/settings/registration-email-blacklist",
++    { emails },
++  );
++  return data;
++}
++
+ export async function getPanelRateLimitSettings(): Promise<PanelRateLimitSettings> {
+   const { data } = await apiClient.get<PanelRateLimitSettings>(
+     "/admin/settings/panel-rate-limit",
+@@ -1603,6 +1632,8 @@ export const settingsAPI = {
+   updateOverloadCooldownSettings,
+   getRateLimit429CooldownSettings,
+   updateRateLimit429CooldownSettings,
++  getRegistrationEmailBlacklist,
++  updateRegistrationEmailBlacklist,
+   getPanelRateLimitSettings,
+   updatePanelRateLimitSettings,
+   getStreamTimeoutSettings,
+diff --git a/frontend/src/api/admin/users.ts b/frontend/src/api/admin/users.ts
+index d943508e7..b14ec3439 100644
+--- a/frontend/src/api/admin/users.ts
++++ b/frontend/src/api/admin/users.ts
+@@ -207,6 +207,32 @@ export async function batchUpdateLimits(
+   return data
+ }
+ 
++/** Active non-admin user whose inbox identity matches a blacklisted email. */
++export interface BlacklistedEmailUser {
++  id: number
++  email: string
++  username: string
++}
++
++/** Find active non-admin users whose email (or an alias of it) is in the given list. */
++export async function findBlacklistedEmailUsers(
++  emails: string[]
++): Promise<{ items: BlacklistedEmailUser[]; total: number }> {
++  const { data } = await apiClient.post<{ items: BlacklistedEmailUser[]; total: number }>(
++    '/admin/users/blacklist-matches',
++    { emails }
++  )
++  return data
++}
++
++/** Disable multiple users; admins and already-disabled users are skipped. */
++export async function batchDisable(userIds: number[]): Promise<{ affected: number }> {
++  const { data } = await apiClient.post<{ affected: number }>('/admin/users/batch-disable', {
++    user_ids: userIds
++  })
++  return data
++}
++
+ /**
+  * Toggle user status
+  * @param id - User ID
+@@ -413,6 +439,8 @@ export const usersAPI = {
+   updateBalance,
+   updateConcurrency,
+   batchUpdateLimits,
++  findBlacklistedEmailUsers,
++  batchDisable,
+   toggleStatus,
+   getUserApiKeys,
+   getUserUsageStats,
+diff --git a/frontend/src/components/admin/settings/RegistrationEmailBlacklistEditor.vue b/frontend/src/components/admin/settings/RegistrationEmailBlacklistEditor.vue
+new file mode 100644
+index 000000000..c9b3eff67
+--- /dev/null
++++ b/frontend/src/components/admin/settings/RegistrationEmailBlacklistEditor.vue
+@@ -0,0 +1,453 @@
++<template>
++  <div class="border-t border-gray-100 pt-4 dark:border-dark-700" data-testid="email-blacklist-editor">
++    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
++      <div class="min-w-0">
++        <label class="font-medium text-gray-900 dark:text-white">
++          {{ t('admin.settings.registration.emailBlacklist.title') }}
++        </label>
++        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
++          {{ t('admin.settings.registration.emailBlacklist.hint') }}
++        </p>
++        <p class="mt-2 text-sm" data-testid="email-blacklist-summary">
++          <span v-if="loading" class="text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</span>
++          <span v-else-if="loadError" class="text-red-600 dark:text-red-400">
++            {{ t('admin.settings.registration.emailBlacklist.loadFailed') }}
++            <button type="button" class="ml-2 underline" @click="load">{{ t('admin.settings.registration.emailBlacklist.retry') }}</button>
++          </span>
++          <span v-else class="text-gray-700 dark:text-gray-300">
++            {{ t('admin.settings.registration.emailBlacklist.count', { count: formatCount(savedEmails.length) }) }}
++          </span>
++        </p>
++      </div>
++      <div class="flex shrink-0 gap-2">
++        <button
++          type="button"
++          class="btn btn-secondary btn-sm"
++          :disabled="loading || loadError || savedEmails.length === 0 || checking"
++          data-testid="email-blacklist-check"
++          @click="checkRegisteredUsers(savedEmails)"
++        >
++          <Icon name="search" size="sm" class="mr-1" />
++          {{ t('admin.settings.registration.emailBlacklist.checkUsers') }}
++        </button>
++        <button
++          type="button"
++          class="btn btn-primary btn-sm"
++          :disabled="loading || loadError || checking"
++          data-testid="email-blacklist-edit"
++          @click="openEditor"
++        >
++          {{ t('admin.settings.registration.emailBlacklist.edit') }}
++        </button>
++      </div>
++    </div>
++
++    <BaseDialog
++      :show="editorOpen"
++      :title="t('admin.settings.registration.emailBlacklist.editorTitle')"
++      width="wide"
++      :close-on-escape="false"
++      @close="closeEditor"
++    >
++      <div class="space-y-5">
++        <section>
++          <label class="text-sm font-medium text-gray-700 dark:text-gray-300" for="email-blacklist-bulk">
++            {{ t('admin.settings.registration.emailBlacklist.bulkLabel') }}
++          </label>
++          <textarea
++            id="email-blacklist-bulk"
++            v-model="bulkInput"
++            rows="5"
++            class="input mt-2 w-full font-mono text-sm"
++            :placeholder="t('admin.settings.registration.emailBlacklist.bulkPlaceholder')"
++            data-testid="email-blacklist-bulk-input"
++          />
++          <div class="mt-2 flex flex-wrap items-center gap-3">
++            <button
++              type="button"
++              class="btn btn-secondary btn-sm"
++              :disabled="!bulkInput.trim()"
++              data-testid="email-blacklist-bulk-add"
++              @click="addBulk"
++            >
++              <Icon name="plus" size="sm" class="mr-1" />
++              {{ t('admin.settings.registration.emailBlacklist.bulkAdd') }}
++            </button>
++            <span v-if="addResult" class="text-sm text-gray-600 dark:text-gray-400" data-testid="email-blacklist-add-result">
++              {{
++                t('admin.settings.registration.emailBlacklist.addResult', {
++                  added: formatCount(addResult.added),
++                  duplicates: formatCount(addResult.duplicates)
++                })
++              }}
++            </span>
++          </div>
++          <p
++            v-if="addResult && addResult.invalid.length > 0"
++            class="mt-2 break-all text-sm text-amber-600 dark:text-amber-400"
++            data-testid="email-blacklist-invalid"
++          >
++            {{
++              t('admin.settings.registration.emailBlacklist.invalidResult', {
++                count: formatCount(addResult.invalid.length),
++                sample: invalidSample
++              })
++            }}
++          </p>
++        </section>
++
++        <section>
++          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
++            <div class="text-sm font-medium text-gray-700 dark:text-gray-300">
++              {{ t('admin.settings.registration.emailBlacklist.listLabel', { count: formatCount(draft.length) }) }}
++              <span
++                v-if="pendingAdded > 0 || pendingRemoved > 0"
++                class="ml-2 font-normal text-primary-600 dark:text-primary-400"
++                data-testid="email-blacklist-pending"
++              >
++                {{
++                  t('admin.settings.registration.emailBlacklist.pending', {
++                    added: formatCount(pendingAdded),
++                    removed: formatCount(pendingRemoved)
++                  })
++                }}
++              </span>
++            </div>
++            <div class="flex items-center gap-2">
++              <input
++                v-model="search"
++                type="search"
++                class="input w-full text-sm sm:w-64"
++                :placeholder="t('admin.settings.registration.emailBlacklist.searchPlaceholder')"
++                data-testid="email-blacklist-search"
++              />
++              <button
++                type="button"
++                class="btn btn-secondary btn-sm shrink-0"
++                :disabled="draft.length === 0"
++                data-testid="email-blacklist-clear"
++                @click="clearDraft"
++              >
++                {{ t('admin.settings.registration.emailBlacklist.clear') }}
++              </button>
++            </div>
++          </div>
++
++          <div class="mt-2 max-h-80 overflow-y-auto rounded-lg border border-gray-200 dark:border-dark-600">
++            <p v-if="draft.length === 0" class="p-4 text-sm text-gray-500 dark:text-gray-400">
++              {{ t('admin.settings.registration.emailBlacklist.empty') }}
++            </p>
++            <p v-else-if="filtered.length === 0" class="p-4 text-sm text-gray-500 dark:text-gray-400">
++              {{ t('admin.settings.registration.emailBlacklist.noMatch') }}
++            </p>
++            <ul v-else class="divide-y divide-gray-100 dark:divide-dark-700">
++              <li
++                v-for="email in visible"
++                :key="email"
++                class="flex items-center justify-between gap-3 px-3 py-1.5"
++                data-testid="email-blacklist-row"
++              >
++                <span class="min-w-0 truncate font-mono text-sm text-gray-800 dark:text-gray-200" :title="email">
++                  {{ email }}
++                  <span
++                    v-if="!savedSet.has(email)"
++                    class="ml-2 rounded bg-primary-50 px-1.5 py-0.5 font-sans text-xs text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
++                  >
++                    {{ t('admin.settings.registration.emailBlacklist.newTag') }}
++                  </span>
++                </span>
++                <button
++                  type="button"
++                  class="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-dark-700 dark:hover:text-red-400"
++                  :title="t('admin.settings.registration.emailBlacklist.remove')"
++                  :aria-label="t('admin.settings.registration.emailBlacklist.remove')"
++                  @click="removeEmail(email)"
++                >
++                  <Icon name="x" size="sm" />
++                </button>
++              </li>
++            </ul>
++          </div>
++          <p v-if="filtered.length > VISIBLE_LIMIT" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
++            {{ t('admin.settings.registration.emailBlacklist.truncated', { limit: VISIBLE_LIMIT, total: formatCount(filtered.length) }) }}
++          </p>
++          <p v-if="draft.length > maxEntries" class="mt-2 text-sm text-red-600 dark:text-red-400" data-testid="email-blacklist-too-many">
++            {{ t('admin.settings.registration.emailBlacklist.tooMany', { max: formatCount(maxEntries) }) }}
++          </p>
++        </section>
++      </div>
++
++      <template #footer>
++        <div class="flex justify-end gap-3">
++          <button type="button" class="btn btn-secondary" :disabled="saving" @click="closeEditor">
++            {{ t('common.cancel') }}
++          </button>
++          <button
++            type="button"
++            class="btn btn-primary"
++            :disabled="saving || !dirty || draft.length > maxEntries"
++            data-testid="email-blacklist-save"
++            @click="save"
++          >
++            {{ saving ? t('common.saving') : t('admin.settings.registration.emailBlacklist.save') }}
++          </button>
++        </div>
++      </template>
++    </BaseDialog>
++
++    <ConfirmDialog
++      :show="discardConfirmOpen"
++      :title="t('admin.settings.registration.emailBlacklist.discardTitle')"
++      :message="
++        t('admin.settings.registration.emailBlacklist.discardMessage', {
++          added: formatCount(pendingAdded),
++          removed: formatCount(pendingRemoved)
++        })
++      "
++      :confirm-text="t('admin.settings.registration.emailBlacklist.discardConfirm')"
++      :cancel-text="t('admin.settings.registration.emailBlacklist.discardCancel')"
++      danger
++      @confirm="discardDraft"
++      @cancel="discardConfirmOpen = false"
++    />
++
++    <BaseDialog
++      :show="disableDialogOpen"
++      :title="t('admin.settings.registration.emailBlacklist.disableTitle')"
++      width="normal"
++      :z-index="60"
++      @close="closeDisableDialog"
++    >
++      <div class="space-y-3">
++        <p class="text-sm text-gray-600 dark:text-gray-400">
++          {{ t('admin.settings.registration.emailBlacklist.disableMessage', { count: formatCount(matchedUsers.length) }) }}
++        </p>
++        <ul
++          class="max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 dark:divide-dark-700 dark:border-dark-600"
++          data-testid="email-blacklist-matched-users"
++        >
++          <li v-for="user in matchedUsers" :key="user.id" class="flex items-center justify-between gap-3 px-3 py-1.5 text-sm">
++            <span class="min-w-0 truncate font-mono text-gray-800 dark:text-gray-200" :title="user.email">{{ user.email }}</span>
++            <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
++              <template v-if="user.username">{{ user.username }} · </template>#{{ user.id }}
++            </span>
++          </li>
++        </ul>
++      </div>
++      <template #footer>
++        <div class="flex justify-end gap-3">
++          <button type="button" class="btn btn-secondary" :disabled="disabling" @click="closeDisableDialog">
++            {{ t('admin.settings.registration.emailBlacklist.disableLater') }}
++          </button>
++          <button
++            type="button"
++            class="btn btn-danger"
++            :disabled="disabling"
++            data-testid="email-blacklist-disable-confirm"
++            @click="disableMatchedUsers"
++          >
++            {{ t('admin.settings.registration.emailBlacklist.disableConfirm', { count: formatCount(matchedUsers.length) }) }}
++          </button>
++        </div>
++      </template>
++    </BaseDialog>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref } from 'vue'
++import { useI18n } from 'vue-i18n'
++import { adminAPI } from '@/api'
++import type { BlacklistedEmailUser } from '@/api/admin/users'
++import BaseDialog from '@/components/common/BaseDialog.vue'
++import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
++import Icon from '@/components/icons/Icon.vue'
++import { useAppStore } from '@/stores'
++import { extractApiErrorMessage } from '@/utils/apiError'
++import { mergeIntoBlacklist, parseBlacklistInput } from '@/utils/registrationEmailBlacklist'
++
++const VISIBLE_LIMIT = 200
++const INVALID_SAMPLE_LIMIT = 10
++const DISABLE_BATCH_SIZE = 1000
++
++const { t, locale } = useI18n()
++const appStore = useAppStore()
++
++const loading = ref(true)
++const loadError = ref(false)
++const savedEmails = ref<string[]>([])
++const maxEntries = ref(20000)
++
++const editorOpen = ref(false)
++const draft = ref<string[]>([])
++const bulkInput = ref('')
++const search = ref('')
++const saving = ref(false)
++const discardConfirmOpen = ref(false)
++const addResult = ref<{ added: number; duplicates: number; invalid: string[] } | null>(null)
++
++const checking = ref(false)
++const disableDialogOpen = ref(false)
++const disabling = ref(false)
++const matchedUsers = ref<BlacklistedEmailUser[]>([])
++
++const savedSet = computed(() => new Set(savedEmails.value))
++const draftSet = computed(() => new Set(draft.value))
++const pendingAdded = computed(() => draft.value.filter((email) => !savedSet.value.has(email)).length)
++const pendingRemoved = computed(() => savedEmails.value.filter((email) => !draftSet.value.has(email)).length)
++const dirty = computed(() => pendingAdded.value > 0 || pendingRemoved.value > 0)
++
++const filtered = computed(() => {
++  const keyword = search.value.trim().toLowerCase()
++  if (!keyword) {
++    return draft.value
++  }
++  return draft.value.filter((email) => email.includes(keyword))
++})
++const visible = computed(() => filtered.value.slice(0, VISIBLE_LIMIT))
++const invalidSample = computed(() => {
++  const invalid = addResult.value?.invalid ?? []
++  const sample = invalid.slice(0, INVALID_SAMPLE_LIMIT).join(', ')
++  return invalid.length > INVALID_SAMPLE_LIMIT ? `${sample} …` : sample
++})
++
++function formatCount(value: number): string {
++  return value.toLocaleString(locale.value)
++}
++
++async function load() {
++  loading.value = true
++  loadError.value = false
++  try {
++    const result = await adminAPI.settings.getRegistrationEmailBlacklist()
++    savedEmails.value = result.emails ?? []
++    if (result.max > 0) {
++      maxEntries.value = result.max
++    }
++  } catch (error) {
++    loadError.value = true
++    console.error('Failed to load registration email blacklist:', error)
++  } finally {
++    loading.value = false
++  }
++}
++
++function openEditor() {
++  draft.value = [...savedEmails.value]
++  bulkInput.value = ''
++  search.value = ''
++  addResult.value = null
++  editorOpen.value = true
++}
++
++function closeEditor() {
++  if (saving.value) {
++    return
++  }
++  if (dirty.value) {
++    discardConfirmOpen.value = true
++    return
++  }
++  editorOpen.value = false
++}
++
++function discardDraft() {
++  discardConfirmOpen.value = false
++  editorOpen.value = false
++}
++
++function addBulk() {
++  const parsed = parseBlacklistInput(bulkInput.value)
++  const merged = mergeIntoBlacklist(draft.value, parsed.valid)
++  draft.value = merged.list
++  addResult.value = {
++    added: merged.added.length,
++    duplicates: parsed.duplicates + merged.duplicates,
++    invalid: parsed.invalid
++  }
++  bulkInput.value = parsed.invalid.join('\n')
++  search.value = ''
++}
++
++function removeEmail(email: string) {
++  draft.value = draft.value.filter((item) => item !== email)
++}
++
++function clearDraft() {
++  draft.value = []
++  search.value = ''
++}
++
++async function save() {
++  saving.value = true
++  let added: string[] = []
++  try {
++    const result = await adminAPI.settings.updateRegistrationEmailBlacklist(draft.value)
++    savedEmails.value = result.emails ?? []
++    added = result.added ?? []
++    appStore.showSuccess(
++      t('admin.settings.registration.emailBlacklist.saved', { count: formatCount(savedEmails.value.length) })
++    )
++    editorOpen.value = false
++  } catch (error) {
++    appStore.showError(extractApiErrorMessage(error, t('common.error')))
++    return
++  } finally {
++    saving.value = false
++  }
++  if (added.length > 0) {
++    await checkRegisteredUsers(added, { silentWhenNone: true })
++  }
++}
++
++async function checkRegisteredUsers(emails: string[], options: { silentWhenNone?: boolean } = {}) {
++  if (emails.length === 0) {
++    return
++  }
++  checking.value = true
++  try {
++    const result = await adminAPI.users.findBlacklistedEmailUsers(emails)
++    matchedUsers.value = result.items ?? []
++    if (matchedUsers.value.length > 0) {
++      disableDialogOpen.value = true
++    } else if (!options.silentWhenNone) {
++      appStore.showInfo(t('admin.settings.registration.emailBlacklist.noActiveMatches'))
++    }
++  } catch (error) {
++    appStore.showError(extractApiErrorMessage(error, t('common.error')))
++  } finally {
++    checking.value = false
++  }
++}
++
++function closeDisableDialog() {
++  if (disabling.value) {
++    return
++  }
++  disableDialogOpen.value = false
++}
++
++// 分批提交；失败时弹窗只保留尚未提交的用户，重试从断点继续（已禁用的用户后端会跳过）。
++async function disableMatchedUsers() {
++  disabling.value = true
++  let affected = 0
++  try {
++    while (matchedUsers.value.length > 0) {
++      const batch = matchedUsers.value.slice(0, DISABLE_BATCH_SIZE)
++      const result = await adminAPI.users.batchDisable(batch.map((user) => user.id))
++      affected += result.affected
++      matchedUsers.value = matchedUsers.value.slice(batch.length)
++    }
++    appStore.showSuccess(
++      t('admin.settings.registration.emailBlacklist.disabled', { count: formatCount(affected) })
++    )
++    disableDialogOpen.value = false
++  } catch (error) {
++    appStore.showError(extractApiErrorMessage(error, t('common.error')))
++  } finally {
++    disabling.value = false
++  }
++}
++
++onMounted(load)
++</script>
+diff --git a/frontend/src/components/admin/settings/__tests__/RegistrationEmailBlacklistEditor.spec.ts b/frontend/src/components/admin/settings/__tests__/RegistrationEmailBlacklistEditor.spec.ts
+new file mode 100644
+index 000000000..e0ae43eba
+--- /dev/null
++++ b/frontend/src/components/admin/settings/__tests__/RegistrationEmailBlacklistEditor.spec.ts
+@@ -0,0 +1,245 @@
++import { flushPromises, mount } from '@vue/test-utils'
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import RegistrationEmailBlacklistEditor from '../RegistrationEmailBlacklistEditor.vue'
++
++const mocks = vi.hoisted(() => ({
++  getBlacklist: vi.fn(),
++  updateBlacklist: vi.fn(),
++  findUsers: vi.fn(),
++  batchDisable: vi.fn(),
++  showSuccess: vi.fn(),
++  showError: vi.fn(),
++  showInfo: vi.fn()
++}))
++
++vi.mock('@/api', () => ({
++  adminAPI: {
++    settings: {
++      getRegistrationEmailBlacklist: mocks.getBlacklist,
++      updateRegistrationEmailBlacklist: mocks.updateBlacklist
++    },
++    users: {
++      findBlacklistedEmailUsers: mocks.findUsers,
++      batchDisable: mocks.batchDisable
++    }
++  }
++}))
++
++vi.mock('vue-i18n', () => ({
++  useI18n: () => ({
++    t: (key: string, params?: Record<string, unknown>) =>
++      params ? `${key}:${JSON.stringify(params)}` : key,
++    locale: { value: 'en' }
++  })
++}))
++
++vi.mock('@/stores', () => ({
++  useAppStore: () => ({
++    showSuccess: mocks.showSuccess,
++    showError: mocks.showError,
++    showInfo: mocks.showInfo
++  })
++}))
++
++const wrappers: ReturnType<typeof mount>[] = []
++
++function mountEditor() {
++  const wrapper = mount(RegistrationEmailBlacklistEditor, {
++    attachTo: document.body,
++    global: {
++      stubs: { teleport: true }
++    }
++  })
++  wrappers.push(wrapper)
++  return wrapper
++}
++
++afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()))
++
++beforeEach(() => {
++  vi.clearAllMocks()
++  mocks.getBlacklist.mockResolvedValue({ emails: ['old@gmail.com'], max: 20000 })
++  mocks.findUsers.mockResolvedValue({ items: [], total: 0 })
++  mocks.batchDisable.mockResolvedValue({ affected: 0 })
++})
++
++describe('RegistrationEmailBlacklistEditor', () => {
++  it('批量添加后保存整份名单，并对新增项命中的用户弹窗确认禁用', async () => {
++    mocks.updateBlacklist.mockResolvedValue({
++      emails: ['new.one@gmail.com', 'new2@googlemail.com', 'old@gmail.com'],
++      added: ['new.one@gmail.com', 'new2@googlemail.com'],
++      max: 20000
++    })
++    mocks.findUsers.mockResolvedValue({
++      items: [{ id: 11, email: 'newone@gmail.com', username: 'n1' }],
++      total: 1
++    })
++    mocks.batchDisable.mockResolvedValue({ affected: 1 })
++
++    const wrapper = mountEditor()
++    await flushPromises()
++    expect(wrapper.get('[data-testid="email-blacklist-summary"]').text()).toContain('"count":"1"')
++
++    await wrapper.get('[data-testid="email-blacklist-edit"]').trigger('click')
++    await wrapper.get('[data-testid="email-blacklist-bulk-input"]').setValue(
++      'New.One@gmail.com, new2@googlemail.com\nold@gmail.com\nnew.one@gmail.com\nnot-an-email'
++    )
++    await wrapper.get('[data-testid="email-blacklist-bulk-add"]').trigger('click')
++
++    expect(wrapper.get('[data-testid="email-blacklist-add-result"]').text()).toContain('"added":"2","duplicates":"2"')
++    expect(wrapper.get('[data-testid="email-blacklist-invalid"]').text()).toContain('not-an-email')
++    expect(wrapper.findAll('[data-testid="email-blacklist-row"]')).toHaveLength(3)
++    expect(
++      (wrapper.get('[data-testid="email-blacklist-bulk-input"]').element as HTMLTextAreaElement).value
++    ).toBe('not-an-email')
++
++    await wrapper.get('[data-testid="email-blacklist-save"]').trigger('click')
++    await flushPromises()
++
++    expect(mocks.updateBlacklist).toHaveBeenCalledWith(['new.one@gmail.com', 'new2@googlemail.com', 'old@gmail.com'])
++    expect(mocks.findUsers).toHaveBeenCalledWith(['new.one@gmail.com', 'new2@googlemail.com'])
++    expect(wrapper.get('[data-testid="email-blacklist-matched-users"]').text()).toContain('newone@gmail.com')
++
++    await wrapper.get('[data-testid="email-blacklist-disable-confirm"]').trigger('click')
++    await flushPromises()
++    expect(mocks.batchDisable).toHaveBeenCalledWith([11])
++    expect(mocks.showSuccess).toHaveBeenLastCalledWith(
++      'admin.settings.registration.emailBlacklist.disabled:{"count":"1"}'
++    )
++    expect(wrapper.find('[data-testid="email-blacklist-matched-users"]').exists()).toBe(false)
++  })
++
++  it('保存后没有新增项时不查询用户，没有命中时也不弹窗', async () => {
++    mocks.updateBlacklist.mockResolvedValue({ emails: [], added: [], max: 20000 })
++
++    const wrapper = mountEditor()
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-edit"]').trigger('click')
++    await wrapper.get('[data-testid="email-blacklist-clear"]').trigger('click')
++    expect(wrapper.get('[data-testid="email-blacklist-pending"]').text()).toContain('"removed":"1"')
++
++    await wrapper.get('[data-testid="email-blacklist-save"]').trigger('click')
++    await flushPromises()
++    expect(mocks.updateBlacklist).toHaveBeenCalledWith([])
++    expect(mocks.findUsers).not.toHaveBeenCalled()
++    expect(mocks.showInfo).not.toHaveBeenCalled()
++  })
++
++  it('手动检查已注册用户覆盖整份已保存名单，无命中时提示', async () => {
++    const wrapper = mountEditor()
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-check"]').trigger('click')
++    await flushPromises()
++
++    expect(mocks.findUsers).toHaveBeenCalledWith(['old@gmail.com'])
++    expect(mocks.showInfo).toHaveBeenCalledWith('admin.settings.registration.emailBlacklist.noActiveMatches')
++    expect(wrapper.find('[data-testid="email-blacklist-matched-users"]').exists()).toBe(false)
++  })
++
++  it('未改动时保存按钮不可用，保存失败时保留弹窗并提示错误', async () => {
++    mocks.updateBlacklist.mockRejectedValue({ message: 'invalid email address (1): broken' })
++
++    const wrapper = mountEditor()
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-edit"]').trigger('click')
++    expect(wrapper.get('[data-testid="email-blacklist-save"]').attributes('disabled')).toBeDefined()
++
++    await wrapper.get('[data-testid="email-blacklist-bulk-input"]').setValue('fresh@gmail.com')
++    await wrapper.get('[data-testid="email-blacklist-bulk-add"]').trigger('click')
++    await wrapper.get('[data-testid="email-blacklist-save"]').trigger('click')
++    await flushPromises()
++
++    expect(mocks.showError).toHaveBeenCalledWith('invalid email address (1): broken')
++    expect(wrapper.find('[data-testid="email-blacklist-save"]').exists()).toBe(true)
++    expect(mocks.findUsers).not.toHaveBeenCalled()
++  })
++
++  it('有未保存改动时关闭先确认，放弃后草稿丢弃，继续编辑则保留', async () => {
++    const wrapper = mountEditor()
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-edit"]').trigger('click')
++    await wrapper.get('[data-testid="email-blacklist-bulk-input"]').setValue('draft@gmail.com')
++    await wrapper.get('[data-testid="email-blacklist-bulk-add"]').trigger('click')
++
++    const findButton = (label: string) => wrapper.findAll('button').find((button) => button.text() === label)
++    await findButton('common.cancel')!.trigger('click')
++    expect(wrapper.text()).toContain('admin.settings.registration.emailBlacklist.discardTitle')
++
++    await findButton('admin.settings.registration.emailBlacklist.discardCancel')!.trigger('click')
++    expect(wrapper.findAll('[data-testid="email-blacklist-row"]')).toHaveLength(2)
++
++    await findButton('common.cancel')!.trigger('click')
++    await findButton('admin.settings.registration.emailBlacklist.discardConfirm')!.trigger('click')
++    expect(wrapper.find('[data-testid="email-blacklist-bulk-input"]').exists()).toBe(false)
++    expect(mocks.updateBlacklist).not.toHaveBeenCalled()
++  })
++
++  it('保存后核查新增项期间编辑入口不可用，核查结束后可正常打开和关闭', async () => {
++    let resolveFind: (value: { items: never[]; total: number }) => void = () => {}
++    mocks.findUsers.mockReturnValue(new Promise((resolve) => { resolveFind = resolve }))
++    mocks.updateBlacklist.mockResolvedValue({ emails: ['x@gmail.com', 'old@gmail.com'], added: ['x@gmail.com'], max: 20000 })
++
++    const wrapper = mountEditor()
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-edit"]').trigger('click')
++    await wrapper.get('[data-testid="email-blacklist-bulk-input"]').setValue('x@gmail.com')
++    await wrapper.get('[data-testid="email-blacklist-bulk-add"]').trigger('click')
++    await wrapper.get('[data-testid="email-blacklist-save"]').trigger('click')
++    await flushPromises()
++
++    expect(wrapper.get('[data-testid="email-blacklist-edit"]').attributes('disabled')).toBeDefined()
++    resolveFind({ items: [], total: 0 })
++    await flushPromises()
++    expect(wrapper.get('[data-testid="email-blacklist-edit"]').attributes('disabled')).toBeUndefined()
++
++    await wrapper.get('[data-testid="email-blacklist-edit"]').trigger('click')
++    const cancel = wrapper.findAll('button').find((button) => button.text() === 'common.cancel')!
++    expect(cancel.attributes('disabled')).toBeUndefined()
++    await cancel.trigger('click')
++    expect(wrapper.find('[data-testid="email-blacklist-bulk-input"]').exists()).toBe(false)
++  })
++
++  it('命中用户超过单批上限时分批禁用并汇总人数', async () => {
++    const users = Array.from({ length: 1001 }, (_, i) => ({ id: i + 1, email: `u${i}@gmail.com`, username: '' }))
++    mocks.findUsers.mockResolvedValue({ items: users, total: users.length })
++    mocks.batchDisable.mockImplementation(async (ids: number[]) => ({ affected: ids.length }))
++
++    const wrapper = mountEditor()
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-check"]').trigger('click')
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-disable-confirm"]').trigger('click')
++    await flushPromises()
++
++    expect(mocks.batchDisable).toHaveBeenCalledTimes(2)
++    expect(mocks.batchDisable.mock.calls[0]![0]).toHaveLength(1000)
++    expect(mocks.batchDisable.mock.calls[1]![0]).toEqual([1001])
++    expect(mocks.showSuccess).toHaveBeenLastCalledWith(
++      'admin.settings.registration.emailBlacklist.disabled:{"count":"1,001"}'
++    )
++  })
++
++  it('分批禁用中途失败时只保留未提交的用户，重试从断点继续', async () => {
++    const users = Array.from({ length: 1500 }, (_, i) => ({ id: i + 1, email: `u${i}@gmail.com`, username: '' }))
++    mocks.findUsers.mockResolvedValue({ items: users, total: users.length })
++    mocks.batchDisable
++      .mockResolvedValueOnce({ affected: 1000 })
++      .mockRejectedValueOnce({ message: 'timeout' })
++      .mockResolvedValueOnce({ affected: 500 })
++
++    const wrapper = mountEditor()
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-check"]').trigger('click')
++    await flushPromises()
++    await wrapper.get('[data-testid="email-blacklist-disable-confirm"]').trigger('click')
++    await flushPromises()
++
++    expect(mocks.showError).toHaveBeenCalledWith('timeout')
++    expect(wrapper.findAll('[data-testid="email-blacklist-matched-users"] li')).toHaveLength(500)
++
++    await wrapper.get('[data-testid="email-blacklist-disable-confirm"]').trigger('click')
++    await flushPromises()
++    expect(mocks.batchDisable.mock.calls[2]![0]).toEqual(users.slice(1000).map((user) => user.id))
++    expect(wrapper.find('[data-testid="email-blacklist-matched-users"]').exists()).toBe(false)
++  })
++})
+diff --git a/frontend/src/i18n/locales/en/admin/settings.ts b/frontend/src/i18n/locales/en/admin/settings.ts
+index c056f3925..689e06433 100644
+--- a/frontend/src/i18n/locales/en/admin/settings.ts
++++ b/frontend/src/i18n/locales/en/admin/settings.ts
+@@ -163,6 +163,43 @@ export default {
+         emailDomainQuota: 'Non-allowlist Domain Quota',
+         emailDomainQuotaHint:
+           'When enabled and the allowlist is not empty, every other registrable domain can register one account. When disabled, non-allowlist domains are rejected. Has no effect while the allowlist is empty',
++        emailBlacklist: {
++          title: 'Email Blacklist (Exact Match)',
++          hint: 'Listed addresses cannot register or be bound as an account email. Matching is per inbox: dots in Gmail addresses, the googlemail.com domain and +suffixes are treated as the same address. Existing accounts are not affected; use Check Registered Users to find and disable them. The list is saved from its own dialog, independent of the Save button at the bottom of this page.',
++          count: '{count} addresses',
++          loadFailed: 'Failed to load the blacklist',
++          retry: 'Retry',
++          edit: 'Edit List',
++          checkUsers: 'Check Registered Users',
++          editorTitle: 'Edit Email Blacklist',
++          bulkLabel: 'Bulk Add',
++          bulkPlaceholder: 'One address per line; commas, spaces or semicolons also work',
++          bulkAdd: 'Add to List',
++          addResult: 'Added {added}, skipped {duplicates} duplicates',
++          invalidResult: '{count} invalid entries were left in the input: {sample}',
++          listLabel: 'List ({count})',
++          pending: 'Unsaved: {added} added, {removed} removed',
++          searchPlaceholder: 'Search addresses',
++          clear: 'Clear',
++          empty: 'The list is empty',
++          noMatch: 'No matching addresses',
++          truncated: '{total} matches; showing the first {limit}. Narrow it down with search.',
++          newTag: 'Unsaved',
++          remove: 'Remove',
++          save: 'Save List',
++          saved: 'Blacklist saved with {count} addresses',
++          tooMany: 'The list can hold at most {max} addresses',
++          disableTitle: 'Disable blacklisted users?',
++          disableMessage: 'The emails of the {count} registered users below are blacklisted (including alias variants of the same inbox). Disabled users cannot sign in and their API keys stop working immediately. Disable them?',
++          disableConfirm: 'Disable {count} users',
++          disableLater: 'Not Now',
++          disabled: 'Disabled {count} users',
++          noActiveMatches: 'No active registered users match the list',
++          discardTitle: 'Discard unsaved changes?',
++          discardMessage: '{added} additions and {removed} removals have not been saved and will be lost.',
++          discardConfirm: 'Discard',
++          discardCancel: 'Keep Editing',
++        },
+         promoCode: 'Promo Code',
+         promoCodeHint: 'Allow users to use promo codes during registration',
+         invitationCode: 'Invitation Code Registration',
+diff --git a/frontend/src/i18n/locales/en/common.ts b/frontend/src/i18n/locales/en/common.ts
+index 694dbb74f..856bd5ba5 100644
+--- a/frontend/src/i18n/locales/en/common.ts
++++ b/frontend/src/i18n/locales/en/common.ts
+@@ -248,6 +248,7 @@ export default {
+     loginFailed: 'Login failed. Please check your credentials and try again.',
+     errors: {
+       USER_NOT_ACTIVE: 'Account has been disabled.',
++      EMAIL_BLOCKED: 'This email address is not allowed. Please use a different one.',
+     },
+     registrationFailed: 'Registration failed. Please try again.',
+     emailDomainRegistrationLimit:
+diff --git a/frontend/src/i18n/locales/zh/admin/settings.ts b/frontend/src/i18n/locales/zh/admin/settings.ts
+index 27b282b88..f48160dbe 100644
+--- a/frontend/src/i18n/locales/zh/admin/settings.ts
++++ b/frontend/src/i18n/locales/zh/admin/settings.ts
+@@ -163,6 +163,43 @@ export default {
+         emailDomainQuota: '非白名单域名限量注册',
+         emailDomainQuotaHint:
+           '开启后，白名单非空时，其他可注册主域名各限注册一个账户；关闭时非白名单域名直接拒绝注册。白名单为空时本开关无效果',
++        emailBlacklist: {
++          title: '邮箱黑名单（精确匹配）',
++          hint: '禁止名单中的邮箱注册，或绑定为账号邮箱。按收件箱匹配：Gmail 地址里的点号、googlemail.com 域名，以及各邮箱的 + 后缀都视为同一邮箱。已注册的账号不受影响，可用「检查已注册用户」找出后禁用。名单在弹窗里单独保存，不受页面底部保存按钮影响。',
++          count: '当前 {count} 个邮箱',
++          loadFailed: '黑名单加载失败',
++          retry: '重试',
++          edit: '编辑名单',
++          checkUsers: '检查已注册用户',
++          editorTitle: '编辑邮箱黑名单',
++          bulkLabel: '批量添加',
++          bulkPlaceholder: '每行一个邮箱，也可以用逗号、空格或分号分隔',
++          bulkAdd: '添加到列表',
++          addResult: '新增 {added} 个，跳过重复 {duplicates} 个',
++          invalidResult: '{count} 个格式无效，已留在输入框中：{sample}',
++          listLabel: '名单（{count} 个）',
++          pending: '未保存：新增 {added}，移除 {removed}',
++          searchPlaceholder: '搜索邮箱',
++          clear: '清空',
++          empty: '名单为空',
++          noMatch: '没有匹配的邮箱',
++          truncated: '共 {total} 条匹配，仅显示前 {limit} 条，请用搜索缩小范围',
++          newTag: '未保存',
++          remove: '移除',
++          save: '保存名单',
++          saved: '黑名单已保存，共 {count} 个邮箱',
++          tooMany: '名单最多 {max} 个邮箱',
++          disableTitle: '禁用命中黑名单的用户？',
++          disableMessage: '以下 {count} 个已注册用户的邮箱在黑名单中（含同一收件箱的别名变体）。禁用后无法登录，API Key 也会立即停用。是否禁用？',
++          disableConfirm: '禁用 {count} 个用户',
++          disableLater: '暂不禁用',
++          disabled: '已禁用 {count} 个用户',
++          noActiveMatches: '名单中没有仍在启用的已注册用户',
++          discardTitle: '放弃未保存的改动？',
++          discardMessage: '还有新增 {added} 个、移除 {removed} 个改动没有保存，关闭后会丢失。',
++          discardConfirm: '放弃改动',
++          discardCancel: '继续编辑',
++        },
+         promoCode: '优惠码',
+         promoCodeHint: '允许用户在注册时使用优惠码',
+         invitationCode: '邀请码注册',
+diff --git a/frontend/src/i18n/locales/zh/common.ts b/frontend/src/i18n/locales/zh/common.ts
+index d2377249d..83556f9e1 100644
+--- a/frontend/src/i18n/locales/zh/common.ts
++++ b/frontend/src/i18n/locales/zh/common.ts
+@@ -248,6 +248,7 @@ export default {
+     loginFailed: '登录失败，请检查您的凭据后重试。',
+     errors: {
+       USER_NOT_ACTIVE: '账号已被禁用',
++      EMAIL_BLOCKED: '该邮箱不允许注册，请更换其他邮箱。',
+     },
+     registrationFailed: '注册失败，请重试。',
+     emailDomainRegistrationLimit:
+diff --git a/frontend/src/utils/__tests__/registrationEmailBlacklist.spec.ts b/frontend/src/utils/__tests__/registrationEmailBlacklist.spec.ts
+new file mode 100644
+index 000000000..12deea054
+--- /dev/null
++++ b/frontend/src/utils/__tests__/registrationEmailBlacklist.spec.ts
+@@ -0,0 +1,41 @@
++import { describe, expect, it } from 'vitest'
++import {
++  mergeIntoBlacklist,
++  normalizeBlacklistEmail,
++  parseBlacklistInput
++} from '../registrationEmailBlacklist'
++
++describe('registrationEmailBlacklist', () => {
++  it('normalizes addresses the same way as the backend', () => {
++    expect(normalizeBlacklistEmail('  Alice@Gmail.COM ')).toBe('alice@gmail.com')
++    expect(normalizeBlacklistEmail('user@example.com.')).toBe('user@example.com')
++    expect(normalizeBlacklistEmail('a.b+tag@googlemail.com')).toBe('a.b+tag@googlemail.com')
++    expect(normalizeBlacklistEmail('@gmail.com')).toBeNull()
++    expect(normalizeBlacklistEmail('user@')).toBeNull()
++    expect(normalizeBlacklistEmail('a@b@gmail.com')).toBeNull()
++    expect(normalizeBlacklistEmail('user@localhost')).toBeNull()
++    expect(normalizeBlacklistEmail('user@bad_domain.com')).toBeNull()
++    expect(normalizeBlacklistEmail(`${'x'.repeat(65)}@gmail.com`)).toBeNull()
++    expect(normalizeBlacklistEmail('a\u0085b@gmail.com')).toBeNull()
++    expect(normalizeBlacklistEmail(`${'用'.repeat(21)}@example.com`)).toBe(`${'用'.repeat(21)}@example.com`)
++    expect(normalizeBlacklistEmail(`${'用'.repeat(22)}@example.com`)).toBeNull()
++    expect(normalizeBlacklistEmail('İvan@Example.com')).toBe('İvan@example.com')
++  })
++
++  it('splits pasted text and separates invalid tokens', () => {
++    expect(parseBlacklistInput('A@gmail.com, b@gmail.com；c@gmail.com\n\nbad a@gmail.com')).toEqual({
++      valid: ['a@gmail.com', 'b@gmail.com', 'c@gmail.com'],
++      invalid: ['bad'],
++      duplicates: 1
++    })
++    expect(parseBlacklistInput('   ')).toEqual({ valid: [], invalid: [], duplicates: 0 })
++  })
++
++  it('prepends only new addresses and counts duplicates', () => {
++    expect(mergeIntoBlacklist(['x@gmail.com'], ['y@gmail.com', 'x@gmail.com', 'z@gmail.com'])).toEqual({
++      list: ['y@gmail.com', 'z@gmail.com', 'x@gmail.com'],
++      added: ['y@gmail.com', 'z@gmail.com'],
++      duplicates: 1
++    })
++  })
++})
+diff --git a/frontend/src/utils/registrationEmailBlacklist.ts b/frontend/src/utils/registrationEmailBlacklist.ts
+new file mode 100644
+index 000000000..4d38c7539
+--- /dev/null
++++ b/frontend/src/utils/registrationEmailBlacklist.ts
+@@ -0,0 +1,106 @@
++// Exact registration email blacklist input helpers. Validation follows the
++// backend (NormalizeRegistrationEmailBlacklistEntry): trim, drop the domain root
++// dot, local part ≤ 64 UTF-8 bytes, whole address ≤ 254 UTF-8 bytes. Only ASCII
++// letters are lowercased here; the backend applies full lowercasing on save and
++// returns the stored form.
++
++const TOKEN_SPLIT_RE = /[\s,，;；]+/
++const DOMAIN_PATTERN =
++  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/
++const LOCAL_MAX_BYTES = 64
++const EMAIL_MAX_BYTES = 254
++const utf8 = new TextEncoder()
++
++function utf8Length(value: string): number {
++  return utf8.encode(value).length
++}
++
++function hasControlChar(value: string): boolean {
++  for (let i = 0; i < value.length; i++) {
++    const code = value.charCodeAt(i)
++    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
++      return true
++    }
++  }
++  return false
++}
++
++/** Returns the normalized address, or null when the token is not a valid email. */
++export function normalizeBlacklistEmail(raw: string): string | null {
++  const value = String(raw ?? '').trim().replace(/[A-Z]+/g, (letters) => letters.toLowerCase())
++  const at = value.indexOf('@')
++  if (at <= 0) {
++    return null
++  }
++  const local = value.slice(0, at)
++  const domain = value.slice(at + 1).replace(/\.+$/, '')
++  if (!domain || domain.includes('@')) {
++    return null
++  }
++  if (utf8Length(local) > LOCAL_MAX_BYTES || /\s/.test(local) || hasControlChar(local)) {
++    return null
++  }
++  if (!DOMAIN_PATTERN.test(domain)) {
++    return null
++  }
++  const email = `${local}@${domain}`
++  return utf8Length(email) > EMAIL_MAX_BYTES ? null : email
++}
++
++export interface ParsedBlacklistInput {
++  /** Normalized, de-duplicated addresses in input order. */
++  valid: string[]
++  /** Raw tokens that are not valid addresses. */
++  invalid: string[]
++  /** Tokens dropped because an earlier token normalized to the same address. */
++  duplicates: number
++}
++
++/** Splits pasted text on whitespace, commas and semicolons into addresses. */
++export function parseBlacklistInput(input: string): ParsedBlacklistInput {
++  const valid: string[] = []
++  const invalid: string[] = []
++  const seen = new Set<string>()
++  let duplicates = 0
++  for (const token of String(input ?? '').split(TOKEN_SPLIT_RE)) {
++    if (!token) {
++      continue
++    }
++    const email = normalizeBlacklistEmail(token)
++    if (!email) {
++      invalid.push(token)
++      continue
++    }
++    if (seen.has(email)) {
++      duplicates++
++      continue
++    }
++    seen.add(email)
++    valid.push(email)
++  }
++  return { valid, invalid, duplicates }
++}
++
++export interface MergeBlacklistResult {
++  list: string[]
++  added: string[]
++  duplicates: number
++}
++
++/** Prepends addresses not already in the list; existing order is kept. */
++export function mergeIntoBlacklist(existing: string[], incoming: string[]): MergeBlacklistResult {
++  const present = new Set(existing)
++  const added: string[] = []
++  for (const email of incoming) {
++    if (present.has(email)) {
++      continue
++    }
++    present.add(email)
++    added.push(email)
++  }
++  return {
++    list: [...added, ...existing],
++    added,
++    duplicates: incoming.length - added.length
++  }
++}
+diff --git a/frontend/src/views/admin/SettingsView.vue b/frontend/src/views/admin/SettingsView.vue
+index 36bbfd4b4..a0a5149f9 100644
+--- a/frontend/src/views/admin/SettingsView.vue
++++ b/frontend/src/views/admin/SettingsView.vue
+@@ -1512,6 +1512,9 @@
+                 />
+               </div>
+ 
++              <!-- Exact Email Blacklist -->
++              <RegistrationEmailBlacklistEditor />
++
+               <!-- Promo Code -->
+               <div
+                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
+@@ -9000,6 +9003,7 @@ import {
+   type RechargeBonusMode,
+   type RechargeBonusTierDraft,
+ } from "@/utils/rechargeBonus";
++import RegistrationEmailBlacklistEditor from "@/components/admin/settings/RegistrationEmailBlacklistEditor.vue";
+ import OpenAIFastPolicyUserSelector from "@/views/admin/settings/OpenAIFastPolicyUserSelector.vue";
+ import { useClipboard } from "@/composables/useClipboard";
+ import {
+diff --git a/frontend/src/views/admin/__tests__/SettingsView.spec.ts b/frontend/src/views/admin/__tests__/SettingsView.spec.ts
+index 399088f42..1de1d9876 100644
+--- a/frontend/src/views/admin/__tests__/SettingsView.spec.ts
++++ b/frontend/src/views/admin/__tests__/SettingsView.spec.ts
+@@ -97,6 +97,7 @@ vi.mock("@/api", () => ({
+       getStreamTimeoutSettings,
+       getRectifierSettings,
+       getBetaPolicySettings,
++      getRegistrationEmailBlacklist: vi.fn().mockResolvedValue({ emails: [], max: 20000 }),
+     },
+     accounts: {
+       getUpstreamBillingProbeSettings,
+diff --git a/frontend/src/views/auth/EmailVerifyView.vue b/frontend/src/views/auth/EmailVerifyView.vue
+index 52198961e..bed6c9268 100644
+--- a/frontend/src/views/auth/EmailVerifyView.vue
++++ b/frontend/src/views/auth/EmailVerifyView.vue
+@@ -786,6 +786,9 @@ function buildRegistrationErrorMessage(error: unknown, fallback: string): string
+   if (extractApiErrorCode(error) === 'EMAIL_DOMAIN_REGISTRATION_LIMIT') {
+     return t('auth.emailDomainRegistrationLimit')
+   }
++  if (extractApiErrorCode(error) === 'EMAIL_BLOCKED') {
++    return t('auth.errors.EMAIL_BLOCKED')
++  }
+   return buildAuthErrorMessage(error, { fallback })
+ }
+ </script>
+diff --git a/frontend/src/views/auth/RegisterView.vue b/frontend/src/views/auth/RegisterView.vue
+index a3f9c0e4a..99866d76e 100644
+--- a/frontend/src/views/auth/RegisterView.vue
++++ b/frontend/src/views/auth/RegisterView.vue
+@@ -1112,6 +1112,9 @@ function buildRegistrationErrorMessage(error: unknown, fallback: string): string
+   if (extractApiErrorCode(error) === 'EMAIL_DOMAIN_REGISTRATION_LIMIT') {
+     return t('auth.emailDomainRegistrationLimit')
+   }
++  if (extractApiErrorCode(error) === 'EMAIL_BLOCKED') {
++    return t('auth.errors.EMAIL_BLOCKED')
++  }
+   return buildAuthErrorMessage(error, { fallback })
+ }
+ </script>

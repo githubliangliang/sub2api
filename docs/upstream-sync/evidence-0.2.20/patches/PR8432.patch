@@ -1,0 +1,83 @@
+diff --git a/backend/internal/service/account_test_service.go b/backend/internal/service/account_test_service.go
+index 45d3c7cb1..1eace6b29 100644
+--- a/backend/internal/service/account_test_service.go
++++ b/backend/internal/service/account_test_service.go
+@@ -3054,11 +3054,11 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+ 
+ 	s.sendEvent(c, TestEvent{Type: "test_start", Model: modelID})
+ 
++	// GPT Image models return base64 images by default and reject response_format.
+ 	payload := map[string]any{
+-		"model":           modelID,
+-		"prompt":          prompt,
+-		"n":               1,
+-		"response_format": "b64_json",
++		"model":  modelID,
++		"prompt": prompt,
++		"n":      1,
+ 	}
+ 	if size := account.OpenAIImageTestSize(); size != "" {
+ 		payload["size"] = size
+diff --git a/backend/internal/service/account_test_service_openai_image_test.go b/backend/internal/service/account_test_service_openai_image_test.go
+index 22dce16c3..624739eaa 100644
+--- a/backend/internal/service/account_test_service_openai_image_test.go
++++ b/backend/internal/service/account_test_service_openai_image_test.go
+@@ -2,6 +2,7 @@ package service
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -91,3 +92,50 @@ func TestAccountTestService_OpenAIImageAPIKeyUsesConfiguredV1BaseURL(t *testing.
+ 	require.Contains(t, rec.Body.String(), "data:image/png;base64,aGVsbG8=")
+ 	require.Contains(t, rec.Body.String(), "\"success\":true")
+ }
++
++func TestAccountTestService_OpenAIImageAPIKeyOmitsUnsupportedResponseFormat(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++
++	for _, model := range []string{
++		"gpt-image-1",
++		"gpt-image-1-mini",
++		"gpt-image-1.5",
++		"gpt-image-2",
++		"gpt-image-2-2026-04-21",
++		"gpt-image-2.5-flare",
++	} {
++		t.Run(model, func(t *testing.T) {
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(rec)
++			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/1/test", nil)
++
++			upstream := &httpUpstreamRecorder{
++				resp: &http.Response{
++					StatusCode: http.StatusOK,
++					Header:     http.Header{"Content-Type": []string{"application/json"}},
++					Body:       io.NopCloser(strings.NewReader(`{"data":[{"b64_json":"aGVsbG8="}]}`)),
++				},
++			}
++			svc := &AccountTestService{httpUpstream: upstream, cfg: &config.Config{}}
++			account := &Account{
++				ID: 54, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
++				Credentials: map[string]any{"api_key": "test-api-key"},
++			}
++
++			err := svc.testOpenAIAccountConnection(c, account, model, "draw a cat", AccountTestModeDefault)
++
++			require.NoError(t, err)
++			require.NotNil(t, upstream.lastReq)
++			require.Equal(t, "https://api.openai.com/v1/images/generations", upstream.lastReq.URL.String())
++			var payload map[string]any
++			require.NoError(t, json.Unmarshal(upstream.lastBody, &payload))
++			require.Equal(t, model, payload["model"])
++			require.Equal(t, "draw a cat", payload["prompt"])
++			require.Equal(t, float64(1), payload["n"])
++			// GPT Image models always return base64 images and reject this legacy parameter.
++			require.NotContains(t, payload, "response_format")
++			require.Contains(t, rec.Body.String(), "data:image/png;base64,aGVsbG8=")
++			require.Contains(t, rec.Body.String(), `"success":true`)
++		})
++	}
++}

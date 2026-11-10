@@ -1,0 +1,332 @@
+diff --git a/backend/internal/service/account_usage_service.go b/backend/internal/service/account_usage_service.go
+index 76d22bcef..41fc20929 100644
+--- a/backend/internal/service/account_usage_service.go
++++ b/backend/internal/service/account_usage_service.go
+@@ -496,10 +496,12 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+ 		return usage, nil
+ 	}
+ 
+-	// Setup Token账号：根据session_window推算（没有profile scope，无法调用usage API）
++	// Setup Token 没有 profile scope，复用响应头采样的窗口数据，不能主动调用 usage API。
+ 	if account.Type == AccountTypeSetupToken {
++		if supportsAnthropicPassiveUsage(account) {
++			return s.getPassiveUsageForAccount(ctx, account)
++		}
+ 		usage := s.estimateSetupTokenUsage(account)
+-		// 添加窗口统计
+ 		s.addWindowStats(ctx, account, usage)
+ 		return usage, nil
+ 	}
+@@ -510,7 +512,7 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+ 
+ // GetUsage 获取账号使用量
+ // OAuth账号: 调用Anthropic API获取真实数据（需要profile scope），API响应缓存10分钟，窗口统计缓存1分钟
+-// Setup Token账号: 根据session_window推算5h窗口，7d数据不可用（没有profile scope）
++// Setup Token账号: 返回响应头采样的5h/7d窗口；无5h采样时回退到session_window估算
+ // API Key账号: 不支持usage查询
+ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, force ...bool) (*UsageInfo, error) {
+ 	forceProbe := len(force) > 0 && force[0]
+@@ -1844,7 +1846,6 @@ func (s *AccountUsageService) estimateSetupTokenUsage(account *Account) *UsageIn
+ 		}
+ 	}
+ 
+-	// Setup Token无法获取7d数据
+ 	return info
+ }
+ 
+diff --git a/backend/internal/service/account_usage_service_setup_token_weekly_test.go b/backend/internal/service/account_usage_service_setup_token_weekly_test.go
+new file mode 100644
+index 000000000..91702348c
+--- /dev/null
++++ b/backend/internal/service/account_usage_service_setup_token_weekly_test.go
+@@ -0,0 +1,115 @@
++package service
++
++import (
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestAccountUsageService_SetupTokenWeeklyUsage(t *testing.T) {
++	now := time.Now().UTC().Truncate(time.Second)
++	sampledAt := now.Add(-10 * time.Minute)
++	resetAt := now.Add(48 * time.Hour)
++	fableResetAt := now.Add(72 * time.Hour)
++
++	for _, scenario := range []string{"without_5h", "active_5h", "expired_5h", "zero_weekly_usage", "no_samples"} {
++		t.Run(scenario, func(t *testing.T) {
++			account := Account{
++				ID: 8508, Platform: PlatformAnthropic, Type: AccountTypeSetupToken,
++				Extra: map[string]any{
++					"passive_usage_7d_utilization":    0.42,
++					"passive_usage_7d_reset":          resetAt.Unix(),
++					"passive_usage_7d_oi_utilization": 0.73,
++					"passive_usage_7d_oi_reset":       fableResetAt.Unix(),
++					"passive_usage_sampled_at":        sampledAt.Format(time.RFC3339),
++				},
++			}
++			weeklyUtilization := 42.0
++			fableUtilization := 73.0
++			switch scenario {
++			case "active_5h":
++				end := now.Add(2 * time.Hour)
++				account.SessionWindowEnd = &end
++				account.Extra["session_window_utilization"] = 0.15
++			case "expired_5h":
++				end := now.Add(-time.Hour)
++				account.SessionWindowEnd = &end
++				account.Extra["session_window_utilization"] = 0.95
++			case "zero_weekly_usage":
++				weeklyUtilization, fableUtilization = 0, 0
++				account.Extra["passive_usage_7d_utilization"] = 0.0
++				account.Extra["passive_usage_7d_oi_utilization"] = 0.0
++			case "no_samples":
++				account.Extra = nil
++			}
++
++			repo := &stubOpenAIAccountRepo{accounts: []Account{account}}
++			// No usage fetcher: setup-token queries must use the persisted sample,
++			// including explicit refreshes, without requiring a profile-scoped token.
++			svc := &AccountUsageService{
++				accountRepo: repo, usageLogRepo: &usageBatchLogRepoStub{}, cache: NewUsageCache(),
++			}
++			ctx := t.Context()
++			usage, err := svc.GetUsage(ctx, account.ID)
++			require.NoError(t, err)
++			forced, err := svc.GetUsage(ctx, account.ID, true)
++			require.NoError(t, err)
++			passive, err := svc.GetPassiveUsage(ctx, account.ID)
++			require.NoError(t, err)
++			batch, failures, err := svc.GetUsageBatch(ctx, []int64{account.ID}, true)
++			require.NoError(t, err)
++			require.Empty(t, failures)
++
++			for name, result := range map[string]*UsageInfo{
++				"explicit": usage, "forced": forced, "passive": passive, "batch": batch[account.ID],
++			} {
++				t.Run(name, func(t *testing.T) {
++					require.NotNil(t, result)
++					require.Equal(t, "passive", result.Source)
++					if scenario == "no_samples" {
++						require.Nil(t, result.SevenDay)
++						require.Nil(t, result.SevenDayFable)
++						require.Nil(t, result.UpdatedAt)
++						return
++					}
++					require.NotNil(t, result.UpdatedAt)
++					require.True(t, sampledAt.Equal(*result.UpdatedAt))
++					require.NotNil(t, result.SevenDay)
++					require.InDelta(t, weeklyUtilization, result.SevenDay.Utilization, 1e-9)
++					require.NotNil(t, result.SevenDay.ResetsAt)
++					require.True(t, resetAt.Equal(*result.SevenDay.ResetsAt))
++					require.Positive(t, result.SevenDay.RemainingSeconds)
++					require.NotNil(t, result.SevenDayFable)
++					require.InDelta(t, fableUtilization, result.SevenDayFable.Utilization, 1e-9)
++					require.NotNil(t, result.SevenDayFable.ResetsAt)
++					require.True(t, fableResetAt.Equal(*result.SevenDayFable.ResetsAt))
++					require.Positive(t, result.SevenDayFable.RemainingSeconds)
++					if scenario == "active_5h" {
++						require.NotNil(t, result.FiveHour)
++						require.InDelta(t, 15.0, result.FiveHour.Utilization, 1e-9)
++					}
++				})
++			}
++		})
++	}
++}
++
++func TestAccountUsageService_NonAnthropicSetupTokenPreservesEstimate(t *testing.T) {
++	resetAt := time.Now().Add(time.Hour)
++	account := Account{
++		ID: 8509, Platform: PlatformOpenAI, Type: AccountTypeSetupToken,
++		SessionWindowEnd: &resetAt, SessionWindowStatus: "allowed_warning",
++	}
++	svc := &AccountUsageService{
++		accountRepo:  &stubOpenAIAccountRepo{accounts: []Account{account}},
++		usageLogRepo: &usageBatchLogRepoStub{},
++		cache:        NewUsageCache(),
++	}
++	usage, err := svc.GetUsage(t.Context(), account.ID)
++	require.NoError(t, err)
++	require.NotNil(t, usage.FiveHour)
++	require.Equal(t, 80.0, usage.FiveHour.Utilization)
++	require.Nil(t, usage.SevenDay)
++	require.Empty(t, usage.Source)
++}
+diff --git a/backend/internal/service/ratelimit_service.go b/backend/internal/service/ratelimit_service.go
+index 2f2f70564..61c065ec0 100644
+--- a/backend/internal/service/ratelimit_service.go
++++ b/backend/internal/service/ratelimit_service.go
+@@ -373,6 +373,8 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
+ 	// otherwise a broad "rate limit" keyword rule can shorten a multi-hour
+ 	// cooldown to a local temporary pause.
+ 	if statusCode == http.StatusTooManyRequests && account.Platform == PlatformAnthropic {
++		// 429 也携带最新用量；在窗口限流分支提前返回前保留耗尽时的周额度。
++		s.samplePassiveUsageFromHeaders(ctx, account, headers)
+ 		// Fable may be rejected because the organization has no usage credits for
+ 		// this model. Anthropic reports that as 429, but it is a model entitlement
+ 		// failure rather than a shared account window exhaustion.
+@@ -1695,10 +1697,6 @@ func (s *RateLimitService) persistAnthropicFableWindowLimit(ctx context.Context,
+ 	if limit == nil {
+ 		return false
+ 	}
+-	// 429 响应头本身携带最新的窗口用量（7d_oi utilization=1.0）。限流期内
+-	// Fable 请求不再调度到该账号，若不在此处采样，7d F 进度条会冻结在
+-	// 限流前的旧值直到窗口重置。
+-	s.samplePassiveUsageFromHeaders(ctx, account, headers)
+ 	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, anthropicFableRateLimitKey, limit.resetAt, limit.reason); err != nil {
+ 		slog.Warn("anthropic_fable_window_rate_limit_set_failed",
+ 			"account_id", account.ID,
+@@ -2056,10 +2054,12 @@ func (s *RateLimitService) handle529(ctx context.Context, account *Account) {
+ 	slog.Info("account_overloaded", "account_id", account.ID, "until", until)
+ }
+ 
+-// UpdateSessionWindow 从成功响应更新5h窗口状态
++// UpdateSessionWindow 从成功响应更新5h窗口状态并采样可用的额度窗口。
+ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Account, headers http.Header) {
+ 	status := headers.Get("anthropic-ratelimit-unified-5h-status")
+ 	if status == "" {
++		// Ultra 等账号可能仅返回周窗口；不能因缺少 5h 状态而丢弃真实的 7d 用量。
++		s.samplePassiveUsageFromHeaders(ctx, account, headers)
+ 		return
+ 	}
+ 
+diff --git a/backend/internal/service/ratelimit_weekly_usage_test.go b/backend/internal/service/ratelimit_weekly_usage_test.go
+new file mode 100644
+index 000000000..039e82e8d
+--- /dev/null
++++ b/backend/internal/service/ratelimit_weekly_usage_test.go
+@@ -0,0 +1,131 @@
++package service
++
++import (
++	"context"
++	"net/http"
++	"strconv"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestUpdateSessionWindow_WeeklyUsageWithoutFiveHourHeaders(t *testing.T) {
++	for _, window := range []string{"7d", "7d_oi"} {
++		t.Run(window, func(t *testing.T) {
++			repo := &sessionWindowMockRepo{}
++			svc := newRateLimitServiceForTest(repo)
++			reset := time.Now().Add(72 * time.Hour).Truncate(time.Second)
++			account := &Account{
++				ID: 42, Platform: PlatformAnthropic, Type: AccountTypeSetupToken,
++				RateLimitResetAt: &reset,
++			}
++			headers := http.Header{}
++			headers.Set("anthropic-ratelimit-unified-"+window+"-utilization", "0.63")
++			headers.Set("anthropic-ratelimit-unified-"+window+"-reset", strconv.FormatInt(reset.Unix(), 10))
++
++			svc.UpdateSessionWindow(context.Background(), account, headers)
++
++			require.Empty(t, repo.sessionWindowCalls, "weekly headers must not create a synthetic 5h window")
++			require.Empty(t, repo.clearRateLimitIDs, "missing 5h status must not clear a weekly rate limit")
++			require.Len(t, repo.updateExtraCalls, 1)
++			call := repo.updateExtraCalls[0]
++			require.Equal(t, account.ID, call.ID)
++			require.Equal(t, 0.63, call.Updates["passive_usage_"+window+"_utilization"])
++			require.Equal(t, reset.Unix(), call.Updates["passive_usage_"+window+"_reset"])
++			require.NotContains(t, call.Updates, "session_window_utilization")
++			sampledRaw, ok := call.Updates["passive_usage_sampled_at"].(string)
++			require.True(t, ok)
++			sampled, err := time.Parse(time.RFC3339, sampledRaw)
++			require.NoError(t, err)
++			require.WithinDuration(t, time.Now(), sampled, 2*time.Second)
++		})
++	}
++}
++
++func TestUpdateSessionWindow_NoQuotaHeadersDoesNotWriteUsage(t *testing.T) {
++	repo := &sessionWindowMockRepo{}
++	svc := newRateLimitServiceForTest(repo)
++	svc.UpdateSessionWindow(context.Background(), &Account{ID: 42}, http.Header{})
++	require.Empty(t, repo.updateExtraCalls)
++	require.Empty(t, repo.sessionWindowCalls)
++}
++
++type weeklyUsageRateLimitRepo struct {
++	sessionWindowMockRepo
++	rateLimitCalls    int
++	resetAt           time.Time
++	modelLimitCalls   int
++	modelLimitScope   string
++	modelLimitReset   time.Time
++	modelLimitReasons []string
++}
++
++func (r *weeklyUsageRateLimitRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
++	r.rateLimitCalls++
++	r.resetAt = resetAt
++	return nil
++}
++
++func (r *weeklyUsageRateLimitRepo) SetModelRateLimit(_ context.Context, _ int64, scope string, resetAt time.Time, reasons ...string) error {
++	r.modelLimitCalls++
++	r.modelLimitScope = scope
++	r.modelLimitReset = resetAt
++	r.modelLimitReasons = reasons
++	return nil
++}
++
++func TestHandleUpstreamError_SamplesWeeklyUsageWithoutFiveHourHeaders(t *testing.T) {
++	reset := time.Now().Add(72 * time.Hour).Truncate(time.Second)
++	for _, scenario := range []string{"shared_no_cooldown", "shared_equal_cooldown", "shared_later_cooldown", "fable_only"} {
++		t.Run(scenario, func(t *testing.T) {
++			repo := &weeklyUsageRateLimitRepo{}
++			svc := newRateLimitServiceForTest(repo)
++			account := &Account{ID: 42, Platform: PlatformAnthropic, Type: AccountTypeSetupToken}
++			weeklyUtilization, fableUtilization := 1.0, 0.75
++			weeklyStatus, fableStatus := "rejected", "allowed"
++			switch scenario {
++			case "shared_equal_cooldown":
++				account.RateLimitResetAt = &reset
++			case "shared_later_cooldown":
++				later := reset.Add(time.Hour)
++				account.RateLimitResetAt = &later
++			case "fable_only":
++				weeklyUtilization, fableUtilization = 0.75, 1.0
++				weeklyStatus, fableStatus = "allowed", "rejected"
++			}
++			headers := http.Header{}
++			headers.Set("anthropic-ratelimit-unified-7d-status", weeklyStatus)
++			headers.Set("anthropic-ratelimit-unified-7d-utilization", strconv.FormatFloat(weeklyUtilization, 'f', -1, 64))
++			headers.Set("anthropic-ratelimit-unified-7d-reset", strconv.FormatInt(reset.Unix(), 10))
++			headers.Set("anthropic-ratelimit-unified-7d_oi-status", fableStatus)
++			headers.Set("anthropic-ratelimit-unified-7d_oi-utilization", strconv.FormatFloat(fableUtilization, 'f', -1, 64))
++			headers.Set("anthropic-ratelimit-unified-7d_oi-reset", strconv.FormatInt(reset.Unix(), 10))
++
++			shouldDisable := svc.HandleUpstreamError(context.Background(), account, http.StatusTooManyRequests, headers, nil)
++
++			require.False(t, shouldDisable)
++			if scenario == "shared_no_cooldown" {
++				require.Equal(t, 1, repo.rateLimitCalls)
++				require.Equal(t, reset, repo.resetAt)
++			} else {
++				require.Zero(t, repo.rateLimitCalls, "preserve an existing cooldown and keep Fable-only limits model-scoped")
++			}
++			if scenario == "fable_only" {
++				require.Equal(t, 1, repo.modelLimitCalls)
++				require.Equal(t, anthropicFableRateLimitKey, repo.modelLimitScope)
++				require.Equal(t, reset, repo.modelLimitReset)
++				require.Equal(t, []string{anthropicFableWindowReason}, repo.modelLimitReasons)
++			} else {
++				require.Zero(t, repo.modelLimitCalls)
++			}
++			require.Empty(t, repo.sessionWindowCalls, "weekly exhaustion must not invent a 5h window")
++			require.Len(t, repo.updateExtraCalls, 1, "sample once even when a window handler returns early")
++			updates := repo.updateExtraCalls[0].Updates
++			require.Equal(t, weeklyUtilization, updates["passive_usage_7d_utilization"])
++			require.Equal(t, reset.Unix(), updates["passive_usage_7d_reset"])
++			require.Equal(t, fableUtilization, updates["passive_usage_7d_oi_utilization"])
++			require.Equal(t, reset.Unix(), updates["passive_usage_7d_oi_reset"])
++		})
++	}
++}

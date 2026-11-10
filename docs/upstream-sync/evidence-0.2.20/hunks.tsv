@@ -1,0 +1,1203 @@
+candidate	path	hunk
+a9240d501	backend/cmd/server/VERSION	@@ -1 +1 @@
+PR7979	backend/internal/service/openai_gateway_passthrough.go	@@ -178,7 +178,12 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+PR7979	backend/internal/service/openai_gateway_passthrough.go	@@ -2338,7 +2343,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
+PR7979	backend/internal/service/openai_gateway_passthrough.go	@@ -2407,6 +2415,9 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
+PR7979	backend/internal/service/openai_gateway_passthrough.go	@@ -2453,6 +2464,9 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
+PR7979	backend/internal/service/openai_gateway_response_handling.go	@@ -1739,6 +1739,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
+PR7979	backend/internal/service/openai_gateway_response_handling.go	@@ -1795,6 +1798,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
+PR7979	backend/internal/service/openai_gateway_response_handling.go	@@ -1981,6 +1987,21 @@ func (s *OpenAIGatewayService) writeOpenAINonStreamingProtocolError(resp *http.R
+PR7979	backend/internal/service/openai_oauth_passthrough_non_stream_test.go	@@ -0,0 +1,162 @@
+PR8389	.gitignore	@@ -134,6 +134,7 @@ deploy/docker-compose.override.yml
+PR8389	backend/cmd/server/wire_gen.go	@@ -49,10 +49,10 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+PR8389	backend/cmd/server/wire_gen.go	@@ -83,7 +83,9 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+PR8389	backend/cmd/server/wire_gen.go	@@ -98,6 +100,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+PR8389	backend/cmd/server/wire_gen.go	@@ -328,7 +331,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+PR8389	backend/go.mod	@@ -30,6 +30,7 @@ require (
+PR8389	backend/go.mod	@@ -128,6 +129,7 @@ require (
+PR8389	backend/go.mod	@@ -167,6 +169,8 @@ require (
+PR8389	backend/go.mod	@@ -187,6 +191,7 @@ require (
+PR8389	backend/go.mod	@@ -201,6 +206,7 @@ require (
+PR8389	backend/go.sum	@@ -251,6 +251,8 @@ github.com/google/go-tpm v0.9.8/go.mod h1:h9jEsEECg7gtLis0upRBQU+GhYVH6jMjrFxI8u
+PR8389	backend/go.sum	@@ -349,6 +351,8 @@ github.com/moby/sys/userns v0.1.0 h1:tVLXkFOxVu9A64/yh59slHVv9ahO9UIev4JZusOLG/g
+PR8389	backend/go.sum	@@ -405,6 +409,10 @@ github.com/sagikazarmark/locafero v0.4.0 h1:HApY1R9zGo4DBgr7dqsTH/JJxLTTsOt7u6ke
+PR8389	backend/go.sum	@@ -498,6 +506,8 @@ github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
+PR8389	backend/go.sum	@@ -604,6 +614,8 @@ golang.org/x/net v0.26.0/go.mod h1:5YKkiSynbBIh3p6iOc/vibscux0x38BZDkn8sCUPxHE=
+PR8389	backend/internal/config/config.go	@@ -7,9 +7,11 @@ import (
+PR8389	backend/internal/config/config.go	@@ -69,6 +71,7 @@ type Config struct {
+PR8389	backend/internal/config/config.go	@@ -116,6 +119,54 @@ type SimpleModeConfig struct {
+PR8389	backend/internal/config/config.go	@@ -2084,6 +2135,7 @@ func setDefaults() {
+PR8389	backend/internal/config/config.go	@@ -2859,6 +2911,9 @@ func (c *Config) Validate() error {
+PR8389	backend/internal/config/mcp_config_test.go	@@ -0,0 +1,64 @@
+PR8389	backend/internal/handler/admin/audit_log_handler.go	@@ -110,13 +110,13 @@ type auditLogClearRequest struct {
+PR8389	backend/internal/handler/admin/setting_handler_update.go	@@ -396,13 +396,13 @@ type UpdateSettingsRequest struct {
+PR8389	backend/internal/handler/dto/settings.go	@@ -415,6 +415,7 @@ type PublicSettings struct {
+PR8389	backend/internal/handler/handler.go	@@ -49,6 +49,7 @@ type AdminHandlers struct {
+PR8389	backend/internal/handler/mcp_oauth_handler.go	@@ -0,0 +1,373 @@
+PR8389	backend/internal/handler/mcp_oauth_handler_test.go	@@ -0,0 +1,494 @@
+PR8389	backend/internal/handler/setting_handler.go	@@ -94,6 +94,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
+PR8389	backend/internal/handler/wire.go	@@ -183,6 +183,7 @@ func ProvideAdminSettingHandler(settingService *service.SettingService, emailSer
+PR8389	backend/internal/handler/wire.go	@@ -209,6 +210,7 @@ func ProvideHandlers(
+PR8389	backend/internal/handler/wire.go	@@ -236,6 +238,7 @@ var ProviderSet = wire.NewSet(
+PR8389	backend/internal/managementmcp/auth.go	@@ -0,0 +1,127 @@
+PR8389	backend/internal/managementmcp/catalog.go	@@ -0,0 +1,280 @@
+PR8389	backend/internal/managementmcp/catalog_test.go	@@ -0,0 +1,168 @@
+PR8389	backend/internal/managementmcp/server.go	@@ -0,0 +1,282 @@
+PR8389	backend/internal/managementmcp/server_test.go	@@ -0,0 +1,445 @@
+PR8389	backend/internal/middleware/rate_limiter.go	@@ -5,6 +5,7 @@ import (
+PR8389	backend/internal/middleware/rate_limiter.go	@@ -25,6 +26,8 @@ const (
+PR8389	backend/internal/middleware/rate_limiter.go	@@ -120,6 +123,22 @@ func clientIPForRateLimit(c *gin.Context) string {
+PR8389	backend/internal/middleware/rate_limiter.go	@@ -136,7 +155,7 @@ func (r *RateLimiter) LimitWithOptions(key string, limit int, window time.Durati
+PR8389	backend/internal/middleware/rate_limiter_test.go	@@ -224,3 +224,43 @@ func TestRateLimiterSuccessAndLimit(t *testing.T) {
+PR8389	backend/internal/repository/mcp_oauth.go	@@ -0,0 +1,240 @@
+PR8389	backend/internal/repository/mcp_oauth_integration_test.go	@@ -0,0 +1,273 @@
+PR8389	backend/internal/repository/mcp_oauth_test.go	@@ -0,0 +1,208 @@
+PR8389	backend/internal/repository/user_repo.go	@@ -351,6 +351,18 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User, field
+PR8389	backend/internal/repository/wire.go	@@ -66,6 +66,7 @@ func ProvideSchedulerCache(rdb *redis.Client, cfg *config.Config) service.Schedu
+PR8389	backend/internal/server/middleware/audit_log.go	@@ -52,6 +52,7 @@ func SkipAudit(c *gin.Context) {
+PR8389	backend/internal/server/middleware/audit_log.go	@@ -160,7 +161,7 @@ var auditBodyOmittedRoutes = map[string]struct{}{
+PR8389	backend/internal/server/middleware/audit_log.go	@@ -179,6 +180,10 @@ func NewAuditLogMiddleware(auditService *service.AuditLogService) AuditLogMiddle
+PR8389	backend/internal/server/middleware/audit_log_test.go	@@ -188,3 +188,39 @@ func TestOllamaCloudUsageSessionRouteOmitsAuditBody(t *testing.T) {
+PR8389	backend/internal/server/middleware/cors.go	@@ -53,6 +53,7 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
+PR8389	backend/internal/server/middleware/cors.go	@@ -65,6 +66,28 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
+PR8389	backend/internal/server/middleware/cors.go	@@ -83,7 +106,7 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
+PR8389	backend/internal/server/middleware/cors.go	@@ -100,6 +123,17 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
+PR8389	backend/internal/server/middleware/cors_test.go	@@ -108,6 +108,7 @@ func TestCORS_AllowedOrigin_HasAllowHeaders(t *testing.T) {
+PR8389	backend/internal/server/middleware/cors_test.go	@@ -116,6 +117,102 @@ func TestCORS_AllowedOrigin_HasAllowHeaders(t *testing.T) {
+PR8389	backend/internal/server/middleware/panel_rate_limit.go	@@ -54,6 +54,12 @@ func (p *PanelRateLimiter) Global() gin.HandlerFunc {
+PR8389	backend/internal/server/middleware/step_up.go	@@ -94,6 +94,23 @@ func EnforceStepUpAlways(
+PR8389	backend/internal/server/middleware/step_up.go	@@ -101,9 +118,9 @@ func enforceStepUp(c *gin.Context, grantChecker stepUpGrantChecker, userReader s
+PR8389	backend/internal/server/middleware/step_up_test.go	@@ -63,6 +63,34 @@ func TestEnforceStepUpRejectsAdminAPIKey(t *testing.T) {
+PR8389	backend/internal/server/router.go	@@ -128,6 +128,8 @@ func registerRoutes(
+PR8389	backend/internal/server/routes/mcp.go	@@ -0,0 +1,56 @@
+PR8389	backend/internal/server/routes/mcp_oauth_sdk_test.go	@@ -0,0 +1,120 @@
+PR8389	backend/internal/server/routes/mcp_oauth_test.go	@@ -0,0 +1,500 @@
+PR8389	backend/internal/server/routes/mcp_rate_limit_test.go	@@ -0,0 +1,115 @@
+PR8389	backend/internal/server/routes/mcp_test.go	@@ -0,0 +1,209 @@
+PR8389	backend/internal/server/routes/user.go	@@ -29,6 +29,13 @@ func RegisterUserRoutes(
+PR8389	backend/internal/service/audit_log.go	@@ -20,6 +20,8 @@ const (
+PR8389	backend/internal/service/auth_service.go	@@ -86,6 +86,7 @@ type AuthService struct {
+PR8389	backend/internal/service/auth_service.go	@@ -95,6 +96,11 @@ type CaptchaProof struct {
+PR8389	backend/internal/service/auth_service.go	@@ -154,6 +160,10 @@ func (s *AuthService) SetAliyunCaptchaService(aliyunCaptchaService *AliyunCaptch
+PR8389	backend/internal/service/auth_service.go	@@ -1907,6 +1917,13 @@ func (s *AuthService) RevokeAllUserTokens(ctx context.Context, userID int64) err
+PR8389	backend/internal/service/mcp_oauth_service.go	@@ -0,0 +1,724 @@
+PR8389	backend/internal/service/mcp_oauth_service_test.go	@@ -0,0 +1,708 @@
+PR8389	backend/internal/service/setting_public.go	@@ -346,6 +346,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
+PR8389	backend/internal/service/setting_public.go	@@ -609,6 +610,7 @@ type PublicSettingsInjectionPayload struct {
+PR8389	backend/internal/service/setting_public.go	@@ -703,6 +705,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
+PR8389	backend/internal/service/setting_service_public_test.go	@@ -4,6 +4,8 @@ package service
+PR8389	backend/internal/service/setting_service_public_test.go	@@ -309,3 +311,26 @@ func TestSettingService_GetPublicSettings_PaymentBalanceDisabledStrictTrue(t *te
+PR8389	backend/internal/service/settings_view.go	@@ -375,6 +375,7 @@ type PublicSettings struct {
+PR8389	backend/internal/service/wire.go	@@ -71,6 +71,7 @@ func ProvideAuthService(
+PR8389	backend/internal/service/wire.go	@@ -89,6 +90,9 @@ func ProvideAuthService(
+PR8389	backend/internal/service/wire.go	@@ -861,6 +865,7 @@ var ProviderSet = wire.NewSet(
+PR8389	backend/internal/web/embed_on.go	@@ -355,6 +355,9 @@ func tryServeOverrideFile(c *gin.Context, overrideDir, cleanPath string) bool {
+PR8389	backend/internal/web/embed_test.go	@@ -528,6 +528,9 @@ func TestFrontendServer_Middleware(t *testing.T) {
+PR8389	backend/internal/web/embed_test.go	@@ -827,6 +830,9 @@ func TestServeEmbeddedFrontend(t *testing.T) {
+PR8389	backend/migrations/249_mcp_oauth.sql	@@ -0,0 +1,44 @@
+PR8389	deploy/.env.example	@@ -30,6 +30,12 @@ UPDATE_GITHUB_TOKEN=
+PR8389	deploy/config.example.yaml	@@ -120,6 +120,19 @@ cors:
+PR8389	deploy/docker-compose.dev.yml	@@ -29,6 +29,7 @@ services:
+PR8389	deploy/docker-compose.local.yml	@@ -54,6 +54,7 @@ services:
+PR8389	deploy/docker-compose.standalone.yml	@@ -40,6 +40,7 @@ services:
+PR8389	deploy/docker-compose.yml	@@ -50,6 +50,7 @@ services:
+PR8389	docs/mcp.md	@@ -0,0 +1,171 @@
+PR8389	frontend/src/api/mcp.ts	@@ -0,0 +1,64 @@
+PR8389	frontend/src/components/icons/Icon.vue	@@ -132,7 +132,11 @@ const icons = {
+PR8389	frontend/src/components/layout/AppSidebar.vue	@@ -481,6 +481,10 @@ const PluginIcon = {
+PR8389	frontend/src/components/layout/AppSidebar.vue	@@ -708,6 +712,7 @@ const purchaseNavLabel = computed(() => {
+PR8389	frontend/src/components/layout/AppSidebar.vue	@@ -734,6 +739,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
+PR8389	frontend/src/components/layout/AppSidebar.vue	@@ -845,6 +851,7 @@ const adminNavItems = computed((): NavItem[] => {
+PR8389	frontend/src/components/layout/__tests__/AppSidebar.spec.ts	@@ -80,3 +80,13 @@ describe('AppSidebar subscription feature flag', () => {
+PR8389	frontend/src/i18n/locales/en/index.ts	@@ -1,4 +1,5 @@
+PR8389	frontend/src/i18n/locales/en/index.ts	@@ -9,6 +10,7 @@ import misc from './misc'
+PR8389	frontend/src/i18n/locales/en/mcp.ts	@@ -0,0 +1,61 @@
+PR8389	frontend/src/i18n/locales/zh/index.ts	@@ -1,4 +1,5 @@
+PR8389	frontend/src/i18n/locales/zh/index.ts	@@ -9,6 +10,7 @@ import misc from './misc'
+PR8389	frontend/src/i18n/locales/zh/mcp.ts	@@ -0,0 +1,61 @@
+PR8389	frontend/src/router/__tests__/mcp-route.spec.ts	@@ -0,0 +1,33 @@
+PR8389	frontend/src/router/index.ts	@@ -276,6 +276,29 @@ const routes: RouteRecordRaw[] = [
+PR8389	frontend/src/stores/app.ts	@@ -380,6 +380,7 @@ export const useAppStore = defineStore('app', () => {
+PR8389	frontend/src/types/index.ts	@@ -287,6 +287,8 @@ export interface PublicSettings {
+PR8389	frontend/src/utils/__tests__/featureFlags.spec.ts	@@ -63,3 +63,19 @@ describe('resolveFeatureFlag', () => {
+PR8389	frontend/src/utils/featureFlags.ts	@@ -134,6 +134,12 @@ export const FeatureFlags = {
+PR8389	frontend/src/views/admin/AuditLogView.vue	@@ -485,7 +485,8 @@ const methodOptions = computed(() => [
+PR8389	frontend/src/views/auth/MCPOAuthAuthorizeView.vue	@@ -0,0 +1,203 @@
+PR8389	frontend/src/views/auth/__tests__/MCPLoginRedirect.spec.ts	@@ -0,0 +1,105 @@
+PR8389	frontend/src/views/auth/__tests__/MCPOAuthAuthorizeView.spec.ts	@@ -0,0 +1,228 @@
+PR8389	frontend/src/views/user/MCPView.vue	@@ -0,0 +1,179 @@
+PR8389	frontend/src/views/user/__tests__/MCPView.spec.ts	@@ -0,0 +1,150 @@
+d851a3847	.github/workflows/backend-ci.yml	@@ -54,7 +54,7 @@ jobs:
+d851a3847	.github/workflows/release.yml	@@ -92,7 +92,7 @@ jobs:
+d851a3847	.github/workflows/security-scan.yml	@@ -41,7 +41,7 @@ jobs:
+d851a3847	frontend/package.json	@@ -32,12 +32,12 @@
+d851a3847	frontend/package.json	@@ -67,7 +67,8 @@
+d851a3847	frontend/pnpm-lock.yaml	@@ -11,6 +11,7 @@ overrides:
+d851a3847	frontend/pnpm-lock.yaml	@@ -65,8 +66,8 @@ importers:
+d851a3847	frontend/pnpm-lock.yaml	@@ -75,8 +76,8 @@ importers:
+d851a3847	frontend/pnpm-lock.yaml	@@ -626,17 +627,21 @@ packages:
+d851a3847	frontend/pnpm-lock.yaml	@@ -2285,8 +2290,8 @@ packages:
+d851a3847	frontend/pnpm-lock.yaml	@@ -4411,10 +4416,9 @@ packages:
+d851a3847	frontend/pnpm-lock.yaml	@@ -5032,17 +5036,23 @@ snapshots:
+d851a3847	frontend/pnpm-lock.yaml	@@ -6969,7 +6979,7 @@ snapshots:
+d851a3847	frontend/pnpm-lock.yaml	@@ -8705,7 +8715,7 @@ snapshots:
+d851a3847	frontend/pnpm-lock.yaml	@@ -9609,10 +9619,11 @@ snapshots:
+d851a3847	frontend/src/components/payment/__tests__/SubscriptionPlanCard.spec.ts	"@@ -69,13 +69,13 @@ describe(""SubscriptionPlanCard"", () => {"
+d851a3847	frontend/src/components/payment/__tests__/SubscriptionPlanCard.spec.ts	"@@ -126,11 +126,11 @@ describe(""SubscriptionPlanCard"", () => {"
+d851a3847	frontend/src/components/payment/__tests__/SubscriptionPlanCard.spec.ts	"@@ -146,6 +146,6 @@ describe(""SubscriptionPlanCard"", () => {"
+d851a3847	frontend/vite.config.ts	@@ -94,15 +94,11 @@ export default defineConfig(({ mode }) => {
+PR8476	backend/internal/handler/admin/account_handler.go	@@ -1734,7 +1734,7 @@ func (h *AccountHandler) GetStats(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_accounts.go	@@ -24,7 +24,7 @@ func scopedAdminAccountDTO(a *service.Account, p adminaccess.Policy) gin.H {
+PR8476	backend/internal/handler/admin/custom_admin_key_accounts.go	@@ -42,12 +42,43 @@ func scopedAdminAccountDTO(a *service.Account, p adminaccess.Policy) gin.H {
+PR8476	backend/internal/handler/admin/custom_admin_key_accounts.go	@@ -70,6 +101,9 @@ func (h *AccountHandler) ScopedAdminKeyAccounts(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_accounts.go	@@ -85,7 +119,17 @@ func (h *AccountHandler) ScopedAdminKeyAccounts(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_accounts.go	@@ -96,10 +140,11 @@ func (h *AccountHandler) ScopedAdminKeyAccounts(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_accounts_test.go	@@ -84,7 +84,7 @@ type scopedBulkAccountService struct {
+PR8476	backend/internal/handler/admin/custom_admin_key_commit_test.go	@@ -40,7 +40,7 @@ type scopedCommitAccounts struct {
+PR8476	backend/internal/handler/admin/custom_admin_key_group_models.go	@@ -18,12 +18,12 @@ import (
+PR8476	backend/internal/handler/admin/custom_admin_key_group_models.go	@@ -72,7 +72,8 @@ func (h *GroupHandler) ScopedAdminKeyGroupModels(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_group_models.go	@@ -89,7 +90,7 @@ func (h *GroupHandler) ScopedAdminKeyGroupModels(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_group_models.go	@@ -157,7 +158,7 @@ func (h *GroupHandler) scopedAdminListGroupModels(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_group_models.go	@@ -165,3 +166,11 @@ func (h *GroupHandler) scopedAdminListGroupModels(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_key_idempotency_scope_test.go	@@ -0,0 +1,30 @@
+PR8476	backend/internal/handler/admin/custom_admin_key_openai.go	@@ -0,0 +1,109 @@
+PR8476	backend/internal/handler/admin/custom_admin_key_permissions_test.go	@@ -0,0 +1,175 @@
+PR8476	backend/internal/handler/admin/custom_admin_key_proxies.go	@@ -31,7 +31,7 @@ func scopedProxyDTO(p service.Proxy) scopedProxyOption {
+PR8476	backend/internal/handler/admin/custom_admin_key_statistics.go	@@ -0,0 +1,233 @@
+PR8476	backend/internal/handler/admin/custom_admin_key_statistics_test.go	@@ -0,0 +1,239 @@
+PR8476	backend/internal/handler/admin/custom_admin_key_users.go	@@ -12,7 +12,7 @@ import (
+PR8476	backend/internal/handler/admin/custom_admin_key_users_test.go	@@ -43,6 +43,9 @@ func TestScopedAdminUserResponsePreservesFullAdminResponses(t *testing.T) {
+PR8476	backend/internal/handler/admin/custom_admin_key_users_test.go	@@ -62,7 +65,7 @@ func TestScopedAdminUserResponsePreservesFullAdminResponses(t *testing.T) {
+PR8476	backend/internal/handler/admin/custom_admin_key_users_test.go	@@ -91,6 +94,12 @@ func TestScopedAdminUserBalanceResponseRedactsCachedFullAdminResult(t *testing.T
+PR8476	backend/internal/handler/admin/custom_admin_keys.go	@@ -50,6 +50,7 @@ func (h *SettingHandler) CreateScopedAdminKey(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_keys.go	@@ -66,6 +67,7 @@ func (h *SettingHandler) UpdateScopedAdminKey(c *gin.Context) {
+PR8476	backend/internal/handler/admin/custom_admin_keys.go	@@ -77,6 +79,7 @@ func (h *SettingHandler) RotateScopedAdminKey(c *gin.Context) {
+PR8476	backend/internal/handler/admin/idempotency_helper.go	@@ -2,6 +2,10 @@ package admin
+PR8476	backend/internal/handler/admin/idempotency_helper.go	@@ -68,6 +72,11 @@ func executeAdminIdempotentWithTimeout(
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -9,6 +9,7 @@ import (
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -194,6 +195,11 @@ type OpenAICodexPATCreateRequest struct {
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -211,6 +217,10 @@ func (h *OpenAIOAuthHandler) RefreshToken(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -225,6 +235,10 @@ func (h *OpenAIOAuthHandler) RefreshToken(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -477,6 +491,10 @@ func buildOpenAICodexPATAccountName(name string, tokenInfo *service.OpenAITokenI
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -504,6 +522,10 @@ func (h *OpenAIOAuthHandler) QueryQuota(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -588,13 +610,19 @@ func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_oauth_handler.go	@@ -620,5 +648,13 @@ func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_referral_handler.go	@@ -47,15 +47,19 @@ func (h *OpenAIOAuthHandler) RefreshReferrals(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_referral_handler.go	@@ -65,6 +69,9 @@ func (h *OpenAIOAuthHandler) SendReferralInvite(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_referral_handler.go	@@ -72,7 +79,7 @@ func (h *OpenAIOAuthHandler) SendReferralInvite(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_referral_handler.go	@@ -81,7 +88,7 @@ func (h *OpenAIOAuthHandler) SendReferralInvite(c *gin.Context) {
+PR8476	backend/internal/handler/admin/openai_referral_handler.go	@@ -92,10 +99,15 @@ func (h *OpenAIOAuthHandler) SendReferralInvite(c *gin.Context) {
+PR8476	backend/internal/handler/admin/scoped_admin_content_response.go	@@ -19,7 +19,7 @@ type scopedPromoUsageResponse struct {
+PR8476	backend/internal/handler/admin/scoped_admin_content_response.go	@@ -36,7 +36,7 @@ type scopedAnnouncementReadResponse struct {
+PR8476	backend/internal/handler/admin/scoped_admin_subscription_response.go	@@ -9,14 +9,14 @@ import (
+PR8476	backend/internal/handler/admin/scoped_admin_subscription_response_test.go	@@ -73,7 +73,7 @@ func (r *scopedSubscriptionRepo) ExtendExpiry(context.Context, int64, time.Time)
+PR8476	backend/internal/handler/admin/scoped_admin_subscription_response_test.go	@@ -100,10 +100,12 @@ func TestScopedAdminSubscriptionExtendReplayRespectsReadPermission(t *testing.T)
+PR8476	backend/internal/handler/admin/scoped_admin_usage_response.go	@@ -82,7 +82,7 @@ func scopedAdminUsageLogResponse(record *service.UsageLog) gin.H {
+PR8476	backend/internal/handler/admin/user_handler.go	@@ -151,7 +151,7 @@ func (h *UserHandler) List(c *gin.Context) {
+PR8476	backend/internal/handler/admin/user_handler.go	@@ -430,7 +430,7 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
+PR8476	backend/internal/pkg/adminaccess/catalog.go	@@ -1,6 +1,9 @@
+PR8476	backend/internal/pkg/adminaccess/catalog.go	@@ -17,6 +20,18 @@ type permissionDefinition struct {
+PR8476	backend/internal/pkg/adminaccess/catalog.go	@@ -77,6 +92,9 @@ func PermissionCatalog() []Permission {
+PR8476	backend/internal/pkg/adminaccess/catalog_permissions_test.go	@@ -0,0 +1,20 @@
+PR8476	backend/internal/pkg/adminaccess/catalog_statistics_test.go	@@ -0,0 +1,31 @@
+PR8476	backend/internal/pkg/adminaccess/full_access_test.go	@@ -0,0 +1,32 @@
+PR8476	backend/internal/pkg/adminaccess/policy.go	@@ -18,6 +18,7 @@ type Rule struct {
+PR8476	backend/internal/pkg/adminaccess/policy.go	@@ -47,6 +48,16 @@ func FromContext(ctx context.Context) *Principal {
+PR8476	backend/internal/repository/account_repo.go	@@ -1969,7 +1969,7 @@ func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, gro
+PR8476	backend/internal/repository/custom_admin_key_group_capacity.go	@@ -0,0 +1,37 @@
+PR8476	backend/internal/repository/custom_admin_key_group_models.go	@@ -25,7 +25,7 @@ func (r *groupRepository) ScopedAdminUpdateGroupModels(ctx context.Context, id i
+PR8476	backend/internal/repository/custom_admin_key_group_models.go	@@ -42,7 +42,7 @@ func (r *groupRepository) ScopedAdminUpdateGroupModels(ctx context.Context, id i
+PR8476	backend/internal/repository/custom_admin_key_group_models.go	@@ -52,7 +52,8 @@ func (r *groupRepository) ScopedAdminListGroupModels(ctx context.Context, params
+PR8476	backend/internal/repository/custom_admin_key_group_models.go	@@ -82,7 +83,7 @@ func (r *groupRepository) ScopedAdminListGroupModels(ctx context.Context, params
+PR8476	backend/internal/repository/custom_admin_key_group_models.go	@@ -91,8 +92,24 @@ func (r *groupRepository) ScopedAdminListGroupModels(ctx context.Context, params
+PR8476	backend/internal/repository/custom_admin_key_permissions_test.go	@@ -0,0 +1,230 @@
+PR8476	backend/internal/repository/custom_admin_key_scope.go	@@ -6,6 +6,7 @@ import (
+PR8476	backend/internal/repository/custom_admin_key_scope.go	@@ -17,35 +18,62 @@ import (
+PR8476	backend/internal/repository/custom_admin_key_scope.go	@@ -71,7 +99,75 @@ func (r *accountRepository) ScopedAdminList(ctx context.Context, p pagination.Pa
+PR8476	backend/internal/repository/custom_admin_key_scope_test.go	@@ -63,7 +63,7 @@ func TestScopedAdminAccountListScopesCountAndPageInSQL(t *testing.T) {
+PR8476	backend/internal/repository/custom_admin_key_scope_test.go	@@ -97,7 +97,7 @@ func TestScopedAdminAccountListPostgresRulesAndPagination(t *testing.T) {
+PR8476	backend/internal/repository/custom_admin_key_scope_test.go	@@ -114,7 +114,7 @@ func TestScopedAdminAccountListPostgresRulesAndPagination(t *testing.T) {
+PR8476	backend/internal/repository/custom_admin_key_scope_test.go	@@ -129,7 +129,7 @@ func TestScopedAdminAccountListPostgresRulesAndPagination(t *testing.T) {
+PR8476	backend/internal/repository/custom_admin_key_scope_test.go	@@ -137,12 +137,12 @@ func TestScopedAdminAccountListPostgresRulesAndPagination(t *testing.T) {
+PR8476	backend/internal/repository/custom_admin_keys.go	@@ -88,7 +88,19 @@ func (r *scopedAdminKeyRepository) UpdateScopedAdminKey(ctx context.Context, k *
+PR8476	backend/internal/repository/custom_admin_keys_postgres_test.go	@@ -144,3 +144,23 @@ func TestScopedAdminKeyPostgresMigrationAndLifecycle(t *testing.T) {
+PR8476	backend/internal/repository/custom_admin_keys_test.go	@@ -44,7 +44,7 @@ func TestScopedAdminKeyRepositoryEditDoesNotRestoreOldHash(t *testing.T) {
+PR8476	backend/internal/server/middleware/admin_auth.go	@@ -268,7 +268,7 @@ func recordAdminKeyRequest(c *gin.Context, audit *service.AuditLogService, item
+PR8476	backend/internal/server/middleware/audit_log.go	@@ -52,6 +52,7 @@ func SkipAudit(c *gin.Context) {
+PR8476	backend/internal/server/middleware/custom_admin_key_rate_limit_test.go	@@ -168,3 +168,21 @@ func TestScopedAdminKeyPanelRateLimitPreservesUnrestrictedAdminWrites(t *testing
+PR8476	backend/internal/server/middleware/custom_admin_keys_test.go	@@ -115,3 +115,36 @@ func TestScopedAdminKeyMissingDependenciesFailClosed(t *testing.T) {
+PR8476	backend/internal/server/routes/custom_admin_key_access_test.go	@@ -76,7 +76,7 @@ func (*scopedRouteAccounts) GetAccount(_ context.Context, id int64) (*service.Ac
+PR8476	backend/internal/server/routes/custom_admin_key_full_access_test.go	@@ -0,0 +1,96 @@
+PR8476	backend/internal/server/routes/custom_admin_key_statistics_test.go	@@ -0,0 +1,200 @@
+PR8476	backend/internal/service/account_usage_service.go	@@ -13,6 +13,7 @@ import (
+PR8476	backend/internal/service/account_usage_service.go	@@ -346,6 +347,9 @@ func batchUsageErrorMessage(err error) string {
+PR8476	backend/internal/service/account_usage_service.go	@@ -512,6 +516,16 @@ func (s *AccountUsageService) GetUsageForAccount(ctx context.Context, account *A
+PR8476	backend/internal/service/account_usage_service.go	@@ -544,6 +558,13 @@ func (s *AccountUsageService) GetUsageBatch(ctx context.Context, accountIDs []in
+PR8476	backend/internal/service/account_usage_service.go	@@ -595,6 +616,9 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
+PR8476	backend/internal/service/account_usage_service.go	@@ -717,17 +741,32 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
+PR8476	backend/internal/service/account_usage_service.go	@@ -905,13 +944,17 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
+PR8476	backend/internal/service/account_usage_service.go	@@ -920,9 +963,12 @@ func (s *AccountUsageService) persistOpenAICodexProbeSnapshot(accountID int64, u
+PR8476	backend/internal/service/account_usage_service.go	@@ -1063,7 +1109,7 @@ func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *
+PR8476	backend/internal/service/account_usage_service.go	@@ -1392,6 +1438,9 @@ func (s *AccountUsageService) addWindowStats(ctx context.Context, account *Accou
+PR8476	backend/internal/service/account_usage_service.go	@@ -1408,6 +1457,16 @@ func (s *AccountUsageService) GetTodayStats(ctx context.Context, accountID int64
+PR8476	backend/internal/service/account_usage_service.go	@@ -1550,6 +1609,9 @@ func codexWindowStatsStart(progress *UsageProgress, fallbackWindow time.Duration
+PR8476	backend/internal/service/account_usage_service.go	@@ -1606,6 +1668,10 @@ func parseTime(s string) (time.Time, error) {
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -18,7 +18,7 @@ import (
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -45,6 +45,21 @@ func scopedAccountFieldPermissions(fields map[string]json.RawMessage, create boo
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -58,6 +73,23 @@ func scopedAccountFieldPermissions(fields map[string]json.RawMessage, create boo
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -90,7 +122,7 @@ func scopedAccountFieldPermissions(fields map[string]json.RawMessage, create boo
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -99,14 +131,14 @@ func scopedAccountFieldPermissions(fields map[string]json.RawMessage, create boo
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -123,20 +155,22 @@ func (s *adminServiceImpl) ScopedAdminWrite(ctx context.Context, id int64, actio
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -151,6 +185,11 @@ func (s *adminServiceImpl) ScopedAdminWrite(ctx context.Context, id int64, actio
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -170,7 +209,7 @@ func (s *adminServiceImpl) ScopedAdminWrite(ctx context.Context, id int64, actio
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -221,20 +260,21 @@ func (s *adminServiceImpl) ScopedAdminWrite(ctx context.Context, id int64, actio
+PR8476	backend/internal/service/custom_admin_key_accounts.go	@@ -264,7 +304,7 @@ func (s *adminServiceImpl) ScopedAdminWrite(ctx context.Context, id int64, actio
+PR8476	backend/internal/service/custom_admin_key_full_access_test.go	@@ -0,0 +1,88 @@
+PR8476	backend/internal/service/custom_admin_key_openai_options.go	@@ -0,0 +1,40 @@
+PR8476	backend/internal/service/custom_admin_key_permissions_test.go	@@ -0,0 +1,158 @@
+PR8476	backend/internal/service/custom_admin_key_statistics.go	@@ -0,0 +1,56 @@
+PR8476	backend/internal/service/custom_admin_key_statistics_test.go	@@ -0,0 +1,295 @@
+PR8476	backend/internal/service/custom_admin_keys.go	"@@ -20,24 +20,27 @@ var ErrScopedAdminKeyConflict = infraerrors.Conflict(""ADMIN_KEY_CONFLICT"", ""密"
+PR8476	backend/internal/service/custom_admin_keys.go	@@ -126,6 +129,10 @@ func (s *SettingService) ListScopedAdminKeys(ctx context.Context) ([]*ScopedAdmi
+PR8476	backend/internal/service/custom_admin_keys.go	@@ -161,9 +168,15 @@ func (s *SettingService) UpdateScopedAdminKey(ctx context.Context, id string, in
+PR8476	backend/internal/service/grok_quota_service.go	@@ -244,6 +244,12 @@ func (s *GrokQuotaService) probeUsage(ctx context.Context, accountID int64) (*Gr
+PR8476	backend/internal/service/grok_quota_service.go	@@ -353,7 +359,7 @@ func (s *GrokQuotaService) runProbeFlight(
+PR8476	backend/internal/service/grok_quota_service.go	@@ -544,6 +550,9 @@ func (s *GrokQuotaService) loadGrokOAuthAccount(ctx context.Context, accountID i
+PR8476	backend/internal/service/group_capacity_service.go	@@ -2,6 +2,8 @@ package service
+PR8476	backend/internal/service/group_capacity_service.go	@@ -77,6 +79,15 @@ func (s *GroupCapacityService) GetAllGroupCapacity(ctx context.Context) ([]Group
+PR8476	backend/internal/service/openai_quota_service.go	@@ -11,6 +11,7 @@ import (
+PR8476	backend/internal/service/openai_quota_service.go	@@ -252,6 +253,9 @@ func (s *OpenAIQuotaService) CacheResetCreditsSnapshot(ctx context.Context, acco
+PR8476	backend/internal/service/openai_quota_service.go	@@ -265,6 +269,9 @@ func (s *OpenAIQuotaService) CacheCreditsSnapshot(ctx context.Context, accountID
+PR8476	backend/internal/service/openai_quota_service.go	@@ -282,6 +289,9 @@ func (s *OpenAIQuotaService) CachePostResetSnapshot(ctx context.Context, account
+PR8476	backend/internal/service/openai_quota_service.go	@@ -358,6 +368,10 @@ func (s *OpenAIQuotaService) ResetCreditTargeted(ctx context.Context, accountID
+PR8476	backend/internal/service/openai_quota_service.go	@@ -453,6 +467,9 @@ func (s *OpenAIQuotaService) prepareUpstreamCall(ctx context.Context, accountID
+PR8476	backend/internal/service/openai_quota_service.go	@@ -469,6 +486,9 @@ func (s *OpenAIQuotaService) prepareUpstreamCall(ctx context.Context, accountID
+PR8476	backend/internal/service/openai_quota_service.go	@@ -521,12 +541,18 @@ func (s *OpenAIQuotaService) recoverAgentIdentityTask(ctx context.Context, accou
+PR8476	backend/internal/service/openai_quota_service.go	@@ -553,10 +579,19 @@ func (s *OpenAIQuotaService) isAgentIdentityAccount(ctx context.Context, account
+PR8476	backend/internal/service/openai_quota_service.go	@@ -565,6 +600,11 @@ func (s *OpenAIQuotaService) buildCodexQuotaHeaders(ctx context.Context, account
+PR8476	backend/internal/service/openai_referral_service.go	@@ -68,6 +68,13 @@ func (s *OpenAIQuotaService) referralAccount(ctx context.Context, id int64, send
+PR8476	backend/internal/service/openai_referral_service.go	@@ -75,7 +82,14 @@ func (s *OpenAIQuotaService) referralAccount(ctx context.Context, id int64, send
+PR8476	backend/internal/service/openai_referral_service.go	@@ -108,6 +122,7 @@ func (s *OpenAIQuotaService) referralCall(ctx context.Context, id int64, program
+PR8476	backend/internal/service/openai_referral_service.go	@@ -130,6 +145,9 @@ func (s *OpenAIQuotaService) QueryReferralEligibility(ctx context.Context, id in
+PR8476	backend/internal/service/openai_referral_service.go	@@ -145,6 +163,7 @@ type OpenAIReferralSendResult struct {
+PR8476	docs/admin-api-keys.md	@@ -1,6 +1,6 @@
+PR8476	docs/admin-api-keys.md	@@ -12,7 +12,43 @@
+PR8476	frontend/package.json	@@ -67,7 +67,7 @@
+PR8476	frontend/pnpm-lock.yaml	@@ -10,7 +10,7 @@ overrides:
+PR8476	frontend/pnpm-lock.yaml	@@ -2566,8 +2566,8 @@ packages:
+PR8476	frontend/pnpm-lock.yaml	@@ -6563,7 +6563,7 @@ snapshots:
+PR8476	frontend/pnpm-lock.yaml	@@ -7305,7 +7305,7 @@ snapshots:
+PR8476	frontend/src/api/admin/adminAccessKeys.ts	@@ -8,9 +8,10 @@ export interface AccessRule {
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -21,6 +21,7 @@
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -41,6 +42,12 @@
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -48,11 +55,11 @@
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -61,26 +68,38 @@
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -96,13 +115,22 @@ const editingID = ref('')
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -110,6 +138,7 @@ const globalCategories = computed(() => {
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -118,10 +147,10 @@ function normalizeItem(item: AdminKey): AdminKey {
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -139,6 +168,8 @@ async function load() {
+PR8476	frontend/src/components/admin/settings/AdminAccessKeysSettings.vue	@@ -146,17 +177,38 @@ function edit(item?: AdminKey) {
+PR8476	frontend/src/components/admin/settings/__tests__/AdminAccessKeysSettings.i18n.spec.ts	@@ -0,0 +1,129 @@
+PR8476	frontend/src/components/admin/settings/__tests__/AdminAccessKeysSettings.spec.ts	@@ -3,14 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
+PR8476	frontend/src/components/admin/settings/__tests__/AdminAccessKeysSettings.spec.ts	@@ -184,7 +178,7 @@ describe('管理员受限密钥配置', () => {
+PR8476	frontend/src/components/admin/settings/__tests__/AdminAccessKeysSettings.spec.ts	@@ -245,3 +239,78 @@ describe('管理员受限密钥配置', () => {
+PR8476	frontend/src/composables/useAdminAccessKeyPermissions.ts	@@ -0,0 +1,16 @@
+PR8476	frontend/src/i18n/locales/en/adminAccessKeys.ts	@@ -5,7 +5,7 @@ export default {
+PR8476	frontend/src/i18n/locales/en/adminAccessKeys.ts	@@ -31,7 +31,7 @@ export default {
+PR8476	frontend/src/i18n/locales/en/adminAccessKeys.ts	@@ -69,5 +69,255 @@ export default {
+PR8476	frontend/src/i18n/locales/zh/adminAccessKeys.ts	@@ -5,7 +5,7 @@ export default {
+PR8476	frontend/src/i18n/locales/zh/adminAccessKeys.ts	@@ -31,7 +31,7 @@ export default {
+PR8476	frontend/src/i18n/locales/zh/adminAccessKeys.ts	@@ -69,5 +69,255 @@ export default {
+PR8465	backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go	@@ -584,7 +584,7 @@ func buildChatMessagesFromItems(messages []ChatMessage, rawItems []json.RawMessa
+PR8465	backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go	@@ -653,8 +653,9 @@ func buildChatMessagesFromItems(messages []ChatMessage, rawItems []json.RawMessa
+PR8465	backend/internal/service/openai_gateway_grok_model_input.go	@@ -6,6 +6,7 @@ import (
+PR8465	backend/internal/service/openai_gateway_grok_model_input.go	@@ -69,6 +70,18 @@ func sanitizeGrokResponsesModelInput(body []byte) ([]byte, error) {
+PR8465	backend/internal/service/openai_gateway_grok_model_input_test.go	@@ -1,6 +1,7 @@
+PR8465	backend/internal/service/openai_gateway_grok_model_input_test.go	@@ -9,6 +10,61 @@ import (
+PR8465	backend/internal/service/openai_gateway_grok_test.go	@@ -2041,6 +2041,71 @@ func TestForwardGrokResponsesStreamingDefaultsEmptyModelTo45AndSnapshots(t *test
+PR8503	backend/internal/service/openai_gateway_cn_fixes_test.go	@@ -12,7 +12,6 @@ package service
+PR8503	backend/internal/service/openai_gateway_cn_fixes_test.go	@@ -270,6 +269,7 @@ func TestHandle403_OtherCNProviderWithKimiConcurrencyMessageUsesNormalPolicy(t *
+PR8503	backend/internal/service/openai_gateway_cn_fixes_test.go	@@ -290,16 +290,16 @@ func TestHandle403_CNProviderConcurrencyLimitAlwaysUsesTemporaryCooldown(t *test
+PR8503	backend/internal/service/openai_gateway_cn_fixes_test.go	@@ -313,12 +313,13 @@ func TestHandle403_KimiConcurrencyLimitRepositoryFailureKeepsRuntimeBlock(t *tes
+PR8503	backend/internal/service/openai_gateway_cn_fixes_test.go	@@ -337,4 +338,5 @@ func TestHandle403_CNProviderNearMatchRetainsNormalPermanentErrorPolicy(t *testi
+PR8503	backend/internal/service/ratelimit_cn_concurrency_403_test.go	@@ -0,0 +1,167 @@
+PR8503	backend/internal/service/ratelimit_cn_providers.go	@@ -93,10 +93,7 @@ func (s *RateLimitService) handleCNProviderConcurrencyLimit403(
+PR8503	backend/internal/service/ratelimit_service_cn_quota_403_test.go	@@ -103,9 +103,9 @@ func TestHandleUpstreamError_KimiConcurrencyLimit403StillUsesConcurrencyPath(t *
+PR8436	frontend/src/api/__tests__/client.spec.ts	@@ -260,6 +260,25 @@ describe('API Client', () => {
+PR8436	frontend/src/api/client.ts	@@ -78,6 +78,13 @@ apiClient.interceptors.request.use(
+PR8436	frontend/src/api/client.ts	@@ -262,6 +269,7 @@ apiClient.interceptors.response.use(
+PR8436	frontend/src/i18n/locales/en/dashboard.ts	@@ -454,6 +454,7 @@ export default {
+PR8436	frontend/src/i18n/locales/zh/dashboard.ts	@@ -459,6 +459,7 @@ export default {
+PR8436	frontend/src/views/user/UsageView.vue	@@ -632,6 +632,27 @@ const escapeCSVValue = (value: unknown): string => {
+PR8436	frontend/src/views/user/UsageView.vue	@@ -641,11 +662,10 @@ const exportToCSV = async () => {
+PR8436	frontend/src/views/user/__tests__/UsageView.spec.ts	@@ -71,6 +71,7 @@ const messages: Record<string, string> = {
+PR8436	frontend/src/views/user/__tests__/UsageView.spec.ts	@@ -390,7 +391,7 @@ describe('user UsageView', () => {
+PR8436	frontend/src/views/user/__tests__/UsageView.spec.ts	@@ -450,7 +451,7 @@ describe('user UsageView', () => {
+PR8436	frontend/src/views/user/__tests__/UsageView.spec.ts	@@ -478,7 +479,7 @@ describe('user UsageView', () => {
+PR8436	frontend/src/views/user/__tests__/UsageView.spec.ts	@@ -511,6 +512,65 @@ describe('user UsageView', () => {
+PR8318	backend/internal/pkg/antigravity/attribution_test.go	@@ -27,6 +27,22 @@ func TestTransformClaudeToGemini_AttributionSystemText(t *testing.T) {
+PR8318	backend/internal/pkg/antigravity/attribution_test.go	@@ -39,12 +55,13 @@ func TestTransformClaudeToGemini_AttributionSystemText(t *testing.T) {
+PR8318	backend/internal/pkg/antigravity/attribution_test.go	@@ -68,8 +85,8 @@ func TestTransformClaudeToGemini_AttributionSystemText(t *testing.T) {
+PR8318	backend/internal/pkg/antigravity/attribution_test.go	@@ -124,7 +141,7 @@ func TestNeutralizeClaudeIdentity(t *testing.T) {
+PR8318	backend/internal/pkg/antigravity/attribution_test.go	@@ -135,7 +152,7 @@ func TestAttributionAndIdentityTogether(t *testing.T) {
+PR8318	backend/internal/pkg/antigravity/request_transformer.go	@@ -294,27 +294,28 @@ func filterOpenCodePrompt(text string) string {
+PR8318	backend/internal/pkg/antigravity/request_transformer.go	@@ -349,7 +350,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
+PR8318	backend/internal/pkg/antigravity/request_transformer.go	@@ -365,7 +366,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
+PR8318	backend/internal/service/antigravity_gateway_compat.go	@@ -13,6 +13,8 @@ import (
+PR8318	backend/internal/service/antigravity_gateway_compat.go	@@ -75,7 +77,7 @@ func (s *AntigravityGatewayService) ForwardAsChatCompletions(
+PR8318	backend/internal/service/antigravity_gateway_compat.go	@@ -118,7 +120,7 @@ func (s *AntigravityGatewayService) ForwardAsResponses(
+PR8318	backend/internal/service/antigravity_gateway_compat.go	@@ -151,6 +153,48 @@ func (s *AntigravityGatewayService) validateAntigravityCompatAccount(c *gin.Cont
+PR8318	backend/internal/service/antigravity_gateway_compat_test.go	@@ -4,6 +4,7 @@ import (
+PR8318	backend/internal/service/antigravity_gateway_compat_test.go	@@ -131,6 +132,234 @@ func antigravityCompatSuccessResponse() *http.Response {
+PR8318	backend/internal/service/antigravity_gateway_service.go	@@ -641,21 +641,33 @@ func injectIdentityPatchToGeminiRequest(body []byte) ([]byte, error) {
+PR8499	backend/internal/handler/ops_error_logger.go	@@ -2343,8 +2343,7 @@ func isOpsLocalBusinessLimitError(code string, msg string) bool {
+PR8499	backend/internal/handler/ops_error_logger_test.go	@@ -1324,15 +1324,6 @@ func TestClassifyOpsLocalBusinessLimitErrorsExcludedFromSLA(t *testing.T) {
+PR8499	backend/internal/handler/ops_error_logger_test.go	@@ -1561,12 +1552,6 @@ func TestClassifyOpsUpstreamAuthTextStillCountsForSLA(t *testing.T) {
+PR8499	backend/internal/service/openai_gateway_forward.go	@@ -33,6 +33,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+PR8499	backend/internal/service/openai_gateway_forward.go	@@ -1042,6 +1043,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+PR8499	backend/internal/service/openai_gateway_passthrough.go	@@ -151,18 +151,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+PR8499	backend/internal/service/openai_gateway_passthrough.go	@@ -376,6 +364,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+PR8499	backend/internal/service/openai_gateway_passthrough.go	@@ -553,37 +542,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+PR8499	backend/internal/service/openai_gateway_passthrough.go	@@ -2066,6 +2024,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
+PR8499	backend/internal/service/openai_gateway_passthrough.go	@@ -2378,6 +2337,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
+PR8499	backend/internal/service/openai_gateway_passthrough.go	@@ -2445,11 +2405,12 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
+PR8499	backend/internal/service/openai_gateway_request_body.go	@@ -1691,24 +1691,6 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
+PR8499	backend/internal/service/openai_gateway_response_handling.go	@@ -653,6 +653,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
+PR8499	backend/internal/service/openai_gateway_response_handling.go	@@ -1674,6 +1675,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
+PR8499	backend/internal/service/openai_gateway_response_handling.go	@@ -1778,11 +1780,13 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
+PR8499	backend/internal/service/openai_passthrough_normalization_test.go	@@ -358,20 +358,3 @@ func TestNormalizeOpenAIPassthroughOAuthBody_ArrayInputUnchanged(t *testing.T) {
+PR8499	backend/internal/service/openai_responses_instructions_echo.go	@@ -0,0 +1,161 @@
+PR8499	backend/internal/service/openai_responses_instructions_echo_test.go	@@ -0,0 +1,227 @@
+PR8462	backend/internal/handler/openai_gateway_handler.go	@@ -656,6 +656,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8462	backend/internal/handler/openai_gateway_handler.go	@@ -702,6 +708,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8462	backend/internal/handler/openai_images.go	@@ -156,7 +156,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+PR8462	backend/internal/handler/openai_images.go	@@ -189,6 +189,11 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+PR8462	backend/internal/handler/openai_images_size_routing_test.go	@@ -0,0 +1,164 @@
+PR8462	backend/internal/repository/scheduler_cache.go	@@ -1317,6 +1317,8 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
+PR8462	backend/internal/repository/scheduler_cache_unit_test.go	@@ -567,6 +567,23 @@ func TestBuildSchedulerMetadataAccount_KeepsQuotaStateForCachedAccounts(t *testi
+PR8462	backend/internal/service/account_test_service.go	@@ -3060,6 +3060,9 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+PR8462	backend/internal/service/account_test_service.go	@@ -3156,7 +3159,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -386,6 +386,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -409,7 +410,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -522,6 +523,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -1823,6 +1825,9 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -2153,7 +2158,7 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -2175,7 +2180,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -2191,7 +2196,42 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -2272,7 +2312,7 @@ func (s *OpenAIGatewayService) selectLegacyAccountByPreviousResponse(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -2323,7 +2363,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -2371,7 +2411,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
+PR8462	backend/internal/service/openai_account_scheduler.go	@@ -2457,7 +2497,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
+PR8462	backend/internal/service/openai_gateway_scheduling.go	@@ -453,6 +453,9 @@ func openAICompatibleAccountEligibilityFailureReasonBeforeProfit(ctx context.Con
+PR8462	backend/internal/service/openai_gateway_scheduling.go	@@ -970,6 +973,7 @@ func (s *OpenAIGatewayService) tryStickySessionHit(ctx context.Context, groupID
+PR8462	backend/internal/service/openai_gateway_scheduling.go	@@ -1153,6 +1157,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
+PR8462	backend/internal/service/openai_image_size_routing.go	@@ -0,0 +1,343 @@
+PR8462	backend/internal/service/openai_image_size_routing_test.go	@@ -0,0 +1,589 @@
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -193,6 +193,43 @@
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -1508,6 +1545,13 @@ import {
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -1661,6 +1705,7 @@ const enableGroups = ref(false)
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -1697,6 +1742,7 @@ const openaiPassthroughEnabled = ref(false)
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -1996,6 +2042,11 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -2206,6 +2257,7 @@ const handleSubmit = async () => {
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -2368,6 +2420,7 @@ watch(
+PR8462	frontend/src/components/account/BulkEditAccountModal.vue	@@ -2386,6 +2439,7 @@ watch(
+PR8462	frontend/src/components/account/CreateAccountModal.vue	@@ -3662,6 +3662,14 @@
+PR8462	frontend/src/components/account/CreateAccountModal.vue	@@ -4154,6 +4162,12 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+PR8462	frontend/src/components/account/CreateAccountModal.vue	@@ -4709,6 +4723,7 @@ const openAICompactMode = ref<OpenAICompactMode>('auto')
+PR8462	frontend/src/components/account/CreateAccountModal.vue	@@ -5227,6 +5242,7 @@ watch(
+PR8462	frontend/src/components/account/CreateAccountModal.vue	@@ -5663,6 +5679,7 @@ const resetForm = () => {
+PR8462	frontend/src/components/account/CreateAccountModal.vue	@@ -5807,6 +5824,7 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
+PR8462	frontend/src/components/account/EditAccountModal.vue	@@ -2243,6 +2243,14 @@
+PR8462	frontend/src/components/account/EditAccountModal.vue	@@ -3407,6 +3415,13 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+PR8462	frontend/src/components/account/EditAccountModal.vue	@@ -4154,6 +4169,7 @@ const openAICompactMode = ref<OpenAICompactMode>('auto')
+PR8462	frontend/src/components/account/EditAccountModal.vue	@@ -4630,6 +4646,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
+PR8462	frontend/src/components/account/EditAccountModal.vue	@@ -6242,6 +6259,7 @@ const handleSubmit = async () => {
+PR8462	frontend/src/components/account/OpenAIImageSizeTiersField.vue	@@ -0,0 +1,52 @@
+PR8462	frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts	@@ -492,6 +492,42 @@ describe('BulkEditAccountModal', () => {
+PR8462	frontend/src/components/account/__tests__/CreateAccountModal.spec.ts	@@ -338,6 +338,25 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
+PR8462	frontend/src/components/account/__tests__/EditAccountModal.spec.ts	@@ -1040,6 +1040,41 @@ describe('EditAccountModal', () => {
+PR8462	frontend/src/components/account/__tests__/OpenAIImageSizeTiersField.spec.ts	@@ -0,0 +1,63 @@
+PR8462	frontend/src/components/account/openaiImageSizeTiers.ts	@@ -0,0 +1,37 @@
+PR8462	frontend/src/i18n/locales/en/admin/accounts.ts	@@ -687,6 +687,10 @@ export default {
+PR8462	frontend/src/i18n/locales/zh/admin/accounts.ts	@@ -799,6 +799,10 @@ export default {
+PR8504	backend/internal/handler/admin/admin_service_stub_test.go	@@ -208,6 +208,14 @@ func (s *stubAdminService) BatchUpdateLimits(ctx context.Context, userIDs []int6
+PR8504	backend/internal/handler/admin/email_blacklist_handler_test.go	@@ -0,0 +1,179 @@
+PR8504	backend/internal/handler/admin/setting_handler_email_blacklist.go	@@ -0,0 +1,65 @@
+PR8504	backend/internal/handler/admin/user_handler_email_blacklist.go	@@ -0,0 +1,77 @@
+PR8504	backend/internal/repository/user_repo_email_blacklist.go	@@ -0,0 +1,137 @@
+PR8504	backend/internal/repository/user_repo_email_blacklist_integration_test.go	@@ -0,0 +1,163 @@
+PR8504	backend/internal/server/routes/admin.go	@@ -316,6 +316,8 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+PR8504	backend/internal/server/routes/admin.go	@@ -593,6 +595,9 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpA
+PR8504	backend/internal/service/admin_service.go	@@ -22,6 +22,10 @@ type AdminService interface {
+PR8504	backend/internal/service/admin_user_email_blacklist.go	@@ -0,0 +1,111 @@
+PR8504	backend/internal/service/admin_user_email_blacklist_test.go	@@ -0,0 +1,125 @@
+PR8504	backend/internal/service/auth_email_oauth_auto.go	@@ -85,7 +85,8 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
+PR8504	backend/internal/service/auth_email_oauth_auto.go	@@ -158,6 +159,9 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
+PR8504	backend/internal/service/auth_email_oauth_blacklist_test.go	@@ -0,0 +1,60 @@
+PR8504	backend/internal/service/auth_registration_email_blacklist_test.go	@@ -0,0 +1,62 @@
+PR8504	backend/internal/service/auth_service.go	@@ -1202,7 +1202,19 @@ func inferLegacySignupSource(email string) string {
+PR8504	backend/internal/service/auth_service.go	@@ -1213,13 +1225,16 @@ func (s *AuthService) validateRegistrationEmailPolicy(ctx context.Context, email
+PR8504	backend/internal/service/domain_constants.go	@@ -223,6 +223,7 @@ const (
+PR8504	backend/internal/service/registration_email_blacklist.go	@@ -0,0 +1,268 @@
+PR8504	backend/internal/service/registration_email_blacklist_test.go	@@ -0,0 +1,311 @@
+PR8504	backend/internal/service/setting_service.go	@@ -145,6 +145,14 @@ type SettingService struct {
+PR8504	frontend/src/api/__tests__/admin.emailBlacklist.spec.ts	@@ -0,0 +1,50 @@
+PR8504	frontend/src/api/admin/settings.ts	@@ -1359,6 +1359,35 @@ export interface PanelRateLimitSettings {
+PR8504	frontend/src/api/admin/settings.ts	@@ -1603,6 +1632,8 @@ export const settingsAPI = {
+PR8504	frontend/src/api/admin/users.ts	@@ -207,6 +207,32 @@ export async function batchUpdateLimits(
+PR8504	frontend/src/api/admin/users.ts	@@ -413,6 +439,8 @@ export const usersAPI = {
+PR8504	frontend/src/components/admin/settings/RegistrationEmailBlacklistEditor.vue	@@ -0,0 +1,453 @@
+PR8504	frontend/src/components/admin/settings/__tests__/RegistrationEmailBlacklistEditor.spec.ts	@@ -0,0 +1,245 @@
+PR8504	frontend/src/i18n/locales/en/admin/settings.ts	@@ -163,6 +163,43 @@ export default {
+PR8504	frontend/src/i18n/locales/en/common.ts	@@ -248,6 +248,7 @@ export default {
+PR8504	frontend/src/i18n/locales/zh/admin/settings.ts	@@ -163,6 +163,43 @@ export default {
+PR8504	frontend/src/i18n/locales/zh/common.ts	@@ -248,6 +248,7 @@ export default {
+PR8504	frontend/src/utils/__tests__/registrationEmailBlacklist.spec.ts	@@ -0,0 +1,41 @@
+PR8504	frontend/src/utils/registrationEmailBlacklist.ts	@@ -0,0 +1,106 @@
+PR8504	frontend/src/views/admin/SettingsView.vue	@@ -1512,6 +1512,9 @@
+PR8504	frontend/src/views/admin/SettingsView.vue	@@ -9000,6 +9003,7 @@ import {
+PR8504	frontend/src/views/admin/__tests__/SettingsView.spec.ts	"@@ -97,6 +97,7 @@ vi.mock(""@/api"", () => ({"
+PR8504	frontend/src/views/auth/EmailVerifyView.vue	@@ -786,6 +786,9 @@ function buildRegistrationErrorMessage(error: unknown, fallback: string): string
+PR8504	frontend/src/views/auth/RegisterView.vue	@@ -1112,6 +1112,9 @@ function buildRegistrationErrorMessage(error: unknown, fallback: string): string
+e353c8322	README.md	@@ -137,11 +137,6 @@ Please read the following carefully before using this project:
+e353c8322	README_CN.md	@@ -140,11 +140,6 @@
+e353c8322	README_JA.md	@@ -139,11 +139,6 @@
+251094436	README.md	@@ -34,11 +34,11 @@ Please read the following carefully before using this project:
+251094436	README_CN.md	@@ -35,11 +35,11 @@
+251094436	README_JA.md	@@ -34,11 +34,11 @@
+876b96d20	README.md	@@ -65,8 +65,8 @@ Please read the following carefully before using this project:
+876b96d20	README_CN.md	@@ -66,8 +66,8 @@
+876b96d20	README_JA.md	@@ -65,8 +65,8 @@
+PR8484	.gitignore	@@ -133,6 +133,7 @@ deploy/docker-compose.override.yml
+PR8484	backend/cmd/server/wire.go	@@ -111,6 +111,8 @@ func provideCleanup(
+PR8484	backend/cmd/server/wire.go	@@ -143,6 +145,18 @@ func provideCleanup(
+PR8484	backend/cmd/server/wire_gen.go	@@ -359,7 +359,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+PR8484	backend/cmd/server/wire_gen.go	@@ -426,6 +426,8 @@ func provideCleanup(
+PR8484	backend/cmd/server/wire_gen.go	@@ -457,6 +459,18 @@ func provideCleanup(
+PR8484	backend/cmd/server/wire_gen_test.go	@@ -81,6 +81,8 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
+PR8484	backend/internal/config/config.go	@@ -1049,6 +1049,12 @@ type GatewayConfig struct {
+PR8484	backend/internal/config/config.go	@@ -1143,7 +1149,10 @@ type GatewayConfig struct {
+PR8484	backend/internal/config/config.go	@@ -2584,6 +2593,9 @@ func setDefaults() {
+PR8484	backend/internal/config/config.go	@@ -2605,6 +2617,9 @@ func setDefaults() {
+PR8484	backend/internal/config/config.go	@@ -3408,6 +3423,18 @@ func (c *Config) Validate() error {
+PR8484	backend/internal/config/config_test.go	@@ -144,6 +144,12 @@ func TestLoadHTTPIngressSafetyDefaults(t *testing.T) {
+PR8484	backend/internal/config/config_test.go	@@ -1634,6 +1640,16 @@ func TestValidateConfigErrors(t *testing.T) {
+PR8484	backend/internal/handler/gateway_handler.go	@@ -147,6 +147,9 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler.go	@@ -599,6 +602,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler.go	@@ -616,7 +620,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler.go	@@ -962,6 +966,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler.go	@@ -979,7 +984,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler.go	@@ -2158,6 +2163,9 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler_chat_completions.go	@@ -47,6 +47,9 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler_chat_completions.go	@@ -333,6 +336,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler_chat_completions.go	@@ -349,7 +353,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler_responses.go	@@ -47,6 +47,9 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler_responses.go	@@ -315,6 +318,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_handler_responses.go	@@ -331,7 +335,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_systemone.go	@@ -56,6 +56,9 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
+PR8484	backend/internal/handler/gateway_systemone.go	@@ -258,9 +261,13 @@ func (h *GatewayHandler) recordSystemOneUsage(c *gin.Context, apiKey *service.AP
+PR8484	backend/internal/handler/gateway_systemone.go	@@ -274,7 +281,7 @@ func (h *GatewayHandler) recordSystemOneUsage(c *gin.Context, apiKey *service.AP
+PR8484	backend/internal/handler/gemini_cached_contents_handler.go	@@ -65,6 +65,9 @@ func (h *GatewayHandler) geminiCachedContentsPreamble(c *gin.Context, component
+PR8484	backend/internal/handler/gemini_v1beta_handler.go	@@ -374,6 +374,9 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
+PR8484	backend/internal/handler/gemini_v1beta_handler.go	@@ -830,6 +833,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
+PR8484	backend/internal/handler/gemini_v1beta_handler.go	@@ -847,7 +851,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
+PR8484	backend/internal/handler/grok_audio.go	@@ -4,12 +4,12 @@ import (
+PR8484	backend/internal/handler/grok_audio.go	@@ -203,6 +203,9 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
+PR8484	backend/internal/handler/grok_audio.go	@@ -344,6 +347,7 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
+PR8484	backend/internal/handler/grok_audio.go	@@ -359,7 +363,7 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
+PR8484	backend/internal/handler/grok_audio.go	@@ -383,7 +387,7 @@ func readGrokVoiceGatewayBody(c *gin.Context) ([]byte, error) {
+PR8484	backend/internal/handler/grok_audio_body_test.go	@@ -0,0 +1,53 @@
+PR8484	backend/internal/handler/grok_media.go	@@ -90,6 +90,9 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
+PR8484	backend/internal/handler/grok_media.go	@@ -757,6 +760,7 @@ func recordGrokMediaUsage(
+PR8484	backend/internal/handler/grok_media.go	@@ -768,7 +772,7 @@ func recordGrokMediaUsage(
+PR8484	backend/internal/handler/image_task_handler.go	@@ -77,6 +77,9 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
+PR8484	backend/internal/handler/openai_alpha_search.go	@@ -52,6 +52,9 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
+PR8484	backend/internal/handler/openai_alpha_search.go	@@ -293,6 +296,7 @@ func (h *OpenAIGatewayHandler) recordAlphaSearchUsage(
+PR8484	backend/internal/handler/openai_alpha_search.go	@@ -310,7 +314,7 @@ func (h *OpenAIGatewayHandler) recordAlphaSearchUsage(
+PR8484	backend/internal/handler/openai_chat_completions.go	@@ -51,6 +51,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
+PR8484	backend/internal/handler/openai_chat_completions.go	@@ -292,6 +295,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
+PR8484	backend/internal/handler/openai_chat_completions.go	@@ -306,7 +310,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
+PR8484	backend/internal/handler/openai_embeddings.go	@@ -48,6 +48,9 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
+PR8484	backend/internal/handler/openai_embeddings.go	@@ -271,6 +274,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
+PR8484	backend/internal/handler/openai_embeddings.go	@@ -285,7 +289,7 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_count_tokens.go	@@ -42,6 +42,9 @@ func (h *OpenAIGatewayHandler) ResponsesInputTokens(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_count_tokens.go	@@ -135,6 +138,9 @@ func (h *OpenAIGatewayHandler) ResponsesInputTokens(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_count_tokens.go	@@ -205,6 +211,9 @@ func (h *OpenAIGatewayHandler) CountTokens(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_handler.go	@@ -270,9 +270,10 @@ func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecord
+PR8484	backend/internal/handler/openai_gateway_handler.go	@@ -422,6 +423,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_handler.go	@@ -840,6 +844,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_handler.go	@@ -855,7 +860,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_handler.go	@@ -1201,6 +1206,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_handler.go	@@ -1434,6 +1442,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/openai_gateway_handler.go	@@ -1449,7 +1458,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+PR8484	backend/internal/handler/openai_images.go	@@ -50,6 +50,9 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+PR8484	backend/internal/handler/openai_images.go	@@ -409,6 +412,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+PR8484	backend/internal/handler/openai_images.go	@@ -424,7 +428,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+PR8484	backend/internal/handler/request_body_limit.go	@@ -7,8 +7,20 @@ import (
+PR8484	backend/internal/handler/request_body_limit_test.go	@@ -2,6 +2,7 @@ package handler
+PR8484	backend/internal/handler/request_body_limit_test.go	@@ -43,3 +44,39 @@ func TestRequestBodyLimitTooLarge(t *testing.T) {
+PR8484	backend/internal/handler/usage_record_async_boundary_test.go	@@ -0,0 +1,85 @@
+PR8484	backend/internal/handler/usage_record_context_reuse_test.go	@@ -0,0 +1,105 @@
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -198,6 +198,10 @@ type AnthropicEventToResponsesState struct {
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -332,6 +336,8 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -380,6 +386,7 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -421,7 +428,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -433,7 +440,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -448,7 +455,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -460,7 +467,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -489,6 +496,7 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -521,6 +529,7 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
+PR8484	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -648,10 +657,14 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
+PR8484	backend/internal/pkg/apicompat/chatcompletions_anthropic_bridge.go	@@ -577,7 +577,7 @@ type ChatCompletionsToAnthropicStreamState struct {
+PR8484	backend/internal/pkg/apicompat/chatcompletions_anthropic_bridge.go	@@ -606,7 +606,7 @@ func NewChatCompletionsToAnthropicStreamState(model string) *ChatCompletionsToAn
+PR8484	backend/internal/pkg/apicompat/chatcompletions_anthropic_bridge.go	@@ -841,7 +841,12 @@ func handleCCAnthropicToolCall(state *ChatCompletionsToAnthropicStreamState, too
+PR8484	backend/internal/pkg/apicompat/chatcompletions_anthropic_bridge.go	@@ -872,7 +877,8 @@ func announceCCAnthropicToolBlock(state *ChatCompletionsToAnthropicStreamState,
+PR8484	backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go	@@ -1594,9 +1594,10 @@ type ChatCompletionsToResponsesStreamState struct {
+PR8484	backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go	@@ -1756,7 +1757,7 @@ func ChatCompletionsChunkToResponsesEvents(
+PR8484	backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go	@@ -1773,7 +1774,7 @@ func ChatCompletionsChunkToResponsesEvents(
+PR8484	backend/internal/pkg/apicompat/responses_to_anthropic.go	@@ -182,12 +182,14 @@ type ResponsesEventToAnthropicState struct {
+PR8484	backend/internal/pkg/apicompat/responses_to_anthropic.go	@@ -361,6 +363,8 @@ func resToAnthHandleOutputItemAdded(evt *ResponsesStreamEvent, state *ResponsesE
+PR8484	backend/internal/pkg/apicompat/responses_to_anthropic.go	@@ -501,8 +505,9 @@ func resToAnthHandleFuncArgsDelta(evt *ResponsesStreamEvent, state *ResponsesEve
+PR8484	backend/internal/pkg/apicompat/responses_to_anthropic.go	@@ -805,6 +810,8 @@ func closeCurrentBlock(state *ResponsesEventToAnthropicState) []AnthropicStreamE
+PR8484	backend/internal/pkg/apicompat/responses_to_chatcompletions.go	@@ -132,6 +132,7 @@ type ResponsesEventToChatState struct {
+PR8484	backend/internal/pkg/apicompat/responses_to_chatcompletions.go	@@ -296,7 +297,7 @@ func resToChatHandleFuncArgsDelta(evt *ResponsesStreamEvent, state *ResponsesEve
+PR8484	backend/internal/pkg/apicompat/responses_to_chatcompletions.go	@@ -325,6 +326,7 @@ func resToChatHandleFuncArgsDone(evt *ResponsesStreamEvent, state *ResponsesEven
+PR8484	backend/internal/pkg/apicompat/stream_accumulation_memory_test.go	@@ -0,0 +1,356 @@
+PR8484	backend/internal/pkg/apicompat/stream_string_buffer.go	@@ -0,0 +1,48 @@
+PR8484	backend/internal/pkg/httputil/body.go	@@ -4,6 +4,7 @@ import (
+PR8484	backend/internal/pkg/httputil/body.go	@@ -19,7 +20,8 @@ const (
+PR8484	backend/internal/pkg/httputil/body.go	@@ -64,11 +66,33 @@ func (p *PrereadBody) Bytes() []byte {
+PR8484	backend/internal/pkg/httputil/body.go	@@ -83,9 +107,9 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
+PR8484	backend/internal/pkg/httputil/body.go	@@ -93,14 +117,15 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
+PR8484	backend/internal/pkg/httputil/body.go	@@ -108,7 +133,13 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
+PR8484	backend/internal/pkg/httputil/body.go	@@ -117,16 +148,26 @@ func readRequestBodyChunks(reader io.Reader, initialCapacity int, contentLength
+PR8484	backend/internal/pkg/httputil/body.go	@@ -134,17 +175,21 @@ func readRequestBodyChunks(reader io.Reader, initialCapacity int, contentLength
+PR8484	backend/internal/pkg/httputil/body.go	@@ -158,73 +203,102 @@ func readRequestBodyChunks(reader io.Reader, initialCapacity int, contentLength
+PR8484	backend/internal/pkg/httputil/body.go	@@ -237,18 +311,41 @@ func NormalizeLenientJSONRequestBody(body []byte, maxNormalizedBytes int64) ([]b
+PR8484	backend/internal/pkg/httputil/body_budget.go	@@ -0,0 +1,98 @@
+PR8484	backend/internal/pkg/httputil/body_budget_test.go	@@ -0,0 +1,367 @@
+PR8484	backend/internal/pkg/httputil/read_timeout.go	@@ -0,0 +1,156 @@
+PR8484	backend/internal/pkg/httputil/read_timeout_test.go	@@ -0,0 +1,261 @@
+PR8484	backend/internal/pkg/httputil/upstream_drain.go	@@ -0,0 +1,73 @@
+PR8484	backend/internal/pkg/httputil/upstream_drain_test.go	@@ -0,0 +1,54 @@
+PR8484	backend/internal/pkg/httputil/write_timeout.go	@@ -0,0 +1,116 @@
+PR8484	backend/internal/pkg/httputil/write_timeout_test.go	@@ -0,0 +1,145 @@
+PR8484	backend/internal/repository/http_upstream.go	@@ -27,6 +27,7 @@ import (
+PR8484	backend/internal/repository/http_upstream.go	@@ -219,7 +220,7 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
+PR8484	backend/internal/repository/http_upstream.go	@@ -280,7 +281,7 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
+PR8484	backend/internal/repository/http_upstream.go	@@ -296,10 +297,21 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
+PR8484	backend/internal/repository/http_upstream_drain_test.go	@@ -0,0 +1,67 @@
+PR8484	backend/internal/server/http.go	@@ -10,6 +10,7 @@ import (
+PR8484	backend/internal/server/http.go	@@ -121,7 +122,7 @@ func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
+PR8484	backend/internal/server/http.go	@@ -159,7 +160,8 @@ func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
+PR8484	backend/internal/server/middleware/group_model_allowlist.go	@@ -113,6 +113,9 @@ func isResponsesWebSocketRoute(c *gin.Context) bool {
+PR8484	backend/internal/server/middleware/request_body_limit.go	@@ -1,14 +1,20 @@
+PR8484	backend/internal/server/middleware/request_body_memory.go	@@ -0,0 +1,35 @@
+PR8484	backend/internal/server/middleware/request_body_memory_test.go	@@ -0,0 +1,98 @@
+PR8484	backend/internal/server/routes/gateway.go	@@ -30,8 +30,9 @@ func RegisterGatewayRoutes(
+PR8484	backend/internal/server/routes/gateway.go	@@ -563,6 +564,9 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
+PR8484	backend/internal/service/account_quota_service_account_test.go	@@ -178,7 +178,7 @@ func TestNotifyAccountQuotaSkipsAccountWithoutLimit(t *testing.T) {
+PR8484	backend/internal/service/account_quota_service_account_test.go	@@ -193,7 +193,7 @@ func TestNotifyAccountQuotaSkipsAccountWithoutLimit(t *testing.T) {
+PR8484	backend/internal/service/antigravity_gateway_compat_stream.go	@@ -304,7 +304,7 @@ func (s *AntigravityGatewayService) handleAntigravityCompatStreamWithKeepaliveIn
+PR8484	backend/internal/service/antigravity_gateway_compat_stream.go	@@ -340,6 +340,9 @@ func (s *AntigravityGatewayService) handleAntigravityCompatStreamWithKeepaliveIn
+PR8484	backend/internal/service/antigravity_gateway_compat_stream.go	@@ -397,7 +400,7 @@ func handleAntigravityCompatEmptyStream(c *gin.Context, session *antigravityComp
+PR8484	backend/internal/service/antigravity_gateway_compat_stream.go	@@ -405,17 +408,23 @@ func (s *AntigravityGatewayService) startAntigravityCompatScanner(
+PR8484	backend/internal/service/antigravity_gateway_compat_stream.go	@@ -428,7 +437,7 @@ func (s *AntigravityGatewayService) startAntigravityCompatScanner(
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -142,6 +142,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -152,11 +153,16 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -229,6 +235,9 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -345,6 +354,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -360,11 +370,16 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -404,6 +419,9 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -756,6 +774,7 @@ func (s *AntigravityGatewayService) collectClaudeStreamResponse(c *gin.Context,
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -771,11 +790,16 @@ func (s *AntigravityGatewayService) collectClaudeStreamResponse(c *gin.Context,
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -815,6 +839,9 @@ func (s *AntigravityGatewayService) collectClaudeStreamResponse(c *gin.Context,
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -980,6 +1007,7 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -1001,11 +1029,16 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
+PR8484	backend/internal/service/antigravity_gateway_streaming.go	@@ -1078,6 +1111,9 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
+PR8484	backend/internal/service/antigravity_gateway_upstream.go	@@ -171,6 +171,7 @@ func (s *AntigravityGatewayService) streamUpstreamResponse(c *gin.Context, resp
+PR8484	backend/internal/service/antigravity_gateway_upstream.go	@@ -178,11 +179,16 @@ func (s *AntigravityGatewayService) streamUpstreamResponse(c *gin.Context, resp
+PR8484	backend/internal/service/antigravity_gateway_upstream.go	@@ -238,6 +244,9 @@ func (s *AntigravityGatewayService) streamUpstreamResponse(c *gin.Context, resp
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -240,8 +240,8 @@ func TestCheckQuotaDimCrossings_NoDimensions(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -258,7 +258,7 @@ func TestCheckQuotaDimCrossings_DisabledDimension(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -275,7 +275,7 @@ func TestCheckQuotaDimCrossings_ZeroThresholdSkipped(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -293,7 +293,7 @@ func TestCheckQuotaDimCrossings_NoCrossing_BothBelowThreshold(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -311,7 +311,7 @@ func TestCheckQuotaDimCrossings_NoCrossing_BothAboveThreshold(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -329,7 +329,7 @@ func TestCheckQuotaDimCrossings_NegativeResolvedThreshold_Skipped(t *testing.T)
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -347,7 +347,7 @@ func TestCheckQuotaDimCrossings_PercentageThreshold_NoCrossing(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -364,7 +364,7 @@ func TestCheckQuotaDimCrossings_ZeroLimit_Skipped(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_check_test.go	@@ -400,5 +400,5 @@ func TestCheckQuotaDimCrossings_MultipleDims_MixedResults(t *testing.T) {
+PR8484	backend/internal/service/balance_notify_service.go	@@ -43,14 +43,16 @@ type BalanceNotifyService struct {
+PR8484	backend/internal/service/balance_notify_service.go	@@ -118,20 +120,13 @@ func crossedDownward(oldV, newV, threshold float64) bool {
+PR8484	backend/internal/service/balance_notify_service.go	@@ -201,7 +196,7 @@ func (s *BalanceNotifyService) CheckAccountQuotaAfterIncrement(ctx context.Conte
+PR8484	backend/internal/service/balance_notify_service.go	@@ -220,7 +215,7 @@ func (s *BalanceNotifyService) fetchFreshAccount(ctx context.Context, snapshot *
+PR8484	backend/internal/service/balance_notify_service.go	@@ -232,23 +227,11 @@ func (s *BalanceNotifyService) checkQuotaDimCrossings(account *Account, dims []q
+PR8484	backend/internal/service/balance_notify_service.go	@@ -329,13 +312,16 @@ func (s *BalanceNotifyService) collectBalanceNotifyRecipients(user *User) []stri
+PR8484	backend/internal/service/balance_notify_service.go	@@ -347,7 +333,7 @@ func (s *BalanceNotifyService) sendEmails(recipients []string, subject, body str
+PR8484	backend/internal/service/balance_notify_service.go	@@ -355,7 +341,10 @@ func (s *BalanceNotifyService) sendBalanceLowEmails(recipients []string, userID
+PR8484	backend/internal/service/balance_notify_service.go	@@ -387,11 +376,11 @@ func (s *BalanceNotifyService) sendBalanceLowEmails(recipients []string, userID
+PR8484	backend/internal/service/balance_notify_service.go	@@ -410,7 +399,10 @@ func (s *BalanceNotifyService) sendQuotaAlertEmails(adminEmails []string, accoun
+PR8484	backend/internal/service/balance_notify_service.go	@@ -447,7 +439,7 @@ func (s *BalanceNotifyService) sendQuotaAlertEmails(adminEmails []string, accoun
+PR8484	backend/internal/service/bedrock_stream.go	@@ -60,11 +60,16 @@ func (s *GatewayService) handleBedrockStreamingResponse(
+PR8484	backend/internal/service/bedrock_stream.go	@@ -107,6 +112,9 @@ func (s *GatewayService) handleBedrockStreamingResponse(
+PR8484	backend/internal/service/billing_cache_service.go	@@ -714,7 +714,7 @@ func (s *BillingCacheService) QueueUpdateAPIKeyRateLimitUsage(apiKeyID int64, co
+PR8484	backend/internal/service/billing_notification_worker.go	@@ -0,0 +1,103 @@
+PR8484	backend/internal/service/billing_notification_worker_test.go	@@ -0,0 +1,76 @@
+PR8484	backend/internal/service/digest_session_store.go	@@ -4,8 +4,6 @@ import (
+PR8484	backend/internal/service/digest_session_store.go	@@ -15,52 +13,61 @@ const digestSessionTTL = 5 * time.Minute
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -8,13 +8,13 @@ import (
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -26,6 +26,7 @@ func TestDigestSessionStore_SaveAndFind(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -40,6 +41,7 @@ func TestDigestSessionStore_PrefixMatch(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -60,6 +62,7 @@ func TestDigestSessionStore_LongestPrefixMatch(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -80,6 +83,7 @@ func TestDigestSessionStore_SaveDeletesOldChain(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -98,6 +102,7 @@ func TestDigestSessionStore_DifferentSessionsNoInterference(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -108,6 +113,7 @@ func TestDigestSessionStore_NoMatch(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -118,6 +124,7 @@ func TestDigestSessionStore_DifferentPrefixHash(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -128,6 +135,7 @@ func TestDigestSessionStore_DifferentGroupID(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -137,8 +145,10 @@ func TestDigestSessionStore_EmptyDigestChain(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -156,6 +166,7 @@ func TestDigestSessionStore_TTLExpiration(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -179,6 +190,7 @@ func TestDigestSessionStore_ConcurrentSafety(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -211,6 +223,7 @@ func TestDigestSessionStore_MultipleSessions(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -233,6 +246,7 @@ func TestDigestSessionStore_Performance1000Sessions(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -249,6 +263,7 @@ func TestDigestSessionStore_FindReturnsMatchedChain(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -278,8 +293,10 @@ func TestDigestSessionStore_CacheItemCountStable(t *testing.T) {
+PR8484	backend/internal/service/digest_session_store_test.go	@@ -297,6 +314,7 @@ func TestDigestSessionStore_TTLPreventsUnboundedGrowth(t *testing.T) {
+PR8484	backend/internal/service/gateway_anthropic_passthrough.go	@@ -422,6 +422,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
+PR8484	backend/internal/service/gateway_anthropic_passthrough.go	@@ -429,11 +430,16 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
+PR8484	backend/internal/service/gateway_anthropic_passthrough.go	@@ -499,6 +505,9 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
+PR8484	backend/internal/service/gateway_forward_as_chat_completions.go	@@ -243,9 +243,11 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
+PR8484	backend/internal/service/gateway_forward_as_chat_completions.go	@@ -268,6 +270,11 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
+PR8484	backend/internal/service/gateway_forward_as_chat_completions.go	@@ -310,6 +317,17 @@ func (s *GatewayService) handleCCBufferedFromAnthropic(
+PR8484	backend/internal/service/gateway_forward_as_responses.go	@@ -392,10 +392,12 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
+PR8484	backend/internal/service/gateway_forward_as_responses.go	@@ -424,6 +426,11 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
+PR8484	backend/internal/service/gateway_forward_as_responses.go	@@ -470,6 +477,17 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
+PR8484	backend/internal/service/gateway_forward_compat_stream.go	@@ -65,8 +65,9 @@ func newAnthropicCompatStream(cfg *config.Config, c *gin.Context, resp *http.Res
+PR8484	backend/internal/service/gateway_request.go	@@ -186,7 +186,9 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
+PR8484	backend/internal/service/gateway_request.go	@@ -196,7 +198,7 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
+PR8484	backend/internal/service/gateway_request.go	@@ -220,15 +222,15 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
+PR8484	backend/internal/service/gateway_request_scalar_memory_test.go	@@ -0,0 +1,52 @@
+PR8484	backend/internal/service/gateway_upstream_response.go	@@ -745,6 +745,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+PR8484	backend/internal/service/gateway_upstream_response.go	@@ -753,11 +754,16 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+PR8484	backend/internal/service/gateway_upstream_response.go	@@ -1022,6 +1028,9 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+PR8484	backend/internal/service/gateway_upstream_response.go	@@ -1081,6 +1090,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+PR8484	backend/internal/service/gateway_usage_billing.go	@@ -9,6 +9,7 @@ import (
+PR8484	backend/internal/service/gateway_usage_billing.go	@@ -425,44 +426,44 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
+PR8484	backend/internal/service/gateway_usage_billing.go	@@ -496,7 +497,7 @@ func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingPara
+PR8484	backend/internal/service/gateway_usage_billing.go	@@ -521,7 +522,7 @@ func notifyBalanceLow(p *postUsageBillingParams, deps *billingDeps, result *Usag
+PR8484	backend/internal/service/gateway_usage_billing.go	@@ -537,7 +538,7 @@ func resolveOldBalance(p *postUsageBillingParams, result *UsageBillingApplyResul
+PR8484	backend/internal/service/gateway_usage_billing.go	@@ -567,7 +568,7 @@ func notifyAccountQuota(p *postUsageBillingParams, deps *billingDeps, result *Us
+PR8484	backend/internal/service/gateway_usage_billing.go	@@ -585,14 +586,14 @@ func detachStreamUpstreamContext(ctx context.Context, stream bool) (context.Cont
+PR8484	backend/internal/service/gateway_usage_quota_worker_test.go	@@ -0,0 +1,86 @@
+PR8484	backend/internal/service/grok_sse_transport_config_test.go	@@ -0,0 +1,70 @@
+PR8484	backend/internal/service/openai_first_output_timeout_test.go	@@ -4,6 +4,7 @@ import (
+PR8484	backend/internal/service/openai_first_output_timeout_test.go	@@ -481,10 +482,12 @@ func TestOpenAINativeFirstOutputStageOverflowFailsOverWithoutAttemptBytes(t *tes
+PR8484	backend/internal/service/openai_first_output_timeout_test.go	@@ -509,6 +512,45 @@ func TestOpenAINativeFirstOutputStageOverflowFailsOverWithoutAttemptBytes(t *tes
+PR8484	backend/internal/service/openai_gateway_anthropic_native_pump.go	@@ -41,18 +41,24 @@ type anthropicNativeLineEvent struct {
+PR8484	backend/internal/service/openai_gateway_anthropic_native_pump.go	@@ -60,9 +66,13 @@ func newAnthropicNativeLinePump(scanner *bufio.Scanner, interval time.Duration)
+PR8484	backend/internal/service/openai_gateway_anthropic_native_pump.go	@@ -110,6 +120,9 @@ func (p *anthropicNativeLinePump) deliver(ev anthropicNativeLineEvent, ok bool)
+PR8484	backend/internal/service/openai_gateway_cc_pipeline.go	@@ -39,6 +39,7 @@ func (s *OpenAIGatewayService) newUpstreamSSEScanner(r io.Reader) *bufio.Scanner
+PR8484	backend/internal/service/openai_gateway_chat_completions.go	@@ -1211,11 +1211,16 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
+PR8484	backend/internal/service/openai_gateway_chat_completions.go	@@ -1248,6 +1253,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -164,13 +164,15 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -198,6 +200,7 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -212,6 +215,7 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -224,6 +228,11 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -254,6 +263,16 @@ func (s *OpenAIGatewayService) handleCCBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -335,6 +354,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -357,7 +377,8 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -443,6 +464,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -456,6 +478,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -468,6 +491,11 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_chat_completions_anthropic_native.go	@@ -477,7 +505,19 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_forward.go	@@ -1209,7 +1209,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+PR8484	backend/internal/service/openai_gateway_grok.go	@@ -218,9 +218,9 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter.go	@@ -8,6 +8,8 @@ import (
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter.go	@@ -46,13 +48,13 @@ func (b *grokResponsesBillingPingFilterBody) closeSource() error {
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter.go	@@ -61,6 +63,7 @@ func filterGrokResponsesBillingPings(
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter.go	@@ -75,7 +78,7 @@ func filterGrokResponsesBillingPings(
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter_test.go	@@ -22,6 +22,7 @@ func filterGrokPingTestInput(t *testing.T, input string) string {
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter_test.go	@@ -157,7 +158,7 @@ func TestGrokResponsesBillingPingFilterConvertsPartialPingFrameAtEOF(t *testing.
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter_test.go	@@ -180,7 +181,7 @@ func TestGrokResponsesBillingPingFilterPreservesUsageAndTerminalEvent(t *testing
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter_test.go	@@ -215,7 +216,7 @@ func (r *grokPingFilterTestReadCloser) Close() error {
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter_test.go	@@ -226,7 +227,7 @@ func TestGrokResponsesBillingPingFilterCloseCancelsSourceOnce(t *testing.T) {
+PR8484	backend/internal/service/openai_gateway_grok_sse_filter_test.go	@@ -255,6 +256,7 @@ func TestGrokResponsesBillingPingFilterReportsOversizedLine(t *testing.T) {
+PR8484	backend/internal/service/openai_gateway_grok_tool_protocol.go	@@ -8,6 +8,7 @@ import (
+PR8484	backend/internal/service/openai_gateway_grok_tool_protocol.go	@@ -122,10 +123,11 @@ func newResponsesClientToolStreamBody(
+PR8484	backend/internal/service/openai_gateway_grok_tool_protocol.go	@@ -133,8 +135,9 @@ func newGrokResponsesClientToolStreamBody(
+PR8484	backend/internal/service/openai_gateway_grok_tool_protocol.go	@@ -142,6 +145,7 @@ func transformResponsesClientToolStream(
+PR8484	backend/internal/service/openai_gateway_grok_tool_protocol.go	@@ -152,6 +156,7 @@ func transformResponsesClientToolStream(
+PR8484	backend/internal/service/openai_gateway_grok_tool_protocol_test.go	@@ -429,7 +429,7 @@ func TestGrokResponsesClientToolStreamBodyFlushesFrameBeforeEOF(t *testing.T) {
+PR8484	backend/internal/service/openai_gateway_messages.go	@@ -880,12 +880,17 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8484	backend/internal/service/openai_gateway_messages.go	@@ -902,6 +907,9 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+PR8484	backend/internal/service/openai_gateway_messages.go	@@ -1300,11 +1308,16 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+PR8484	backend/internal/service/openai_gateway_messages.go	@@ -1337,6 +1350,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+PR8484	backend/internal/service/openai_gateway_messages_anthropic_native.go	@@ -347,6 +347,7 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
+PR8484	backend/internal/service/openai_gateway_messages_anthropic_native.go	@@ -354,11 +355,16 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
+PR8484	backend/internal/service/openai_gateway_messages_anthropic_native.go	@@ -424,6 +430,9 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
+PR8484	backend/internal/service/openai_gateway_passthrough.go	@@ -432,7 +432,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+PR8484	backend/internal/service/openai_gateway_passthrough.go	@@ -1973,6 +1973,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
+PR8484	backend/internal/service/openai_gateway_response_handling.go	@@ -165,8 +165,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
+PR8484	backend/internal/service/openai_gateway_response_handling.go	@@ -428,6 +429,15 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
+PR8484	backend/internal/service/openai_gateway_response_handling.go	@@ -843,13 +853,18 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
+PR8484	backend/internal/service/openai_gateway_response_handling.go	@@ -887,6 +902,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -166,13 +166,15 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -200,6 +202,7 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -213,6 +216,7 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -225,6 +229,11 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -257,6 +266,16 @@ func (s *OpenAIGatewayService) handleResponsesBufferedFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -346,6 +365,7 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -368,7 +388,8 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -391,7 +412,7 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -412,10 +433,10 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -446,6 +467,7 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -458,6 +480,7 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_responses_anthropic_native.go	@@ -470,11 +493,28 @@ func (s *OpenAIGatewayService) handleResponsesStreamingFromNativeAnthropic(
+PR8484	backend/internal/service/openai_gateway_service.go	@@ -504,8 +504,8 @@ type OpenAIGatewayService struct {
+PR8484	backend/internal/service/openai_gateway_service.go	@@ -704,10 +704,15 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
+PR8484	backend/internal/service/openai_images.go	@@ -1,13 +1,13 @@
+PR8484	backend/internal/service/openai_images.go	@@ -660,7 +660,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
+PR8484	backend/internal/service/openai_images.go	@@ -1018,6 +1018,30 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8484	backend/internal/service/openai_images.go	@@ -1096,6 +1120,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8484	backend/internal/service/openai_images.go	@@ -1107,17 +1132,14 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8484	backend/internal/service/openai_images.go	@@ -1151,9 +1173,15 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8484	backend/internal/service/openai_images.go	@@ -1174,11 +1202,16 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8484	backend/internal/service/openai_images.go	@@ -1186,9 +1219,9 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8484	backend/internal/service/openai_images.go	@@ -1229,12 +1262,21 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8484	backend/internal/service/openai_images.go	@@ -1805,3 +1847,13 @@ func dedupeStrings(values []string) []string {
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1,7 +1,6 @@
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1169,6 +1168,17 @@ func (s *OpenAIGatewayService) tryWriteOpenAIImagesStreamEvent(
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1629,9 +1639,14 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1671,11 +1686,16 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1683,9 +1703,9 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1726,6 +1746,9 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1738,6 +1761,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
+PR8484	backend/internal/service/openai_images_responses.go	@@ -1819,7 +1847,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+PR8484	backend/internal/service/openai_images_stream_limit_error_test.go	@@ -0,0 +1,243 @@
+PR8484	backend/internal/service/openai_messages_continuation.go	@@ -20,6 +20,16 @@ type openAICompatSessionResponseBinding struct {
+PR8484	backend/internal/service/openai_messages_digest_session.go	@@ -14,6 +14,13 @@ type openAICompatAnthropicDigestBinding struct {
+PR8484	backend/internal/service/openai_messages_digest_session.go	@@ -52,24 +59,12 @@ func (s *OpenAIGatewayService) findOpenAICompatAnthropicDigestPromptCacheKey(acc
+PR8484	backend/internal/service/openai_sse_data.go	@@ -29,6 +29,7 @@ func (a *openAISSEDataAccumulator) Flush(fn func([]byte)) {
+PR8484	backend/internal/service/openai_ws_http_bridge.go	@@ -704,11 +704,12 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
+PR8484	backend/internal/service/session_memory_cache.go	@@ -0,0 +1,244 @@
+PR8484	backend/internal/service/session_memory_cache_test.go	@@ -0,0 +1,223 @@
+PR8484	backend/internal/service/sse_large_image_compat_test.go	@@ -0,0 +1,45 @@
+PR8484	backend/internal/service/sse_transport_limits.go	@@ -0,0 +1,187 @@
+PR8484	backend/internal/service/sse_transport_limits_test.go	@@ -0,0 +1,313 @@
+PR8484	deploy/EDGE_SECURITY.md	@@ -1,8 +1,8 @@
+PR8484	deploy/EDGE_SECURITY.md	@@ -15,6 +15,50 @@ terminate healthy long generations and streams.
+PR8484	deploy/EDGE_SECURITY.md	@@ -22,10 +66,56 @@ terminate healthy long generations and streams.
+PR8484	deploy/config.example.yaml	@@ -254,6 +254,15 @@ gateway:
+PR8484	deploy/config.example.yaml	@@ -539,9 +548,16 @@ gateway:
+PR8484	docs/agent-resource-safety.md	@@ -0,0 +1,15 @@
+PR8495	frontend/src/utils/ccswitchImport.ts	@@ -1,6 +1,6 @@
+25608d216	README.md	@@ -177,6 +177,11 @@ Please read the following carefully before using this project:
+25608d216	README_CN.md	@@ -180,6 +180,11 @@
+PR8549	backend/go.mod	@@ -10,7 +10,7 @@ require (
+PR8549	backend/go.mod	@@ -28,7 +28,7 @@ require (
+PR8549	backend/go.sum	@@ -68,8 +68,8 @@ github.com/aliyun/credentials-go v1.3.1/go.mod h1:8jKYhQuDawt8x2+fusqa1Y6mPxemTs
+PR8549	backend/go.sum	@@ -297,8 +297,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
+PR8549	backend/internal/handler/openai_cyber_allowlist_test.go	@@ -49,7 +49,7 @@ func TestCyberAllowlistedUserBypassesExistingBlocksAndContinuesWebSocket(t *test
+PR8549	backend/internal/handler/openai_cyber_allowlist_test.go	@@ -63,7 +63,11 @@ func TestCyberAllowlistedUserBypassesExistingBlocksAndContinuesWebSocket(t *test
+PR8549	backend/internal/handler/openai_gateway_cyber_test.go	@@ -178,21 +178,24 @@ func TestRejectIfCyberSessionBlocked_FailOpen(t *testing.T) {
+PR8549	backend/internal/handler/openai_gateway_handler.go	@@ -4275,26 +4275,20 @@ func (h *OpenAIGatewayHandler) rejectIfCyberSessionBlocked(c *gin.Context, apiKe
+PR8549	backend/internal/handler/openai_gateway_handler.go	@@ -4443,10 +4437,10 @@ func (h *OpenAIGatewayHandler) recordCyberPolicyIfMarked(c *gin.Context, apiKey
+PR8549	backend/internal/repository/gateway_cache.go	@@ -270,15 +270,21 @@ func (c *gatewayCache) GetReasoningContent(ctx context.Context, itemID string) (
+PR8549	backend/internal/repository/gateway_cache.go	@@ -294,7 +300,7 @@ func (c *gatewayCache) SetCyberSessionBlocked(ctx context.Context, scopeKey stri
+PR8549	backend/internal/repository/gateway_cache.go	@@ -307,18 +313,53 @@ func (c *gatewayCache) SetCyberSessionBlocked(ctx context.Context, scopeKey stri
+PR8549	backend/internal/repository/gateway_cache_cyber_test.go	@@ -49,7 +49,7 @@ func (h *cyberRedisCommandHook) ProcessPipelineHook(next redis.ProcessPipelineHo
+PR8549	backend/internal/repository/gateway_cache_cyber_test.go	@@ -57,17 +57,49 @@ func TestGatewayCacheCyberBlockWritesScopeAndExactKeysTogether(t *testing.T) {
+PR8549	backend/internal/repository/gateway_cache_cyber_test.go	@@ -82,8 +114,9 @@ func TestGatewayCacheCyberBlockCommandsAreBoundedAndLookupShortCircuits(t *testi
+PR8549	backend/internal/service/openai_cyber_session_block.go	@@ -16,12 +16,22 @@ import (
+PR8549	backend/internal/service/openai_cyber_session_block.go	@@ -29,25 +39,6 @@ func CyberSessionExplicitBlockKey(apiKeyID int64, c *gin.Context, body []byte) s
+PR8549	backend/internal/service/openai_cyber_session_block.go	@@ -97,8 +88,8 @@ func (s *OpenAIGatewayService) CyberSessionBlockRuntime(ctx context.Context) (bo
+PR8549	backend/internal/service/openai_cyber_session_block.go	@@ -109,7 +100,7 @@ func (s *OpenAIGatewayService) MarkCyberSessionBlocked(ctx context.Context, scop
+PR8549	backend/internal/service/openai_cyber_session_block.go	@@ -135,22 +126,15 @@ func (s *OpenAIGatewayService) FindCyberSessionBlockedForRequest(ctx context.Con
+PR8549	backend/internal/service/openai_cyber_session_block_test.go	@@ -54,81 +54,94 @@ func TestCyberSessionExplicitBlockKey(t *testing.T) {
+PR8549	backend/internal/service/openai_cyber_session_block_test.go	@@ -216,11 +229,11 @@ func (c *comboCacheAndStore) GetReasoningContent(_ context.Context, _ string) (s
+PR8549	backend/internal/service/openai_cyber_session_block_test.go	@@ -233,7 +246,7 @@ func (c *comboCacheAndStore) FindCyberSessionBlocked(ctx context.Context, keys [
+PR8549	backend/internal/service/openai_cyber_session_block_test.go	@@ -267,7 +280,7 @@ func TestCyberSessionBlock_RoundTrip(t *testing.T) {
+PR8549	backend/internal/service/openai_cyber_session_block_test.go	@@ -286,16 +299,19 @@ func TestFindCyberSessionBlockedForRequestUsesScopeForTranscript(t *testing.T) {
+PR8549	backend/internal/service/openai_cyber_session_block_test.go	@@ -307,20 +323,46 @@ func TestFindCyberSessionBlockedForRequestFailsClosedOnScopedTranscriptOverflow(
+PR8549	backend/internal/service/openai_cyber_transcript.go	@@ -10,27 +10,80 @@ import (
+PR8549	backend/internal/service/openai_cyber_transcript.go	@@ -53,74 +106,40 @@ func deriveOpenAICyberTranscriptBlockKeys(apiKeyID int64, body []byte) openAICyb
+PR8543	backend/internal/config/config.go	@@ -1038,7 +1038,8 @@ type GatewayConfig struct {
+PR8543	backend/internal/config/config.go	@@ -2488,6 +2489,7 @@ func setDefaults() {
+PR8543	backend/internal/config/openai_transport_error_cooldown_test.go	@@ -0,0 +1,40 @@
+PR8543	backend/internal/service/openai_upstream_transport_error.go	@@ -175,6 +175,9 @@ func (s *OpenAIGatewayService) tempUnscheduleOpenAITransportError(ctx context.Co
+PR8543	backend/internal/service/openai_upstream_transport_error_handle_test.go	@@ -6,8 +6,10 @@ import (
+PR8543	backend/internal/service/openai_upstream_transport_error_handle_test.go	@@ -39,6 +41,119 @@ func newOpenAITransportErrTestContext() (*gin.Context, *httptest.ResponseRecorde
+PR8543	deploy/.env.example	@@ -307,6 +307,11 @@ GATEWAY_OPENAI_COMPACT_MODEL=gpt-5.5
+PR8543	deploy/config.example.yaml	@@ -239,6 +239,12 @@ gateway:
+PR8543	deploy/docker-compose.dev.yml	@@ -62,6 +62,7 @@ services:
+PR8543	deploy/docker-compose.local.yml	@@ -170,6 +170,7 @@ services:
+PR8543	deploy/docker-compose.standalone.yml	@@ -117,6 +117,7 @@ services:
+PR8543	deploy/docker-compose.yml	@@ -167,6 +167,7 @@ services:
+PR8518	.gitignore	@@ -134,6 +134,7 @@ deploy/docker-compose.override.yml
+PR8518	backend/go.mod	@@ -5,6 +5,7 @@ go 1.27.3
+PR8518	backend/go.sum	@@ -14,6 +14,8 @@ github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7Oputl
+PR8518	backend/internal/handler/image_task_handler.go	@@ -103,7 +103,13 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
+PR8518	backend/internal/handler/image_task_handler.go	@@ -261,13 +267,23 @@ func (h *AsyncImageHandler) failTask(taskID string, statusCode int, taskErr json
+PR8518	backend/internal/handler/image_task_handler.go	@@ -277,7 +293,7 @@ func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Dura
+PR8518	backend/internal/handler/image_task_handler_test.go	@@ -10,6 +10,7 @@ import (
+PR8518	backend/internal/handler/image_task_handler_test.go	@@ -106,6 +107,150 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
+PR8518	backend/internal/handler/openai_automation_bootstrap_test.go	@@ -207,3 +207,30 @@ Read the reference index and report changes. Preserve A &amp; B and &lt;tags&gt;
+PR8518	backend/internal/handler/openai_gateway_handler.go	@@ -19,6 +19,7 @@ import (
+PR8518	backend/internal/handler/openai_gateway_handler.go	@@ -814,6 +815,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8518	backend/internal/handler/openai_gateway_handler.go	@@ -1699,6 +1703,9 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
+PR8518	backend/internal/handler/openai_gateway_handler.go	@@ -1706,9 +1713,31 @@ func normalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
+PR8518	backend/internal/handler/openai_gateway_handler.go	@@ -3719,6 +3748,26 @@ func (h *OpenAIGatewayHandler) mapUpstreamError(statusCode int) (int, string, st
+PR8518	backend/internal/handler/openai_request_body_memory_test.go	@@ -0,0 +1,59 @@
+PR8518	backend/internal/pkg/httputil/body_budget.go	@@ -41,24 +41,103 @@ func WithRequestBodyMemoryBudget(ctx context.Context, budget *BodyMemoryBudget)
+PR8518	backend/internal/pkg/httputil/body_budget.go	@@ -78,6 +157,13 @@ func reserveRequestBodyMemory(ctx context.Context, n int64) error {
+PR8518	backend/internal/pkg/httputil/body_budget.go	@@ -91,6 +177,7 @@ func releaseRequestBodyMemory(ctx context.Context, n int64) {
+PR8518	backend/internal/pkg/httputil/body_budget_test.go	@@ -37,6 +37,57 @@ func TestRequestBodyMemoryBudgetSharedUntilRelease(t *testing.T) {
+PR8518	backend/internal/pkg/httputil/body_budget_test.go	@@ -365,3 +416,149 @@ func TestRequestBodyMemoryBudgetPreservesBorrowedPrereadAllocation(t *testing.T)
+PR8518	backend/internal/repository/api_key_repo.go	@@ -231,6 +231,8 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
+PR8518	backend/internal/repository/api_key_repo_profit_projection_integration_test.go	@@ -28,6 +28,7 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
+PR8518	backend/internal/repository/api_key_repo_profit_projection_integration_test.go	@@ -57,4 +58,6 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
+PR8518	backend/internal/repository/fixtures_integration_test.go	@@ -96,7 +96,8 @@ func mustCreateGroup(t *testing.T, client *dbent.Client, g *service.Group) *serv
+PR8518	backend/internal/service/antigravity_gateway_upstream.go	@@ -6,7 +6,6 @@ import (
+PR8518	backend/internal/service/antigravity_gateway_upstream.go	@@ -124,7 +123,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
+PR8518	backend/internal/service/api_key_auth_cache.go	@@ -53,6 +53,9 @@ type APIKeyAuthUserSnapshot struct {
+PR8518	backend/internal/service/api_key_auth_cache.go	@@ -141,6 +144,9 @@ type APIKeyAuthGroupSnapshot struct {
+PR8518	backend/internal/service/api_key_auth_cache_impl.go	@@ -14,7 +14,7 @@ import (
+PR8518	backend/internal/service/api_key_auth_cache_impl.go	@@ -372,10 +372,11 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey)
+PR8518	backend/internal/service/api_key_auth_cache_impl.go	@@ -436,6 +437,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey)
+PR8518	backend/internal/service/api_key_auth_cache_impl.go	@@ -461,22 +463,23 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
+PR8518	backend/internal/service/api_key_auth_cache_impl.go	@@ -539,6 +542,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
+PR8518	backend/internal/service/bedrock_stream.go	@@ -249,6 +249,13 @@ type bedrockEventStreamDecoder struct {
+PR8518	backend/internal/service/bedrock_stream.go	@@ -276,6 +283,12 @@ func (d *bedrockEventStreamDecoder) Decode() ([]byte, error) {
+PR8518	backend/internal/service/bedrock_stream_test.go	@@ -243,6 +243,45 @@ func TestBedrockEventStreamDecoder(t *testing.T) {
+PR8518	backend/internal/service/billing_cache_service.go	@@ -938,9 +938,9 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
+PR8518	backend/internal/service/billing_cache_service_rpm_test.go	@@ -4,6 +4,7 @@ package service
+PR8518	backend/internal/service/billing_cache_service_rpm_test.go	@@ -251,3 +252,55 @@ func TestBillingCacheService_CheckRPM_NilUserIsNoop(t *testing.T) {
+PR8518	backend/internal/service/gateway_cache_control_paths_test.go	@@ -0,0 +1,155 @@
+PR8518	backend/internal/service/gateway_claude_oauth_body.go	@@ -993,7 +993,10 @@ type cacheControlPath struct {
+PR8518	backend/internal/service/gateway_claude_oauth_body.go	@@ -1013,7 +1016,7 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath,
+PR8518	backend/internal/service/gateway_claude_oauth_body.go	@@ -1041,7 +1044,7 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath,
+PR8518	backend/internal/service/gateway_request.go	@@ -5,6 +5,7 @@ import (
+PR8518	backend/internal/service/gateway_request.go	@@ -60,13 +61,17 @@ type jsonRange struct {
+PR8518	backend/internal/service/gateway_request.go	@@ -86,6 +91,55 @@ func (b *RequestBodyRef) Replace(data []byte) {
+PR8518	backend/internal/service/gateway_request.go	@@ -180,6 +234,7 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
+PR8518	backend/internal/service/gateway_request.go	@@ -243,6 +298,7 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
+PR8518	backend/internal/service/gateway_request.go	@@ -420,6 +476,13 @@ func (p *ParsedRequest) CloneForBody(body []byte) (*ParsedRequest, error) {
+PR8518	backend/internal/service/gateway_request.go	@@ -431,6 +494,10 @@ func (p *ParsedRequest) ReplaceBody(data []byte) error {
+PR8518	backend/internal/service/gateway_request.go	@@ -1428,7 +1495,117 @@ func filterThinkingBlocksInternal(body []byte, alwaysThinking bool) []byte {
+PR8518	backend/internal/service/gateway_request_reuse_test.go	@@ -0,0 +1,215 @@
+PR8518	backend/internal/service/gateway_service_benchmark_test.go	@@ -1,6 +1,7 @@
+PR8518	backend/internal/service/gateway_service_benchmark_test.go	@@ -136,7 +137,7 @@ func BenchmarkOpenAIResponses_LargeInputRawPatch(b *testing.B) {
+PR8518	backend/internal/service/gateway_thinking_filter_precheck_test.go	@@ -0,0 +1,123 @@
+PR8518	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -1,7 +1,6 @@
+PR8518	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -266,7 +265,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+PR8518	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -597,11 +596,11 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+PR8518	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -619,13 +618,13 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+PR8518	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -654,8 +653,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+PR8518	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -694,8 +692,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+PR8518	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -775,8 +772,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -1,7 +1,6 @@
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -1034,7 +1033,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -1565,7 +1564,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2210,16 +2209,16 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2270,8 +2269,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2282,7 +2280,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2333,11 +2331,10 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2403,7 +2400,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2439,8 +2436,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2566,8 +2562,8 @@ func unwrapIfNeeded(isOAuth bool, raw []byte) []byte {
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2578,8 +2574,8 @@ type geminiSSECollectStats struct {
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2588,7 +2584,7 @@ func collectGeminiSSEObserved(body io.Reader, isOAuth bool, observe func(rawByte
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2909,7 +2905,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -2923,7 +2919,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
+PR8518	backend/internal/service/gemini_messages_compat_service.go	@@ -3427,22 +3423,38 @@ func extractGeminiParts(geminiResp map[string]any) []map[string]any {
+PR8518	backend/internal/service/gemini_native_response_signal_test.go	@@ -501,7 +501,7 @@ func TestGeminiForwardNative_CountTokensBodyLeavesNoMark(t *testing.T) {
+PR8518	backend/internal/service/gemini_sse_line_limit_test.go	@@ -0,0 +1,58 @@
+PR8518	backend/internal/service/gemini_text_delta_test.go	@@ -0,0 +1,62 @@
+PR8518	backend/internal/service/openai_account_scheduler.go	@@ -16,6 +16,7 @@ import (
+PR8518	backend/internal/service/openai_account_scheduler.go	@@ -1434,12 +1435,6 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
+PR8518	backend/internal/service/openai_account_scheduler.go	@@ -1466,7 +1461,8 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
+PR8518	backend/internal/service/openai_account_scheduler.go	@@ -2256,7 +2252,14 @@ func (s *OpenAIGatewayService) openAIGroupRequiresPrivacySet(ctx context.Context
+PR8518	backend/internal/service/openai_compact_body_signal.go	@@ -1,6 +1,7 @@
+PR8518	backend/internal/service/openai_compact_body_signal.go	@@ -28,6 +29,9 @@ func NormalizeCompactionTriggerInputOrder(body []byte) ([]byte, bool, error) {
+PR8518	backend/internal/service/openai_compact_body_signal.go	@@ -63,6 +67,18 @@ func NormalizeCompactionTriggerInputOrder(body []byte) ([]byte, bool, error) {
+PR8518	backend/internal/service/openai_compact_body_signal_test.go	@@ -3,6 +3,7 @@
+PR8518	backend/internal/service/openai_compact_body_signal_test.go	@@ -116,3 +117,25 @@ func TestWebSocketCompatibilityNormalizesTriggerAfterPairedOutputCleanup(t *test
+PR8518	backend/internal/service/openai_gateway_forward.go	@@ -10,6 +10,7 @@ import (
+PR8518	backend/internal/service/openai_gateway_forward.go	@@ -291,16 +292,45 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+PR8518	backend/internal/service/openai_gateway_forward.go	@@ -706,13 +736,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+PR8518	backend/internal/service/openai_gateway_request_body.go	@@ -11,9 +11,11 @@ import (
+PR8518	backend/internal/service/openai_gateway_request_body.go	@@ -1170,14 +1172,177 @@ func (v *openAIRequestView) DisablePatches() {
+PR8518	backend/internal/service/openai_gateway_request_body.go	@@ -1520,7 +1685,7 @@ func normalizeOpenAIResponsesCompatibilityBodyWithOptions(body []byte, account *
+PR8518	backend/internal/service/openai_gateway_service_hotpath_test.go	@@ -68,7 +68,7 @@ func TestOpenAIRequestView_ApplyPatches(t *testing.T) {
+PR8518	backend/internal/service/openai_gateway_service_hotpath_test.go	@@ -78,7 +78,7 @@ func TestOpenAIRequestView_RejectsEscapedPatchPath(t *testing.T) {
+PR8518	backend/internal/service/openai_gateway_service_hotpath_test.go	@@ -87,7 +87,7 @@ func TestOpenAIRequestView_ApplyPatchesDisabled(t *testing.T) {
+PR8518	backend/internal/service/openai_privacy_gate_ctx_test.go	@@ -0,0 +1,80 @@
+PR8518	backend/internal/service/openai_request_patches_benchmark_test.go	@@ -0,0 +1,150 @@
+PR8518	backend/internal/service/openai_request_patches_test.go	@@ -0,0 +1,664 @@
+PR8518	backend/internal/service/openai_responses_orphan_precheck.go	@@ -0,0 +1,133 @@
+PR8518	backend/internal/service/openai_responses_orphan_precheck_benchmark_test.go	@@ -0,0 +1,49 @@
+PR8518	backend/internal/service/openai_responses_orphan_precheck_test.go	@@ -0,0 +1,170 @@
+PR8518	backend/internal/service/sse_transport_limits.go	@@ -7,6 +7,7 @@ import (
+PR8518	backend/internal/service/sse_transport_limits.go	@@ -179,6 +180,14 @@ func (r *boundedSSELineReader) ReadLine() ([]byte, error) {
+PR8518	backend/internal/service/user.go	@@ -63,6 +63,9 @@ type User struct {
+PR8518	docs/moego-json-batching.md	@@ -0,0 +1,150 @@
+e6c19082f	README.md	@@ -182,6 +182,11 @@ Please read the following carefully before using this project:
+e6c19082f	README_CN.md	@@ -185,6 +185,11 @@
+e6c19082f	README_JA.md	@@ -179,6 +179,11 @@
+PR8563	backend/internal/pkg/apicompat/responses_reasoning.go	@@ -0,0 +1,22 @@
+PR8563	backend/internal/pkg/apicompat/responses_reasoning_content_test.go	@@ -0,0 +1,118 @@
+PR8563	backend/internal/pkg/apicompat/responses_to_anthropic.go	@@ -27,19 +27,14 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
+PR8563	backend/internal/pkg/apicompat/responses_to_chatcompletions.go	@@ -57,11 +57,7 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
+PR8563	backend/internal/service/openai_gateway_buffered_reasoning_content_test.go	@@ -0,0 +1,72 @@
+PR8429	backend/internal/pkg/apicompat/responses_message_serialization_test.go	@@ -0,0 +1,56 @@
+PR8429	backend/internal/pkg/apicompat/responses_stream_event_wire.go	@@ -214,7 +214,14 @@ func messageContentWire(parts []ResponsesContentPart) []map[string]any {
+PR8429	backend/internal/pkg/apicompat/types.go	@@ -425,26 +425,14 @@ type ResponsesOutput struct {
+PR8531	backend/internal/service/account_test_service_antigravity_test.go	@@ -80,3 +80,39 @@ func TestAntigravityShouldUseGeminiTestBuilder_UsesMappedModel(t *testing.T) {
+PR8531	backend/internal/service/antigravity_gateway_service.go	@@ -396,7 +396,7 @@ func (s *AntigravityGatewayService) TestConnectionWithPrompt(ctx context.Context
+PR8531	backend/internal/service/antigravity_gateway_service.go	@@ -505,7 +505,7 @@ func (s *AntigravityGatewayService) buildGeminiTestRequestWithPrompt(projectID,
+PR8531	backend/internal/service/antigravity_gateway_service.go	@@ -516,7 +516,7 @@ func (s *AntigravityGatewayService) buildGeminiTestRequestWithPrompt(projectID,
+PR8531	backend/internal/service/antigravity_gateway_service.go	@@ -529,17 +529,21 @@ func (s *AntigravityGatewayService) buildGeminiTestRequestWithPrompt(projectID,
+PR8531	backend/internal/service/antigravity_gateway_service.go	@@ -555,6 +559,18 @@ func (s *AntigravityGatewayService) getClaudeTransformOptions(ctx context.Contex
+PR8521	backend/internal/service/antigravity_gateway_retry.go	@@ -686,7 +686,7 @@ urlFallbackLoop:
+PR8521	backend/internal/service/antigravity_internal500_penalty.go	@@ -5,6 +5,9 @@ import (
+PR8521	backend/internal/service/antigravity_internal500_penalty.go	@@ -17,6 +20,69 @@ const (
+PR8521	backend/internal/service/antigravity_internal500_penalty.go	@@ -35,6 +101,10 @@ func isAntigravityInternalServerError(statusCode int, body []byte) bool {
+PR8521	backend/internal/service/antigravity_internal500_penalty.go	@@ -45,25 +115,25 @@ func (s *AntigravityGatewayService) applyInternal500Penalty(
+PR8521	backend/internal/service/antigravity_internal500_scope_test.go	@@ -0,0 +1,104 @@
+PR8437	backend/internal/handler/openai_body_limit_passthrough_rule_test.go	@@ -0,0 +1,157 @@
+PR8437	backend/internal/handler/openai_gateway_handler.go	@@ -3589,6 +3589,17 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
+PR8437	backend/internal/handler/openai_gateway_handler.go	@@ -3648,27 +3659,8 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
+PR8437	backend/internal/handler/openai_gateway_handler.go	@@ -3680,6 +3672,45 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
+PR8430	backend/internal/pkg/antigravity/gemini_types.go	@@ -54,9 +54,15 @@ type GeminiFunctionCall struct {
+PR8430	backend/internal/pkg/antigravity/request_transformer.go	@@ -13,6 +13,7 @@ import (
+PR8430	backend/internal/pkg/antigravity/request_transformer.go	@@ -111,7 +112,7 @@ func TransformClaudeToGeminiWithOptions(claudeReq *ClaudeRequest, projectID, map
+PR8430	backend/internal/pkg/antigravity/request_transformer.go	@@ -419,7 +420,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
+PR8430	backend/internal/pkg/antigravity/request_transformer.go	@@ -430,7 +431,7 @@ func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isT
+PR8430	backend/internal/pkg/antigravity/request_transformer.go	"@@ -484,7 +485,7 @@ const DummyThoughtSignature = ""skip_thought_signature_validator"""
+PR8430	backend/internal/pkg/antigravity/request_transformer.go	@@ -580,16 +581,21 @@ func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDu
+PR8430	backend/internal/pkg/antigravity/request_transformer_test.go	@@ -55,7 +55,7 @@ func TestBuildParts_ThinkingBlockWithoutSignature(t *testing.T) {
+PR8430	backend/internal/pkg/antigravity/request_transformer_test.go	@@ -105,7 +105,7 @@ func TestBuildParts_ToolUseSignatureHandling(t *testing.T) {
+PR8430	backend/internal/pkg/antigravity/request_transformer_test.go	@@ -122,7 +122,7 @@ func TestBuildParts_ToolUseSignatureHandling(t *testing.T) {
+PR8430	backend/internal/pkg/antigravity/request_transformer_test.go	@@ -136,7 +136,7 @@ func TestBuildParts_ToolUseSignatureHandling(t *testing.T) {
+PR8430	backend/internal/pkg/antigravity/request_transformer_test.go	@@ -651,7 +651,7 @@ func TestBuildParts_DocumentBecomesInlineData(t *testing.T) {
+PR8430	backend/internal/pkg/antigravity/tool_result_images_test.go	@@ -0,0 +1,103 @@
+PR8430	backend/internal/pkg/gemini/function_response.go	@@ -0,0 +1,20 @@
+PR8430	backend/internal/pkg/gemini/function_response_test.go	@@ -0,0 +1,17 @@
+PR8430	backend/internal/service/antigravity_gateway_compat.go	@@ -313,7 +313,7 @@ func (s *AntigravityGatewayService) buildAntigravityCompatGeminiBody(
+PR8430	backend/internal/service/antigravity_tool_result_images_test.go	@@ -0,0 +1,64 @@
+PR8430	backend/internal/service/gemini_chat_completions_compat_service.go	@@ -95,7 +95,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+PR8430	backend/internal/service/gemini_compat_thinking_test.go	@@ -258,7 +258,7 @@ func TestConvertClaudeMessagesToGemini_DropsHistoryThinkingBlocks(t *testing.T)
+PR8430	backend/internal/service/gemini_messages_compat_service.go	@@ -21,6 +21,7 @@ import (
+PR8430	backend/internal/service/gemini_messages_compat_service.go	@@ -551,7 +552,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8430	backend/internal/service/gemini_messages_compat_service.go	@@ -795,7 +796,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+PR8430	backend/internal/service/gemini_messages_compat_service.go	@@ -3468,7 +3469,7 @@ func mapGeminiFinishReasonToClaudeStopReason(finishReason string) string {
+PR8430	backend/internal/service/gemini_messages_compat_service.go	@@ -3477,7 +3478,7 @@ func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
+PR8430	backend/internal/service/gemini_messages_compat_service.go	@@ -3557,7 +3558,7 @@ func extractClaudeSystemText(system any) string {
+PR8430	backend/internal/service/gemini_messages_compat_service.go	@@ -3633,18 +3634,19 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
+PR8430	backend/internal/service/gemini_messages_compat_service_test.go	@@ -911,7 +911,7 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_AddsThoughtSignatureForToo
+PR8430	backend/internal/service/gemini_messages_compat_service_test.go	@@ -979,7 +979,7 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t
+PR8557	README_CN.md	@@ -747,11 +747,13 @@ go generate ./cmd/server
+PR8557	backend/internal/pkg/openai/constants.go	@@ -41,6 +41,8 @@ var DefaultModels = []Model{
+PR8557	backend/internal/pkg/openai/constants_test.go	@@ -28,9 +28,11 @@ func TestDefaultModelsPreferConcreteGPT56SolForAccountTests(t *testing.T) {
+PR8557	backend/internal/service/billing_service.go	@@ -1048,6 +1048,14 @@ func (s *BillingService) initFallbackPricing() {
+PR8557	backend/internal/service/openai_image_dimensions.go	@@ -6,6 +6,7 @@ import (
+PR8557	backend/internal/service/openai_images.go	@@ -86,6 +86,7 @@ type OpenAIImagesRequest struct {
+PR8557	backend/internal/service/openai_images.go	@@ -93,6 +94,9 @@ type OpenAIImagesRequest struct {
+PR8557	backend/internal/service/openai_images.go	@@ -100,10 +104,20 @@ type OpenAIImagesRequest struct {
+PR8557	backend/internal/service/openai_images.go	@@ -150,6 +164,14 @@ func (r *OpenAIImagesRequest) moderationImages() []map[string]string {
+PR8557	backend/internal/service/openai_images.go	@@ -274,6 +296,7 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
+PR8557	backend/internal/service/openai_images.go	@@ -294,6 +317,20 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
+PR8557	backend/internal/service/openai_images.go	@@ -317,6 +354,18 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
+PR8557	backend/internal/service/openai_images.go	@@ -366,10 +415,9 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+PR8557	backend/internal/service/openai_images.go	@@ -377,7 +425,13 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+PR8557	backend/internal/service/openai_images.go	@@ -420,6 +474,9 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+PR8557	backend/internal/service/openai_images.go	@@ -449,6 +506,22 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
+PR8557	backend/internal/service/openai_images.go	@@ -574,12 +647,17 @@ func hasOpenAINativeImageOptions(exists func(path string) bool) bool {
+PR8557	backend/internal/service/openai_images.go	@@ -590,7 +668,7 @@ func hasOpenAINativeImageOptions(exists func(path string) bool) bool {
+PR8557	backend/internal/service/openai_images.go	@@ -996,7 +1074,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8557	backend/internal/service/openai_images.go	@@ -1156,9 +1234,6 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8557	backend/internal/service/openai_images.go	@@ -1166,6 +1241,26 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
+PR8557	backend/internal/service/openai_images26_test.go	@@ -0,0 +1,303 @@
+PR8557	backend/internal/service/openai_images_direct.go	@@ -31,6 +31,7 @@ func isOpenAIImagesForceResponses(ctx context.Context) bool {
+PR8557	backend/internal/service/openai_images_direct.go	@@ -39,6 +40,17 @@ func usesCodexDirectImages(model string) bool {
+PR8557	backend/internal/service/openai_images_direct.go	@@ -65,7 +77,7 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
+PR8557	backend/internal/service/openai_images_direct.go	@@ -83,6 +95,15 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
+PR8557	backend/internal/service/openai_images_direct.go	@@ -118,6 +139,17 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
+PR8557	backend/internal/service/openai_images_direct_payload_test.go	@@ -54,7 +54,7 @@ func TestCodexDirectImagesMultipartEdit(t *testing.T) {
+PR8557	backend/internal/service/openai_images_direct_test.go	@@ -18,7 +18,7 @@ func directImagesTestAccount() *Account {
+PR8557	backend/internal/service/openai_images_direct_test.go	@@ -111,15 +111,19 @@ func TestCodexDirectImagesHTTPErrorFallbacksOnlyWhenEndpointUnavailable(t *testi
+PR8557	backend/internal/service/openai_images_model_test.go	@@ -84,8 +84,8 @@ func TestOpenAIImagesRejectedDriverDoesNotCoolImageModel(t *testing.T) {
+PR8557	backend/internal/service/openai_images_model_test.go	@@ -100,9 +100,9 @@ func TestGPTImage25PricingDoesNotUseLegacyImageRates(t *testing.T) {
+PR8557	backend/internal/service/openai_images_responses.go	@@ -319,6 +319,10 @@ func openAIImageOutputMIMEType(outputFormat string) string {
+PR8557	backend/internal/service/openai_images_responses.go	@@ -359,6 +363,9 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
+PR8557	backend/internal/service/openai_images_responses.go	@@ -411,6 +418,7 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
+PR8557	backend/internal/service/openai_images_responses.go	@@ -1914,7 +1922,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
+PR8557	backend/internal/service/pricing_service.go	@@ -38,7 +38,7 @@ var (
+PR8557	backend/internal/service/pricing_service.go	@@ -1688,8 +1688,11 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
+PR8557	backend/resources/model-pricing/model_prices_and_context_window.json	@@ -6713,6 +6713,22 @@
+PR8557	backend/resources/model-pricing/model_prices_and_context_window.json	@@ -6745,6 +6761,22 @@
+PR8557	frontend/src/composables/__tests__/useModelWhitelist.spec.ts	@@ -50,6 +50,8 @@ describe('useModelWhitelist', () => {
+PR8557	frontend/src/composables/useModelWhitelist.ts	@@ -21,7 +21,8 @@ const openaiModels = [
+PR8457	backend/internal/handler/gateway_handler.go	@@ -147,14 +147,11 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+PR8457	backend/internal/handler/gateway_handler.go	@@ -2163,14 +2160,11 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
+PR8457	backend/internal/handler/gateway_handler_chat_completions.go	@@ -47,14 +47,11 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
+PR8457	backend/internal/handler/gateway_handler_responses.go	@@ -47,14 +47,11 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
+PR8457	backend/internal/handler/gateway_systemone.go	@@ -56,14 +56,11 @@ func (h *GatewayHandler) SystemOne(c *gin.Context) {
+PR8457	backend/internal/handler/gemini_cached_contents_handler.go	@@ -65,14 +65,12 @@ func (h *GatewayHandler) geminiCachedContentsPreamble(c *gin.Context, component
+PR8457	backend/internal/handler/gemini_v1beta_handler.go	@@ -374,14 +374,11 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
+PR8457	backend/internal/handler/grok_audio.go	@@ -203,10 +203,16 @@ func (h *OpenAIGatewayHandler) GrokVoice(c *gin.Context, endpoint string) {
+PR8457	backend/internal/handler/grok_audio.go	@@ -377,15 +383,20 @@ func (h *OpenAIGatewayHandler) recordGrokVoiceUsage(
+PR8457	backend/internal/handler/grok_audio_body_test.go	@@ -1,10 +1,14 @@
+PR8457	backend/internal/handler/grok_audio_body_test.go	@@ -51,3 +55,55 @@ func TestGrokVoiceRequestBodyMemoryOverload(t *testing.T) {
+PR8457	backend/internal/handler/grok_media.go	@@ -90,14 +90,11 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
+PR8457	backend/internal/handler/image_task_handler.go	@@ -77,14 +77,12 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
+PR8457	backend/internal/handler/openai_alpha_search.go	@@ -52,14 +52,11 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
+PR8457	backend/internal/handler/openai_chat_completions.go	@@ -51,15 +51,11 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
+PR8457	backend/internal/handler/openai_embeddings.go	@@ -48,14 +48,11 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
+PR8457	backend/internal/handler/openai_gateway_count_tokens.go	@@ -42,14 +42,11 @@ func (h *OpenAIGatewayHandler) ResponsesInputTokens(c *gin.Context) {
+PR8457	backend/internal/handler/openai_gateway_count_tokens.go	@@ -138,14 +135,12 @@ func (h *OpenAIGatewayHandler) ResponsesInputTokens(c *gin.Context) {
+PR8457	backend/internal/handler/openai_gateway_count_tokens.go	@@ -211,14 +206,11 @@ func (h *OpenAIGatewayHandler) CountTokens(c *gin.Context) {
+PR8457	backend/internal/handler/openai_gateway_handler.go	@@ -424,15 +424,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8457	backend/internal/handler/openai_gateway_handler.go	@@ -1210,14 +1206,11 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+PR8457	backend/internal/handler/openai_images.go	@@ -50,14 +50,11 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+PR8457	backend/internal/handler/request_body_limit.go	@@ -1,7 +1,6 @@
+PR8457	backend/internal/handler/request_body_limit.go	@@ -9,26 +8,24 @@ import (
+PR8457	backend/internal/handler/request_body_limit_test.go	@@ -4,8 +4,10 @@ import (
+PR8457	backend/internal/handler/request_body_limit_test.go	@@ -22,15 +24,8 @@ func TestRequestBodyLimitTooLarge(t *testing.T) {
+PR8457	backend/internal/handler/request_body_limit_test.go	@@ -50,10 +45,15 @@ func TestHandleRequestBodyReadErrorCancellation(t *testing.T) {
+PR8457	backend/internal/handler/request_body_limit_test.go	@@ -69,10 +69,14 @@ func TestHandleRequestBodyReadErrorCancellation(t *testing.T) {
+PR8457	backend/internal/handler/request_body_read_log.go	@@ -1,79 +1,30 @@
+PR8457	backend/internal/handler/request_body_read_log_test.go	@@ -3,25 +3,36 @@
+PR8457	backend/internal/handler/request_body_read_log_test.go	@@ -32,9 +43,97 @@ func TestLogRequestBodyReadFailureClassifiesWithoutPayload(t *testing.T) {
+PR8457	backend/internal/pkg/googleapi/status.go	@@ -14,6 +14,8 @@ func HTTPStatusToGoogleStatus(status int) string {
+PR8457	backend/internal/pkg/googleapi/status_test.go	@@ -14,6 +14,7 @@ func TestHTTPStatusToGoogleStatus(t *testing.T) {
+PR8457	backend/internal/pkg/httputil/body.go	@@ -10,6 +10,7 @@ import (
+PR8457	backend/internal/pkg/httputil/body.go	@@ -107,8 +108,13 @@ func readRequestBodyWithBudget(req *http.Request) (requestBodyBuffer, error) {
+PR8457	backend/internal/pkg/httputil/body.go	@@ -156,18 +162,20 @@ func readRequestBodyChunksWithBudget(ctx context.Context, reader io.Reader, init
+PR8457	backend/internal/pkg/httputil/body_read_error.go	@@ -0,0 +1,194 @@
+PR8457	backend/internal/pkg/httputil/body_read_error_test.go	@@ -0,0 +1,124 @@
+PR8457	backend/internal/server/middleware/group_model_allowlist.go	@@ -1,7 +1,6 @@
+PR8457	backend/internal/server/middleware/group_model_allowlist.go	@@ -113,18 +112,10 @@ func isResponsesWebSocketRoute(c *gin.Context) bool {
+PR8457	backend/internal/server/middleware/request_body_memory.go	@@ -11,8 +11,11 @@ import (
+PR8457	backend/internal/server/middleware/request_body_memory_test.go	@@ -3,8 +3,10 @@ package middleware
+PR8457	backend/internal/server/middleware/request_body_memory_test.go	@@ -66,10 +68,15 @@ func TestRejectRequestBodyReadErrorCancellation(t *testing.T) {
+PR8457	backend/internal/server/middleware/request_body_memory_test.go	@@ -85,10 +92,14 @@ func TestRejectRequestBodyReadErrorCancellation(t *testing.T) {
+PR8457	backend/internal/server/middleware/request_body_read_failure.go	@@ -0,0 +1,24 @@
+PR8457	backend/internal/server/request_body_read_timeout_test.go	@@ -0,0 +1,163 @@
+PR8457	backend/internal/server/routes/gateway.go	@@ -1,7 +1,6 @@
+PR8457	backend/internal/server/routes/gateway.go	@@ -564,18 +563,10 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
+PR8522	backend/internal/pkg/antigravity/quota_summary.go	@@ -0,0 +1,117 @@
+PR8522	backend/internal/pkg/antigravity/quota_summary_test.go	@@ -0,0 +1,79 @@
+PR8522	backend/internal/service/account_usage_service.go	@@ -155,6 +155,21 @@ type UsageProgress struct {
+PR8522	backend/internal/service/account_usage_service.go	@@ -197,6 +212,9 @@ type UsageInfo struct {
+PR8522	backend/internal/service/antigravity_quota_fetcher.go	@@ -7,6 +7,7 @@ import (
+PR8522	backend/internal/service/antigravity_quota_fetcher.go	@@ -86,6 +87,14 @@ func (f *AntigravityQuotaFetcher) FetchQuota(ctx context.Context, account *Accou
+PR8522	backend/internal/service/antigravity_quota_fetcher.go	@@ -206,6 +215,53 @@ func (f *AntigravityQuotaFetcher) buildUsageInfo(modelsResp *antigravity.FetchAv
+PR8522	backend/internal/service/antigravity_quota_groups_test.go	@@ -0,0 +1,79 @@
+PR8522	frontend/src/components/account/AccountUsageCell.vue	@@ -294,6 +294,23 @@
+PR8522	frontend/src/components/account/AccountUsageCell.vue	@@ -885,6 +902,42 @@ interface AntigravityUsageResult {
+PR8522	frontend/src/components/account/__tests__/AccountUsageCell.spec.ts	@@ -450,6 +450,66 @@ describe('AccountUsageCell', () => {
+PR8522	frontend/src/i18n/locales/en/admin/accounts.ts	@@ -1718,6 +1718,12 @@ export default {
+PR8522	frontend/src/i18n/locales/zh/admin/accounts.ts	@@ -519,6 +519,12 @@ export default {
+PR8522	frontend/src/types/index.ts	@@ -1442,6 +1442,19 @@ export interface UsageProgress {
+PR8522	frontend/src/types/index.ts	@@ -1505,6 +1518,8 @@ export interface AccountUsageInfo {
+PR8553	backend/internal/service/account_usage_service.go	@@ -496,10 +496,12 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+PR8553	backend/internal/service/account_usage_service.go	@@ -510,7 +512,7 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+PR8553	backend/internal/service/account_usage_service.go	@@ -1844,7 +1846,6 @@ func (s *AccountUsageService) estimateSetupTokenUsage(account *Account) *UsageIn
+PR8553	backend/internal/service/account_usage_service_setup_token_weekly_test.go	@@ -0,0 +1,115 @@
+PR8553	backend/internal/service/ratelimit_service.go	@@ -373,6 +373,8 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
+PR8553	backend/internal/service/ratelimit_service.go	@@ -1695,10 +1697,6 @@ func (s *RateLimitService) persistAnthropicFableWindowLimit(ctx context.Context,
+PR8553	backend/internal/service/ratelimit_service.go	@@ -2056,10 +2054,12 @@ func (s *RateLimitService) handle529(ctx context.Context, account *Account) {
+PR8553	backend/internal/service/ratelimit_weekly_usage_test.go	@@ -0,0 +1,131 @@
+PR8441	backend/internal/pkg/antigravity/stream_response_shape_test.go	@@ -0,0 +1,75 @@
+PR8441	backend/internal/pkg/antigravity/stream_transformer.go	@@ -87,8 +87,15 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
+PR8441	backend/internal/pkg/antigravity/stream_transformer.go	@@ -96,6 +103,8 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
+PR8432	backend/internal/service/account_test_service.go	@@ -3054,11 +3054,11 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+PR8432	backend/internal/service/account_test_service_openai_image_test.go	@@ -2,6 +2,7 @@ package service
+PR8432	backend/internal/service/account_test_service_openai_image_test.go	@@ -91,3 +92,50 @@ func TestAccountTestService_OpenAIImageAPIKeyUsesConfiguredV1BaseURL(t *testing.
+PR8445	backend/internal/service/openai_apikey_responses_probe.go	@@ -154,6 +154,11 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
+PR8445	backend/internal/service/openai_apikey_responses_probe_test.go	@@ -90,6 +90,57 @@ func TestProbeOpenAIAPIKeyResponsesSupportCNProviders(t *testing.T) {
+PR8520	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -773,12 +773,6 @@ func observeUpstreamMessage(
+PR8520	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -789,15 +783,17 @@ func observeUpstreamMessage(
+PR8520	backend/internal/service/openai_ws_v2/passthrough_relay_test.go	@@ -1478,3 +1478,83 @@ func TestRelay_OnTurnComplete_RealOpenAIStream_FirstTokenMs(t *testing.T) {
+PR8464	backend/internal/service/openai_ws_http_bridge.go	@@ -449,6 +449,27 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
+PR8464	backend/internal/service/openai_ws_http_bridge_test.go	@@ -2352,3 +2352,42 @@ func TestOpenAIWSHTTPBridge_IdleTimeoutClosesClientSession(t *testing.T) {
+PR8471	backend/internal/server/middleware/api_key_auth.go	@@ -10,13 +10,18 @@ import (
+PR8471	backend/internal/server/middleware/api_key_auth.go	@@ -110,6 +115,9 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
+PR8471	backend/internal/server/middleware/api_key_auth.go	@@ -447,3 +455,17 @@ func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool)
+PR8471	backend/internal/server/middleware/api_key_auth_google.go	@@ -71,6 +71,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
+PR8471	backend/internal/server/middleware/api_key_auth_test.go	@@ -50,6 +50,70 @@ func TestAPIKeyAuthRejectsOversizedCredentialsBeforeLookup(t *testing.T) {
+PR8471	backend/internal/service/api_key_service.go	@@ -13,6 +13,7 @@ import (
+PR8471	backend/internal/service/api_key_service.go	@@ -735,7 +736,9 @@ func (s *APIKeyService) GetByID(ctx context.Context, id int64) (*APIKey, error)
+PR8471	backend/internal/service/api_key_service_cache_test.go	@@ -615,6 +615,16 @@ func TestAPIKeyService_GetByKeyAllowsMaximumLength(t *testing.T) {
+PR8409	backend/internal/service/antigravity_gateway_gemini.go	@@ -522,6 +522,11 @@ func cleanGeminiRequest(body []byte) ([]byte, error) {
+PR8409	backend/internal/service/antigravity_gateway_gemini.go	@@ -529,6 +534,37 @@ func cleanGeminiRequest(body []byte) ([]byte, error) {
+PR8409	backend/internal/service/antigravity_gemini_response_schema_test.go	@@ -0,0 +1,79 @@
+PR8420	backend/internal/service/account_test_service.go	@@ -547,7 +547,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
+PR8420	backend/internal/service/anthropic_messages_endpoint_test.go	@@ -0,0 +1,53 @@
+PR8420	backend/internal/service/anthropic_messages_url.go	@@ -0,0 +1,26 @@
+PR8420	backend/internal/service/anthropic_messages_url_test.go	@@ -0,0 +1,134 @@
+PR8420	backend/internal/service/gateway_anthropic_passthrough.go	@@ -307,7 +307,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
+PR8420	backend/internal/service/gateway_upstream_request.go	@@ -66,7 +66,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -275,6 +275,7 @@ import Icon from '@/components/icons/Icon.vue'
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -318,7 +319,7 @@ const copiedIndex = ref<number | null>(null)
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -376,12 +377,12 @@ const defaultClientTab = computed(() => {
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -1027,13 +1028,14 @@ function generateOpenAIFiles(baseUrl: string, apiKey: string): FileConfig[] {
+PR8380	frontend/src/components/keys/UseKeyModal.vue	"@@ -1045,16 +1047,14 @@ ${codexModelCatalogMode.value === 'remote' ? `model_catalog_url = ""${escapeTomlB"
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -1309,7 +1309,7 @@ function generateRoutedCodexFiles(
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -1319,7 +1319,7 @@ function generateRoutedCodexFiles(
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -1375,13 +1375,14 @@ supports_websockets = false${codexModelCatalogMode.value === 'remote' ? '\n\n[fe
+PR8380	frontend/src/components/keys/UseKeyModal.vue	@@ -1394,7 +1395,7 @@ supports_websockets = true
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -379,7 +379,7 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -399,15 +399,19 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -462,7 +466,7 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -483,7 +487,6 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -492,12 +495,13 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -515,7 +519,7 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -535,6 +539,8 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -547,11 +553,12 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -603,10 +610,11 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -635,21 +643,21 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -967,7 +975,7 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -1002,8 +1010,8 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -1035,10 +1043,10 @@ describe('UseKeyModal', () => {
+PR8380	frontend/src/i18n/locales/en/dashboard.ts	@@ -168,10 +168,10 @@ export default {
+PR8380	frontend/src/i18n/locales/zh/dashboard.ts	@@ -168,10 +168,10 @@ export default {
+PR8380	frontend/src/utils/__tests__/ccswitchImport.spec.ts	@@ -14,7 +14,7 @@ function paramsFromDeeplink(deeplink: string): URLSearchParams {
+PR8380	frontend/src/utils/__tests__/ccswitchImport.spec.ts	@@ -48,6 +48,32 @@ describe('ccswitchImport utils', () => {
+PR8380	frontend/src/utils/__tests__/ccswitchImport.spec.ts	@@ -68,6 +94,7 @@ describe('ccswitchImport utils', () => {
+PR8380	frontend/src/utils/__tests__/ccswitchImport.spec.ts	@@ -85,6 +112,7 @@ describe('ccswitchImport utils', () => {
+PR8380	frontend/src/utils/__tests__/ccswitchImport.spec.ts	@@ -99,6 +127,7 @@ describe('ccswitchImport utils', () => {
+PR8380	frontend/src/utils/ccswitchImport.ts	@@ -1,6 +1,7 @@
+PR8380	frontend/src/utils/ccswitchImport.ts	@@ -111,5 +112,23 @@ export function buildCcSwitchImportDeeplink(input: CcSwitchImportDeeplinkInput):
+PR8380	frontend/src/utils/codexAuthConfig.ts	@@ -0,0 +1,10 @@
+PR8365	backend/internal/pkg/apicompat/anthropic_to_responses.go	@@ -19,7 +19,7 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
+PR8365	backend/internal/pkg/apicompat/chatcompletions_to_responses.go	@@ -24,7 +24,7 @@ func ChatCompletionsToResponses(req *ChatCompletionsRequest) (*ResponsesRequest,
+PR8365	backend/internal/pkg/openai/codex_gpt61_terra.json	@@ -0,0 +1,176 @@
+PR8365	backend/internal/pkg/openai/constants.go	@@ -25,7 +25,7 @@ var DefaultModels = []Model{
+PR8365	backend/internal/pkg/openai/constants.go	@@ -90,6 +90,26 @@ var instructionsGPT6Astra string
+PR8365	backend/internal/pkg/openai/constants.go	@@ -141,6 +161,7 @@ func CanonicalizeOpenAIModelAliasSpelling(model string) string {
+PR8365	backend/internal/pkg/openai/constants.go	@@ -153,15 +174,9 @@ func CodexBaseInstructionsForModel(model string) string {
+PR8365	backend/internal/pkg/openai/constants.go	@@ -219,6 +234,8 @@ func IsGPT61SolModelSpelling(model string) bool {
+PR8365	backend/internal/pkg/openai/constants.go	@@ -229,13 +246,15 @@ func IsGPT61TerraModelSpelling(model string) bool {
+PR8365	backend/internal/pkg/openai/constants.go	@@ -251,3 +270,21 @@ func ValidateGPT61SolReasoningEffort(model, effort string) error {
+PR8365	backend/internal/service/billing_service.go	@@ -574,7 +574,7 @@ func (s *BillingService) initFallbackPricing() {
+PR8365	backend/internal/service/billing_service.go	@@ -589,6 +589,7 @@ func (s *BillingService) initFallbackPricing() {
+PR8365	backend/internal/service/openai_codex_model_metadata.go	@@ -73,7 +73,7 @@ func accountCodexToolCapabilities(account *Account, modelID string) map[string]j
+PR8365	backend/internal/service/openai_codex_models_service.go	@@ -544,6 +544,15 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
+PR8365	backend/internal/service/openai_codex_models_service.go	@@ -649,9 +658,6 @@ func configuredCodexGPTReasoningLevels(modelID string) []configuredCodexReasonin
+PR8365	backend/internal/service/openai_codex_models_service.go	@@ -2087,6 +2093,7 @@ func CodexModelsManifestETag(body []byte) string {
+PR8365	backend/internal/service/openai_compat_prompt_cache_key.go	"@@ -15,8 +15,8 @@ const compatPromptCacheKeyPrefix = ""compat_cc_"""
+PR8365	backend/internal/service/openai_gateway_chat_completions.go	@@ -165,7 +165,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
+PR8365	backend/internal/service/openai_gateway_chat_completions_raw.go	@@ -84,7 +84,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletionsWithStartTime(
+PR8365	backend/internal/service/openai_gateway_chat_completions_test.go	@@ -1801,8 +1801,8 @@ func TestGPT61SolRejectsDisabledReasoningBeforeForwarding(t *testing.T) {
+PR8365	backend/internal/service/openai_gateway_messages.go	@@ -98,7 +98,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+PR8365	backend/internal/service/openai_gateway_messages_chat_fallback.go	@@ -63,7 +63,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
+PR8365	backend/internal/service/openai_gateway_request_body.go	@@ -2748,24 +2748,24 @@ func supportsOpenAIReasoningEffortMax(model string) bool {
+PR8365	backend/internal/service/openai_gateway_responses_chat_fallback.go	@@ -71,7 +71,7 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
+PR8365	backend/internal/service/openai_gateway_usage.go	@@ -562,7 +562,7 @@ func openAILongContextBillingGate(account *Account) *bool {
+PR8365	backend/internal/service/openai_gateway_usage.go	@@ -572,7 +572,7 @@ func openAISubscriptionLongContextExempt(account *Account, result *OpenAIForward
+PR8365	backend/internal/service/openai_gpt61_terra_test.go	@@ -3,7 +3,9 @@
+PR8365	backend/internal/service/openai_gpt61_terra_test.go	@@ -45,22 +47,23 @@ func TestGPT61TerraIdentityAndEffort(t *testing.T) {
+PR8365	backend/internal/service/openai_gpt61_terra_test.go	@@ -140,3 +143,98 @@ func TestGPT61TerraChatFallbackRejectsTools(t *testing.T) {
+PR8365	backend/internal/service/openai_subscription_long_context_test.go	@@ -33,6 +33,12 @@ func TestOpenAISubscriptionLongContextExempt(t *testing.T) {
+PR8365	backend/internal/service/openai_subscription_long_context_test.go	@@ -236,3 +242,37 @@ func TestOpenAIGatewayServiceRecordUsage_GPT61SolExemptionSurvivesRepricing(t *t

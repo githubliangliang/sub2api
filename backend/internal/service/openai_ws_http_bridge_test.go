@@ -1726,3 +1726,59 @@ func TestProxyOpenAIWSHTTPBridgeTurnDisconnectedBeforeOutputDoesNotFailOver(t *t
 		})
 	}
 }
+
+func TestProxyOpenAIWSHTTPBridgeTurn_StagesCodexFingerprint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	bridgeFingerprintAccount := func(id int64, extra map[string]any) *Account {
+		return &Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: extra, Credentials: map[string]any{"access_token": "test-token"}}
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	run := func(account *Account, cacheKey string) *http.Request {
+		sse := `data: {"type":"response.completed","response":{"id":"resp_fp","model":"gpt-5.5","status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}` + "\n\n"
+		upstream := &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(sse)),
+		}}
+		svc := &OpenAIGatewayService{
+			cfg:          &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+			httpUpstream: upstream,
+		}
+		payload := []byte(fmt.Sprintf(`{"type":"response.create","model":"gpt-5.5","store":false,"input":"hi","prompt_cache_key":%q}`, cacheKey))
+		_, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+			context.Background(), c, account, "test-token", payload, len(payload),
+			"gpt-5.5", "", "", "", "", 1,
+			func([]byte) error { return nil },
+		)
+		require.NoError(t, err)
+		require.NotNil(t, upstream.lastReq)
+		ids := resolveCodexFingerprintIDsFromRequest(account, c.Request.Header)
+		if account.UsesOpenAICodexProtocol() && ids != nil {
+			require.Equal(t, ids.sessionID, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
+		} else {
+			require.Empty(t, gjson.GetBytes(upstream.lastBody, "client_metadata.session_id").String())
+		}
+		if cacheKey != "" {
+			require.Equal(t, cacheKey, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").String())
+		}
+		return upstream.lastReq
+	}
+
+	full := bridgeFingerprintAccount(7101, map[string]any{"codex_fingerprint_mode": "full"})
+	ids := resolveCodexFingerprintIDsFromRequest(full, nil)
+	require.NotNil(t, ids)
+	first := run(full, "")
+	require.Equal(t, ids.sessionID, first.Header.Get("session_id"))
+	require.Equal(t, ids.installationID, first.Header.Get("x-codex-installation-id"))
+	// Every bridge request carries the same account-level session_id, keeping upstream cache routing stable
+	require.Equal(t, first.Header.Get("session_id"), run(full, "").Header.Get("session_id"))
+
+	off := bridgeFingerprintAccount(7102, map[string]any{"codex_fingerprint_mode": "off"})
+	require.Empty(t, run(off, "").Header.Get("session_id"), "accounts without convergence get no session_id")
+
+	other := bridgeFingerprintAccount(7103, map[string]any{"codex_fingerprint_mode": "full"})
+	require.NotEqual(t, first.Header.Get("session_id"), run(other, "explicit-cache-key").Header.Get("session_id"))
+	apiKey := &Account{ID: 7104, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "test", "base_url": "https://api.openai.com"}}
+	require.Empty(t, run(apiKey, "explicit-cache-key").Header.Get("session_id"))
+}

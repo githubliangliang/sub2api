@@ -1,0 +1,27 @@
+package apicompat
+
+import (
+ "encoding/json"
+ "testing"
+ "github.com/stretchr/testify/require"
+)
+
+func TestIntake020BufferedReasoning(t *testing.T) {
+ var response ResponsesResponse
+ require.NoError(t, json.Unmarshal([]byte(`{"id":"r1","output":[{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"visible upstream reasoning"}]}]}`), &response))
+ for name, converted := range map[string]any{"messages": ResponsesToAnthropic(&response,"test"), "chat": ResponsesToChatCompletions(&response,"test")} {
+  t.Run(name,func(t *testing.T){ raw,err:=json.Marshal(converted); require.NoError(t,err); require.Contains(t,string(raw),"visible upstream reasoning") })
+ }
+}
+
+func TestIntake020CompletedMessageShape(t *testing.T) {
+ raw,err:=json.Marshal(ResponsesOutput{Type:"message",ID:"m1",Role:"assistant",Status:"completed"})
+ require.NoError(t,err)
+ require.Contains(t,string(raw),`"content":[]`)
+}
+
+func TestIntake020RefusalWire(t *testing.T) {
+ raw,err:=json.Marshal(ResponsesStreamEvent{Type:"response.output_item.done", Item:&ResponsesOutput{Type:"message",Content:[]ResponsesContentPart{{Type:"refusal",Refusal:"cannot comply"}}}})
+ require.NoError(t,err)
+ require.Contains(t,string(raw),`"refusal":"cannot comply"`)
+}

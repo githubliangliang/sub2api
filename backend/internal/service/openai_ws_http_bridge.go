@@ -373,6 +373,28 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
 	}
 
+	// Codex fingerprint convergence, same as Forward / forwardOpenAIPassthrough. Builders only read
+	// staged IDs; without staging, the bridge sends no account-level session_id, so clients without
+	// prompt_cache_key get random upstream prompt-cache routing and rarely hit the cache.
+	stageCodexFingerprintIDs(c, nil)
+	if account.UsesOpenAICodexProtocol() {
+		var clientHeaders http.Header
+		if c != nil && c.Request != nil {
+			clientHeaders = c.Request.Header
+		}
+		fpIDs := resolveCodexFingerprintIDsFromRequest(account, clientHeaders)
+		if fpIDs != nil {
+			fpBody, fpChanged, fpErr := applyCodexFingerprintClientMetadataRaw(body, fpIDs)
+			if fpErr != nil {
+				return nil, fmt.Errorf("apply http bridge codex fingerprint: %w", fpErr)
+			}
+			if fpChanged {
+				body = fpBody
+			}
+		}
+		stageCodexFingerprintIDs(c, fpIDs)
+	}
+
 	// Lite 请求必须 parallel_tool_calls: false，否则上游 400 unsupported_value。
 	// 位置必须在构建上游请求之前：本仓库这条路径下面第 248/250 行就把 body 交给
 	// buildGrokResponsesRequest / buildUpstreamRequestOpenAIPassthrough 了。

@@ -1,0 +1,269 @@
+diff --git a/backend/internal/service/openai_gateway_cn_fixes_test.go b/backend/internal/service/openai_gateway_cn_fixes_test.go
+index 1ab002af8..dbbed21ef 100644
+--- a/backend/internal/service/openai_gateway_cn_fixes_test.go
++++ b/backend/internal/service/openai_gateway_cn_fixes_test.go
+@@ -12,7 +12,6 @@ package service
+ import (
+ 	"context"
+ 	"encoding/json"
+-	"errors"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -270,6 +269,7 @@ func TestHandle403_OtherCNProviderWithKimiConcurrencyMessageUsesNormalPolicy(t *
+ 	require.True(t, shouldDisable)
+ 	require.Equal(t, 1, repo.setErrorCalls, "non-Kimi CN provider must retain the normal permanent-error policy")
+ 	require.Equal(t, 0, repo.tempCalls)
++	require.Zero(t, repo.rateLimitedCalls)
+ 	require.Empty(t, counter.counts, "normal CN 403 policy must consume the counter result")
+ 	require.Equal(t, []string{"auth_error"}, blocker.reasons, "the Kimi-specific runtime block must not apply")
+ }
+@@ -290,16 +290,16 @@ func TestHandle403_CNProviderConcurrencyLimitAlwaysUsesTemporaryCooldown(t *test
+ 
+ 	require.True(t, shouldDisable, "the request must still fail over to another account")
+ 	require.Equal(t, 0, repo.setErrorCalls)
+-	require.Equal(t, 1, repo.tempCalls)
+-	require.Contains(t, repo.lastTempReason, cnConcurrencyLimitReasonPrefix)
++	require.Equal(t, 0, repo.tempCalls)
++	require.Equal(t, 1, repo.rateLimitedCalls)
+ 	require.Equal(t, []int64{openAI403DisableThreshold}, counter.counts, "transient concurrency 403 must bypass the permanent-error counter")
+ 	require.Len(t, blocker.accounts, 1)
+-	require.Equal(t, cnConcurrencyLimitReasonPrefix, blocker.reasons[0])
++	require.Equal(t, "429_fallback", blocker.reasons[0])
+ 	require.True(t, blocker.until[0].After(time.Now()))
+ }
+ 
+ func TestHandle403_KimiConcurrencyLimitRepositoryFailureKeepsRuntimeBlock(t *testing.T) {
+-	repo := &rateLimitAccountRepoStub{tempErr: errors.New("repository unavailable")}
++	repo := &kimiConcurrencyRateLimitFailureRepo{}
+ 	counter := &openAI403CounterCacheStub{counts: []int64{openAI403DisableThreshold}}
+ 	blocker := &runtimeBlockRecorder{}
+ 	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+@@ -313,12 +313,13 @@ func TestHandle403_KimiConcurrencyLimitRepositoryFailureKeepsRuntimeBlock(t *tes
+ 	)
+ 
+ 	require.True(t, shouldDisable, "the current request must fail over even when persistence fails")
+-	require.Equal(t, 1, repo.tempCalls, "the temporary cooldown should still be persisted when possible")
++	require.Equal(t, 1, repo.rateLimitedCalls, "the rate limit cooldown should still be persisted when possible")
++	require.Zero(t, repo.tempCalls)
+ 	require.Equal(t, 0, repo.setErrorCalls, "persistence failure must not fall back to permanent account error")
+ 	require.Equal(t, []int64{openAI403DisableThreshold}, counter.counts, "persistence failure must not enter the permanent-error counter path")
+ 	require.Len(t, blocker.accounts, 1, "the in-memory runtime block must survive repository failure")
+ 	require.Same(t, account, blocker.accounts[0])
+-	require.Equal(t, cnConcurrencyLimitReasonPrefix, blocker.reasons[0])
++	require.Equal(t, "429_fallback", blocker.reasons[0])
+ 	require.True(t, blocker.until[0].After(time.Now()))
+ }
+ 
+@@ -337,4 +338,5 @@ func TestHandle403_CNProviderNearMatchRetainsNormalPermanentErrorPolicy(t *testi
+ 	require.True(t, shouldDisable)
+ 	require.Equal(t, 1, repo.setErrorCalls, "non-exact 403 must retain existing permission/auth protection")
+ 	require.Equal(t, 0, repo.tempCalls)
++	require.Zero(t, repo.rateLimitedCalls)
+ }
+diff --git a/backend/internal/service/ratelimit_cn_concurrency_403_test.go b/backend/internal/service/ratelimit_cn_concurrency_403_test.go
+new file mode 100644
+index 000000000..8edb2e597
+--- /dev/null
++++ b/backend/internal/service/ratelimit_cn_concurrency_403_test.go
+@@ -0,0 +1,167 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/require"
++)
++
++type kimiConcurrencyRateLimitFailureRepo struct {
++	rateLimitAccountRepoStub
++}
++
++func (repo *kimiConcurrencyRateLimitFailureRepo) SetRateLimited(ctx context.Context, accountID int64, resetAt time.Time) error {
++	_ = repo.rateLimitAccountRepoStub.SetRateLimited(ctx, accountID, resetAt)
++	return errors.New("repository unavailable")
++}
++
++func TestHandleUpstreamError_KimiConcurrency403CooldownSettings(t *testing.T) {
++	for _, testCase := range []struct {
++		name     string
++		settings *RateLimit429CooldownSettings
++		seconds  int
++	}{
++		{name: "no setting service", seconds: 5},
++		{name: "default settings", settings: &RateLimit429CooldownSettings{}, seconds: 5},
++		{name: "custom seconds", settings: &RateLimit429CooldownSettings{Enabled: true, CooldownSeconds: 17}, seconds: 17},
++		{name: "disabled", settings: &RateLimit429CooldownSettings{Enabled: false, CooldownSeconds: 17}},
++	} {
++		t.Run(testCase.name, func(t *testing.T) {
++			repo := &rateLimitAccountRepoStub{}
++			counter := &openAI403CounterCacheStub{counts: []int64{openAI403DisableThreshold}}
++			blocker := &runtimeBlockRecorder{}
++			service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
++			service.SetOpenAI403CounterCache(counter)
++			service.SetAccountRuntimeBlocker(blocker)
++			if testCase.settings != nil {
++				settingRepo := newMockSettingRepo()
++				if testCase.settings.CooldownSeconds > 0 {
++					data, err := json.Marshal(testCase.settings)
++					require.NoError(t, err)
++					settingRepo.data[SettingKeyRateLimit429CooldownSettings] = string(data)
++				}
++				service.SetSettingService(NewSettingService(settingRepo, &config.Config{}))
++			}
++			account := newCNQuotaExhaustedTestAccount(2 * time.Hour)
++			for attempt := 0; attempt < 5; attempt++ {
++				before := time.Now()
++				require.True(t, runKimi403(service, account, `{"error":{"message":"`+kimiConcurrentRequestLimitMessage+`"}}`), "must switch accounts even with cooldown disabled")
++				after := time.Now()
++				if testCase.seconds > 0 {
++					cooldown := time.Duration(testCase.seconds) * time.Second
++					require.Equal(t, attempt+1, repo.rateLimitedCalls)
++					require.Equal(t, account.ID, repo.lastRateLimitedID)
++					require.False(t, repo.lastRateLimitedAt.Before(before.Add(cooldown)))
++					require.False(t, repo.lastRateLimitedAt.After(after.Add(cooldown)))
++					require.Len(t, blocker.accounts, attempt+1)
++					require.Same(t, account, blocker.accounts[attempt])
++					require.Equal(t, repo.lastRateLimitedAt, blocker.until[attempt])
++					require.Equal(t, "429_fallback", blocker.reasons[attempt])
++				} else {
++					require.Zero(t, repo.rateLimitedCalls)
++					require.Empty(t, blocker.accounts)
++				}
++				require.Zero(t, repo.tempCalls)
++				require.Zero(t, repo.setErrorCalls)
++				require.Equal(t, []int64{openAI403DisableThreshold}, counter.counts)
++			}
++		})
++	}
++}
++
++func TestHandleUpstreamError_KimiQuota403IgnoresDisabledConcurrencyCooldown(t *testing.T) {
++	for _, resetIn := range []time.Duration{0, 2 * time.Hour} {
++		t.Run(resetIn.String(), func(t *testing.T) {
++			repo := &rateLimitAccountRepoStub{}
++			blocker := &runtimeBlockRecorder{}
++			service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
++			service.SetAccountRuntimeBlocker(blocker)
++			settingRepo := newMockSettingRepo()
++			settingRepo.data[SettingKeyRateLimit429CooldownSettings] = `{"enabled":false,"cooldown_seconds":17}`
++			service.SetSettingService(NewSettingService(settingRepo, &config.Config{}))
++			account := newCNQuotaExhaustedTestAccount(resetIn)
++			require.True(t, runKimi403(service, account, kimiWeeklyQuotaExhaustedBody))
++			require.Zero(t, repo.setErrorCalls)
++			require.Len(t, blocker.accounts, 1)
++			require.Equal(t, cnQuotaExhaustedReasonPrefix, blocker.reasons[0])
++			if resetIn > 0 {
++				require.Equal(t, 1, repo.rateLimitedCalls)
++				require.Zero(t, repo.tempCalls)
++				require.WithinDuration(t, time.Now().Add(resetIn), repo.lastRateLimitedAt, time.Second)
++			} else {
++				require.Zero(t, repo.rateLimitedCalls)
++				require.Equal(t, 1, repo.tempCalls)
++				require.WithinDuration(t, time.Now().Add(10*time.Minute), blocker.until[0], time.Second)
++			}
++		})
++	}
++}
++
++func TestHandleUpstreamError_KimiConcurrency403ExplicitRulesTakePriority(t *testing.T) {
++	for _, testCase := range []struct {
++		name        string
++		credentials map[string]any
++		wantSwitch  bool
++		wantTemp    int
++		wantLimited int
++	}{
++		{
++			name: "custom error codes exclude 403",
++			credentials: map[string]any{
++				"custom_error_codes_enabled": true,
++				"custom_error_codes":         []any{float64(429)},
++			},
++		},
++		{
++			name: "custom error codes include 403",
++			credentials: map[string]any{
++				"custom_error_codes_enabled": true,
++				"custom_error_codes":         []any{float64(403)},
++			},
++			wantSwitch: true, wantLimited: 1,
++		},
++		{
++			name: "explicit temporary unschedulable rule",
++			credentials: map[string]any{
++				"temp_unschedulable_enabled": true,
++				"temp_unschedulable_rules": []any{map[string]any{
++					"error_code": float64(403), "keywords": []any{"concurrent request limit"},
++					"duration_minutes": float64(23),
++				}},
++			},
++			wantSwitch: true, wantTemp: 1,
++		},
++	} {
++		t.Run(testCase.name, func(t *testing.T) {
++			repo := &rateLimitAccountRepoStub{}
++			blocker := &runtimeBlockRecorder{}
++			counter := &openAI403CounterCacheStub{counts: []int64{openAI403DisableThreshold}}
++			service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
++			service.SetAccountRuntimeBlocker(blocker)
++			service.SetOpenAI403CounterCache(counter)
++			account := newCNQuotaExhaustedTestAccount(0)
++			account.Credentials = testCase.credentials
++			before := time.Now()
++			require.Equal(t, testCase.wantSwitch, runKimi403(service, account,
++				`{"error":{"message":"`+kimiConcurrentRequestLimitMessage+`"}}`))
++			require.Equal(t, testCase.wantTemp, repo.tempCalls)
++			require.Equal(t, testCase.wantLimited, repo.rateLimitedCalls)
++			require.Zero(t, repo.setErrorCalls)
++			require.Equal(t, []int64{openAI403DisableThreshold}, counter.counts)
++			if testCase.wantTemp > 0 {
++				require.Len(t, blocker.accounts, 1)
++				require.NotEqual(t, "429_fallback", blocker.reasons[0])
++				require.WithinDuration(t, before.Add(23*time.Minute), blocker.until[0], time.Second)
++			} else if !testCase.wantSwitch {
++				require.Empty(t, blocker.accounts)
++			}
++		})
++	}
++}
+diff --git a/backend/internal/service/ratelimit_cn_providers.go b/backend/internal/service/ratelimit_cn_providers.go
+index 8ffa3e774..9fa194de6 100644
+--- a/backend/internal/service/ratelimit_cn_providers.go
++++ b/backend/internal/service/ratelimit_cn_providers.go
+@@ -93,10 +93,7 @@ func (s *RateLimitService) handleCNProviderConcurrencyLimit403(
+ 	ctx context.Context,
+ 	account *Account,
+ ) {
+-	until := time.Now().Add(time.Duration(openAI403CooldownMinutesDefault) * time.Minute)
+-	s.setCNProviderTempUnschedulable(ctx, account, until,
+-		cnConcurrencyLimitReasonPrefix, cnConcurrencyLimitReasonPrefix+": "+kimiConcurrentRequestLimitMessage,
+-		"cn_provider_concurrency_limited")
++	s.apply429FallbackRateLimit(ctx, account, cnConcurrencyLimitReasonPrefix)
+ }
+ 
+ // cnBalanceLowReason 构造余额不足临时停调的 reason（带稳定前缀）。
+diff --git a/backend/internal/service/ratelimit_service_cn_quota_403_test.go b/backend/internal/service/ratelimit_service_cn_quota_403_test.go
+index 44062eb8a..f353def53 100644
+--- a/backend/internal/service/ratelimit_service_cn_quota_403_test.go
++++ b/backend/internal/service/ratelimit_service_cn_quota_403_test.go
+@@ -103,9 +103,9 @@ func TestHandleUpstreamError_KimiConcurrencyLimit403StillUsesConcurrencyPath(t *
+ 
+ 	require.True(t, shouldDisable)
+ 	require.Equal(t, 0, repo.setErrorCalls)
+-	require.Equal(t, 0, repo.rateLimitedCalls, "concurrency-limit message must keep its dedicated path")
+-	require.Equal(t, 1, repo.tempCalls)
+-	require.Contains(t, repo.lastTempReason, cnConcurrencyLimitReasonPrefix)
++	require.Equal(t, 1, repo.rateLimitedCalls, "concurrency-limit message must keep its dedicated path")
++	require.Equal(t, 0, repo.tempCalls)
++	require.WithinDuration(t, time.Now().Add(5*time.Second), repo.lastRateLimitedAt, time.Second)
+ }
+ 
+ func TestHandleUpstreamError_KimiGeneric403StillEscalates(t *testing.T) {

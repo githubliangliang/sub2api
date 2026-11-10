@@ -1,0 +1,298 @@
+diff --git a/backend/internal/config/config.go b/backend/internal/config/config.go
+index 4b9a59cad..ac7b9c10d 100644
+--- a/backend/internal/config/config.go
++++ b/backend/internal/config/config.go
+@@ -1038,7 +1038,8 @@ type GatewayConfig struct {
+ 	ResponseHeaderTimeout int `mapstructure:"response_header_timeout"`
+ 	// OpenAIResponseHeaderTimeout: OpenAI/Codex 上游等待响应头的超时时间（秒），0表示无超时
+ 	// OpenAI/Codex 请求可能在上游排队较久；默认不使用通用响应头超时截断。
+-	OpenAIResponseHeaderTimeout int `mapstructure:"openai_response_header_timeout"`
++	OpenAIResponseHeaderTimeout         int  `mapstructure:"openai_response_header_timeout"`
++	DisableOpenAITransportErrorCooldown bool `mapstructure:"disable_openai_transport_error_cooldown"`
+ 	// GrokResponseHeaderTimeout bounds the pre-first-byte wait for xAI/Grok.
+ 	// A zero value uses the provider-safe default instead of the generic gateway timeout.
+ 	GrokResponseHeaderTimeout int `mapstructure:"grok_response_header_timeout"`
+@@ -2488,6 +2489,7 @@ func setDefaults() {
+ 	// Gateway
+ 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
+ 	viper.SetDefault("gateway.openai_response_header_timeout", 0)
++	viper.SetDefault("gateway.disable_openai_transport_error_cooldown", false)
+ 	viper.SetDefault("gateway.grok_response_header_timeout", 120)
+ 	viper.SetDefault("gateway.openai_first_output_timeout_seconds", 0)
+ 	viper.SetDefault("gateway.openai_high_effort_first_output_timeout_seconds", 0)
+diff --git a/backend/internal/config/openai_transport_error_cooldown_test.go b/backend/internal/config/openai_transport_error_cooldown_test.go
+new file mode 100644
+index 000000000..a3562ab6e
+--- /dev/null
++++ b/backend/internal/config/openai_transport_error_cooldown_test.go
+@@ -0,0 +1,40 @@
++//go:build unit
++
++package config
++
++import (
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestLoadOpenAITransportErrorCooldown(t *testing.T) {
++	for _, testCase := range []struct {
++		name     string
++		yaml     string
++		env      string
++		disabled bool
++	}{
++		{name: "default"},
++		{name: "env_true", env: "true", disabled: true},
++		{name: "env_false", env: "false"},
++		{name: "yaml_true", yaml: "true", disabled: true},
++		{name: "env_overrides_yaml", yaml: "true", env: "false"},
++	} {
++		t.Run(testCase.name, func(t *testing.T) {
++			resetViperWithJWTSecret(t)
++			t.Chdir(t.TempDir())
++			t.Setenv("GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN", testCase.env)
++			if testCase.yaml != "" {
++				configPath := filepath.Join(t.TempDir(), "config.yaml")
++				require.NoError(t, os.WriteFile(configPath, []byte("gateway:\n  disable_openai_transport_error_cooldown: "+testCase.yaml+"\n"), 0600))
++				t.Setenv("CONFIG_FILE", configPath)
++			}
++			cfg, err := Load()
++			require.NoError(t, err)
++			require.Equal(t, testCase.disabled, cfg.Gateway.DisableOpenAITransportErrorCooldown)
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_upstream_transport_error.go b/backend/internal/service/openai_upstream_transport_error.go
+index 8c56f000d..7c847b84d 100644
+--- a/backend/internal/service/openai_upstream_transport_error.go
++++ b/backend/internal/service/openai_upstream_transport_error.go
+@@ -175,6 +175,9 @@ func (s *OpenAIGatewayService) tempUnscheduleOpenAITransportError(ctx context.Co
+ 	if s == nil || account == nil {
+ 		return
+ 	}
++	if s.cfg != nil && s.cfg.Gateway.DisableOpenAITransportErrorCooldown {
++		return
++	}
+ 	until := time.Now().Add(openAITransportErrorTempUnschedDuration)
+ 	reason := "upstream transport error (proxy/network): " + safeErr
+ 
+diff --git a/backend/internal/service/openai_upstream_transport_error_handle_test.go b/backend/internal/service/openai_upstream_transport_error_handle_test.go
+index 8aaed2eae..27090f8cd 100644
+--- a/backend/internal/service/openai_upstream_transport_error_handle_test.go
++++ b/backend/internal/service/openai_upstream_transport_error_handle_test.go
+@@ -6,8 +6,10 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"net"
+ 	"net/http"
+ 	"net/http/httptest"
++	"net/url"
+ 	"testing"
+ 	"time"
+ 
+@@ -39,6 +41,119 @@ func newOpenAITransportErrTestContext() (*gin.Context, *httptest.ResponseRecorde
+ 	return c, rec
+ }
+ 
++func TestHandleOpenAIUpstreamTransportError_DNSCooldownConfig(t *testing.T) {
++	transportErr := &url.Error{
++		Op:  "Post",
++		URL: "https://chatgpt.com/backend-api/codex/responses",
++		Err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{
++			Err: "no such host", Name: "chatgpt.com", Server: "127.0.0.11:53", IsNotFound: true,
++		}},
++	}
++	require.True(t, classifyUpstreamTransportError(transportErr).Persistent)
++	for _, testCase := range []struct {
++		name     string
++		cfg      *config.Config
++		disabled bool
++	}{
++		{name: "nil"},
++		{name: "zero", cfg: &config.Config{}},
++		{name: "enabled", cfg: &config.Config{Gateway: config.GatewayConfig{DisableOpenAITransportErrorCooldown: false}}},
++		{name: "disabled", cfg: &config.Config{Gateway: config.GatewayConfig{DisableOpenAITransportErrorCooldown: true}}, disabled: true},
++	} {
++		for _, withRepo := range []bool{false, true} {
++			for _, passthrough := range []bool{false, true} {
++				t.Run(fmt.Sprintf("%s/repo=%t/passthrough=%t", testCase.name, withRepo, passthrough), func(t *testing.T) {
++					repo := &openaiTransportAccountRepoStub{}
++					svc := &OpenAIGatewayService{cfg: testCase.cfg}
++					if withRepo {
++						svc.accountRepo = repo
++					}
++					account := &Account{ID: 8541, Name: "shared-egress", Platform: PlatformOpenAI}
++					c, rec := newOpenAITransportErrTestContext()
++					before := time.Now()
++					retErr := svc.handleOpenAIUpstreamTransportError(context.Background(), c, account, transportErr, passthrough)
++					after := time.Now()
++
++					var failover *UpstreamFailoverError
++					require.ErrorAs(t, retErr, &failover)
++					require.Equal(t, http.StatusBadGateway, failover.StatusCode)
++					require.JSONEq(t, `{"error":{"type":"upstream_error","message":"Upstream request failed"}}`, string(failover.ResponseBody))
++					require.False(t, rec.Flushed)
++					require.False(t, c.Writer.Written())
++					require.Empty(t, rec.Body.String())
++					rawEvents, exists := c.Get(OpsUpstreamErrorsKey)
++					require.True(t, exists)
++					var events []*OpsUpstreamErrorEvent
++					require.IsType(t, events, rawEvents)
++					events = rawEvents.([]*OpsUpstreamErrorEvent)
++					require.Len(t, events, 1)
++					require.Equal(t, account.ID, events[0].AccountID)
++					require.Equal(t, account.Name, events[0].AccountName)
++					require.Equal(t, PlatformOpenAI, events[0].Platform)
++					require.Equal(t, "request_error", events[0].Kind)
++					require.Zero(t, events[0].UpstreamStatusCode)
++					require.Equal(t, passthrough, events[0].Passthrough)
++					require.Contains(t, events[0].Message, "no such host")
++					require.Equal(t, 0, c.GetInt(OpsUpstreamStatusCodeKey))
++					require.Equal(t, events[0].Message, c.GetString(OpsUpstreamErrorMessageKey))
++
++					require.Equal(t, !testCase.disabled, svc.isOpenAIAccountRuntimeBlocked(account))
++					if testCase.disabled {
++						_, blocked := svc.openaiAccountRuntimeBlockUntil.Load(account.ID)
++						require.False(t, blocked)
++					} else {
++						blockUntil, exists := svc.openaiAccountRuntimeBlockUntil.Load(account.ID)
++						require.True(t, exists)
++						require.WithinRange(t, blockUntil.(time.Time), before.Add(10*time.Minute), after.Add(10*time.Minute))
++					}
++					if withRepo && !testCase.disabled {
++						require.Len(t, repo.tempUnschedCalls, 1)
++						call := repo.tempUnschedCalls[0]
++						require.Equal(t, account.ID, call.accountID)
++						require.WithinRange(t, call.until, before.Add(10*time.Minute), after.Add(10*time.Minute))
++						require.Contains(t, call.reason, "no such host")
++					} else {
++						require.Empty(t, repo.tempUnschedCalls)
++					}
++				})
++			}
++		}
++	}
++}
++
++func TestTempUnscheduleOpenAITransportError_DisabledPreservesExistingState(t *testing.T) {
++	for _, paused := range []bool{false, true} {
++		t.Run(fmt.Sprintf("paused=%t", paused), func(t *testing.T) {
++			repo := &openaiTransportAccountRepoStub{}
++			svc := &OpenAIGatewayService{accountRepo: repo, cfg: &config.Config{}}
++			account := &Account{ID: 8541, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: !paused}
++			svc.tempUnscheduleOpenAITransportError(context.Background(), account, "previous failure")
++			require.Len(t, repo.tempUnschedCalls, 1)
++			previousCall := repo.tempUnschedCalls[0]
++			persistedUntil := previousCall.until
++			account.TempUnschedulableUntil = &persistedUntil
++			account.TempUnschedulableReason = previousCall.reason
++			previousAccount := *account
++			previousBlock, exists := svc.openaiAccountRuntimeBlockUntil.Load(account.ID)
++			require.True(t, exists)
++			previousGeneration, _ := svc.openaiAccountRuntimeBlockGeneration.Load(account.ID)
++
++			svc.cfg.Gateway.DisableOpenAITransportErrorCooldown = true
++			svc.tempUnscheduleOpenAITransportError(context.Background(), account, "new failure")
++
++			require.Equal(t, []tempUnschedCall{previousCall}, repo.tempUnschedCalls)
++			require.Equal(t, previousAccount, *account)
++			require.Equal(t, previousCall.until, *account.TempUnschedulableUntil)
++			currentBlock, exists := svc.openaiAccountRuntimeBlockUntil.Load(account.ID)
++			require.True(t, exists)
++			require.Equal(t, previousBlock, currentBlock)
++			currentGeneration, _ := svc.openaiAccountRuntimeBlockGeneration.Load(account.ID)
++			require.Equal(t, previousGeneration, currentGeneration)
++			require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
++		})
++	}
++}
++
+ type failingOpenAIHTTPUpstream struct {
+ 	err       error
+ 	calls     int
+diff --git a/deploy/.env.example b/deploy/.env.example
+index 0e8ce5304..d9d1beb33 100644
+--- a/deploy/.env.example
++++ b/deploy/.env.example
+@@ -307,6 +307,11 @@ GATEWAY_OPENAI_COMPACT_MODEL=gpt-5.5
+ SUB2API_IMAGES_MAIN_MODEL=gpt-5.6-luna
+ # OpenAI/Codex 等待上游响应头超时（秒）；0 表示不使用本地响应头超时截断。
+ GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT=0
++# Disable only the fixed 10-minute account cooldown for persistent OpenAI DNS/proxy/network failures.
++# YAML: gateway.disable_openai_transport_error_cooldown; false preserves the default protection.
++# Ops/errors and bounded failover remain; other cooldowns, existing state and admin pauses are unchanged.
++# Later requests retry broken shared egress; this is not a DNS/proxy repair or a model speed guarantee.
++GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN=false
+ # 全局强制 OpenAI Responses 上游使用 HTTP/SSE，不使用 WebSocket。
+ # 当代理或网络导致上游 WebSocket 反复重连时可设为 true；这不会禁用 HTTP/2。
+ # 如需回退 HTTP/1.1，请另行设置 GATEWAY_OPENAI_HTTP2_ENABLED=false。
+diff --git a/deploy/config.example.yaml b/deploy/config.example.yaml
+index fe6343487..557ca32b5 100644
+--- a/deploy/config.example.yaml
++++ b/deploy/config.example.yaml
+@@ -239,6 +239,12 @@ gateway:
+   # OpenAI/Codex upstream response header timeout (seconds, 0=disabled)
+   # OpenAI/Codex 等待上游响应头超时时间（秒，0=禁用本地响应头超时）
+   openai_response_header_timeout: 0
++  # Opt out of the fixed 10-minute account cooldown for persistent OpenAI transport failures (DNS/proxy/network).
++  # Env: GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN=true; default false retains protection.
++  # Errors/Ops and bounded request failover remain; HTTP 401/403/429, quota/model limits,
++  # stream timeouts and token-refresh cooldowns are unchanged. Existing cooldowns and admin pauses are not cleared.
++  # With shared egress still broken, later requests retry it: this does not repair DNS/proxies or guarantee faster models.
++  disable_openai_transport_error_cooldown: false
+   # Grok text Responses first-byte timeout (seconds, 0=disabled; default 120)
+   # Grok 文本 Responses 首字节超时时间（秒，0=禁用；默认 120）
+   grok_response_header_timeout: 120
+diff --git a/deploy/docker-compose.dev.yml b/deploy/docker-compose.dev.yml
+index 54953ba2f..fd13301f6 100644
+--- a/deploy/docker-compose.dev.yml
++++ b/deploy/docker-compose.dev.yml
+@@ -62,6 +62,7 @@ services:
+       - GATEWAY_OPENAI_COMPACT_MODEL=${GATEWAY_OPENAI_COMPACT_MODEL:-gpt-5.5}
+       - SUB2API_IMAGES_MAIN_MODEL=${SUB2API_IMAGES_MAIN_MODEL:-gpt-5.6-luna}
+       - GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT=${GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT:-0}
++      - GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN=${GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN:-false}
+       - GATEWAY_OPENAI_WS_FORCE_HTTP=${GATEWAY_OPENAI_WS_FORCE_HTTP:-false}
+       - GATEWAY_OPENAI_HTTP2_ENABLED=${GATEWAY_OPENAI_HTTP2_ENABLED:-true}
+       - GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1=${GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1:-true}
+diff --git a/deploy/docker-compose.local.yml b/deploy/docker-compose.local.yml
+index 6ca816a54..ea2827da5 100644
+--- a/deploy/docker-compose.local.yml
++++ b/deploy/docker-compose.local.yml
+@@ -170,6 +170,7 @@ services:
+       - GATEWAY_OPENAI_COMPACT_MODEL=${GATEWAY_OPENAI_COMPACT_MODEL:-gpt-5.5}
+       - SUB2API_IMAGES_MAIN_MODEL=${SUB2API_IMAGES_MAIN_MODEL:-gpt-5.6-luna}
+       - GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT=${GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT:-0}
++      - GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN=${GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN:-false}
+       - GATEWAY_OPENAI_WS_FORCE_HTTP=${GATEWAY_OPENAI_WS_FORCE_HTTP:-false}
+       - GATEWAY_OPENAI_HTTP2_ENABLED=${GATEWAY_OPENAI_HTTP2_ENABLED:-true}
+       - GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1=${GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1:-true}
+diff --git a/deploy/docker-compose.standalone.yml b/deploy/docker-compose.standalone.yml
+index 6711bcbdb..0c544bd9c 100644
+--- a/deploy/docker-compose.standalone.yml
++++ b/deploy/docker-compose.standalone.yml
+@@ -117,6 +117,7 @@ services:
+       - GATEWAY_OPENAI_COMPACT_MODEL=${GATEWAY_OPENAI_COMPACT_MODEL:-gpt-5.5}
+       - SUB2API_IMAGES_MAIN_MODEL=${SUB2API_IMAGES_MAIN_MODEL:-gpt-5.6-luna}
+       - GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT=${GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT:-0}
++      - GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN=${GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN:-false}
+       - GATEWAY_OPENAI_WS_FORCE_HTTP=${GATEWAY_OPENAI_WS_FORCE_HTTP:-false}
+       - GATEWAY_OPENAI_HTTP2_ENABLED=${GATEWAY_OPENAI_HTTP2_ENABLED:-true}
+       - GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1=${GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1:-true}
+diff --git a/deploy/docker-compose.yml b/deploy/docker-compose.yml
+index 51e3cb5de..4d94afb1a 100644
+--- a/deploy/docker-compose.yml
++++ b/deploy/docker-compose.yml
+@@ -167,6 +167,7 @@ services:
+       - GATEWAY_OPENAI_COMPACT_MODEL=${GATEWAY_OPENAI_COMPACT_MODEL:-gpt-5.5}
+       - SUB2API_IMAGES_MAIN_MODEL=${SUB2API_IMAGES_MAIN_MODEL:-gpt-5.6-luna}
+       - GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT=${GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT:-0}
++      - GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN=${GATEWAY_DISABLE_OPENAI_TRANSPORT_ERROR_COOLDOWN:-false}
+       - GATEWAY_OPENAI_WS_FORCE_HTTP=${GATEWAY_OPENAI_WS_FORCE_HTTP:-false}
+       - GATEWAY_OPENAI_HTTP2_ENABLED=${GATEWAY_OPENAI_HTTP2_ENABLED:-true}
+       - GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1=${GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1:-true}

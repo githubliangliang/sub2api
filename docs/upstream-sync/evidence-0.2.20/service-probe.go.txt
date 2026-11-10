@@ -1,0 +1,141 @@
+package service
+
+import (
+ "bytes"
+ "encoding/binary"
+ "hash/crc32"
+ "net/http"
+ "net/http/httptest"
+ "testing"
+ "time"
+ "github.com/gin-gonic/gin"
+ "github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+ "github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
+ "github.com/Wei-Shaw/sub2api/internal/config"
+ "context"
+ "io"
+ "strings"
+ "github.com/stretchr/testify/require"
+ "github.com/tidwall/gjson"
+)
+
+func TestIntake020GrokAgentMessage(t *testing.T) {
+ raw,_,err:=patchGrokResponsesBodyWithClientTools([]byte(`{"model":"grok-4.5","input":[{"type":"agent_message","content":[{"type":"input_text","text":"task:"},{"type":"encrypted_content","encrypted_content":"inspect repository"}]}]}`),"grok-4.5")
+ require.NoError(t,err)
+ require.Equal(t,"message",gjson.GetBytes(raw,"input.0.type").String())
+ require.Contains(t,gjson.GetBytes(raw,"input.0.content").String(),"inspect repository")
+}
+
+func TestIntake020EmptyCodexInstructions(t *testing.T) {
+ require.Empty(t,detectOpenAIPassthroughInstructionsRejectReason("gpt-5.3-codex",[]byte(`{"instructions":""}`)))
+}
+
+func TestIntake020TerraMinimal(t *testing.T) {
+ require.Error(t,validateGPT61SolCompatRequest([]byte(`{"reasoning_effort":"minimal"}`),"gpt-6.1-terra"))
+}
+
+func TestIntake020TerraSubscription(t *testing.T) {
+ require.True(t,openAISubscriptionLongContextExempt(&Account{Platform:PlatformOpenAI,Type:AccountTypeOAuth}, &OpenAIForwardResult{Model:"gpt-6.1-terra"}))
+}
+
+func TestIntake020WeeklySetupToken(t *testing.T) {
+ account:=Account{ID:8508,Platform:PlatformAnthropic,Type:AccountTypeSetupToken,Extra:map[string]any{"passive_usage_7d_utilization":0.42,"passive_usage_7d_reset":time.Now().Add(time.Hour).Unix()}}
+ svc:=&AccountUsageService{accountRepo:&stubOpenAIAccountRepo{accounts:[]Account{account}}, usageLogRepo:&usageBatchLogRepoStub{}, cache:NewUsageCache()}
+ usage,err:=svc.GetUsage(t.Context(),account.ID)
+ require.NoError(t,err)
+ require.NotNil(t,usage.SevenDay)
+}
+
+func TestIntake020IncompleteSSEBecomesJSON(t *testing.T) {
+ body:=`event: response.incomplete
+data: {"type":"response.incomplete","response":{"id":"r1","status":"incomplete","output":[],"usage":{"input_tokens":1,"output_tokens":0}}}
+
+`
+ recorder:=httptest.NewRecorder(); c,_:=gin.CreateTestContext(recorder)
+ c.Request=httptest.NewRequest(http.MethodPost,"/v1/responses",nil)
+ svc:=&OpenAIGatewayService{}
+ _,err:=svc.handleSSEToJSON(&http.Response{StatusCode:200,Header:http.Header{"Content-Type":[]string{"text/event-stream"}}},c,nil,[]byte(body),"test","test")
+ require.NoError(t,err)
+ require.True(t,gjson.Valid(recorder.Body.String()),recorder.Body.String())
+ require.Contains(t,recorder.Header().Get("Content-Type"),"application/json")
+}
+
+func TestIntake020BedrockHeaderLength(t *testing.T) {
+ // Small valid-CRC frame: reproduce bounds failure without a large allocation.
+ raw:=make([]byte,16)
+ binary.BigEndian.PutUint32(raw[0:4],16)
+ binary.BigEndian.PutUint32(raw[4:8],100)
+ binary.BigEndian.PutUint32(raw[8:12],crc32.ChecksumIEEE(raw[:8]))
+ binary.BigEndian.PutUint32(raw[12:16],crc32.ChecksumIEEE(raw[:12]))
+ require.NotPanics(t,func(){ _,err:=newBedrockEventStreamDecoder(bytes.NewReader(raw)).Decode(); require.Error(t,err) })
+}
+
+func TestIntake020ResponseJSONSchema(t *testing.T) {
+ raw,err:=cleanGeminiRequest([]byte(`{"generationConfig":{"responseJsonSchema":{"type":"object","properties":{"answer":{"type":"string"}}}}}`))
+ require.NoError(t,err)
+ require.True(t,gjson.GetBytes(raw,"generationConfig.responseSchema").Exists())
+}
+
+func TestIntake020CyberNoTranscriptControl(t *testing.T) {
+ recorder:=httptest.NewRecorder(); c,_:=gin.CreateTestContext(recorder)
+ c.Request=httptest.NewRequest(http.MethodPost,"/v1/responses",nil)
+ require.Empty(t,CyberSessionBlockKey(1,c,[]byte(`{"input":[{"role":"user","content":"arbitrary history"}]}`)))
+}
+
+func TestIntake020ForcedModes(t *testing.T) {
+	cases := []struct {
+		name      string
+		mode      any
+		wantProbe bool
+	}{
+		{name: "force_responses skips probe", mode: string(openai_compat.ResponsesSupportModeForceResponses), wantProbe: false},
+		{name: "force_chat_completions skips probe", mode: string(openai_compat.ResponsesSupportModeForceChatCompletions), wantProbe: false},
+		{name: "auto probes", mode: string(openai_compat.ResponsesSupportModeAuto), wantProbe: true},
+		{name: "invalid mode falls back to auto and probes", mode: "bogus", wantProbe: true},
+		{name: "non-string mode falls back to auto and probes", mode: nil, wantProbe: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			updateCalls := make(chan map[string]any, 1)
+			account := Account{
+				ID:          301,
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeAPIKey,
+				Concurrency: 1,
+				Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://compat-upstream.example/v1"},
+				Extra:       map[string]any{openai_compat.ExtraKeyResponsesMode: tc.mode},
+			}
+			repo := &snapshotUpdateAccountRepo{
+				stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}},
+				updateExtraCalls:      updateCalls,
+			}
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"output":[{"type":"function_call","name":"probe_ping"}]}`)),
+			}}
+			svc := &AccountTestService{
+				accountRepo:  repo,
+				httpUpstream: upstream,
+				cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
+			}
+
+			svc.ProbeOpenAIAPIKeyResponsesSupport(context.Background(), account.ID)
+
+			if !tc.wantProbe {
+				require.Nil(t, upstream.lastReq)
+				require.Empty(t, updateCalls)
+				return
+			}
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, true, (<-updateCalls)[openai_compat.ExtraKeyResponsesSupported])
+		})
+	}
+}
+
+
+func TestIntake020AntigravityDirectSSE(t *testing.T) {
+ processor:=antigravity.NewStreamingProcessor("test")
+ result:=processor.ProcessLine(`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"direct text"}]}}],"responseId":"test"}`)
+ require.Contains(t,string(result),"direct text")
+}

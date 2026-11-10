@@ -1,0 +1,232 @@
+diff --git a/frontend/src/api/__tests__/client.spec.ts b/frontend/src/api/__tests__/client.spec.ts
+index debcb6a67..de22f555d 100644
+--- a/frontend/src/api/__tests__/client.spec.ts
++++ b/frontend/src/api/__tests__/client.spec.ts
+@@ -260,6 +260,25 @@ describe('API Client', () => {
+       )
+     })
+ 
++    it.each([
++      ['17', 17],
++      ['Wed, 21 Oct 2026 07:28:00 GMT', undefined],
++      [undefined, undefined],
++    ])('429 结构化错误携带 Retry-After 秒数（%s）', async (retryAfter, expected) => {
++      apiClient.defaults.adapter = vi.fn().mockRejectedValueOnce({
++        response: {
++          status: 429,
++          data: { code: 'RATE_LIMITED', message: 'Too many requests' },
++          headers: retryAfter === undefined ? {} : { 'retry-after': retryAfter },
++        },
++        config: { url: '/usage', headers: {} },
++      })
++
++      const error = await apiClient.get('/usage').catch((err) => err)
++      expect(error).toMatchObject({ status: 429, code: 'RATE_LIMITED', message: 'Too many requests' })
++      expect(error.retry_after_seconds).toBe(expected)
++    })
++
+     it('部署与运营合规未确认时广播事件且保留登录态', async () => {
+       localStorage.setItem('auth_token', 'admin-token')
+       const listener = vi.fn()
+diff --git a/frontend/src/api/client.ts b/frontend/src/api/client.ts
+index 064f8f83e..c7072003f 100644
+--- a/frontend/src/api/client.ts
++++ b/frontend/src/api/client.ts
+@@ -78,6 +78,13 @@ apiClient.interceptors.request.use(
+ 
+ // ==================== Response Interceptor ====================
+ 
++// Retry-After 只接受整数秒；跨域部署未暴露该头或为 HTTP-date 形式时返回 undefined。
++const parseRetryAfterSeconds = (headers: unknown): number | undefined => {
++  const raw = (headers as Record<string, unknown> | undefined)?.['retry-after']
++  if (typeof raw !== 'string' || !/^\d+$/.test(raw.trim())) return undefined
++  return Number(raw.trim())
++}
++
+ apiClient.interceptors.response.use(
+   (response: AxiosResponse) => {
+     // Unwrap standard API response format { code, message, data }
+@@ -262,6 +269,7 @@ apiClient.interceptors.response.use(
+         error: apiData.error,
+         message: apiData.message || apiData.detail || error.message,
+         metadata: apiData.metadata,
++        retry_after_seconds: parseRetryAfterSeconds(error.response.headers),
+       })
+     }
+ 
+diff --git a/frontend/src/i18n/locales/en/dashboard.ts b/frontend/src/i18n/locales/en/dashboard.ts
+index d43bed531..d06cda279 100644
+--- a/frontend/src/i18n/locales/en/dashboard.ts
++++ b/frontend/src/i18n/locales/en/dashboard.ts
+@@ -454,6 +454,7 @@ export default {
+     noDataToExport: 'No data to export',
+     exportSuccess: 'Usage data exported successfully',
+     exportFailed: 'Failed to export usage data',
++    exportRateLimited: 'Too many requests, export will resume in {seconds} seconds',
+     exportExcelSuccess: 'Usage data exported successfully (Excel format)',
+     exportExcelFailed: 'Failed to export usage data',
+     imageUnit: ' images',
+diff --git a/frontend/src/i18n/locales/zh/dashboard.ts b/frontend/src/i18n/locales/zh/dashboard.ts
+index 15c276d6e..4ca5a30ca 100644
+--- a/frontend/src/i18n/locales/zh/dashboard.ts
++++ b/frontend/src/i18n/locales/zh/dashboard.ts
+@@ -459,6 +459,7 @@ export default {
+     noDataToExport: '没有可导出的数据',
+     exportSuccess: '使用数据导出成功',
+     exportFailed: '使用数据导出失败',
++    exportRateLimited: '请求过于频繁，{seconds} 秒后自动继续导出',
+     exportExcelSuccess: '使用数据导出成功（Excel格式）',
+     exportExcelFailed: '使用数据导出失败',
+     imageUnit: '张',
+diff --git a/frontend/src/views/user/UsageView.vue b/frontend/src/views/user/UsageView.vue
+index c18824806..8ced36145 100644
+--- a/frontend/src/views/user/UsageView.vue
++++ b/frontend/src/views/user/UsageView.vue
+@@ -632,6 +632,27 @@ const escapeCSVValue = (value: unknown): string => {
+   return str
+ }
+ 
++const EXPORT_PAGE_SIZE = 1000
++const EXPORT_RATE_LIMIT_MAX_RETRIES = 3
++const EXPORT_RATE_LIMIT_MAX_WAIT_SECONDS = 60
++
++// 导出逐页请求计入按用户的重查询限流；429 时按 Retry-After 等待后重试同一页。
++const queryExportPage = async (params: UsageQueryParams) => {
++  for (let attempt = 0; ; attempt++) {
++    try {
++      return await usageAPI.query(params)
++    } catch (error: any) {
++      if (error?.status !== 429 || attempt >= EXPORT_RATE_LIMIT_MAX_RETRIES) throw error
++      const waitSeconds = Math.min(
++        Math.max(error.retry_after_seconds ?? EXPORT_RATE_LIMIT_MAX_WAIT_SECONDS, 1),
++        EXPORT_RATE_LIMIT_MAX_WAIT_SECONDS
++      )
++      appStore.showInfo(t('usage.exportRateLimited', { seconds: waitSeconds }))
++      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000))
++    }
++  }
++}
++
+ const exportToCSV = async () => {
+   if (pagination.total === 0) {
+     appStore.showWarning(t('usage.noDataToExport'))
+@@ -641,11 +662,10 @@ const exportToCSV = async () => {
+   appStore.showInfo(t('usage.preparingExport'))
+   try {
+     const allLogs: UsageLog[] = []
+-    const pageSize = 100
+-    const exportParams = buildUsageListParams(1, pageSize)
+-    const totalPages = Math.ceil(pagination.total / pageSize)
++    const exportParams = buildUsageListParams(1, EXPORT_PAGE_SIZE)
++    const totalPages = Math.ceil(pagination.total / EXPORT_PAGE_SIZE)
+     for (let page = 1; page <= totalPages; page++) {
+-      const response = await usageAPI.query({ ...exportParams, page })
++      const response = await queryExportPage({ ...exportParams, page })
+       allLogs.push(...response.items)
+     }
+     if (allLogs.length === 0) {
+diff --git a/frontend/src/views/user/__tests__/UsageView.spec.ts b/frontend/src/views/user/__tests__/UsageView.spec.ts
+index 34df794bc..2748fccf2 100644
+--- a/frontend/src/views/user/__tests__/UsageView.spec.ts
++++ b/frontend/src/views/user/__tests__/UsageView.spec.ts
+@@ -71,6 +71,7 @@ const messages: Record<string, string> = {
+   'usage.preparingExport': 'Preparing export',
+   'usage.exportSuccess': 'Export success',
+   'usage.exportFailed': 'Export failed',
++  'usage.exportRateLimited': 'Rate limited',
+   'common.refresh': 'Refresh',
+   'common.reset': 'Reset',
+ }
+@@ -390,7 +391,7 @@ describe('user UsageView', () => {
+ 
+     expect(exportedBlob).not.toBeNull()
+     expect(query).toHaveBeenCalledWith(expect.objectContaining({
+-      page_size: 100,
++      page_size: 1000,
+       sort_by: 'created_at',
+       sort_order: 'desc',
+       native_compaction_v2: true,
+@@ -450,7 +451,7 @@ describe('user UsageView', () => {
+   })
+ 
+   it('keeps the initial filters, sort, and filename while exporting multiple pages', async () => {
+-    const pageResponse = { items: [usageLog], total: 101, pages: 2 }
++    const pageResponse = { items: [usageLog], total: 1001, pages: 2 }
+     query.mockResolvedValue(pageResponse)
+     const wrapper = mountUsageView()
+     await flushPromises()
+@@ -478,7 +479,7 @@ describe('user UsageView', () => {
+       await wrapper.findAll('button').find((button) => button.text() === 'Export CSV')!.trigger('click')
+       const initialParams = { ...query.mock.calls[0][0] }
+       expect(initialParams).toMatchObject({
+-        page: 1, page_size: 100, start_date: '2026-03-01', end_date: '2026-03-08',
++        page: 1, page_size: 1000, start_date: '2026-03-01', end_date: '2026-03-08',
+         sort_by: 'created_at', sort_order: 'desc',
+       })
+ 
+@@ -511,6 +512,65 @@ describe('user UsageView', () => {
+     }
+   })
+ 
++  it('waits for Retry-After and retries the same page when export is rate limited', async () => {
++    const wrapper = mountUsageView()
++    await flushPromises()
++    query.mockClear()
++    query.mockRejectedValueOnce({ status: 429, code: 'RATE_LIMITED', retry_after_seconds: 2 })
++    const originalCreateObjectURL = window.URL.createObjectURL
++    const originalRevokeObjectURL = window.URL.revokeObjectURL
++    window.URL.createObjectURL = vi.fn(() => 'blob:usage-export') as typeof window.URL.createObjectURL
++    window.URL.revokeObjectURL = vi.fn(() => {}) as typeof window.URL.revokeObjectURL
++    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
++    vi.useFakeTimers()
++
++    try {
++      const exporting = (wrapper.vm as any).exportToCSV()
++      await vi.advanceTimersByTimeAsync(1999)
++      expect(query).toHaveBeenCalledTimes(1)
++      expect(showInfo).toHaveBeenCalledWith('Rate limited')
++
++      await vi.advanceTimersByTimeAsync(1)
++      await exporting
++      expect(query).toHaveBeenCalledTimes(2)
++      expect(query.mock.calls[1]).toEqual(query.mock.calls[0])
++      expect(clickSpy).toHaveBeenCalled()
++      expect(showSuccess).toHaveBeenCalledWith('Export success')
++      expect(showError).not.toHaveBeenCalled()
++    } finally {
++      vi.useRealTimers()
++      window.URL.createObjectURL = originalCreateObjectURL
++      window.URL.revokeObjectURL = originalRevokeObjectURL
++      clickSpy.mockRestore()
++      wrapper.unmount()
++    }
++  })
++
++  it('fails the export after repeated rate limiting', async () => {
++    const wrapper = mountUsageView()
++    await flushPromises()
++    query.mockClear()
++    query.mockRejectedValue({ status: 429, code: 'RATE_LIMITED', retry_after_seconds: 1 })
++    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
++    vi.spyOn(console, 'error').mockImplementation(() => {})
++    vi.useFakeTimers()
++
++    try {
++      const exporting = (wrapper.vm as any).exportToCSV()
++      await vi.advanceTimersByTimeAsync(3000)
++      await exporting
++      expect(query).toHaveBeenCalledTimes(4)
++      expect(clickSpy).not.toHaveBeenCalled()
++      expect(showError).toHaveBeenCalledWith('Export failed')
++      expect((wrapper.vm as any).exporting).toBe(false)
++    } finally {
++      vi.useRealTimers()
++      vi.mocked(console.error).mockRestore()
++      clickSpy.mockRestore()
++      wrapper.unmount()
++    }
++  })
++
+   it('exports historical image rows with image billing mode derived from image_count', async () => {
+     query.mockResolvedValue({
+       items: [

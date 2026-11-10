@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1791,4 +1792,91 @@ func (r *stubUserSubscriptionRepo) IncrementUsage(ctx context.Context, id int64,
 
 func (r *stubUserSubscriptionRepo) BatchUpdateExpiredStatus(ctx context.Context) (int64, error) {
 	return 0, errors.New("not implemented")
+}
+
+func TestAPIKeyAuthLookupFailureWhenClientGoneReturns499(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{RunMode: config.RunModeSimple}
+
+	for _, tc := range []struct {
+		name   string
+		cancel bool
+		want   int
+	}{
+		{name: "client gone", cancel: true, want: 499},
+		{name: "server failure", cancel: false, want: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cancel context.CancelFunc
+			repo := &stubApiKeyRepo{getByKey: func(lookupCtx context.Context, _ string) (*service.APIKey, error) {
+				if tc.cancel {
+					// 查库期间客户端断开：net/http 取消请求 ctx，驱动返回 context 错误。
+					cancel()
+					return nil, lookupCtx.Err()
+				}
+				return nil, errors.New("db unavailable")
+			}}
+			svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
+
+			for _, mw := range []gin.HandlerFunc{
+				gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg)),
+				APIKeyAuthWithSubscriptionGoogle(svc, nil, cfg),
+			} {
+				var ctx context.Context
+				ctx, cancel = context.WithCancel(context.Background())
+				r := gin.New()
+				r.Use(mw)
+				r.GET("/t", func(c *gin.Context) { c.Status(http.StatusOK) })
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/t", nil).WithContext(ctx)
+				req.Header.Set("x-api-key", "sk-test-key")
+				req.Header.Set("x-goog-api-key", "sk-test-key")
+				r.ServeHTTP(w, req)
+				require.Equal(t, tc.want, w.Code)
+				cancel()
+			}
+		})
+	}
+}
+
+func TestAPIKeyAuthLookupDeadlineAndBusinessClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		requestExpired bool
+		err            error
+		want           int
+	}{
+		{"request deadline", true, context.DeadlineExceeded, 499},
+		{"internal deadline", false, context.DeadlineExceeded, 500},
+		{"missing key", false, service.ErrAPIKeyNotFound, 401},
+		{"overloaded", false, service.ErrAPIKeyAuthOverloaded, 503},
+	} {
+		for _, google := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/google=%t", tc.name, google), func(t *testing.T) {
+				ctx := context.Background()
+				if tc.requestExpired {
+					var cancel context.CancelFunc
+					ctx, cancel = context.WithDeadline(ctx, time.Now().Add(-time.Second))
+					defer cancel()
+				}
+				repo := &stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) { return nil, tc.err }}
+				cfg := &config.Config{RunMode: config.RunModeSimple}
+				svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
+				mw := gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg))
+				if google {
+					mw = APIKeyAuthWithSubscriptionGoogle(svc, nil, cfg)
+				}
+				router := gin.New()
+				router.Use(mw)
+				router.GET("/t", func(c *gin.Context) { t.Error("rejected auth reached handler") })
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/t", nil).WithContext(ctx)
+				req.Header.Set("x-api-key", "sk-synthetic-secret")
+				req.Header.Set("x-goog-api-key", "sk-synthetic-secret")
+				router.ServeHTTP(rec, req)
+				require.Equal(t, tc.want, rec.Code)
+				require.NotContains(t, rec.Body.String(), "sk-synthetic-secret")
+			})
+		}
+	}
 }

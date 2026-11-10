@@ -1,0 +1,112 @@
+diff --git a/backend/internal/pkg/antigravity/stream_response_shape_test.go b/backend/internal/pkg/antigravity/stream_response_shape_test.go
+new file mode 100644
+index 000000000..33f2b65f5
+--- /dev/null
++++ b/backend/internal/pkg/antigravity/stream_response_shape_test.go
+@@ -0,0 +1,75 @@
++package antigravity
++
++import (
++	"strings"
++	"testing"
++)
++
++func TestStreamingProcessorResponseShapesPreserveContent(t *testing.T) {
++	for _, tc := range []struct {
++		name    string
++		parts   string
++		markers []string
++	}{
++		{
++			name:    "text",
++			parts:   `[{"text":"你好，请把研究方案发给我。"}]`,
++			markers: []string{"text_delta", "你好，请把研究方案发给我。"},
++		},
++		{
++			name:    "thinking",
++			parts:   `[{"thought":true,"text":"先整理研究问题。"}]`,
++			markers: []string{"thinking_delta", "先整理研究问题。"},
++		},
++		{
++			name:    "tool_call",
++			parts:   `[{"functionCall":{"name":"read_file","args":{"path":"notes.md"}}}]`,
++			markers: []string{"tool_use", "read_file", "notes.md"},
++		},
++	} {
++		for _, shape := range []string{"direct", "wrapped"} {
++			t.Run(tc.name+"/"+shape, func(t *testing.T) {
++				body := `{"candidates":[{"content":{"role":"model","parts":` + tc.parts + `},"finishReason":"STOP"}],` +
++					`"usageMetadata":{"promptTokenCount":100,"cachedContentTokenCount":30,"candidatesTokenCount":20,"thoughtsTokenCount":5},"responseId":"response-shape"}`
++				if shape == "wrapped" {
++					body = `{"response":` + body + `}`
++				}
++				p := NewStreamingProcessor("gemini-model")
++				events := p.ProcessLine("data: " + body)
++				finalEvents, usage := p.Finish()
++				events = append(events, finalEvents...)
++				if !p.HasContent() {
++					t.Fatalf("valid %s response lost its content: %s", shape, events)
++				}
++				for _, marker := range append(tc.markers, "response-shape", "message_stop") {
++					if !strings.Contains(string(events), marker) {
++						t.Errorf("missing %q in events: %s", marker, events)
++					}
++				}
++				if usage.InputTokens != 70 || usage.CacheReadInputTokens != 30 || usage.OutputTokens != 25 {
++					t.Errorf("usage lost: %+v", usage)
++				}
++			})
++		}
++	}
++}
++
++func TestStreamingProcessorResponseShapesPreserveUsageWithoutContent(t *testing.T) {
++	for _, shape := range []string{"direct", "wrapped"} {
++		t.Run(shape, func(t *testing.T) {
++			body := `{"usageMetadata":{"promptTokenCount":123,"candidatesTokenCount":0}}`
++			if shape == "wrapped" {
++				body = `{"response":` + body + `}`
++			}
++			p := NewStreamingProcessor("gemini-model")
++			p.ProcessLine("data: " + body)
++			_, usage := p.Finish()
++			if usage.InputTokens != 123 || usage.OutputTokens != 0 {
++				t.Fatalf("usage lost: %+v", usage)
++			}
++			if p.HasContent() {
++				t.Fatal("usage-only response must not become content")
++			}
++		})
++	}
++}
+diff --git a/backend/internal/pkg/antigravity/stream_transformer.go b/backend/internal/pkg/antigravity/stream_transformer.go
+index 6b52ba882..5a1cdaa81 100644
+--- a/backend/internal/pkg/antigravity/stream_transformer.go
++++ b/backend/internal/pkg/antigravity/stream_transformer.go
+@@ -87,8 +87,15 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
+ 
+ 	// 解包 v1internal 响应
+ 	var v1Resp V1InternalResponse
+-	if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
+-		// 尝试直接解析为 GeminiResponse
++	var envelope struct {
++		Response json.RawMessage `json:"response"`
++	}
++	if err := json.Unmarshal([]byte(data), &envelope); err != nil {
++		return nil
++	}
++	if len(envelope.Response) == 0 {
++		// A direct response also unmarshals into V1InternalResponse without
++		// an error, but leaves Response empty. Select the shape explicitly.
+ 		var directResp GeminiResponse
+ 		if err2 := json.Unmarshal([]byte(data), &directResp); err2 != nil {
+ 			return nil
+@@ -96,6 +103,8 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
+ 		v1Resp.Response = directResp
+ 		v1Resp.ResponseID = directResp.ResponseID
+ 		v1Resp.ModelVersion = directResp.ModelVersion
++	} else if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
++		return nil
+ 	}
+ 
+ 	geminiResp := &v1Resp.Response

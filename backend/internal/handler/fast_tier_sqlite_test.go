@@ -65,7 +65,7 @@ func TestFastTierAsyncUsageSQLiteSettlementAndDedup(t *testing.T) {
 					require.NoError(t, err)
 				}
 				cfg := &config.Config{Default: config.DefaultConfig{RateMultiplier: 1}, Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false, AllowInsecureHTTP: true}}}
-				response := `{"id":"resp_terra_sqlite","model":"gpt-6.1-terra","status":"completed","service_tier":"priority","output":[{"id":"fc_terra","type":"function_call","call_id":"call_lookup","name":"lookup","arguments":"{}"}],"usage":{"input_tokens":1000,"output_tokens":10,"input_tokens_details":{"cached_tokens":200,"cache_write_tokens":300}}}`
+				response := `{"id":"resp_terra_sqlite","model":"gpt-6.1-terra","status":"completed","service_tier":"priority","output":[{"type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"buffered thinking"}]},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]},{"id":"fc_terra","type":"function_call","call_id":"call_lookup","name":"lookup","arguments":"{}"}],"usage":{"input_tokens":1000,"output_tokens":10,"input_tokens_details":{"cached_tokens":200,"cache_write_tokens":300}}}`
 				response = strings.ReplaceAll(response, `"service_tier":"priority"`, `"service_tier":"`+tier+`"`)
 				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					payload, err := io.ReadAll(r.Body)
@@ -103,7 +103,8 @@ func TestFastTierAsyncUsageSQLiteSettlementAndDedup(t *testing.T) {
 				body = strings.ReplaceAll(body, `"service_tier":"priority"`, `"service_tier":"`+tier+`"`)
 				parent, cancelParent := context.WithCancel(context.WithValue(context.Background(), ctxkey.ClientRequestID, "terra-client-"+protocol+"-"+effort))
 				t.Cleanup(cancelParent)
-				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				recorder := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(recorder)
 				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body)).WithContext(parent)
 				c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 2})
 				var result *service.OpenAIForwardResult
@@ -115,6 +116,15 @@ func TestFastTierAsyncUsageSQLiteSettlementAndDedup(t *testing.T) {
 					result, err = svc.Forward(parent, c, account, []byte(body))
 				}
 				require.NoError(t, err)
+				if protocol == "chat-buffered" {
+					require.Equal(t, "buffered thinking", gjson.GetBytes(recorder.Body.Bytes(), "choices.0.message.reasoning_content").String())
+					require.Equal(t, "answer", gjson.GetBytes(recorder.Body.Bytes(), "choices.0.message.content").String())
+				}
+				if protocol == "messages-buffered" {
+					require.Equal(t, "thinking", gjson.GetBytes(recorder.Body.Bytes(), "content.0.type").String())
+					require.Equal(t, "buffered thinking", gjson.GetBytes(recorder.Body.Bytes(), "content.0.thinking").String())
+					require.Equal(t, "answer", gjson.GetBytes(recorder.Body.Bytes(), "content.1.text").String())
+				}
 				require.NotNil(t, result.ReasoningEffort)
 				require.Equal(t, effort, *result.ReasoningEffort)
 				require.Equal(t, "gpt-6.1-terra", result.UpstreamResponseModel)

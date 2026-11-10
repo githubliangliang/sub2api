@@ -1,0 +1,4299 @@
+diff --git a/.gitignore b/.gitignore
+index 1af51f759..a5ff9a969 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -134,6 +134,7 @@ deploy/docker-compose.override.yml
+ vite.config.js
+ docs/*
+ !docs/agent-resource-safety.md
++!docs/moego-json-batching.md
+ !docs/admin-api-keys.md
+ !docs/mcp.md
+ !docs/PAYMENT.md
+diff --git a/backend/go.mod b/backend/go.mod
+index ae50b6e7b..91db5d03b 100644
+--- a/backend/go.mod
++++ b/backend/go.mod
+@@ -5,6 +5,7 @@ go 1.27.3
+ require (
+ 	entgo.io/ent v0.14.5
+ 	github.com/DATA-DOG/go-sqlmock v1.5.2
++	github.com/MoeForge/moego v0.1.0-alpha.1
+ 	github.com/alibabacloud-go/captcha-20230305 v1.1.3
+ 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.1.13
+ 	github.com/alibabacloud-go/tea v1.3.13
+diff --git a/backend/go.sum b/backend/go.sum
+index 457b0b7a3..b6fc3d31d 100644
+--- a/backend/go.sum
++++ b/backend/go.sum
+@@ -14,6 +14,8 @@ github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7Oputl
+ github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
+ github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
+ github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
++github.com/MoeForge/moego v0.1.0-alpha.1 h1:d+asBZu+2oKnBj1kzdvdANMStbIKw9BLCpknuWjiR28=
++github.com/MoeForge/moego v0.1.0-alpha.1/go.mod h1:SBNiQjCpWC3IEBMKFBOwOyhhQ3jywMrISqCwJTdr4aA=
+ github.com/agext/levenshtein v1.2.3 h1:YB2fHEn0UJagG8T1rrWknE3ZQzWM06O8AMAatNn7lmo=
+ github.com/agext/levenshtein v1.2.3/go.mod h1:JEDfjyjHDjOF/1e4FlBE/PkbqA9OfWu2ki2W0IB5558=
+ github.com/agiledragon/gomonkey v2.0.2+incompatible h1:eXKi9/piiC3cjJD1658mEE2o3NjkJ5vDLgYjCQu0Xlw=
+diff --git a/backend/internal/handler/image_task_handler.go b/backend/internal/handler/image_task_handler.go
+index deff4b7a2..4a4998013 100644
+--- a/backend/internal/handler/image_task_handler.go
++++ b/backend/internal/handler/image_task_handler.go
+@@ -103,7 +103,13 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
+ 		return
+ 	}
+ 
+-	taskCtx, recorder, cancel := newAsyncImageContext(c, body, h.tasks.ExecutionTimeout())
++	taskCtx, recorder, cancel, err := newAsyncImageContext(c, body, h.tasks.ExecutionTimeout())
++	if err != nil {
++		if !middleware2.RejectRequestBodyMemoryOverload(c, err) {
++			imageTaskError(c, service.ErrImageTaskUnavailable)
++		}
++		return
++	}
+ 	task, err := h.tasks.Create(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID})
+ 	if err != nil {
+ 		cancel()
+@@ -261,13 +267,23 @@ func (h *AsyncImageHandler) failTask(taskID string, statusCode int, taskErr json
+ 	}
+ }
+ 
+-func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Duration) (*gin.Context, *httptest.ResponseRecorder, context.CancelFunc) {
+-	base := context.WithoutCancel(c.Request.Context())
+-	executionCtx, cancel := context.WithTimeout(base, timeoutDuration)
++func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Duration) (*gin.Context, *httptest.ResponseRecorder, context.CancelFunc, error) {
++	// The task keeps body after Submit returns and the ingress reservation is
++	// released, so it holds the body, and whatever it buffers, on its own one.
++	retained, releaseBody, err := pkghttputil.DetachRequestBodyMemory(c.Request.Context(), int64(len(body)))
++	if err != nil {
++		return nil, nil, nil, err
++	}
++	base := context.WithoutCancel(retained)
++	executionCtx, cancelExecution := context.WithTimeout(base, timeoutDuration)
++	cancel := func() {
++		cancelExecution()
++		releaseBody()
++	}
+ 	request := c.Request.Clone(executionCtx)
+-	request.Body = io.NopCloser(bytes.NewReader(body))
++	request.Body = pkghttputil.NewPrereadBody(body)
+ 	request.GetBody = func() (io.ReadCloser, error) {
+-		return io.NopCloser(bytes.NewReader(body)), nil
++		return pkghttputil.NewPrereadBody(body), nil
+ 	}
+ 	request.ContentLength = int64(len(body))
+ 	request.URL.Path = strings.TrimSuffix(request.URL.Path, "/async")
+@@ -277,7 +293,7 @@ func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Dura
+ 	recorderCtx, _ := gin.CreateTestContext(recorder)
+ 	taskCtx.Writer = recorderCtx.Writer
+ 	taskCtx.Request = request
+-	return taskCtx, recorder, cancel
++	return taskCtx, recorder, cancel, nil
+ }
+ 
+ func asyncImageRequestStreams(contentType string, body []byte) bool {
+diff --git a/backend/internal/handler/image_task_handler_test.go b/backend/internal/handler/image_task_handler_test.go
+index 1fbc8d18b..7f360b465 100644
+--- a/backend/internal/handler/image_task_handler_test.go
++++ b/backend/internal/handler/image_task_handler_test.go
+@@ -10,6 +10,7 @@ import (
+ 	"testing"
+ 	"time"
+ 
++	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+ 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+ 	"github.com/gin-gonic/gin"
+@@ -106,6 +107,150 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
+ 	require.Contains(t, pollWriter.Body.String(), "https://example.test/image.png")
+ }
+ 
++// The background task runs after Submit has released the ingress reservation;
++// it must still read its body and buffer under the shared budget, then return
++// every byte it held.
++func TestAsyncImageHandlerTaskUsesOwnBodyReservation(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const budgetLimit = 1 << 20
++	budget := pkghttputil.NewBodyMemoryBudget(budgetLimit)
++	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
++	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
++	requestBody := `{"model":"gpt-image-1","prompt":"cat"}`
++	submitted := make(chan struct{})
++	h := &AsyncImageHandler{tasks: tasks}
++	h.execute = func(_ string, c *gin.Context) {
++		<-submitted
++		body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
++		if err != nil || string(body) != requestBody {
++			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"message": "read body failed"}})
++			return
++		}
++		if err := pkghttputil.ReserveRequestBodyMemory(c.Request.Context(), 4096); err != nil {
++			c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"message": err.Error()}})
++			return
++		}
++		c.JSON(http.StatusOK, gin.H{"created": 123, "data": []gin.H{{"url": "https://example.test/image.png"}}})
++	}
++
++	router := gin.New()
++	router.Use(middleware2.RequestBodyLimit(1<<20, budget))
++	router.Use(func(c *gin.Context) {
++		groupID := int64(3)
++		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
++			ID:      9,
++			UserID:  7,
++			GroupID: &groupID,
++			Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
++		})
++		c.Next()
++	})
++	router.POST("/v1/images/generations/async", h.Submit)
++
++	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(requestBody))
++	req.Header.Set("Content-Type", "application/json")
++	w := httptest.NewRecorder()
++	router.ServeHTTP(w, req)
++	require.Equal(t, http.StatusAccepted, w.Code)
++	var accepted struct {
++		TaskID string `json:"task_id"`
++	}
++	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &accepted))
++	close(submitted) // Submit and its ingress release have completed.
++
++	owner := service.ImageTaskOwner{UserID: 7, APIKeyID: 9}
++	require.Eventually(t, func() bool {
++		got, err := tasks.Get(context.Background(), owner, accepted.TaskID)
++		return err == nil && got.Status != service.ImageTaskStatusProcessing
++	}, time.Second, 10*time.Millisecond)
++	got, err := tasks.Get(context.Background(), owner, accepted.TaskID)
++	require.NoError(t, err)
++	require.Equal(t, service.ImageTaskStatusCompleted, got.Status, "task error: %s", string(got.Error))
++
++	require.Eventually(t, func() bool {
++		ctx, release := pkghttputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++		defer release()
++		return pkghttputil.ReserveRequestBodyMemory(ctx, budgetLimit) == nil
++	}, time.Second, 10*time.Millisecond, "task must release its reservation")
++}
++
++// The retained body is charged before a task is created, so exhaustion is
++// reported as retryable overload instead of an accepted task that cannot run.
++// A body the request already holds moves to the task instead of being charged
++// twice.
++func TestAsyncImageHandlerSubmitRejectsWhenBodyCannotBeRetained(t *testing.T) {
++	requestBody := `{"model":"gpt-image-1","prompt":"cat"}`
++	for _, tt := range []struct {
++		name          string
++		chargeRequest bool
++		want          int
++	}{
++		{name: "budget held by other requests", want: http.StatusServiceUnavailable},
++		{name: "body already charged to the request", chargeRequest: true, want: http.StatusAccepted},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
++			tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
++			h := &AsyncImageHandler{tasks: tasks}
++			ran := make(chan struct{})
++			h.execute = func(_ string, c *gin.Context) {
++				if !tt.chargeRequest {
++					t.Error("task must not run")
++				}
++				close(ran)
++			}
++
++			budget := pkghttputil.NewBodyMemoryBudget(int64(len(requestBody)))
++			router := gin.New()
++			router.Use(func(c *gin.Context) {
++				groupID := int64(3)
++				c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
++					ID:      9,
++					UserID:  7,
++					GroupID: &groupID,
++					Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
++				})
++				ctx, release := pkghttputil.WithRequestBodyMemoryBudget(c.Request.Context(), budget)
++				defer release()
++				c.Request = c.Request.WithContext(ctx)
++				c.Request.Body = pkghttputil.NewPrereadBody([]byte(requestBody))
++				if tt.chargeRequest {
++					require.NoError(t, pkghttputil.ReserveRequestBodyMemory(ctx, int64(len(requestBody))))
++				} else {
++					// Another in-flight request holds all remaining capacity.
++					other, releaseOther := pkghttputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++					defer releaseOther()
++					require.NoError(t, pkghttputil.ReserveRequestBodyMemory(other, int64(len(requestBody))))
++				}
++				c.Next()
++			})
++			router.POST("/v1/images/generations/async", h.Submit)
++
++			req := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(requestBody))
++			req.Header.Set("Content-Type", "application/json")
++			w := httptest.NewRecorder()
++			router.ServeHTTP(w, req)
++			require.Equal(t, tt.want, w.Code)
++			if !tt.chargeRequest {
++				require.Equal(t, "1", w.Header().Get("Retry-After"))
++				require.Empty(t, store.tasks)
++				return
++			}
++			select {
++			case <-ran:
++			case <-time.After(time.Second):
++				t.Fatal("accepted task did not run")
++			}
++			require.Eventually(t, func() bool {
++				ctx, release := pkghttputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++				defer release()
++				return pkghttputil.ReserveRequestBodyMemory(ctx, int64(len(requestBody))) == nil
++			}, time.Second, 10*time.Millisecond, "task must release the body it took over")
++		})
++	}
++}
++
+ // When object storage is not configured the feature is fully disabled: the
+ // endpoints must return 404 without creating a task or writing to Redis.
+ func TestAsyncImageHandlerDisabledReturns404(t *testing.T) {
+diff --git a/backend/internal/handler/openai_automation_bootstrap_test.go b/backend/internal/handler/openai_automation_bootstrap_test.go
+index d88131555..0710008f6 100644
+--- a/backend/internal/handler/openai_automation_bootstrap_test.go
++++ b/backend/internal/handler/openai_automation_bootstrap_test.go
+@@ -207,3 +207,30 @@ Read the reference index and report changes. Preserve A &amp; B and &lt;tags&gt;
+ 		require.Equal(t, guarded, unchanged)
+ 	}
+ }
++
++// The byte precheck must stay a necessary condition: an escaped type or tool
++// name is still a candidate, and a body without either is returned untouched
++// without the token scan and decode.
++func TestNormalizeCodexBootstrapPrecheck(t *testing.T) {
++	output := codexAutomationBootstrap("wiki-maintenance", "never", automationBootstrapPrompt)
++	escaped := []byte(strings.Replace(string(codexAutomationBootstrapBody(t, output, "")), `"automation_update"`, `"\u0061utomation_update"`, 1))
++	got, changed := normalizeCodexAutomationBootstrap(escaped)
++	require.True(t, changed)
++	require.Equal(t, output, gjson.GetBytes(got, "input.0.content.0.text").String())
++
++	plain := []byte(`{"model":"gpt-5","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"` + strings.Repeat("x", 4096) + `"}]},{"type":"function_call_output","call_id":"call_1","output":"ok"}]}`)
++	for name, normalize := range map[string]func([]byte) ([]byte, bool){
++		"automation": normalizeCodexAutomationBootstrap,
++		"delegation": normalizeCodexDelegationBootstrap,
++	} {
++		t.Run(name, func(t *testing.T) {
++			allocs := testing.AllocsPerRun(10, func() {
++				got, changed := normalize(plain)
++				if changed || &got[0] != &plain[0] {
++					t.Fatal("non-candidate body must be returned unchanged")
++				}
++			})
++			require.Zero(t, allocs)
++		})
++	}
++}
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index 3566e8613..d96d277ac 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -19,6 +19,7 @@ import (
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/domain"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel"
+@@ -814,6 +815,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+ 			}()
+ 			return h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
+ 		}()
++		if h.handleForwardRequestBodyMemoryOverload(c, err, streamStarted) {
++			return
++		}
+ 		var cyberBlockBodyHTTP []byte
+ 		if service.GetOpsCyberPolicy(c) != nil {
+ 			cyberBlockBodyHTTP = sessionHashBody
+@@ -1699,6 +1703,9 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
+ }
+ 
+ func normalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
++	if !mayContainCodexCallOutputCandidate(body, "create_thread", "send_message_to_thread") {
++		return body, false
++	}
+ 	// 已有任务通过 send_message_to_thread 唤醒时会携带 previous_response_id；
+ 	// 完整历史回放还会带有已配对的调用项。delegation 仍是客户端注入的用户输入，
+ 	// 不属于这些历史调用的结果，因此允许它与可明确配对的历史上下文共存。
+@@ -1706,9 +1713,31 @@ func normalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
+ }
+ 
+ func normalizeCodexAutomationBootstrap(body []byte) ([]byte, bool) {
++	if !mayContainCodexCallOutputCandidate(body, "automation_update") {
++		return body, false
++	}
+ 	return normalizeCodexCallOutputBootstrap(body, isCodexAutomationCandidate, false)
+ }
+ 
++// mayContainCodexCallOutputCandidate is a necessary condition for a bootstrap
++// candidate, checked before the full uniqueness scan and decode. Its type and
++// tool name are JSON strings, which appear literally unless a \u escape spells
++// their letters; without either, normalization cannot change the body.
++func mayContainCodexCallOutputCandidate(body []byte, toolNames ...string) bool {
++	if bytes.Contains(body, []byte(`\u`)) {
++		return true
++	}
++	if !bytes.Contains(body, []byte("function_call_output")) {
++		return false
++	}
++	for _, name := range toolNames {
++		if bytes.Contains(body, []byte(name)) {
++			return true
++		}
++	}
++	return false
++}
++
+ func normalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]any) bool, allowHistoricalContext bool) ([]byte, bool) {
+ 	if !hasUniqueJSONMembers(body) {
+ 		return body, false
+@@ -3719,6 +3748,26 @@ func (h *OpenAIGatewayHandler) mapUpstreamError(statusCode int) (int, string, st
+ 	}
+ }
+ 
++// handleForwardRequestBodyMemoryOverload ends a request when rewriting exhausts
++// local buffering capacity, without retrying or penalizing the upstream account.
++func (h *OpenAIGatewayHandler) handleForwardRequestBodyMemoryOverload(c *gin.Context, err error, streamStarted bool) bool {
++	if !errors.Is(err, pkghttputil.ErrRequestBodyMemoryBudget) {
++		return false
++	}
++	// Stop compact heartbeats before inspecting or writing the response headers.
++	if service.StopOpenAICompactSSEKeepaliveCommitted(c) {
++		streamStarted = true
++	}
++	streamStarted = streamStarted || c.Writer.Written()
++	if !c.Writer.Written() {
++		c.Header("Retry-After", "1")
++	}
++	h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "service_unavailable",
++		"Request body buffering capacity is exhausted; retry later", streamStarted)
++	c.Abort()
++	return true
++}
++
+ // handleStreamingAwareError handles errors that may occur after streaming has started
+ func (h *OpenAIGatewayHandler) handleStreamingAwareError(c *gin.Context, status int, errType, message string, streamStarted bool) {
+ 	h.handleStreamingAwareErrorWithCode(c, status, errType, "", message, streamStarted, false)
+diff --git a/backend/internal/handler/openai_request_body_memory_test.go b/backend/internal/handler/openai_request_body_memory_test.go
+new file mode 100644
+index 000000000..d7660844b
+--- /dev/null
++++ b/backend/internal/handler/openai_request_body_memory_test.go
+@@ -0,0 +1,59 @@
++package handler
++
++import (
++	"errors"
++	"fmt"
++	"net/http"
++	"strings"
++	"testing"
++
++	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestOpenAIForwardRequestBodyMemoryOverloadReturns503(t *testing.T) {
++	c, recorder := newGinContextForEndpoint(t, EndpointResponses)
++	h := &OpenAIGatewayHandler{}
++	err := fmt.Errorf("materialize rewritten body: %w", pkghttputil.ErrRequestBodyMemoryBudget)
++
++	require.True(t, h.handleForwardRequestBodyMemoryOverload(c, err, false))
++	require.True(t, c.IsAborted())
++	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
++	require.Equal(t, "1", recorder.Result().Header.Get("Retry-After"))
++	require.Equal(t, "service_unavailable", gjson.GetBytes(recorder.Body.Bytes(), "error.type").String())
++	require.Contains(t, gjson.GetBytes(recorder.Body.Bytes(), "error.message").String(), "retry later")
++}
++
++func TestOpenAIForwardRequestBodyMemoryOverloadTerminatesCommittedStream(t *testing.T) {
++	c, recorder := newGinContextForEndpoint(t, EndpointResponses)
++	c.Header("Content-Type", "text/event-stream")
++	_, err := c.Writer.Write([]byte(": keepalive\n\n"))
++	require.NoError(t, err)
++	c.Writer.Flush()
++	h := &OpenAIGatewayHandler{}
++
++	// A heartbeat may commit HTTP 200 before the caller updates streamStarted.
++	require.True(t, h.handleForwardRequestBodyMemoryOverload(c, pkghttputil.ErrRequestBodyMemoryBudget, false))
++	require.True(t, c.IsAborted())
++	require.Equal(t, http.StatusOK, recorder.Code)
++	_, errorObject := parseResponsesFailedSSE(t, strings.TrimPrefix(recorder.Body.String(), ": keepalive\n\n"))
++	require.Contains(t, errorObject["message"], "retry later")
++	require.NotContains(t, recorder.Body.String(), "response.completed")
++	streamError, ok := service.GetOpsStreamError(c)
++	require.True(t, ok)
++	require.Equal(t, http.StatusServiceUnavailable, streamError.IntendedStatus)
++}
++
++func TestOpenAIForwardRequestBodyMemoryOverloadLeavesOtherErrorsUntouched(t *testing.T) {
++	for _, err := range []error{nil, errors.New("upstream failed")} {
++		c, recorder := newGinContextForEndpoint(t, EndpointResponses)
++		h := &OpenAIGatewayHandler{}
++		require.False(t, h.handleForwardRequestBodyMemoryOverload(c, err, false))
++		require.False(t, c.IsAborted())
++		require.False(t, c.Writer.Written())
++		require.Empty(t, recorder.Body.String())
++		require.Empty(t, recorder.Header().Get("Retry-After"))
++	}
++}
+diff --git a/backend/internal/pkg/httputil/body_budget.go b/backend/internal/pkg/httputil/body_budget.go
+index 9c6dc9fbe..3e2c8b55a 100644
+--- a/backend/internal/pkg/httputil/body_budget.go
++++ b/backend/internal/pkg/httputil/body_budget.go
+@@ -41,24 +41,103 @@ func WithRequestBodyMemoryBudget(ctx context.Context, budget *BodyMemoryBudget)
+ 		return ctx, func() {}
+ 	}
+ 	r := &bodyMemoryReservation{budget: budget}
+-	return context.WithValue(ctx, bodyMemoryReservationKey{}, r), func() {
++	return context.WithValue(ctx, bodyMemoryReservationKey{}, r), r.release
++}
++
++// WithRequestBodyMemoryScope opens a nested reservation on the request's budget
++// for representations that die before the handler returns, such as one upstream
++// attempt's rewritten body. Release returns only the scope's bytes and is
++// idempotent. Without a request budget in ctx it is a no-op; a scope opened after
++// the request released its budget rejects every reservation.
++func WithRequestBodyMemoryScope(ctx context.Context) (context.Context, func()) {
++	parent, _ := ctx.Value(bodyMemoryReservationKey{}).(*bodyMemoryReservation)
++	if parent == nil {
++		return ctx, func() {}
++	}
++	parent.mu.Lock()
++	closed := parent.closed
++	parent.mu.Unlock()
++	r := &bodyMemoryReservation{budget: parent.budget, closed: closed}
++	return context.WithValue(ctx, bodyMemoryReservationKey{}, r), r.release
++}
++
++// DetachRequestBodyMemory opens a reservation on the request's budget for work
++// that keeps request-derived buffers after the handler returns, such as an
++// accepted asynchronous task. It takes over up to n bytes the request already
++// holds for the retained body and reserves only the remainder, so the body is
++// never charged twice; reservations made through the returned ctx accumulate on
++// it. The handler's release does not affect it, so the caller owns release and
++// must call it when the work ends. Without a request budget in ctx it is a no-op.
++func DetachRequestBodyMemory(ctx context.Context, n int64) (context.Context, func(), error) {
++	parent, _ := ctx.Value(bodyMemoryReservationKey{}).(*bodyMemoryReservation)
++	if parent == nil {
++		return ctx, func() {}, nil
++	}
++	detached, release := WithRequestBodyMemoryScope(ctx)
++	r, _ := detached.Value(bodyMemoryReservationKey{}).(*bodyMemoryReservation)
++	parent.mu.Lock()
++	moved := int64(0)
++	if !parent.closed && !r.closed {
++		moved = min(max(n, 0), parent.bytes)
++		parent.bytes -= moved
++	}
++	parent.mu.Unlock()
++	r.mu.Lock()
++	r.bytes += moved
++	r.mu.Unlock()
++	if err := reserveRequestBodyMemory(detached, n-moved); err != nil {
++		// Hand the body back: the handler still owns it until it returns.
+ 		r.mu.Lock()
+-		defer r.mu.Unlock()
+-		if r.closed {
+-			return
++		r.bytes -= moved
++		r.mu.Unlock()
++		parent.mu.Lock()
++		if parent.closed {
++			parent.budget.mu.Lock()
++			parent.budget.used -= moved
++			parent.budget.mu.Unlock()
++		} else {
++			parent.bytes += moved
+ 		}
+-		r.closed = true
+-		budget.mu.Lock()
+-		budget.used -= r.bytes
+-		budget.mu.Unlock()
+-		r.bytes = 0
++		parent.mu.Unlock()
++		release()
++		return ctx, func() {}, err
++	}
++	return detached, release, nil
++}
++
++func (r *bodyMemoryReservation) release() {
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	if r.closed {
++		return
+ 	}
++	r.closed = true
++	r.budget.mu.Lock()
++	r.budget.used -= r.bytes
++	r.budget.mu.Unlock()
++	r.bytes = 0
++}
++
++// ReserveRequestBodyMemory reserves n bytes before allocating another buffered
++// representation of the request body. The reservation shares the ingress budget
++// and is retained until the release function of the handler, or of the innermost
++// WithRequestBodyMemoryScope in ctx, runs. Without a budget in
++// ctx it is a no-op. Callers must propagate exhaustion instead of allocating
++// through an unbudgeted fallback. Unlike ingress reads, it ignores ctx
++// cancellation: callers that keep working after a client disconnect own that
++// policy.
++func ReserveRequestBodyMemory(ctx context.Context, n int64) error {
++	return reserveBodyMemory(ctx, n)
+ }
+ 
+ func reserveRequestBodyMemory(ctx context.Context, n int64) error {
+ 	if err := ctx.Err(); err != nil {
+ 		return err
+ 	}
++	return reserveBodyMemory(ctx, n)
++}
++
++func reserveBodyMemory(ctx context.Context, n int64) error {
+ 	r, _ := ctx.Value(bodyMemoryReservationKey{}).(*bodyMemoryReservation)
+ 	if r == nil || n <= 0 {
+ 		return nil
+@@ -78,6 +157,13 @@ func reserveRequestBodyMemory(ctx context.Context, n int64) error {
+ 	return nil
+ }
+ 
++// ReleaseRequestBodyMemory returns up to n bytes previously reserved through ctx,
++// for a representation that was never allocated or came out smaller than its
++// reservation. It never refunds another request's or scope's bytes.
++func ReleaseRequestBodyMemory(ctx context.Context, n int64) {
++	releaseRequestBodyMemory(ctx, n)
++}
++
+ // releaseRequestBodyMemory refunds storage that a helper no longer owns. Each
+ // allocation must be released once, or left for the handler's final cleanup.
+ // Cleanup may race with a cancelled read, so a closed reservation is a no-op.
+@@ -91,6 +177,7 @@ func releaseRequestBodyMemory(ctx context.Context, n int64) {
+ 	if r.closed {
+ 		return
+ 	}
++	n = min(n, r.bytes)
+ 	r.budget.mu.Lock()
+ 	r.budget.used -= n
+ 	r.budget.mu.Unlock()
+diff --git a/backend/internal/pkg/httputil/body_budget_test.go b/backend/internal/pkg/httputil/body_budget_test.go
+index 3f2f06c7f..b1086ca91 100644
+--- a/backend/internal/pkg/httputil/body_budget_test.go
++++ b/backend/internal/pkg/httputil/body_budget_test.go
+@@ -37,6 +37,57 @@ func TestRequestBodyMemoryBudgetSharedUntilRelease(t *testing.T) {
+ 	}
+ }
+ 
++func TestReserveRequestBodyMemorySharesIngressBudgetAndRelease(t *testing.T) {
++	budget := NewBodyMemoryBudget(100)
++	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
++	defer release()
++	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 20))).WithContext(ctx)
++	if _, err := ReadRequestBodyWithPrealloc(req); err != nil {
++		t.Fatal(err)
++	}
++	// The ingress reader reserves the body and one byte for overflow detection.
++	if err := ReserveRequestBodyMemory(ctx, 79); err != nil {
++		t.Fatal(err)
++	}
++	if err := ReserveRequestBodyMemory(ctx, 1); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("rewrite bypassed the ingress reservation: %v", err)
++	}
++	ctx2, release2 := WithRequestBodyMemoryBudget(context.Background(), budget)
++	defer release2()
++	if err := ReserveRequestBodyMemory(ctx2, 1); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("parallel request bypassed shared capacity: %v", err)
++	}
++	release()
++	release()
++	if err := ReserveRequestBodyMemory(ctx2, 100); err != nil {
++		t.Fatalf("failed reservation or cleanup leaked capacity: %v", err)
++	}
++	release2()
++	if err := ReserveRequestBodyMemory(ctx, 1); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("closed request accepted a new reservation: %v", err)
++	}
++	if budget.used != 0 {
++		t.Fatalf("leaked reservations: %d", budget.used)
++	}
++}
++
++func TestReserveRequestBodyMemoryWithoutBudgetOrAllocation(t *testing.T) {
++	if err := ReserveRequestBodyMemory(context.Background(), 1<<30); err != nil {
++		t.Fatal(err)
++	}
++	budget := NewBodyMemoryBudget(1)
++	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
++	defer release()
++	for _, size := range []int64{0, -1} {
++		if err := ReserveRequestBodyMemory(ctx, size); err != nil {
++			t.Fatal(err)
++		}
++	}
++	if budget.used != 0 {
++		t.Fatalf("non-positive allocation consumed budget: %d", budget.used)
++	}
++}
++
+ func TestRequestBodyMemoryBudgetUnknownLengthAndConcurrency(t *testing.T) {
+ 	budget := NewBodyMemoryBudget(4096)
+ 	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
+@@ -365,3 +416,149 @@ func TestRequestBodyMemoryBudgetPreservesBorrowedPrereadAllocation(t *testing.T)
+ 		t.Fatalf("preread fast path changed the budget: %d", used)
+ 	}
+ }
++
++func TestRequestBodyMemoryScopeReleasesOnlyItsBytes(t *testing.T) {
++	if ctx, release := WithRequestBodyMemoryScope(context.Background()); ctx != context.Background() {
++		t.Fatal("scope without a request budget must be a no-op")
++	} else {
++		release()
++	}
++	budget := NewBodyMemoryBudget(100)
++	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
++	defer release()
++	if err := ReserveRequestBodyMemory(ctx, 30); err != nil {
++		t.Fatal(err)
++	}
++	scope, releaseScope := WithRequestBodyMemoryScope(ctx)
++	if err := ReserveRequestBodyMemory(scope, 50); err != nil {
++		t.Fatal(err)
++	}
++	if err := ReserveRequestBodyMemory(scope, 30); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("scope bypassed shared capacity: %v", err)
++	}
++	releaseScope()
++	releaseScope() // Idempotent cleanup cannot refund the request's own bytes.
++	if budget.used != 30 {
++		t.Fatalf("scope release returned %d of the request's bytes", 30-budget.used)
++	}
++	if err := ReserveRequestBodyMemory(scope, 1); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("closed scope accepted a new reservation: %v", err)
++	}
++	release()
++	late, releaseLate := WithRequestBodyMemoryScope(ctx)
++	defer releaseLate()
++	if err := ReserveRequestBodyMemory(late, 1); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("scope outlived its request: %v", err)
++	}
++	if budget.used != 0 {
++		t.Fatalf("leaked reservations: %d", budget.used)
++	}
++}
++
++func TestReleaseRequestBodyMemoryCapsAtOwnReservation(t *testing.T) {
++	budget := NewBodyMemoryBudget(100)
++	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
++	if err := ReserveRequestBodyMemory(ctx, 40); err != nil {
++		t.Fatal(err)
++	}
++	scope, releaseScope := WithRequestBodyMemoryScope(ctx)
++	defer releaseScope()
++	if err := ReserveRequestBodyMemory(scope, 20); err != nil {
++		t.Fatal(err)
++	}
++	ReleaseRequestBodyMemory(scope, 100)
++	if budget.used != 40 {
++		t.Fatalf("scope refunded another reservation: used=%d", budget.used)
++	}
++	ReleaseRequestBodyMemory(ctx, 10)
++	ReleaseRequestBodyMemory(ctx, -1)
++	if budget.used != 30 {
++		t.Fatalf("partial release: used=%d", budget.used)
++	}
++	release()
++	ReleaseRequestBodyMemory(ctx, 30)
++	if budget.used != 0 {
++		t.Fatalf("release after close changed the budget: used=%d", budget.used)
++	}
++}
++
++func TestDetachRequestBodyMemoryOutlivesHandlerRelease(t *testing.T) {
++	budget := NewBodyMemoryBudget(100)
++	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
++	detached, releaseDetached, err := DetachRequestBodyMemory(ctx, 40)
++	if err != nil {
++		t.Fatal(err)
++	}
++	release() // The handler returns while the detached work still runs.
++	if budget.used != 40 {
++		t.Fatalf("detached body must stay reserved: %d", budget.used)
++	}
++	if err := ReserveRequestBodyMemory(detached, 30); err != nil {
++		t.Fatalf("detached work must keep reserving after handler release: %v", err)
++	}
++	if err := ReserveRequestBodyMemory(detached, 31); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("detached reservations still share the budget: %v", err)
++	}
++	releaseDetached()
++	releaseDetached()
++	if budget.used != 0 {
++		t.Fatalf("leaked reservations: %d", budget.used)
++	}
++}
++
++func TestDetachRequestBodyMemoryTakesOverTheRequestCharge(t *testing.T) {
++	budget := NewBodyMemoryBudget(100)
++	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
++	if err := ReserveRequestBodyMemory(ctx, 70); err != nil {
++		t.Fatal(err)
++	}
++	// The retained body is already charged to the request, so detaching it must
++	// not need a second copy's worth of capacity.
++	_, releaseDetached, err := DetachRequestBodyMemory(ctx, 60)
++	if err != nil {
++		t.Fatalf("detach charged the body twice: %v", err)
++	}
++	if budget.used != 70 {
++		t.Fatalf("detach changed the shared usage: %d", budget.used)
++	}
++	release()
++	if budget.used != 60 {
++		t.Fatalf("handler release must leave only the detached body: %d", budget.used)
++	}
++	releaseDetached()
++	if budget.used != 0 {
++		t.Fatalf("leaked reservations: %d", budget.used)
++	}
++
++	ctx, release = WithRequestBodyMemoryBudget(context.Background(), budget)
++	if err := ReserveRequestBodyMemory(ctx, 50); err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := DetachRequestBodyMemory(ctx, 101); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("want capacity error, got %v", err)
++	}
++	if budget.used != 50 {
++		t.Fatalf("failed detach must return the body to the request: %d", budget.used)
++	}
++	release()
++	if budget.used != 0 {
++		t.Fatalf("failed detach leaked reservations: %d", budget.used)
++	}
++}
++
++func TestDetachRequestBodyMemoryRejectsWhenBudgetExhausted(t *testing.T) {
++	budget := NewBodyMemoryBudget(100)
++	ctx, release := WithRequestBodyMemoryBudget(context.Background(), budget)
++	defer release()
++	if _, _, err := DetachRequestBodyMemory(ctx, 101); !errors.Is(err, ErrRequestBodyMemoryBudget) {
++		t.Fatalf("want capacity error, got %v", err)
++	}
++	if budget.used != 0 {
++		t.Fatalf("failed detach consumed budget: %d", budget.used)
++	}
++	if got, releaseNoop, err := DetachRequestBodyMemory(context.Background(), 101); err != nil || got == nil {
++		t.Fatalf("without a budget detach is a no-op: %v", err)
++	} else {
++		releaseNoop()
++	}
++}
+diff --git a/backend/internal/repository/api_key_repo.go b/backend/internal/repository/api_key_repo.go
+index d2a8a83f1..07c12e43a 100644
+--- a/backend/internal/repository/api_key_repo.go
++++ b/backend/internal/repository/api_key_repo.go
+@@ -231,6 +231,8 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
+ 				group.FieldProfitControlEnabled,
+ 				group.FieldProfitMinMargin,
+ 				group.FieldProfitSafetyBuffer,
++				// OpenAI 选号从 ctx 分组读取隐私门，漏选会放行未设置隐私的账号。
++				group.FieldRequirePrivacySet,
+ 			)
+ 		}).
+ 		Only(ctx)
+diff --git a/backend/internal/repository/api_key_repo_profit_projection_integration_test.go b/backend/internal/repository/api_key_repo_profit_projection_integration_test.go
+index 283b103d9..ff2e39841 100644
+--- a/backend/internal/repository/api_key_repo_profit_projection_integration_test.go
++++ b/backend/internal/repository/api_key_repo_profit_projection_integration_test.go
+@@ -28,6 +28,7 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
+ 		ProfitControlEnabled: true,
+ 		ProfitMinMargin:      0.2,
+ 		ProfitSafetyBuffer:   0.05,
++		RequirePrivacySet:    true,
+ 	})
+ 	user := mustCreateUser(t, integrationEntClient, &service.User{
+ 		Email: fmt.Sprintf("profit-proj-%d@example.com", suffix), Concurrency: 5,
+@@ -57,4 +58,6 @@ func TestGetByKeyForAuthCarriesProfitControlProjection(t *testing.T) {
+ 	require.True(t, got.Group.ProfitControlEnabled, "profit_control_enabled 必须进入认证投影（投影漏列会让门静默失效）")
+ 	require.InDelta(t, 0.2, got.Group.ProfitMinMargin, 1e-9)
+ 	require.InDelta(t, 0.05, got.Group.ProfitSafetyBuffer, 1e-9)
++	// OpenAI 选号从认证分组读取隐私门，漏列会放行未设置隐私的账号。
++	require.True(t, got.Group.RequirePrivacySet, "require_privacy_set 必须进入认证投影")
+ }
+diff --git a/backend/internal/repository/fixtures_integration_test.go b/backend/internal/repository/fixtures_integration_test.go
+index 98e0085e2..50e398b3e 100644
+--- a/backend/internal/repository/fixtures_integration_test.go
++++ b/backend/internal/repository/fixtures_integration_test.go
+@@ -96,7 +96,8 @@ func mustCreateGroup(t *testing.T, client *dbent.Client, g *service.Group) *serv
+ 		SetCodexModelsManifestConfig(g.CodexModelsManifestConfig).
+ 		SetProfitControlEnabled(g.ProfitControlEnabled).
+ 		SetProfitMinMargin(g.ProfitMinMargin).
+-		SetProfitSafetyBuffer(g.ProfitSafetyBuffer)
++		SetProfitSafetyBuffer(g.ProfitSafetyBuffer).
++		SetRequirePrivacySet(g.RequirePrivacySet)
+ 	if g.Description != "" {
+ 		create.SetDescription(g.Description)
+ 	}
+diff --git a/backend/internal/service/antigravity_gateway_upstream.go b/backend/internal/service/antigravity_gateway_upstream.go
+index 22925c74f..20018202b 100644
+--- a/backend/internal/service/antigravity_gateway_upstream.go
++++ b/backend/internal/service/antigravity_gateway_upstream.go
+@@ -6,7 +6,6 @@ import (
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
+-	"io"
+ 	"net/http"
+ 	"strings"
+ 	"sync/atomic"
+@@ -124,7 +123,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
+ 		clientDisconnect = streamRes.clientDisconnect
+ 	} else {
+ 		// 非流式响应：直接透传
+-		respBody, err := io.ReadAll(resp.Body)
++		respBody, err := ReadUpstreamResponseBody(resp.Body, s.antigravitySSEConfig(), c, anthropicTooLargeError)
+ 		if err != nil {
+ 			return nil, fmt.Errorf("read upstream response: %w", err)
+ 		}
+diff --git a/backend/internal/service/api_key_auth_cache.go b/backend/internal/service/api_key_auth_cache.go
+index bf66fa0c2..716c0a58c 100644
+--- a/backend/internal/service/api_key_auth_cache.go
++++ b/backend/internal/service/api_key_auth_cache.go
+@@ -53,6 +53,9 @@ type APIKeyAuthUserSnapshot struct {
+ 	// UserGroupRPMOverride 该 API Key 对应的 (user, group) 专属 RPM 覆盖值。
+ 	// nil = 无 override（回退到 group/user 级）；0 = 不限流；>0 = 专属上限。
+ 	UserGroupRPMOverride *int `json:"user_group_rpm_override,omitempty"`
++	// UserGroupRPMOverrideGroupID 是成功查询 override 的分组（0 = 未查询或查询失败），
++	// 让 checkRPM 区分"该分组确认无 override"与"需要回源"。
++	UserGroupRPMOverrideGroupID int64 `json:"user_group_rpm_override_group_id,omitempty"`
+ }
+ 
+ // APIKeyAuthGroupSnapshot 分组快照
+@@ -141,6 +144,9 @@ type APIKeyAuthGroupSnapshot struct {
+ 	ProfitControlEnabled bool    `json:"profit_control_enabled"`
+ 	ProfitMinMargin      float64 `json:"profit_min_margin"`
+ 	ProfitSafetyBuffer   float64 `json:"profit_safety_buffer"`
++
++	// RequirePrivacySet 由 OpenAI 选号从 ctx 分组读取，与 GetByKeyForAuth 投影同步。
++	RequirePrivacySet bool `json:"require_privacy_set"`
+ }
+ 
+ // APIKeyAuthCacheEntry 缓存条目，支持负缓存
+diff --git a/backend/internal/service/api_key_auth_cache_impl.go b/backend/internal/service/api_key_auth_cache_impl.go
+index cb2ade94b..2bb7204fd 100644
+--- a/backend/internal/service/api_key_auth_cache_impl.go
++++ b/backend/internal/service/api_key_auth_cache_impl.go
+@@ -14,7 +14,7 @@ import (
+ 	"github.com/dgraph-io/ristretto"
+ )
+ 
+-const apiKeyAuthSnapshotVersion = 25 // v25: group image_count_billing switch (per-image billing on image endpoints)
++const apiKeyAuthSnapshotVersion = 27 // v27: group require_privacy_set (OpenAI scheduling reads it from ctx)
+ 
+ type apiKeyAuthCacheConfig struct {
+ 	l1Size        int
+@@ -372,10 +372,11 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey)
+ 	// 填充 (user, group) RPM override —— snapshot 构建时查一次 DB，后续请求零 DB 往返。
+ 	if apiKey.GroupID != nil && *apiKey.GroupID > 0 && s.userGroupRateRepo != nil {
+ 		override, err := s.userGroupRateRepo.GetRPMOverrideByUserAndGroup(ctx, apiKey.UserID, *apiKey.GroupID)
+-		if err == nil && override != nil {
++		if err == nil {
+ 			snapshot.User.UserGroupRPMOverride = override
++			snapshot.User.UserGroupRPMOverrideGroupID = *apiKey.GroupID
+ 		}
+-		// 查询失败或无 override 时留 nil，checkRPM 会回退到 DB 查询
++		// 查询失败时不记录分组，checkRPM 会回退到 DB 查询
+ 	}
+ 	if apiKey.Group != nil {
+ 		snapshot.Group = &APIKeyAuthGroupSnapshot{
+@@ -436,6 +437,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey)
+ 			ProfitControlEnabled:            apiKey.Group.ProfitControlEnabled,
+ 			ProfitMinMargin:                 apiKey.Group.ProfitMinMargin,
+ 			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
++			RequirePrivacySet:               apiKey.Group.RequirePrivacySet,
+ 		}
+ 	}
+ 	return snapshot
+@@ -461,22 +463,23 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
+ 		RateLimit1d: snapshot.RateLimit1d,
+ 		RateLimit7d: snapshot.RateLimit7d,
+ 		User: &User{
+-			ID:                         snapshot.User.ID,
+-			Status:                     snapshot.User.Status,
+-			Role:                       snapshot.User.Role,
+-			Balance:                    snapshot.User.Balance,
+-			Concurrency:                snapshot.User.Concurrency,
+-			AllowedGroups:              snapshot.User.AllowedGroups,
+-			Email:                      snapshot.User.Email,
+-			Username:                   snapshot.User.Username,
+-			BalanceNotifyEnabled:       snapshot.User.BalanceNotifyEnabled,
+-			RestrictPublicGroups:       snapshot.User.RestrictPublicGroups,
+-			BalanceNotifyThresholdType: snapshot.User.BalanceNotifyThresholdType,
+-			BalanceNotifyThreshold:     snapshot.User.BalanceNotifyThreshold,
+-			BalanceNotifyExtraEmails:   snapshot.User.BalanceNotifyExtraEmails,
+-			TotalRecharged:             snapshot.User.TotalRecharged,
+-			RPMLimit:                   snapshot.User.RPMLimit,
+-			UserGroupRPMOverride:       snapshot.User.UserGroupRPMOverride,
++			ID:                          snapshot.User.ID,
++			Status:                      snapshot.User.Status,
++			Role:                        snapshot.User.Role,
++			Balance:                     snapshot.User.Balance,
++			Concurrency:                 snapshot.User.Concurrency,
++			AllowedGroups:               snapshot.User.AllowedGroups,
++			Email:                       snapshot.User.Email,
++			Username:                    snapshot.User.Username,
++			BalanceNotifyEnabled:        snapshot.User.BalanceNotifyEnabled,
++			RestrictPublicGroups:        snapshot.User.RestrictPublicGroups,
++			BalanceNotifyThresholdType:  snapshot.User.BalanceNotifyThresholdType,
++			BalanceNotifyThreshold:      snapshot.User.BalanceNotifyThreshold,
++			BalanceNotifyExtraEmails:    snapshot.User.BalanceNotifyExtraEmails,
++			TotalRecharged:              snapshot.User.TotalRecharged,
++			RPMLimit:                    snapshot.User.RPMLimit,
++			UserGroupRPMOverride:        snapshot.User.UserGroupRPMOverride,
++			UserGroupRPMOverrideGroupID: snapshot.User.UserGroupRPMOverrideGroupID,
+ 		},
+ 	}
+ 	if snapshot.Group != nil {
+@@ -539,6 +542,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
+ 			ProfitControlEnabled:            snapshot.Group.ProfitControlEnabled,
+ 			ProfitMinMargin:                 snapshot.Group.ProfitMinMargin,
+ 			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,
++			RequirePrivacySet:               snapshot.Group.RequirePrivacySet,
+ 		}
+ 	}
+ 	s.compileAPIKeyIPRules(apiKey)
+diff --git a/backend/internal/service/bedrock_stream.go b/backend/internal/service/bedrock_stream.go
+index 3656628c2..a7637b64e 100644
+--- a/backend/internal/service/bedrock_stream.go
++++ b/backend/internal/service/bedrock_stream.go
+@@ -249,6 +249,13 @@ type bedrockEventStreamDecoder struct {
+ 	reader *bufio.Reader
+ }
+ 
++// AWS EventStream 协议上限（与 AWS SDK 的 eventstream 解码器一致）。帧长度来自
++// 上游，必须在分配前校验，否则单个伪造的 prelude 即可申请约 4 GiB。
++const (
++	bedrockEventStreamMaxHeadersLength = 128 << 10
++	bedrockEventStreamMaxPayloadLength = 16 << 20
++)
++
+ func newBedrockEventStreamDecoder(r io.Reader) *bedrockEventStreamDecoder {
+ 	return &bedrockEventStreamDecoder{
+ 		reader: bufio.NewReaderSize(r, 64*1024),
+@@ -276,6 +283,12 @@ func (d *bedrockEventStreamDecoder) Decode() ([]byte, error) {
+ 		if totalLength < 16 { // minimum: 12 prelude + 4 message_crc
+ 			return nil, fmt.Errorf("invalid eventstream frame: total_length=%d", totalLength)
+ 		}
++		if headersLength > bedrockEventStreamMaxHeadersLength || headersLength > totalLength-16 {
++			return nil, fmt.Errorf("invalid eventstream frame: headers_length=%d total_length=%d", headersLength, totalLength)
++		}
++		if totalLength-16-headersLength > bedrockEventStreamMaxPayloadLength {
++			return nil, fmt.Errorf("invalid eventstream frame: payload too large, total_length=%d", totalLength)
++		}
+ 
+ 		// 读取 headers + payload + message_crc
+ 		remaining := int(totalLength) - 12
+diff --git a/backend/internal/service/bedrock_stream_test.go b/backend/internal/service/bedrock_stream_test.go
+index 3d0661379..d2c63552b 100644
+--- a/backend/internal/service/bedrock_stream_test.go
++++ b/backend/internal/service/bedrock_stream_test.go
+@@ -243,6 +243,45 @@ func TestBedrockEventStreamDecoder(t *testing.T) {
+ 	})
+ }
+ 
++func TestBedrockEventStreamDecoderRejectsUntrustedLengths(t *testing.T) {
++	// Only the prelude is sent: the decoder must reject the declared lengths
++	// before allocating or reading the frame body.
++	prelude := func(totalLen, headersLen uint32) []byte {
++		var buf bytes.Buffer
++		_ = binary.Write(&buf, binary.BigEndian, totalLen)
++		_ = binary.Write(&buf, binary.BigEndian, headersLen)
++		_ = binary.Write(&buf, binary.BigEndian, crc32.Checksum(buf.Bytes(), crc32.MakeTable(crc32.IEEE)))
++		return buf.Bytes()
++	}
++	for _, tc := range []struct {
++		name       string
++		totalLen   uint32
++		headersLen uint32
++	}{
++		{name: "payload over protocol limit", totalLen: 16 + bedrockEventStreamMaxPayloadLength + 1},
++		{name: "maximum total length", totalLen: ^uint32(0)},
++		{name: "headers beyond frame", totalLen: 64, headersLen: 49},
++		{name: "headers over protocol limit", totalLen: 16 + bedrockEventStreamMaxHeadersLength + 1, headersLen: bedrockEventStreamMaxHeadersLength + 1},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			decoder := newBedrockEventStreamDecoder(bytes.NewReader(prelude(tc.totalLen, tc.headersLen)))
++			_, err := decoder.Decode()
++			require.Error(t, err)
++			assert.Contains(t, err.Error(), "invalid eventstream frame")
++		})
++	}
++
++	t.Run("headers filling the frame are accepted", func(t *testing.T) {
++		var frame bytes.Buffer
++		_, _ = frame.Write(prelude(16+4, 4))
++		_, _ = frame.Write([]byte{0, 0, 0, 0}) // empty-name, unknown-type header bytes
++		_ = binary.Write(&frame, binary.BigEndian, crc32.Checksum(frame.Bytes(), crc32.MakeTable(crc32.IEEE)))
++		decoder := newBedrockEventStreamDecoder(bytes.NewReader(frame.Bytes()))
++		_, err := decoder.Decode()
++		assert.Equal(t, io.EOF, err)
++	})
++}
++
+ func TestBuildBedrockURL(t *testing.T) {
+ 	t.Run("stream URL with colon in model ID", func(t *testing.T) {
+ 		url := BuildBedrockURL("us-east-1", "us.anthropic.claude-opus-4-5-20251101-v1:0", true)
+diff --git a/backend/internal/service/billing_cache_service.go b/backend/internal/service/billing_cache_service.go
+index b4734f1e1..39435f90b 100644
+--- a/backend/internal/service/billing_cache_service.go
++++ b/backend/internal/service/billing_cache_service.go
+@@ -938,9 +938,9 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
+ 
+ 	// ── 第一层：分组级检查（override 或 group.rpm_limit） ──
+ 	if group != nil {
+-		// 解析 override：优先从 auth cache snapshot，nil 时回退 DB。
++		// 解析 override：优先从 auth cache snapshot；snapshot 未确认该分组时回退 DB。
+ 		var override *int
+-		if user.UserGroupRPMOverride != nil {
++		if user.UserGroupRPMOverride != nil || user.UserGroupRPMOverrideGroupID == group.ID {
+ 			override = user.UserGroupRPMOverride
+ 		} else if s.userGroupRateRepo != nil {
+ 			dbOverride, err := s.userGroupRateRepo.GetRPMOverrideByUserAndGroup(ctx, user.ID, group.ID)
+diff --git a/backend/internal/service/billing_cache_service_rpm_test.go b/backend/internal/service/billing_cache_service_rpm_test.go
+index cb71b886c..fbf5f6e99 100644
+--- a/backend/internal/service/billing_cache_service_rpm_test.go
++++ b/backend/internal/service/billing_cache_service_rpm_test.go
+@@ -4,6 +4,7 @@ package service
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"errors"
+ 	"sync/atomic"
+ 	"testing"
+@@ -251,3 +252,55 @@ func TestBillingCacheService_CheckRPM_NilUserIsNoop(t *testing.T) {
+ 	require.EqualValues(t, 0, atomic.LoadInt32(&cache.userCalls))
+ 	require.EqualValues(t, 0, atomic.LoadInt32(&repo.calls))
+ }
++
++func TestBillingCacheService_CheckRPM_SnapshotConfirmedNoOverrideSkipsLookup(t *testing.T) {
++	cache := &userRPMCacheStub{userGroupCounts: []int{5, 6}}
++	repo := &rpmOverrideRepoStub{err: errors.New("must not be queried")}
++	svc := newBillingServiceForRPM(t, cache, repo)
++
++	user := &User{ID: 1, UserGroupRPMOverrideGroupID: 10}
++	group := &Group{ID: 10, RPMLimit: 5}
++
++	require.NoError(t, svc.checkRPM(context.Background(), user, group))
++	require.ErrorIs(t, svc.checkRPM(context.Background(), user, group), ErrGroupRPMExceeded)
++	require.EqualValues(t, 0, atomic.LoadInt32(&repo.calls), "snapshot 已确认无 override 时不应查 DB")
++}
++
++func TestBillingCacheService_CheckRPM_SnapshotForAnotherGroupStillLooksUp(t *testing.T) {
++	override := 0
++	cache := &userRPMCacheStub{}
++	repo := &rpmOverrideRepoStub{override: &override}
++	svc := newBillingServiceForRPM(t, cache, repo)
++
++	user := &User{ID: 1, UserGroupRPMOverrideGroupID: 10}
++	group := &Group{ID: 11, RPMLimit: 5}
++
++	require.NoError(t, svc.checkRPM(context.Background(), user, group))
++	require.EqualValues(t, 1, atomic.LoadInt32(&repo.calls), "snapshot 只确认了 key 所属分组")
++	require.EqualValues(t, 0, atomic.LoadInt32(&cache.userGroupCalls), "DB override=0 应跳过分组计数")
++}
++
++func TestAPIKeyAuthSnapshotRecordsResolvedRPMOverrideGroup(t *testing.T) {
++	groupID := int64(10)
++	newKey := func() *APIKey {
++		return &APIKey{ID: 2, UserID: 1, GroupID: &groupID, Status: StatusActive,
++			User: &User{ID: 1, Status: StatusActive}}
++	}
++
++	svc := &APIKeyService{userGroupRateRepo: &rpmOverrideRepoStub{}}
++	snapshot := svc.snapshotFromAPIKey(context.Background(), newKey())
++	require.Nil(t, snapshot.User.UserGroupRPMOverride)
++	require.Equal(t, groupID, snapshot.User.UserGroupRPMOverrideGroupID)
++	payload, err := json.Marshal(&APIKeyAuthCacheEntry{Snapshot: snapshot})
++	require.NoError(t, err)
++	var restored APIKeyAuthCacheEntry
++	require.NoError(t, json.Unmarshal(payload, &restored))
++	materialized, used, err := svc.applyAuthCacheEntry("k", &restored)
++	require.NoError(t, err)
++	require.True(t, used)
++	require.Equal(t, groupID, materialized.User.UserGroupRPMOverrideGroupID)
++
++	failing := &APIKeyService{userGroupRateRepo: &rpmOverrideRepoStub{err: errors.New("db down")}}
++	snapshot = failing.snapshotFromAPIKey(context.Background(), newKey())
++	require.Zero(t, snapshot.User.UserGroupRPMOverrideGroupID, "查询失败时必须保留回源")
++}
+diff --git a/backend/internal/service/gateway_cache_control_paths_test.go b/backend/internal/service/gateway_cache_control_paths_test.go
+new file mode 100644
+index 000000000..9ef28b223
+--- /dev/null
++++ b/backend/internal/service/gateway_cache_control_paths_test.go
+@@ -0,0 +1,155 @@
++package service
++
++import (
++	"bytes"
++	"fmt"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++type cacheControlPathsSnapshot struct {
++	invalidThinking []cacheControlPath
++	messages        []string
++	tools           []string
++	system          []string
++}
++
++func snapshotCacheControlPaths(body []byte) cacheControlPathsSnapshot {
++	invalid, messages, tools, system := collectCacheControlPaths(body)
++	return cacheControlPathsSnapshot{invalid, messages, tools, system}
++}
++
++func TestCollectCacheControlPaths_BorrowedViewPreservesSelectionAndOwnership(t *testing.T) {
++	for _, tt := range []struct {
++		name string
++		body string
++		want cacheControlPathsSnapshot
++	}{
++		{name: "empty"},
++		{
++			name: "array order and invalid thinking",
++			body: `{"system":[{"type":"text","cache_control":{}},{"type":"thinking","cache_control":{}}],"messages":[{"content":[{"type":"text"},{"type":"thinking","cache_control":{}},{"type":"text","cache_control":{}}]},{"content":"plain text"}],"tools":[{"cache_control":{}},{},{"cache_control":{}}]}`,
++			want: cacheControlPathsSnapshot{
++				invalidThinking: []cacheControlPath{
++					{path: "system.1.cache_control", log: "[Warning] Removed illegal cache_control from thinking block in system"},
++					{path: "messages.0.content.1.cache_control", log: "[Warning] Removed illegal cache_control from thinking block in messages[0].content[1]"},
++				},
++				messages: []string{"messages.0.content.2.cache_control"},
++				tools:    []string{"tools.0.cache_control", "tools.2.cache_control"},
++				system:   []string{"system.0.cache_control"},
++			},
++		},
++		{
++			name: "first duplicate parent and content keys",
++			body: `{"system":[{"type":"text","cache_control":null}],"system":[{"type":"thinking","cache_control":{}}],"messages":[{"content":[{"type":"text","cache_control":{}}],"content":[{"type":"thinking","cache_control":{}}]}],"messages":[],"tools":[],"tools":[{"cache_control":{}}]}`,
++			want: cacheControlPathsSnapshot{
++				messages: []string{"messages.0.content.0.cache_control"},
++				system:   []string{"system.0.cache_control"},
++			},
++		},
++		{
++			name: "escaped field names",
++			body: ` {"\u0073ystem":[{"type":"text","cache_control":{}}],"\u006dessages":[{"content":[{"type":"text","cache_control":{}}]}],"\u0074ools":[{"cache_control":{}}]} `,
++			want: cacheControlPathsSnapshot{
++				messages: []string{"messages.0.content.0.cache_control"},
++				tools:    []string{"tools.0.cache_control"},
++				system:   []string{"system.0.cache_control"},
++			},
++		},
++		{
++			name: "garbage prefix retains GetBytes lookup behavior",
++			body: `junk{"system":[{"type":"text","cache_control":{}}],"messages":[{"content":[{"type":"text","cache_control":{}}]}],"tools":[{"cache_control":{}}]}`,
++			want: cacheControlPathsSnapshot{
++				messages: []string{"messages.0.content.0.cache_control"},
++				tools:    []string{"tools.0.cache_control"},
++				system:   []string{"system.0.cache_control"},
++			},
++		},
++		{
++			name: "nonarray fields and content stay ignored",
++			body: `{"system":"plain text","messages":[{"content":"plain text"},{"content":null}],"tools":{"cache_control":{}}}`,
++		},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			body := []byte(tt.body)
++			got := snapshotCacheControlPaths(body)
++			require.Equal(t, tt.body, string(body), "collection must not mutate borrowed input")
++			// The caller can reuse the source after collection. Returned metadata must
++			// not retain strings borrowed from the body.
++			for i := range body {
++				body[i] = 'x'
++			}
++			require.Equal(t, tt.want, got)
++		})
++	}
++}
++
++func TestCollectCacheControlPaths_ConcurrentImmutableInput(t *testing.T) {
++	body := cacheControlPathsBenchmarkBody(4096)
++	original := bytes.Clone(body)
++	want := cacheControlPathsSnapshot{
++		messages: []string{"messages.0.content.0.cache_control"},
++		tools:    []string{"tools.0.cache_control"},
++		system:   []string{"system.0.cache_control"},
++	}
++	t.Cleanup(func() { require.Equal(t, original, body) })
++	for worker := 0; worker < 8; worker++ {
++		t.Run(fmt.Sprintf("worker_%d", worker), func(t *testing.T) {
++			t.Parallel()
++			for i := 0; i < 8; i++ {
++				require.Equal(t, want, snapshotCacheControlPaths(body))
++			}
++		})
++	}
++}
++
++func TestEnforceCacheControlLimit_BorrowedCollectionKeepsDuplicateWireFields(t *testing.T) {
++	body := `{"opaque":9007199254740993,"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral","ttl":"5m"}}],"system":[{"type":"text","text":"untouched duplicate","cache_control":{"type":"ephemeral","ttl":"5m"}}],"messages":[{"role":"user","content":[{"type":"text","text":"m","cache_control":{"type":"ephemeral","ttl":"1h"}}]}],"unknown":{"decimal":1.2300e+04,"text":"\u4f60\u597d"}}`
++	want := strings.Replace(body, `"ttl":"5m"`, `"ttl":"1h"`, 1)
++	out := enforceCacheControlLimit([]byte(body))
++	require.Equal(t, want, string(out), "both passes must keep first-key semantics and preserve unrelated bytes")
++	require.Equal(t, out, enforceCacheControlLimit(out), "a valid TTL order must remain byte-for-byte unchanged")
++}
++
++func cacheControlPathsBenchmarkBody(payloadBytes int) []byte {
++	return []byte(`{"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral","ttl":"5m"}}],"messages":[{"role":"user","content":[{"type":"text","text":"` + strings.Repeat("x", payloadBytes) + `","cache_control":{"type":"ephemeral","ttl":"5m"}}]}],"tools":[{"name":"probe","cache_control":{"type":"ephemeral","ttl":"5m"}}]}`)
++}
++
++var benchmarkCacheControlPathsSnapshotSink cacheControlPathsSnapshot
++var benchmarkCacheControlPathsBodySink []byte
++
++// Fixed breakpoint count, increasing opaque message content: cumulative
++// allocation bytes should stay bounded instead of copying messages per scan.
++func BenchmarkCacheControlPathsLargeContent(b *testing.B) {
++	for _, size := range []struct {
++		name  string
++		bytes int
++	}{
++		{name: "4KiB", bytes: 4 << 10},
++		{name: "1MiB", bytes: 1 << 20},
++		{name: "8MiB", bytes: 8 << 20},
++	} {
++		body := cacheControlPathsBenchmarkBody(size.bytes)
++		b.Run(size.name+"/Collect", func(b *testing.B) {
++			b.SetBytes(int64(len(body)))
++			b.ReportAllocs()
++			b.ResetTimer()
++			for i := 0; i < b.N; i++ {
++				benchmarkCacheControlPathsSnapshotSink = snapshotCacheControlPaths(body)
++			}
++		})
++		b.Run(size.name+"/EnforceUnchanged", func(b *testing.B) {
++			if got := enforceCacheControlLimit(body); !bytes.Equal(body, got) {
++				b.Fatal("fixture should not require cache-control changes")
++			}
++			b.SetBytes(int64(len(body)))
++			b.ReportAllocs()
++			b.ResetTimer()
++			for i := 0; i < b.N; i++ {
++				benchmarkCacheControlPathsBodySink = enforceCacheControlLimit(body)
++			}
++		})
++	}
++}
+diff --git a/backend/internal/service/gateway_claude_oauth_body.go b/backend/internal/service/gateway_claude_oauth_body.go
+index 8a3eea412..355be46b7 100644
+--- a/backend/internal/service/gateway_claude_oauth_body.go
++++ b/backend/internal/service/gateway_claude_oauth_body.go
+@@ -993,7 +993,10 @@ type cacheControlPath struct {
+ }
+ 
+ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath, messagePaths []string, toolPaths []string, systemPaths []string) {
+-	system := gjson.GetBytes(body, "system")
++	// Borrow only during this synchronous scan. Returned paths/logs own their
++	// strings; no result may retain the request body after this function returns.
++	view := openAIWSPayloadStringView(body)
++	system := gjson.Get(view, "system")
+ 	if system.IsArray() {
+ 		sysIndex := 0
+ 		system.ForEach(func(_, item gjson.Result) bool {
+@@ -1013,7 +1016,7 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath,
+ 		})
+ 	}
+ 
+-	messages := gjson.GetBytes(body, "messages")
++	messages := gjson.Get(view, "messages")
+ 	if messages.IsArray() {
+ 		msgIndex := 0
+ 		messages.ForEach(func(_, msg gjson.Result) bool {
+@@ -1041,7 +1044,7 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath,
+ 		})
+ 	}
+ 
+-	tools := gjson.GetBytes(body, "tools")
++	tools := gjson.Get(view, "tools")
+ 	if tools.IsArray() {
+ 		toolIndex := 0
+ 		tools.ForEach(func(_, tool gjson.Result) bool {
+diff --git a/backend/internal/service/gateway_request.go b/backend/internal/service/gateway_request.go
+index 0e52e00ec..f68d87a5a 100644
+--- a/backend/internal/service/gateway_request.go
++++ b/backend/internal/service/gateway_request.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
++	"hash/maphash"
+ 	"math"
+ 	"regexp"
+ 	"sort"
+@@ -60,13 +61,17 @@ type jsonRange struct {
+ }
+ 
+ type RequestBodyRef struct {
+-	data []byte
++	data   []byte
++	parsed *gatewayRequestBodyState
+ }
+ 
++// NewRequestBodyRef borrows immutable data. Callers must replace the body rather
++// than modify its backing storage while any request or attempt still borrows it.
+ func NewRequestBodyRef(data []byte) *RequestBodyRef {
+ 	return &RequestBodyRef{data: data}
+ }
+ 
++// Bytes returns a read-only view; use Replace to invalidate parsed state.
+ func (b *RequestBodyRef) Bytes() []byte {
+ 	if b == nil {
+ 		return nil
+@@ -86,6 +91,55 @@ func (b *RequestBodyRef) Replace(data []byte) {
+ 		return
+ 	}
+ 	b.data = data
++	// Even replacing with the same slice invalidates the snapshot. Callers may
++	// have reused storage after releasing its previous immutable view.
++	b.parsed = nil
++}
++
++// gatewayRequestBodySeed keys body fingerprints for this process only.
++var gatewayRequestBodySeed = maphash.MakeSeed()
++
++// gatewayRequestBodyState is an immutable snapshot of a successful parse. It
++// owns scalar strings and stores only offsets for large fields, so sharing it
++// between attempts cannot retain an old request body or mutable request state.
++type gatewayRequestBodyState struct {
++	model, metadataUserID, outputEffort, speed string
++	stream, hasSystem, thinkingEnabled         bool
++	maxTokens                                  int
++	protocol                                   string
++	systemRange, messagesRange, inputRange     jsonRange
++	fingerprint                                uint64
++}
++
++func (p *ParsedRequest) saveBodyState() {
++	p.Body.parsed = &gatewayRequestBodyState{
++		model: p.Model, metadataUserID: p.MetadataUserID, outputEffort: p.OutputEffort, speed: p.Speed,
++		stream: p.Stream, hasSystem: p.HasSystem, thinkingEnabled: p.ThinkingEnabled, maxTokens: p.MaxTokens,
++		protocol: p.protocol, systemRange: p.systemRange, messagesRange: p.messagesRange, inputRange: p.inputRange,
++		fingerprint: maphash.Bytes(gatewayRequestBodySeed, p.Body.Bytes()),
++	}
++}
++
++func (p *ParsedRequest) restoreBodyState(state *gatewayRequestBodyState) {
++	p.Model, p.MetadataUserID, p.OutputEffort, p.Speed = state.model, state.metadataUserID, state.outputEffort, state.speed
++	p.Stream, p.HasSystem, p.ThinkingEnabled, p.MaxTokens = state.stream, state.hasSystem, state.thinkingEnabled, state.maxTokens
++	p.protocol = state.protocol
++	p.systemRange, p.messagesRange, p.inputRange = state.systemRange, state.messagesRange, state.inputRange
++}
++
++func (p *ParsedRequest) reusableBodyState(data []byte) *gatewayRequestBodyState {
++	if p.Body == nil || p.Body.parsed == nil || p.Body.parsed.protocol != p.protocol {
++		return nil
++	}
++	current := p.Body.Bytes()
++	// Identity alone would trust the immutable borrowing contract. The content
++	// fingerprint also catches in-place edits of shared storage, which then
++	// reparse as before; it costs one hash pass instead of a full parse.
++	if len(data) == 0 || len(data) != len(current) || &data[0] != &current[0] ||
++		maphash.Bytes(gatewayRequestBodySeed, data) != p.Body.parsed.fingerprint {
++		return nil
++	}
++	return p.Body.parsed
+ }
+ 
+ func missingJSONRange() jsonRange {
+@@ -180,6 +234,7 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
+ 	if parsed == nil || parsed.Body == nil {
+ 		return fmt.Errorf("empty request body")
+ 	}
++	parsed.Body.parsed = nil
+ 
+ 	bodyBytes := parsed.Body.Bytes()
+ 	if !gjson.ValidBytes(bodyBytes) {
+@@ -243,6 +298,7 @@ func parseGatewayRequestCurrentBody(parsed *ParsedRequest, protocol string) erro
+ 	}
+ 
+ 	setGatewayRequestRanges(parsed, protocol, jsonStr)
++	parsed.saveBodyState()
+ 	return nil
+ }
+ 
+@@ -420,6 +476,13 @@ func (p *ParsedRequest) CloneForBody(body []byte) (*ParsedRequest, error) {
+ 	clone := *p
+ 	clone.Body = NewRequestBodyRef(body)
+ 	clone.OnUpstreamAccepted = nil
++	if state := p.reusableBodyState(body); state != nil {
++		clone.Body.parsed = state
++		// Restore derived fields just as reparsing would; callers can have
++		// temporarily overridden exported fields such as Model for routing.
++		clone.restoreBodyState(state)
++		return &clone, nil
++	}
+ 	if err := refreshGatewayRequestRanges(&clone, clone.protocol); err != nil {
+ 		return nil, err
+ 	}
+@@ -431,6 +494,10 @@ func (p *ParsedRequest) ReplaceBody(data []byte) error {
+ 	if p == nil {
+ 		return fmt.Errorf("parse request: empty request")
+ 	}
++	if state := p.reusableBodyState(data); state != nil {
++		p.restoreBodyState(state)
++		return nil
++	}
+ 	if p.Body == nil {
+ 		p.Body = NewRequestBodyRef(data)
+ 	} else {
+@@ -1428,7 +1495,117 @@ func filterThinkingBlocksInternal(body []byte, alwaysThinking bool) []byte {
+ 		!bytes.Contains(body, []byte(`"thinking" :`)) {
+ 		return body
+ 	}
++	// Signed thinking history and top-level thinking config defeat the substring
++	// check on most requests; decide without decoding when nothing is dropped.
++	if needs, decided := thinkingBlocksNeedFiltering(body, alwaysThinking); decided && !needs {
++		return body
++	}
++	return filterThinkingBlocksDecoded(body, alwaysThinking)
++}
++
++// thinkingBlocksNeedFiltering reports whether filterThinkingBlocksDecoded would
++// drop a block, mirroring its decisions on borrowed gjson views with
++// encoding/json's last-wins rule for duplicate keys. The body is borrowed only
++// during this call. A non-object root is left to the decoding path
++// (decided=false). Invalid JSON needs no separate scan: the decoding path
++// returns it unchanged, so either answer yields the same body.
++func thinkingBlocksNeedFiltering(body []byte, alwaysThinking bool) (needs, decided bool) {
++	view := openAIWSPayloadStringView(body)
++	root := gjson.Parse(view)
++	if !root.IsObject() {
++		return false, false
++	}
++	var thinking, messages gjson.Result
++	root.ForEach(func(key, value gjson.Result) bool {
++		switch key.String() {
++		case "thinking":
++			thinking = value
++		case "messages":
++			messages = value
++		}
++		return true
++	})
++
++	thinkingEnabled := alwaysThinking
++	if thinking.IsObject() {
++		var thinkType gjson.Result
++		thinking.ForEach(func(key, value gjson.Result) bool {
++			if key.String() == "type" {
++				thinkType = value
++			}
++			return true
++		})
++		if thinkType.Type == gjson.String && (thinkType.Str == "enabled" || thinkType.Str == "adaptive") {
++			thinkingEnabled = true
++		}
++	}
++	if !messages.IsArray() {
++		return false, true
++	}
++
++	messages.ForEach(func(_, msg gjson.Result) bool {
++		if !msg.IsObject() {
++			return true
++		}
++		var role, content gjson.Result
++		msg.ForEach(func(key, value gjson.Result) bool {
++			switch key.String() {
++			case "role":
++				role = value
++			case "content":
++				content = value
++			}
++			return true
++		})
++		if !content.IsArray() {
++			return true
++		}
++		isAssistant := role.Type == gjson.String && role.Str == "assistant"
++		content.ForEach(func(_, block gjson.Result) bool {
++			if !block.IsObject() {
++				return true
++			}
++			var blockType, data, signature gjson.Result
++			hasThinking := false
++			block.ForEach(func(key, value gjson.Result) bool {
++				switch key.String() {
++				case "type":
++					blockType = value
++				case "data":
++					data = value
++				case "signature":
++					signature = value
++				case "thinking":
++					hasThinking = true
++				}
++				return true
++			})
++			typ := ""
++			if blockType.Type == gjson.String {
++				typ = blockType.Str
++			}
++			switch {
++			case typ == "thinking" || typ == "redacted_thinking":
++				if thinkingEnabled && isAssistant {
++					if alwaysThinking && typ == "redacted_thinking" && data.Type == gjson.String && data.Str != "" {
++						return true
++					}
++					if signature.Type == gjson.String && signature.Str != "" && signature.Str != antigravity.DummyThoughtSignature {
++						return true
++					}
++				}
++				needs = true
++			case typ == "" && hasThinking:
++				needs = true
++			}
++			return !needs
++		})
++		return !needs
++	})
++	return needs, true
++}
+ 
++func filterThinkingBlocksDecoded(body []byte, alwaysThinking bool) []byte {
+ 	var req map[string]any
+ 	if err := json.Unmarshal(body, &req); err != nil {
+ 		return body
+diff --git a/backend/internal/service/gateway_request_reuse_test.go b/backend/internal/service/gateway_request_reuse_test.go
+new file mode 100644
+index 000000000..c580dca04
+--- /dev/null
++++ b/backend/internal/service/gateway_request_reuse_test.go
+@@ -0,0 +1,215 @@
++package service
++
++import (
++	"bytes"
++	"sync"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/domain"
++	"github.com/stretchr/testify/require"
++)
++
++func TestGatewayRequestBodyReuse_RestoresDerivedStateAndIsolatesAttempts(t *testing.T) {
++	body := []byte(`{"model":"claude-sonnet-4-5","model":"ignored","stream":true,"metadata":{"user_id":"session"},"system":null,"messages":[{"role":"user","content":"first"}],"messages":[],"thinking":{"type":"enabled"},"output_config":{"effort":"high"},"speed":"fast","max_tokens":123,"unknown":{"number":1.00}}`)
++	parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), domain.PlatformAnthropic)
++	require.NoError(t, err)
++	want := *parsed.Body.parsed
++	groupID := int64(17)
++	parsed.GroupID = &groupID
++	parsed.SessionContext = &SessionContext{APIKeyID: 9}
++	callbackCalled := false
++	parsed.OnUpstreamAccepted = func() { callbackCalled = true }
++
++	// Exported fields are mutable routing inputs, not the authoritative parse.
++	clearGatewayRequestDerivedState(parsed)
++	parsed.Model = "temporary-routing-override"
++	first, err := parsed.CloneForBody(body)
++	require.NoError(t, err)
++	require.NotSame(t, parsed.Body, first.Body)
++	require.Nil(t, first.OnUpstreamAccepted)
++	require.Same(t, parsed.SessionContext, first.SessionContext)
++	require.Same(t, parsed.GroupID, first.GroupID)
++	require.Equal(t, "claude-sonnet-4-5", first.Model)
++	require.Equal(t, `[{"role":"user","content":"first"}]`, string(first.MessagesRaw()))
++	require.Equal(t, body, first.Body.Bytes())
++	first.saveBodyState()
++	require.Equal(t, want, *first.Body.parsed)
++
++	require.NoError(t, parsed.ReplaceBody(body))
++	parsed.saveBodyState()
++	require.Equal(t, want, *parsed.Body.parsed)
++	parsed.OnUpstreamAccepted()
++	require.True(t, callbackCalled)
++	second, err := parsed.CloneForBody(body)
++	require.NoError(t, err)
++	require.NoError(t, first.ReplaceBody([]byte(`{"model":"other","messages":[{"content":"replacement"}]}`)))
++	require.Equal(t, "other", first.Model)
++	require.Equal(t, "claude-sonnet-4-5", parsed.Model)
++	require.Equal(t, body, parsed.Body.Bytes())
++	require.Equal(t, body, second.Body.Bytes())
++	require.Equal(t, string(parsed.MessagesRaw()), string(second.MessagesRaw()))
++}
++
++func TestGatewayRequestBodyReuse_InvalidatesReplacedAndUnparsedBodies(t *testing.T) {
++	for _, mode := range []string{"manual", "replace-ref", "replace-storage", "mutate-in-place", "protocol"} {
++		t.Run(mode, func(t *testing.T) {
++			body := []byte(`{"model":"old","system":"system","messages":[1],"contents":[2]}`)
++			parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), domain.PlatformAnthropic)
++			require.NoError(t, err)
++			switch mode {
++			case "manual":
++				parsed = &ParsedRequest{Body: NewRequestBodyRef(body), Model: "unparsed", protocol: domain.PlatformAnthropic}
++			case "replace-ref":
++				parsed.Body = NewRequestBodyRef(body)
++			case "replace-storage":
++				// Release the previous immutable view before reusing its storage.
++				parsed.Body.Replace(nil)
++				copy(body, bytes.Replace(body, []byte(`"old"`), []byte(`"new"`), 1))
++				parsed.Body.Replace(body)
++			case "mutate-in-place":
++				// Violates the borrowing contract; the fingerprint still forces a reparse.
++				copy(body, bytes.Replace(body, []byte(`"old"`), []byte(`"new"`), 1))
++			case "protocol":
++				parsed.protocol = domain.PlatformGemini
++			}
++			clone, err := parsed.CloneForBody(body)
++			require.NoError(t, err)
++			require.NoError(t, parsed.ReplaceBody(body))
++			for _, actual := range []*ParsedRequest{parsed, clone} {
++				if mode == "replace-storage" || mode == "mutate-in-place" {
++					require.Equal(t, "new", actual.Model)
++				} else {
++					require.Equal(t, "old", actual.Model)
++				}
++				if mode == "protocol" {
++					require.Equal(t, "[2]", string(actual.MessagesRaw()))
++					require.Nil(t, actual.SystemRaw())
++				} else {
++					require.Equal(t, "[1]", string(actual.MessagesRaw()))
++				}
++			}
++		})
++	}
++}
++
++func TestGatewayRequestBodyReuse_ExplicitReplaceSameSliceInvalidates(t *testing.T) {
++	body := []byte(`{"model":"old"}`)
++	parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), "")
++	require.NoError(t, err)
++	parsed.Body.Replace(body)
++	require.Nil(t, parsed.Body.parsed)
++	require.NoError(t, parsed.ReplaceBody(body))
++	require.NotNil(t, parsed.Body.parsed)
++}
++
++func TestGatewayRequestBodyReuse_FailedParseCannotBeReused(t *testing.T) {
++	for _, invalid := range []string{`{"messages":`, `{"model":123}`, `{"stream":"true"}`, `{"model":"claude-sonnet-4[1m]","stream":0}`} {
++		t.Run(invalid, func(t *testing.T) {
++			parsed, err := ParseGatewayRequest(NewRequestBodyRef([]byte(`{"model":"valid","system":"old","messages":[1]}`)), domain.PlatformAnthropic)
++			require.NoError(t, err)
++			require.Error(t, parsed.ReplaceBody([]byte(invalid)))
++			require.Nil(t, parsed.Body.parsed)
++			require.Nil(t, parsed.SystemRaw())
++			require.Nil(t, parsed.MessagesRaw())
++			_, err = parsed.CloneForBody(parsed.Body.Bytes())
++			require.Error(t, err)
++			require.Error(t, parsed.ReplaceBody(parsed.Body.Bytes()))
++			require.Nil(t, parsed.Body.parsed)
++			require.NoError(t, parsed.ReplaceBody([]byte(`{"model":"recovered","messages":[2]}`)))
++			require.Equal(t, "recovered", parsed.Model)
++			require.Equal(t, "[2]", string(parsed.MessagesRaw()))
++		})
++	}
++}
++
++func TestGatewayRequestBodyReuse_NormalizedBodyAndProtocolRanges(t *testing.T) {
++	for _, tt := range []struct{ protocol, body string }{
++		{domain.PlatformAnthropic, `{"model":"claude-sonnet-4[1m]","system":"sys","messages":[{"content":"hello"}]}`},
++		{domain.PlatformGemini, `{"model":"gemini","systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"parts":[{"text":"hi"}]}]}`},
++		{"responses", `{"model":"gpt-5.4","input":[{"type":"message","content":"hi"}]}`},
++	} {
++		t.Run(tt.protocol, func(t *testing.T) {
++			original := []byte(tt.body)
++			parsed, err := ParseGatewayRequest(NewRequestBodyRef(original), tt.protocol)
++			require.NoError(t, err)
++			for _, body := range [][]byte{original, parsed.Body.Bytes(), bytes.Clone(parsed.Body.Bytes())} {
++				clone, err := parsed.CloneForBody(body)
++				require.NoError(t, err)
++				require.NoError(t, clone.ReplaceBody(clone.Body.Bytes()))
++				require.Equal(t, parsed.Model, clone.Model)
++				require.Equal(t, parsed.Body.Bytes(), clone.Body.Bytes())
++				require.Equal(t, parsed.SystemRaw(), clone.SystemRaw())
++				require.Equal(t, parsed.MessagesRaw(), clone.MessagesRaw())
++				require.Equal(t, parsed.InputRaw(), clone.InputRaw())
++			}
++		})
++	}
++}
++
++func TestGatewayRequestBodyReuse_ConcurrentIndependentAttempts(t *testing.T) {
++	body := []byte(`{"model":"original","messages":[{"content":"hello"}]}`)
++	parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), domain.PlatformAnthropic)
++	require.NoError(t, err)
++	var wg sync.WaitGroup
++	for range 16 {
++		wg.Go(func() {
++			clone, err := parsed.CloneForBody(body)
++			if err != nil {
++				t.Error(err)
++				return
++			}
++			if err := clone.ReplaceBody([]byte(`{"model":"attempt","messages":[]}`)); err != nil {
++				t.Error(err)
++			}
++		})
++	}
++	wg.Wait()
++	require.Equal(t, "original", parsed.Model)
++	require.Equal(t, body, parsed.Body.Bytes())
++}
++
++func BenchmarkGatewayRequestBodyReuse(b *testing.B) {
++	for _, size := range []struct {
++		name  string
++		bytes int
++	}{{"4KiB", 4 << 10}, {"1MiB", 1 << 20}, {"8MiB", 8 << 20}} {
++		body := buildLargeAnthropicMessagesBody(size.bytes, false)
++		parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), domain.PlatformAnthropic)
++		if err != nil {
++			b.Fatal(err)
++		}
++		for _, reuse := range []bool{false, true} {
++			name := "Reparse"
++			if reuse {
++				name = "Reuse"
++			}
++			b.Run(size.name+"/"+name, func(b *testing.B) {
++				b.ReportAllocs()
++				b.SetBytes(int64(len(body)))
++				for i := 0; i < b.N; i++ {
++					if !reuse {
++						parsed.Body.Replace(body)
++					}
++					attempt, err := parsed.CloneForBody(body)
++					if err != nil {
++						b.Fatal(err)
++					}
++					// Unchanged compatibility and cache-control phases.
++					for range 2 {
++						if !reuse {
++							attempt.Body.Replace(body)
++						}
++						if err := attempt.ReplaceBody(body); err != nil {
++							b.Fatal(err)
++						}
++					}
++					benchmarkIntSink = len(attempt.MessagesRaw())
++				}
++			})
++			// Reparse deliberately invalidates the source snapshot.
++			if err := parsed.ReplaceBody(body); err != nil {
++				b.Fatal(err)
++			}
++		}
++	}
++}
+diff --git a/backend/internal/service/gateway_service_benchmark_test.go b/backend/internal/service/gateway_service_benchmark_test.go
+index 42a711db9..0997253ba 100644
+--- a/backend/internal/service/gateway_service_benchmark_test.go
++++ b/backend/internal/service/gateway_service_benchmark_test.go
+@@ -1,6 +1,7 @@
+ package service
+ 
+ import (
++	"context"
+ 	"strconv"
+ 	"strings"
+ 	"testing"
+@@ -136,7 +137,7 @@ func BenchmarkOpenAIResponses_LargeInputRawPatch(b *testing.B) {
+ 				view := newOpenAIRequestView(body)
+ 				view.MarkPatchSet("instructions", "You are a helpful coding assistant.")
+ 				view.MarkPatchSet("reasoning.effort", "none")
+-				patched, err := view.ApplyPatches()
++				patched, err := view.ApplyPatches(context.Background())
+ 				if err != nil {
+ 					b.Fatalf("应用 OpenAI raw patch 失败: %v", err)
+ 				}
+diff --git a/backend/internal/service/gateway_thinking_filter_precheck_test.go b/backend/internal/service/gateway_thinking_filter_precheck_test.go
+new file mode 100644
+index 000000000..b7cb36c4d
+--- /dev/null
++++ b/backend/internal/service/gateway_thinking_filter_precheck_test.go
+@@ -0,0 +1,123 @@
++package service
++
++import (
++	"bytes"
++	"encoding/json"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
++	"github.com/stretchr/testify/require"
++)
++
++// The precheck may only skip the decoding path when that path would return the
++// body unchanged; every case is checked against filterThinkingBlocksDecoded.
++func TestThinkingBlocksNeedFilteringMatchesDecodingPath(t *testing.T) {
++	dummy := antigravity.DummyThoughtSignature
++	bodies := []string{
++		`{"thinking":{"type":"adaptive"},"messages":[{"role":"user","content":"hi"}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"sig"},{"type":"text","text":"a"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":""}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"` + dummy + `"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":7}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"user","content":[{"type":"thinking","thinking":"t","signature":"sig"}]}]}`,
++		`{"thinking":{"type":"disabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"sig"}]}]}`,
++		`{"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"sig"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"redacted_thinking","data":"d"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"redacted_thinking","data":""}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"thinking":"untyped"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":7,"thinking":null}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"text","text":"\"thinking\": quoted"}]}]}`,
++		// Duplicate keys: encoding/json keeps the last value.
++		`{"thinking":{"type":"enabled"},"thinking":{"budget_tokens":1},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"sig"}]}]}`,
++		`{"thinking":{"type":"disabled","type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"sig"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"user","role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"sig"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","signature":"sig","signature":""}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","signature":"sig"}],"content":"plain"}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[],"messages":[{"role":"assistant","content":[{"type":"thinking","signature":""}]}]}`,
++		// Escaped keys and values.
++		`{"thinking":{"\u0074ype":"enabled"},"messages":[{"role":"assistant","content":[{"\u0074ype":"thinking","thinking":"t","signature":"sig"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","\u0073ignature":""}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"\u0061ssistant","content":[{"type":"\u0074hinking","thinking":"t","signature":"\u0073ig"}]}]}`,
++		`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"\u0000"}]}]}`,
++		// Shapes the decoder rejects or ignores.
++		`{"thinking":{"type":"enabled"},"messages":"none"}`,
++		`{"thinking":{"type":"enabled"},"messages":[null,1,{"role":"assistant","content":null},{"role":"assistant","content":[null,"x"]}]}`,
++		`[{"thinking":{}}]`,
++		`{"thinking":{"type":"enabled"},"messages":[`,
++		`{"thinking":{"type":"enabled"}} {}`,
++	}
++	for _, body := range bodies {
++		for _, alwaysThinking := range []bool{false, true} {
++			decoded := filterThinkingBlocksDecoded([]byte(body), alwaysThinking)
++			changed := !bytes.Equal(decoded, []byte(body))
++			needs, decided := thinkingBlocksNeedFiltering([]byte(body), alwaysThinking)
++			if decided && json.Valid([]byte(body)) {
++				require.Equal(t, changed, needs, "alwaysThinking=%v body=%s", alwaysThinking, body)
++			}
++			require.Equal(t, string(decoded), string(filterThinkingBlocksInternal([]byte(body), alwaysThinking)), "alwaysThinking=%v body=%s", alwaysThinking, body)
++		}
++	}
++}
++
++func signedThinkingHistoryBody() []byte {
++	var b strings.Builder
++	_, _ = b.WriteString(`{"model":"claude-sonnet-4-5","thinking":{"type":"adaptive"},"messages":[`)
++	for i := 0; i < 200; i++ {
++		if i > 0 {
++			_ = b.WriteByte(',')
++		}
++		_, _ = b.WriteString(`{"role":"user","content":[{"type":"text","text":"` + strings.Repeat("q", 2048) + `"}]},`)
++		_, _ = b.WriteString(`{"role":"assistant","content":[{"type":"thinking","thinking":"reason","signature":"sig-valid"},{"type":"text","text":"answer"}]}`)
++	}
++	_, _ = b.WriteString(`]}`)
++	return []byte(b.String())
++}
++
++func TestFilterThinkingBlocksSignedHistorySkipsDecode(t *testing.T) {
++	body := signedThinkingHistoryBody()
++	allocs := testing.AllocsPerRun(5, func() {
++		got := filterThinkingBlocksInternal(body, false)
++		if &got[0] != &body[0] {
++			t.Fatal("valid signed history must be returned unchanged")
++		}
++	})
++	require.Less(t, allocs, float64(16), "allocs: %v", allocs)
++}
++
++func FuzzThinkingBlocksNeedFiltering(f *testing.F) {
++	f.Add([]byte(`{"thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"t","signature":"sig"}]}]}`), false)
++	f.Add([]byte(`{"thinking":{"type":"adaptive"},"messages":[{"role":"assistant","content":[{"type":"redacted_thinking","data":"d"},{"thinking":1}]}]}`), true)
++	f.Add([]byte(`{"messages":[{"role":"user","role":"assistant","content":[{"type":"thinking","signature":"","signature":"s"}]}]}`), true)
++	f.Fuzz(func(t *testing.T, body []byte, alwaysThinking bool) {
++		original := append([]byte(nil), body...)
++		decoded := filterThinkingBlocksDecoded(original, alwaysThinking)
++		needs, decided := thinkingBlocksNeedFiltering(body, alwaysThinking)
++		if !bytes.Equal(filterThinkingBlocksInternal(body, alwaysThinking), decoded) {
++			t.Fatalf("filter output differs from decoding path for %q", body)
++		}
++		if decided && json.Valid(original) && needs == bytes.Equal(decoded, original) {
++			t.Fatalf("precheck needs=%v disagrees with decoding path for %q", needs, body)
++		}
++	})
++}
++
++// Decoded is the previous cost of a request whose signed history needs no
++// filtering; Precheck is the current path for the same body.
++func BenchmarkFilterThinkingBlocksSignedHistory(b *testing.B) {
++	body := signedThinkingHistoryBody()
++	b.Run("Decoded", func(b *testing.B) {
++		b.ReportAllocs()
++		b.SetBytes(int64(len(body)))
++		for i := 0; i < b.N; i++ {
++			_ = filterThinkingBlocksDecoded(body, false)
++		}
++	})
++	b.Run("Precheck", func(b *testing.B) {
++		b.ReportAllocs()
++		b.SetBytes(int64(len(body)))
++		for i := 0; i < b.N; i++ {
++			_ = filterThinkingBlocksInternal(body, false)
++		}
++	})
++}
+diff --git a/backend/internal/service/gemini_chat_completions_compat_service.go b/backend/internal/service/gemini_chat_completions_compat_service.go
+index 8e1cd1aa2..0a339d766 100644
+--- a/backend/internal/service/gemini_chat_completions_compat_service.go
++++ b/backend/internal/service/gemini_chat_completions_compat_service.go
+@@ -1,7 +1,6 @@
+ package service
+ 
+ import (
+-	"bufio"
+ 	"bytes"
+ 	"context"
+ 	"encoding/json"
+@@ -266,7 +265,7 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+ 		clientDisconnect = streamRes.clientDisconnect
+ 		streamFinished = streamRes.finished
+ 	} else if useUpstreamStream {
+-		collected, usageObj, err := collectGeminiSSE(resp.Body, account.Type == AccountTypeOAuth)
++		collected, usageObj, err := collectGeminiSSE(s.cfg, resp.Body, account.Type == AccountTypeOAuth)
+ 		if err != nil {
+ 			return nil, s.writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
+ 		}
+@@ -597,11 +596,11 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+ 	nextBlockIndex := 0
+ 	openBlockIndex := -1
+ 	openBlockType := ""
+-	seenText := ""
+-	seenThought := ""
++	var seenText geminiTextDelta
++	var seenThought geminiTextDelta
+ 	openToolIndex := -1
+ 	openToolName := ""
+-	seenToolJSON := ""
++	var seenToolJSON geminiTextDelta
+ 
+ 	closeOpenBlock := func() bool {
+ 		if openBlockIndex < 0 {
+@@ -619,13 +618,13 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+ 		disconnected := emitAnthropicEvent(&apicompat.AnthropicStreamEvent{Type: "content_block_stop"})
+ 		openToolIndex = -1
+ 		openToolName = ""
+-		seenToolJSON = ""
++		seenToolJSON.reset()
+ 		return disconnected
+ 	}
+ 
+-	reader := bufio.NewReader(resp.Body)
++	reader := newBoundedSSELineReader(resp.Body, s.cfg)
+ 	for {
+-		line, err := reader.ReadString('\n')
++		line, err := reader.ReadLineString()
+ 		if len(line) > 0 {
+ 			trimmed := strings.TrimRight(line, "\r\n")
+ 			if strings.HasPrefix(trimmed, "data:") {
+@@ -654,8 +653,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+ 
+ 						for _, part := range extractGeminiParts(geminiResp) {
+ 							if text, ok := part["text"].(string); ok && isGeminiThoughtPart(part) {
+-								delta, newSeen := computeGeminiTextDelta(seenThought, text)
+-								seenThought = newSeen
++								delta := seenThought.next(text)
+ 								if delta == "" {
+ 									continue
+ 								}
+@@ -694,8 +692,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+ 										return streamResult(), nil
+ 									}
+ 								}
+-								delta, newSeen := computeGeminiTextDelta(seenText, text)
+-								seenText = newSeen
++								delta := seenText.next(text)
+ 								if delta == "" {
+ 									continue
+ 								}
+@@ -775,8 +772,7 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsStreamingResponseFrom
+ 										argsJSONText = string(b)
+ 									}
+ 								}
+-								delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
+-								seenToolJSON = newSeen
++								delta := seenToolJSON.next(argsJSONText)
+ 								if delta != "" {
+ 									if emitAnthropicEvent(&apicompat.AnthropicStreamEvent{
+ 										Type: "content_block_delta",
+diff --git a/backend/internal/service/gemini_messages_compat_service.go b/backend/internal/service/gemini_messages_compat_service.go
+index 6f4edef96..9c1ff6d8c 100644
+--- a/backend/internal/service/gemini_messages_compat_service.go
++++ b/backend/internal/service/gemini_messages_compat_service.go
+@@ -1,7 +1,6 @@
+ package service
+ 
+ import (
+-	"bufio"
+ 	"bytes"
+ 	"context"
+ 	"crypto/rand"
+@@ -1034,7 +1033,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+ 		streamFinished = streamRes.finished
+ 	} else {
+ 		if useUpstreamStream {
+-			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
++			collected, usageObj, err := collectGeminiSSE(s.cfg, resp.Body, true)
+ 			if err != nil {
+ 				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
+ 			}
+@@ -1565,7 +1564,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+ 	} else {
+ 		if useUpstreamStream {
+ 			var best geminiResponseSignal
+-			collected, usageObj, stats, err := collectGeminiSSEObserved(resp.Body, isOAuth, func(rawBytes []byte) {
++			collected, usageObj, stats, err := collectGeminiSSEObserved(s.cfg, resp.Body, isOAuth, func(rawBytes []byte) {
+ 				if sig, ok := detectGeminiResponseSignal(rawBytes); ok && sig.Kind > best.Kind {
+ 					best = sig
+ 				}
+@@ -2210,16 +2209,16 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+ 	nextBlockIndex := 0
+ 	openBlockIndex := -1
+ 	openBlockType := ""
+-	seenText := ""
+-	seenThought := ""
++	var seenText geminiTextDelta
++	var seenThought geminiTextDelta
+ 	openToolIndex := -1
+ 	openToolID := ""
+ 	openToolName := ""
+-	seenToolJSON := ""
++	var seenToolJSON geminiTextDelta
+ 
+-	reader := bufio.NewReader(resp.Body)
++	reader := newBoundedSSELineReader(resp.Body, s.cfg)
+ 	for {
+-		line, err := reader.ReadString('\n')
++		line, err := reader.ReadLineString()
+ 		if err != nil && !errors.Is(err, io.EOF) {
+ 			if geminiStreamAbortedWithBillableOutput(c, err, &usage) {
+ 				logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] Client disconnected during messages stream, billing collected usage: %v", err)
+@@ -2270,8 +2269,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+ 		parts := extractGeminiParts(geminiResp)
+ 		for _, part := range parts {
+ 			if text, ok := part["text"].(string); ok && isGeminiThoughtPart(part) {
+-				delta, newSeen := computeGeminiTextDelta(seenThought, text)
+-				seenThought = newSeen
++				delta := seenThought.next(text)
+ 				if delta == "" {
+ 					continue
+ 				}
+@@ -2282,7 +2280,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+ 					})
+ 					openToolIndex = -1
+ 					openToolName = ""
+-					seenToolJSON = ""
++					seenToolJSON.reset()
+ 				}
+ 				if openBlockType != "thinking" {
+ 					if openBlockIndex >= 0 {
+@@ -2333,11 +2331,10 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+ 					})
+ 					openToolIndex = -1
+ 					openToolName = ""
+-					seenToolJSON = ""
++					seenToolJSON.reset()
+ 				}
+ 
+-				delta, newSeen := computeGeminiTextDelta(seenText, text)
+-				seenText = newSeen
++				delta := seenText.next(text)
+ 				if delta == "" {
+ 					continue
+ 				}
+@@ -2403,7 +2400,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+ 					})
+ 					openToolIndex = -1
+ 					openToolName = ""
+-					seenToolJSON = ""
++					seenToolJSON.reset()
+ 				}
+ 
+ 				if openToolIndex < 0 {
+@@ -2439,8 +2436,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
+ 					}
+ 				}
+ 
+-				delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
+-				seenToolJSON = newSeen
++				delta := seenToolJSON.next(argsJSONText)
+ 				if delta != "" {
+ 					writeSSE(c.Writer, "content_block_delta", map[string]any{
+ 						"type":  "content_block_delta",
+@@ -2566,8 +2562,8 @@ func unwrapIfNeeded(isOAuth bool, raw []byte) []byte {
+ 	return inner
+ }
+ 
+-func collectGeminiSSE(body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsage, error) {
+-	collected, usage, _, err := collectGeminiSSEObserved(body, isOAuth, nil)
++func collectGeminiSSE(cfg *config.Config, body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsage, error) {
++	collected, usage, _, err := collectGeminiSSEObserved(cfg, body, isOAuth, nil)
+ 	return collected, usage, err
+ }
+ 
+@@ -2578,8 +2574,8 @@ type geminiSSECollectStats struct {
+ }
+ 
+ // collectGeminiSSEObserved 在聚合的同时把每个解包后的事件原文交给 observe（可为 nil）。
+-func collectGeminiSSEObserved(body io.Reader, isOAuth bool, observe func(rawBytes []byte)) (map[string]any, *ClaudeUsage, geminiSSECollectStats, error) {
+-	reader := bufio.NewReader(body)
++func collectGeminiSSEObserved(cfg *config.Config, body io.Reader, isOAuth bool, observe func(rawBytes []byte)) (map[string]any, *ClaudeUsage, geminiSSECollectStats, error) {
++	reader := newBoundedSSELineReader(body, cfg)
+ 
+ 	var last map[string]any
+ 	var lastWithParts map[string]any
+@@ -2588,7 +2584,7 @@ func collectGeminiSSEObserved(body io.Reader, isOAuth bool, observe func(rawByte
+ 	stats := geminiSSECollectStats{fallback: &geminiSSEFallbackBody{}}
+ 
+ 	for {
+-		line, err := reader.ReadString('\n')
++		line, err := reader.ReadLineString()
+ 		if len(line) > 0 {
+ 			trimmed := strings.TrimRight(line, "\r\n")
+ 			if !strings.HasPrefix(trimmed, "data:") {
+@@ -2909,7 +2905,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
+ 		return nil, errors.New("streaming not supported")
+ 	}
+ 
+-	reader := bufio.NewReader(resp.Body)
++	reader := newBoundedSSELineReader(resp.Body, s.cfg)
+ 	usage := &ClaudeUsage{}
+ 	observer := upstreamResponseModelObserverFromContext(c)
+ 	if observer == nil {
+@@ -2923,7 +2919,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
+ 	finished := false
+ 
+ 	for {
+-		line, err := reader.ReadString('\n')
++		line, err := reader.ReadLineString()
+ 		// 读错误时 line 是未以换行结尾的残行，不透传也不参与用量统计；EOF 时的末行完整有效。
+ 		if len(line) > 0 && (err == nil || errors.Is(err, io.EOF)) {
+ 			trimmed := strings.TrimRight(line, "\r\n")
+@@ -3427,22 +3423,38 @@ func extractGeminiParts(geminiResp map[string]any) []map[string]any {
+ 	return nil
+ }
+ 
+-func computeGeminiTextDelta(seen, incoming string) (delta, newSeen string) {
++// geminiTextDelta tracks the text already emitted for one stream block. Only the
++// storage differs from concatenating strings: appends are amortized, so
++// delta-mode streams no longer copy the whole prefix on every chunk.
++type geminiTextDelta struct {
++	seen strings.Builder
++}
++
++// next returns the part of incoming that has not been emitted yet.
++func (d *geminiTextDelta) next(incoming string) string {
+ 	incoming = strings.TrimSuffix(incoming, "\u0000")
+ 	if incoming == "" {
+-		return "", seen
++		return ""
+ 	}
++	seen := d.seen.String()
+ 
+ 	// Cumulative mode: incoming contains full text so far.
+ 	if strings.HasPrefix(incoming, seen) {
+-		return strings.TrimPrefix(incoming, seen), incoming
++		delta := incoming[len(seen):]
++		_, _ = d.seen.WriteString(delta)
++		return delta
+ 	}
+ 	// Duplicate/rewind: ignore.
+ 	if strings.HasPrefix(seen, incoming) {
+-		return "", seen
++		return ""
+ 	}
+ 	// Delta mode: treat incoming as incremental chunk.
+-	return incoming, seen + incoming
++	_, _ = d.seen.WriteString(incoming)
++	return incoming
++}
++
++func (d *geminiTextDelta) reset() {
++	d.seen.Reset()
+ }
+ 
+ func mapGeminiFinishReasonToClaudeStopReason(finishReason string) string {
+diff --git a/backend/internal/service/gemini_native_response_signal_test.go b/backend/internal/service/gemini_native_response_signal_test.go
+index 1005eca1e..dee07b68c 100644
+--- a/backend/internal/service/gemini_native_response_signal_test.go
++++ b/backend/internal/service/gemini_native_response_signal_test.go
+@@ -501,7 +501,7 @@ func TestGeminiForwardNative_CountTokensBodyLeavesNoMark(t *testing.T) {
+ 
+ func TestCollectGeminiSSEObserved_SeesTerminalChunkEvenWhenAggregateDropsIt(t *testing.T) {
+ 	var observed []string
+-	collected, usage, stats, err := collectGeminiSSEObserved(strings.NewReader(geminiSignalTestProhibitedSSE), false, func(raw []byte) {
++	collected, usage, stats, err := collectGeminiSSEObserved(nil, strings.NewReader(geminiSignalTestProhibitedSSE), false, func(raw []byte) {
+ 		observed = append(observed, string(raw))
+ 	})
+ 	require.NoError(t, err)
+diff --git a/backend/internal/service/gemini_sse_line_limit_test.go b/backend/internal/service/gemini_sse_line_limit_test.go
+new file mode 100644
+index 000000000..4a7298e21
+--- /dev/null
++++ b/backend/internal/service/gemini_sse_line_limit_test.go
+@@ -0,0 +1,58 @@
++package service
++
++import (
++	"bufio"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++// Upstreams behind a custom base_url can stream a line that never ends. Every
++// Gemini stream reader must stop at the configured line limit instead of
++// buffering it, and must not forward a truncated prefix.
++func TestGeminiStreamsRejectOversizedUpstreamLines(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	cfg := &config.Config{Gateway: config.GatewayConfig{MaxLineSize: 256}}
++	svc := &GeminiMessagesCompatService{cfg: cfg}
++	oversized := `data: {"candidates":[{"content":{"parts":[{"text":"` + strings.Repeat("x", 4096)
++
++	run := map[string]func(c *gin.Context, resp *http.Response) error{
++		"native": func(c *gin.Context, resp *http.Response) error {
++			_, err := svc.handleNativeStreamingResponse(c, resp, time.Now(), false, &Account{ID: 1}, "")
++			return err
++		},
++		"messages": func(c *gin.Context, resp *http.Response) error {
++			_, err := svc.handleStreamingResponse(c, resp, time.Now(), "gemini-2.5-pro")
++			return err
++		},
++		"chat_completions": func(c *gin.Context, resp *http.Response) error {
++			_, err := svc.handleChatCompletionsStreamingResponseFromGemini(c, resp, time.Now(), "gemini-2.5-pro", false, false)
++			return err
++		},
++		"collector": func(_ *gin.Context, resp *http.Response) error {
++			_, _, _, err := collectGeminiSSEObserved(cfg, resp.Body, false, nil)
++			return err
++		},
++	}
++	for name, fn := range run {
++		t.Run(name, func(t *testing.T) {
++			w := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(w)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:streamGenerateContent", nil)
++			resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(oversized))}
++
++			err := fn(c, resp)
++			require.Error(t, err)
++			require.True(t, errors.Is(err, bufio.ErrTooLong), "got %v", err)
++			require.NotContains(t, w.Body.String(), "xxxx")
++		})
++	}
++}
+diff --git a/backend/internal/service/gemini_text_delta_test.go b/backend/internal/service/gemini_text_delta_test.go
+new file mode 100644
+index 000000000..d8a7bcf50
+--- /dev/null
++++ b/backend/internal/service/gemini_text_delta_test.go
+@@ -0,0 +1,62 @@
++package service
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++// legacyComputeGeminiTextDelta is the previous string-concatenating
++// implementation, kept as the oracle for the storage-only change.
++func legacyComputeGeminiTextDelta(seen, incoming string) (delta, newSeen string) {
++	incoming = strings.TrimSuffix(incoming, "\u0000")
++	if incoming == "" {
++		return "", seen
++	}
++	if strings.HasPrefix(incoming, seen) {
++		return strings.TrimPrefix(incoming, seen), incoming
++	}
++	if strings.HasPrefix(seen, incoming) {
++		return "", seen
++	}
++	return incoming, seen + incoming
++}
++
++func TestGeminiTextDeltaMatchesLegacy(t *testing.T) {
++	sequences := [][]string{
++		{"Hel", "Hello", "Hello, wor", "Hello, world"},   // cumulative
++		{"Hel", "lo", ", wor", "ld"},                     // incremental
++		{"The", " cat", "The", " sat"},                   // delta equal to an emitted prefix
++		{"abc", "abc", "ab", "abcd", "x"},                // duplicate, rewind, extend, diverge
++		{"", "\u0000", "a\u0000", "ab", "", "abc\u0000"}, // empty and NUL-terminated chunks
++		{"{\"a\":", "{\"a\":1", "}", "{\"a\":1}"},        // tool args mixing modes
++		{"多字节", "多字节文本", "😀", "多字节文本😀继续"},                // non-ASCII
++	}
++	for _, seq := range sequences {
++		var state geminiTextDelta
++		legacySeen := ""
++		for i, chunk := range seq {
++			wantDelta, newSeen := legacyComputeGeminiTextDelta(legacySeen, chunk)
++			legacySeen = newSeen
++			require.Equal(t, wantDelta, state.next(chunk), "sequence %q chunk %d", seq, i)
++			require.Equal(t, legacySeen, state.seen.String(), "sequence %q chunk %d", seq, i)
++		}
++		state.reset()
++		require.Equal(t, "", state.seen.String())
++		require.Equal(t, "fresh", state.next("fresh"))
++	}
++}
++
++func TestGeminiTextDeltaIncrementalAllocationsStayLinear(t *testing.T) {
++	chunk := strings.Repeat("x", 100)
++	const chunks = 2000
++	allocs := testing.AllocsPerRun(5, func() {
++		var state geminiTextDelta
++		for i := 0; i < chunks; i++ {
++			_ = state.next(chunk)
++		}
++	})
++	// Concatenation allocates once per chunk; amortized growth needs O(log n).
++	require.Less(t, allocs, float64(100), "allocs per stream: %v", allocs)
++}
+diff --git a/backend/internal/service/openai_account_scheduler.go b/backend/internal/service/openai_account_scheduler.go
+index 3f2a2c993..c5912f892 100644
+--- a/backend/internal/service/openai_account_scheduler.go
++++ b/backend/internal/service/openai_account_scheduler.go
+@@ -16,6 +16,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+ 	"golang.org/x/sync/singleflight"
+ )
+ 
+@@ -1434,12 +1435,6 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
+ 		accounts = modelFiltered
+ 	}
+ 
+-	// require_privacy_set: 获取分组配置。GetByID 会聚合账号计数，选号不能走它。
+-	var schedGroup *Group
+-	if req.GroupID != nil && s.service.schedulerSnapshot != nil {
+-		schedGroup, _ = s.service.schedulerSnapshot.GetGroupByIDLite(ctx, *req.GroupID)
+-	}
+-
+ 	filterStats := openAISelectionFilterStats{pool: len(accounts)}
+ 	filtered := make([]*Account, 0, len(accounts))
+ 	loadReq := make([]AccountWithConcurrency, 0, len(accounts))
+@@ -1466,7 +1461,8 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
+ 		// require_privacy_set is a group-scoped eligibility gate. Do not mutate the
+ 		// shared account: another group may intentionally allow accounts whose
+ 		// upstream privacy setting has not been confirmed.
+-		if schedGroup != nil && schedGroup.RequirePrivacySet && !account.IsPrivacySet() {
++		// Select already resolved the group requirement into req.
++		if req.RequirePrivacySet && !account.IsPrivacySet() {
+ 			filterStats.exclude("privacy_not_set")
+ 			continue
+ 		}
+@@ -2256,7 +2252,14 @@ func (s *OpenAIGatewayService) openAIGroupRequiresPrivacySet(ctx context.Context
+ }
+ 
+ func (s *OpenAIGatewayService) loadOpenAIGroupRequiresPrivacySet(ctx context.Context, groupID *int64) bool {
+-	if s == nil || groupID == nil || s.schedulerSnapshot == nil {
++	if s == nil || groupID == nil {
++		return false
++	}
++	// 直连请求的被调度分组即认证分组，复用 auth 快照；composite 等 ID 不一致时回源。
++	if ctxGroup, ok := ctx.Value(ctxkey.Group).(*Group); ok && IsGroupContextValid(ctxGroup) && ctxGroup.ID == *groupID {
++		return ctxGroup.RequirePrivacySet
++	}
++	if s.schedulerSnapshot == nil {
+ 		return false
+ 	}
+ 	// GetByID 会聚合账号计数；隐私开关只在分组行上。
+diff --git a/backend/internal/service/openai_compact_body_signal.go b/backend/internal/service/openai_compact_body_signal.go
+index e0ea88b62..a545f1cfd 100644
+--- a/backend/internal/service/openai_compact_body_signal.go
++++ b/backend/internal/service/openai_compact_body_signal.go
+@@ -1,6 +1,7 @@
+ package service
+ 
+ import (
++	"bytes"
+ 	"net/http"
+ 	"strings"
+ 
+@@ -28,6 +29,9 @@ func NormalizeCompactionTriggerInputOrder(body []byte) ([]byte, bool, error) {
+ 	if len(body) == 0 {
+ 		return body, false, nil
+ 	}
++	if !compactionTriggerNeedsDecode(body) {
++		return body, false, nil
++	}
+ 	var payload map[string]any
+ 	if err := decodeOpenAIJSONUseNumber(body, &payload); err != nil {
+ 		return body, false, err
+@@ -63,6 +67,18 @@ func NormalizeCompactionTriggerInputOrder(body []byte) ([]byte, bool, error) {
+ 	return encoded, true, nil
+ }
+ 
++// compactionTriggerNeedsDecode lets bodies that cannot hold a trigger skip the
++// full decode: the type string appears literally unless a \u escape spells it.
++// Such a body must still be a valid JSON object, so decode errors keep
++// surfacing from the original path.
++func compactionTriggerNeedsDecode(body []byte) bool {
++	if bytes.Contains(body, []byte("compaction_trigger")) || bytes.Contains(body, []byte(`\u`)) {
++		return true
++	}
++	trimmed := bytes.TrimLeft(body, " \t\r\n")
++	return len(trimmed) == 0 || trimmed[0] != '{' || !gjson.ValidBytes(body)
++}
++
+ func isOpenAINativeCompactionV2(c *gin.Context) bool {
+ 	if c == nil {
+ 		return false
+diff --git a/backend/internal/service/openai_compact_body_signal_test.go b/backend/internal/service/openai_compact_body_signal_test.go
+index b0e0e4e24..ef672ba16 100644
+--- a/backend/internal/service/openai_compact_body_signal_test.go
++++ b/backend/internal/service/openai_compact_body_signal_test.go
+@@ -3,6 +3,7 @@
+ package service
+ 
+ import (
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/gin-gonic/gin"
+@@ -116,3 +117,25 @@ func TestWebSocketCompatibilityNormalizesTriggerAfterPairedOutputCleanup(t *test
+ 	require.Equal(t, "message", items[2].Get("type").String())
+ 	require.Equal(t, "compaction_trigger", items[3].Get("type").String())
+ }
++
++func TestNormalizeCompactionTriggerInputOrder_PrecheckKeepsContract(t *testing.T) {
++	plain := []byte(`{"model":"gpt-5","input":[{"type":"message","role":"user","content":"` + strings.Repeat("x", 4096) + `"}]}`)
++	allocs := testing.AllocsPerRun(10, func() {
++		got, changed, err := NormalizeCompactionTriggerInputOrder(plain)
++		if err != nil || changed || &got[0] != &plain[0] {
++			t.Fatal("body without a trigger must be returned unchanged")
++		}
++	})
++	require.Zero(t, allocs)
++
++	for _, invalid := range []string{`{"input":[`, `[{"type":"message"}]`, `{"input":[]} {}`} {
++		_, _, err := NormalizeCompactionTriggerInputOrder([]byte(invalid))
++		require.Error(t, err, invalid)
++	}
++
++	escaped := []byte(`{"input":[{"type":"\u0063ompaction_trigger"},{"type":"message","role":"user","content":"hi"}]}`)
++	normalized, changed, err := NormalizeCompactionTriggerInputOrder(escaped)
++	require.NoError(t, err)
++	require.True(t, changed)
++	require.Equal(t, "compaction_trigger", gjson.GetBytes(normalized, "input.1.type").String())
++}
+diff --git a/backend/internal/service/openai_gateway_forward.go b/backend/internal/service/openai_gateway_forward.go
+index b8bee593b..ba7c1beae 100644
+--- a/backend/internal/service/openai_gateway_forward.go
++++ b/backend/internal/service/openai_gateway_forward.go
+@@ -10,6 +10,7 @@ import (
+ 	"strings"
+ 	"time"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
+@@ -291,16 +292,45 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+ 	bodyModified := false
+ 	clientPromptCacheKey := promptCacheKey
+ 	var reqBody map[string]any
+-	ensureReqBody := func() (map[string]any, error) {
+-		if requestView.HasPatches() {
+-			patchedBody, patchErr := requestView.ApplyPatches()
+-			if patchErr != nil {
+-				return nil, patchErr
+-			}
++	// Each patched body supersedes the previous one, so this attempt holds only
++	// the live output's budget, returned when Forward ends rather than retained
++	// across failover attempts until the handler returns.
++	releasePatchedBodyMemory := func() {}
++	defer func() { releasePatchedBodyMemory() }()
++	flushPatches := func() error {
++		if !requestView.HasPatches() {
++			return nil
++		}
++		patchCtx, releasePatch := httputil.WithRequestBodyMemoryScope(ctx)
++		patchedBody, patchErr := requestView.ApplyPatches(patchCtx)
++		if patchErr == nil {
++			releasePatchedBodyMemory()
++			releasePatchedBodyMemory = releasePatch
+ 			body = patchedBody
+ 			requestView = newOpenAIRequestView(body)
+ 			reqBody = nil
+ 			bodyModified = false
++			return nil
++		}
++		releasePatch()
++		if errors.Is(patchErr, httputil.ErrRequestBodyMemoryBudget) {
++			return patchErr
++		}
++		// Raw edits cannot express this patch set. Replay it on the decoded
++		// body so the map-based fallback still applies every edit.
++		if reqBody == nil {
++			decoded, decodeErr := requestView.Decode(c)
++			if decodeErr != nil {
++				return decodeErr
++			}
++			reqBody = decoded
++		}
++		requestView.MovePatchesTo(reqBody)
++		return nil
++	}
++	ensureReqBody := func() (map[string]any, error) {
++		if err := flushPatches(); err != nil {
++			return nil, err
+ 		}
+ 		if reqBody != nil {
+ 			return reqBody, nil
+@@ -706,13 +736,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+ 	}
+ 
+ 	if bodyModified {
+-		if requestView.HasPatches() {
+-			if patchedBody, patchErr := requestView.ApplyPatches(); patchErr == nil {
+-				body = patchedBody
+-				requestView = newOpenAIRequestView(body)
+-				reqBody = nil
+-				bodyModified = false
+-			}
++		if err := flushPatches(); err != nil {
++			return nil, err
+ 		}
+ 		if bodyModified {
+ 			decoded, decodeErr := ensureReqBody()
+diff --git a/backend/internal/service/openai_gateway_request_body.go b/backend/internal/service/openai_gateway_request_body.go
+index 36125142a..076ec7b3a 100644
+--- a/backend/internal/service/openai_gateway_request_body.go
++++ b/backend/internal/service/openai_gateway_request_body.go
+@@ -11,9 +11,11 @@ import (
+ 	"strings"
+ 	"unicode/utf8"
+ 
++	"github.com/MoeForge/moego/ojson"
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+ 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/google/uuid"
+@@ -1170,14 +1172,177 @@ func (v *openAIRequestView) DisablePatches() {
+ 	v.patches = nil
+ }
+ 
++// MovePatchesTo replays pending raw patches onto reqBody, decoded from the same
++// unpatched body, when they cannot be applied as raw edits. Later edits must go
++// to reqBody directly, so patching is disabled afterwards.
++func (v *openAIRequestView) MovePatchesTo(reqBody map[string]any) {
++	if v == nil {
++		return
++	}
++	for _, patch := range v.patches {
++		if patch.delete {
++			deleteOpenAIRequestMapPath(reqBody, patch.path)
++		} else {
++			setOpenAIRequestMapPath(reqBody, patch.path, patch.value)
++		}
++	}
++	v.DisablePatches()
++}
++
+ func (v openAIRequestView) HasPatches() bool {
+ 	return !v.patchesDisabled && len(v.patches) > 0
+ }
+ 
+-func (v openAIRequestView) ApplyPatches() ([]byte, error) {
++func (v openAIRequestView) ApplyPatches(ctx context.Context) ([]byte, error) {
+ 	if v.patchesDisabled || len(v.patches) == 0 {
+ 		return nil, errors.New("openai request patches disabled")
+ 	}
++	// Every strategy materializes one full output. Reserve the input size before
++	// editing so an exhausted budget rejects without wasted work, then settle the
++	// reservation to the exact output length.
++	reserved := int64(len(v.body))
++	if err := httputil.ReserveRequestBodyMemory(ctx, reserved); err != nil {
++		return nil, err
++	}
++	out, err := v.materializePatches()
++	if err != nil {
++		httputil.ReleaseRequestBodyMemory(ctx, reserved)
++		return nil, err
++	}
++	if extra := int64(len(out)) - reserved; extra > 0 {
++		if err := httputil.ReserveRequestBodyMemory(ctx, extra); err != nil {
++			httputil.ReleaseRequestBodyMemory(ctx, reserved)
++			return nil, err
++		}
++	} else {
++		httputil.ReleaseRequestBodyMemory(ctx, -extra)
++	}
++	return out, nil
++}
++
++func (v openAIRequestView) materializePatches() ([]byte, error) {
++	// A single edit already needs only one output buffer. Keep sjson's exact
++	// behavior for it and for inputs outside ojson's compatibility contract.
++	if len(v.patches) == 1 || !v.canBatchPatches() {
++		return v.applyPatchesSequential()
++	}
++
++	// Doc borrows the immutable request body only within this call. Materialize
++	// once into owned storage; neither Doc nor its borrowed results escape.
++	doc := ojson.NewDoc(v.body)
++	for _, patch := range v.patches {
++		var err error
++		if patch.delete {
++			err = doc.Delete(patch.path)
++		} else {
++			err = doc.Set(patch.path, patch.value)
++		}
++		if err != nil {
++			// Doc rejects some edits sjson accepts (e.g. a key under an array).
++			// Only scalar values reach here, so retrying runs no marshaler twice.
++			return v.applyPatchesSequential()
++		}
++	}
++	return doc.Bytes(), nil
++}
++
++func (v openAIRequestView) canBatchPatches() bool {
++	// Doc indexes members of containers traversed by edits. Bound that scratch
++	// metadata independently of body size; a large opaque input is fine, but a
++	// dense object must not amplify memory before the output reservation.
++	const maxBatchPatches = 16
++	if len(v.patches) > maxBatchPatches {
++		return false
++	}
++	for _, patch := range v.patches {
++		if !patch.delete {
++			switch patch.value.(type) {
++			case nil, bool, string, json.Number, int, int8, int16, int32, int64,
++				uint, uint8, uint16, uint32, uint64, float32, float64:
++			default:
++				// Container/custom values could introduce an unbounded object
++				// for a later child edit, or run a marshaler twice on fallback.
++				return false
++			}
++		}
++		if !isOpenAIBatchPatchPath(patch.path) {
++			return false
++		}
++	}
++	for _, ancestor := range v.patches {
++		for _, patch := range v.patches {
++			// An ancestor edit can replace the checked object or expose a second
++			// duplicate key. Keep those batches on the existing path.
++			if len(patch.path) > len(ancestor.path) && patch.path[len(ancestor.path)] == '.' &&
++				strings.HasPrefix(patch.path, ancestor.path) {
++				return false
++			}
++		}
++	}
++	body := bytes.TrimSpace(v.body)
++	if len(body) == 0 || body[0] != '{' {
++		return false
++	}
++	// Borrow the body rather than copying it into a string. The scans below do
++	// not retain results or materialize member maps.
++	root := ojson.Parse(openAIWSPayloadStringView(body))
++	for _, patch := range v.patches {
++		for i := 0; i < len(patch.path); i++ {
++			if patch.path[i] != '.' {
++				continue
++			}
++			parent := root.Get(patch.path[:i])
++			// sjson edits inside string parents differently. Inspect only the
++			// original raw input: Doc.Get can copy an already edited container.
++			if parent.Type == ojson.String || !openAIRequestPatchObjectIsSmall(parent) {
++				return false
++			}
++		}
++	}
++	// Reject unsuitable shapes before paying for full validation. Only a valid
++	// document reaches Doc; both borrowed readers tolerate malformed input.
++	return openAIRequestPatchObjectIsSmall(root) && ojson.ValidBytes(body)
++}
++
++// isOpenAIBatchPatchPath narrows isSimpleOpenAIRequestPatchPath to what ojson
++// and sjson address identically. Production paths are host-owned identifiers;
++// queries, array indices, modifiers and non-ASCII keys retain sjson semantics.
++func isOpenAIBatchPatchPath(path string) bool {
++	start := true
++	depth := 1
++	for i := 0; i < len(path); i++ {
++		c := path[i]
++		if c == '.' && !start {
++			depth++
++			if depth > 4 {
++				return false
++			}
++			start = true
++			continue
++		}
++		if c != '_' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') &&
++			(start || c < '0' || c > '9') {
++			return false
++		}
++		start = false
++	}
++	return !start
++}
++
++func openAIRequestPatchObjectIsSmall(value ojson.Result) bool {
++	const maxMembers = 64
++	if !value.IsObject() {
++		return true
++	}
++	members := 0
++	value.ForEach(func(_, _ ojson.Result) bool {
++		members++
++		return members <= maxMembers
++	})
++	return members <= maxMembers
++}
++
++func (v openAIRequestView) applyPatchesSequential() ([]byte, error) {
+ 	body := v.body
+ 	for _, patch := range v.patches {
+ 		var err error
+@@ -1520,7 +1685,7 @@ func normalizeOpenAIResponsesCompatibilityBodyWithOptions(body []byte, account *
+ 		}
+ 	}
+ 	needsOrphanCleanup := account != nil && account.IsOpenAIOAuthLike() &&
+-		gjson.GetBytes(normalized, "input").IsArray()
++		openAIResponsesInputMayNeedOrphanCleanup(normalized)
+ 	if needsOrphanCleanup || openAIResponsesInputMayNeedTruncation(normalized) {
+ 		var reqBody map[string]any
+ 		if err := decodeOpenAIJSONUseNumber(normalized, &reqBody); err != nil {
+diff --git a/backend/internal/service/openai_gateway_service_hotpath_test.go b/backend/internal/service/openai_gateway_service_hotpath_test.go
+index 65ba44f2d..a703b46a8 100644
+--- a/backend/internal/service/openai_gateway_service_hotpath_test.go
++++ b/backend/internal/service/openai_gateway_service_hotpath_test.go
+@@ -68,7 +68,7 @@ func TestOpenAIRequestView_ApplyPatches(t *testing.T) {
+ 	view.MarkPatchDelete("previous_response_id")
+ 	view.MarkPatchSet("reasoning.effort", "none")
+ 
+-	patched, err := view.ApplyPatches()
++	patched, err := view.ApplyPatches(context.Background())
+ 	require.NoError(t, err)
+ 	require.JSONEq(t, `{"model":"gpt-5.1","reasoning":{"effort":"none"},"input":[{"type":"message","content":"hi"}]}`, string(patched))
+ }
+@@ -78,7 +78,7 @@ func TestOpenAIRequestView_RejectsEscapedPatchPath(t *testing.T) {
+ 	view.MarkPatchSet(`metadata.user\.id`, "new")
+ 
+ 	require.False(t, view.HasPatches())
+-	_, err := view.ApplyPatches()
++	_, err := view.ApplyPatches(context.Background())
+ 	require.Error(t, err)
+ }
+ 
+@@ -87,7 +87,7 @@ func TestOpenAIRequestView_ApplyPatchesDisabled(t *testing.T) {
+ 	view.MarkPatchSet("model", "gpt-5.1")
+ 	view.DisablePatches()
+ 
+-	_, err := view.ApplyPatches()
++	_, err := view.ApplyPatches(context.Background())
+ 	require.Error(t, err)
+ }
+ 
+diff --git a/backend/internal/service/openai_privacy_gate_ctx_test.go b/backend/internal/service/openai_privacy_gate_ctx_test.go
+new file mode 100644
+index 000000000..0fed48124
+--- /dev/null
++++ b/backend/internal/service/openai_privacy_gate_ctx_test.go
+@@ -0,0 +1,80 @@
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"sync/atomic"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++	"github.com/stretchr/testify/require"
++)
++
++type countingPrivacyGroupRepo struct {
++	GroupRepository
++	group *Group
++	calls atomic.Int32
++}
++
++func (r *countingPrivacyGroupRepo) GetByIDLite(context.Context, int64) (*Group, error) {
++	r.calls.Add(1)
++	return r.group, nil
++}
++
++func (r *countingPrivacyGroupRepo) GetByID(ctx context.Context, id int64) (*Group, error) {
++	return r.GetByIDLite(ctx, id)
++}
++
++// Direct requests schedule on the authenticated group, so the privacy gate
++// comes from the auth snapshot in ctx instead of a group-table read per pick.
++func TestOpenAIGatewayService_PrivacyGateReadsAuthGroupFromContext(t *testing.T) {
++	groupID := int64(39101)
++	for _, advanced := range []string{"false", "true"} {
++		t.Run(map[string]string{"false": "legacy", "true": "advanced"}[advanced], func(t *testing.T) {
++			accounts := []Account{
++				{ID: 39111, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 0, GroupIDs: []int64{groupID}, Credentials: map[string]any{"plan_type": "team"}},
++				{ID: 39112, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 5, GroupIDs: []int64{groupID}, Credentials: map[string]any{"plan_type": "team"}, Extra: map[string]any{"privacy_mode": PrivacyModeTrainingOff}},
++			}
++			repo := &guardianAffinityAccountRepo{schedulerGroupAwareOpenAIAccountRepo: schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{accounts: accounts}}}
++			// The repository disagrees with ctx; reading it would admit 39111.
++			groupRepo := &countingPrivacyGroupRepo{group: &Group{ID: groupID, Name: "stale", RequirePrivacySet: false}}
++			svc := &OpenAIGatewayService{
++				accountRepo:        repo,
++				cache:              &schedulerTestGatewayCache{},
++				cfg:                &config.Config{},
++				rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService(advanced),
++				concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{acquireResults: map[int64]bool{39111: true, 39112: true}}),
++				schedulerSnapshot:  &SchedulerSnapshotService{accountRepo: repo, groupRepo: groupRepo},
++			}
++			ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
++				ID: groupID, Name: "privacy", Platform: PlatformOpenAI, Status: StatusActive,
++				Hydrated: true, RequirePrivacySet: true,
++			})
++
++			selection, _, err := svc.SelectAccountWithScheduler(ctx, &groupID, "", "", "gpt-5.1", nil, OpenAIUpstreamTransportAny, false)
++			require.NoError(t, err)
++			require.NotNil(t, selection)
++			require.Equal(t, int64(39112), selection.Account.ID)
++			require.Zero(t, groupRepo.calls.Load(), "privacy gate must not read the group table for the auth group")
++			if selection.ReleaseFunc != nil {
++				selection.ReleaseFunc()
++			}
++		})
++	}
++}
++
++func TestAPIKeyAuthSnapshotRequirePrivacySetRoundtrip(t *testing.T) {
++	svc := &APIKeyService{}
++	apiKey := profitAuthTestAPIKey()
++	apiKey.Group.RequirePrivacySet = true
++
++	payload, err := json.Marshal(&APIKeyAuthCacheEntry{Snapshot: svc.snapshotFromAPIKey(context.Background(), apiKey)})
++	require.NoError(t, err)
++	var restored APIKeyAuthCacheEntry
++	require.NoError(t, json.Unmarshal(payload, &restored))
++	materialized, used, err := svc.applyAuthCacheEntry(apiKey.Key, &restored)
++	require.NoError(t, err)
++	require.True(t, used)
++	require.True(t, materialized.Group.RequirePrivacySet)
++}
+diff --git a/backend/internal/service/openai_request_patches_benchmark_test.go b/backend/internal/service/openai_request_patches_benchmark_test.go
+new file mode 100644
+index 000000000..4593eb96a
+--- /dev/null
++++ b/backend/internal/service/openai_request_patches_benchmark_test.go
+@@ -0,0 +1,150 @@
++package service
++
++import (
++	"bytes"
++	"context"
++	"strings"
++	"testing"
++)
++
++var benchmarkOpenAIRequestPatchesSink []byte
++
++// Compare the same patch list and immutable input, without timing request-view
++// construction. BenchmarkOpenAIResponses_LargeInputRawPatch covers that too.
++func BenchmarkOpenAIRequestPatches(b *testing.B) {
++	for _, size := range []struct {
++		name  string
++		bytes int
++	}{
++		{name: "small", bytes: 256},
++		{name: "1MiB", bytes: 1 << 20},
++		{name: "8MiB", bytes: 8 << 20},
++	} {
++		body := []byte(`{"model":"old","max_tokens":8192,"input":[{"type":"message","role":"user","content":"` + strings.Repeat("a", size.bytes) + `"}],"reasoning":{"effort":"low"},"previous_response_id":"resp_1","service_tier":"flex"}`)
++		for _, edits := range []struct {
++			name    string
++			patches []openAIRequestPatch
++		}{
++			{
++				name: "1_edit",
++				patches: []openAIRequestPatch{
++					{path: "model", value: "mapped"},
++				},
++			},
++			{
++				name: "6_edits",
++				patches: []openAIRequestPatch{
++					{path: "model", value: "mapped"},
++					{path: "reasoning.effort", value: "none"},
++					{path: "previous_response_id", delete: true},
++					{path: "max_output_tokens", value: 8192},
++					{path: "max_tokens", delete: true},
++					{path: "service_tier", value: "priority"},
++				},
++			},
++		} {
++			view := requestViewWithPatches(body, edits.patches)
++			want, err := applyOpenAIRequestPatchesSequential(body, edits.patches)
++			if err != nil {
++				b.Fatal(err)
++			}
++			got, err := view.ApplyPatches(context.Background())
++			if err != nil || !bytes.Equal(want, got) {
++				b.Fatalf("patch results differ: %v", err)
++			}
++			for _, implementation := range []struct {
++				name  string
++				apply func() ([]byte, error)
++			}{
++				{name: "SequentialSJSON", apply: func() ([]byte, error) { return applyOpenAIRequestPatchesSequential(body, edits.patches) }},
++				{name: "ApplyPatches", apply: func() ([]byte, error) { return view.ApplyPatches(context.Background()) }},
++			} {
++				b.Run(size.name+"/"+edits.name+"/"+implementation.name, func(b *testing.B) {
++					b.SetBytes(int64(len(body)))
++					b.ReportAllocs()
++					b.ResetTimer()
++					for i := 0; i < b.N; i++ {
++						patched, err := implementation.apply()
++						if err != nil {
++							b.Fatal(err)
++						}
++						benchmarkOpenAIRequestPatchesSink = patched
++					}
++				})
++			}
++		}
++	}
++}
++
++// A small byte length can still contain thousands of object members. Keep this
++// case beside the large opaque-input benchmarks to expose scratch amplification.
++func BenchmarkOpenAIRequestPatches_DenseObjects(b *testing.B) {
++	for _, fixture := range []struct {
++		name   string
++		nested bool
++	}{
++		{name: "root"},
++		{name: "nested", nested: true},
++	} {
++		body, patches := denseOpenAIRequestPatchFixture(4096, fixture.nested)
++		view := requestViewWithPatches(body, patches)
++		if view.canBatchPatches() {
++			b.Fatal("dense object should retain the sequential implementation")
++		}
++		want, err := applyOpenAIRequestPatchesSequential(body, patches)
++		if err != nil {
++			b.Fatal(err)
++		}
++		got, err := view.ApplyPatches(context.Background())
++		if err != nil || !bytes.Equal(want, got) {
++			b.Fatalf("patch results differ: %v", err)
++		}
++		for _, implementation := range []struct {
++			name  string
++			apply func() ([]byte, error)
++		}{
++			{name: "SequentialSJSON", apply: func() ([]byte, error) { return applyOpenAIRequestPatchesSequential(body, patches) }},
++			{name: "ApplyPatches", apply: func() ([]byte, error) { return view.ApplyPatches(context.Background()) }},
++		} {
++			b.Run(fixture.name+"/"+implementation.name, func(b *testing.B) {
++				b.SetBytes(int64(len(body)))
++				b.ReportAllocs()
++				b.ResetTimer()
++				for i := 0; i < b.N; i++ {
++					patched, err := implementation.apply()
++					if err != nil {
++						b.Fatal(err)
++					}
++					benchmarkOpenAIRequestPatchesSink = patched
++				}
++			})
++		}
++	}
++}
++
++// Rechecking an edited parent through Doc.Get can materialize its large opaque
++// sibling after every edit. The batched path should allocate one final body.
++func BenchmarkOpenAIRequestPatches_RepeatedNestedLeaf(b *testing.B) {
++	body, patches := repeatedNestedOpenAIRequestPatchFixture()
++	view := requestViewWithPatches(body, patches)
++	for _, implementation := range []struct {
++		name  string
++		apply func() ([]byte, error)
++	}{
++		{name: "SequentialSJSON", apply: func() ([]byte, error) { return applyOpenAIRequestPatchesSequential(body, patches) }},
++		{name: "ApplyPatches", apply: func() ([]byte, error) { return view.ApplyPatches(context.Background()) }},
++	} {
++		b.Run(implementation.name, func(b *testing.B) {
++			b.SetBytes(int64(len(body)))
++			b.ReportAllocs()
++			b.ResetTimer()
++			for i := 0; i < b.N; i++ {
++				patched, err := implementation.apply()
++				if err != nil {
++					b.Fatal(err)
++				}
++				benchmarkOpenAIRequestPatchesSink = patched
++			}
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_request_patches_test.go b/backend/internal/service/openai_request_patches_test.go
+new file mode 100644
+index 000000000..bd554762b
+--- /dev/null
++++ b/backend/internal/service/openai_request_patches_test.go
+@@ -0,0 +1,664 @@
++package service
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/sjson"
++)
++
++// Keep the previous sequential implementation as a wire-compatibility oracle.
++// JSONEq would miss changes to duplicate keys, number spelling and unknown fields.
++func applyOpenAIRequestPatchesSequential(body []byte, patches []openAIRequestPatch) ([]byte, error) {
++	for _, patch := range patches {
++		var err error
++		if patch.delete {
++			body, err = sjson.DeleteBytes(body, patch.path)
++		} else {
++			body, err = sjson.SetBytes(body, patch.path, patch.value)
++		}
++		if err != nil {
++			return nil, err
++		}
++	}
++	return body, nil
++}
++
++func requestViewWithPatches(body []byte, patches []openAIRequestPatch) openAIRequestView {
++	view := newOpenAIRequestView(body)
++	for _, patch := range patches {
++		if patch.delete {
++			view.MarkPatchDelete(patch.path)
++		} else {
++			view.MarkPatchSet(patch.path, patch.value)
++		}
++	}
++	return view
++}
++
++func denseOpenAIRequestPatchFixture(fields int, nested bool) ([]byte, []openAIRequestPatch) {
++	var body strings.Builder
++	body.Grow(fields*16 + 64)
++	prefix := ""
++	if nested {
++		_, _ = body.WriteString(`{"model":"old","reasoning":`)
++		prefix = "reasoning."
++	}
++	_ = body.WriteByte('{')
++	for i := 0; i < fields; i++ {
++		if i > 0 {
++			_ = body.WriteByte(',')
++		}
++		fmt.Fprintf(&body, `"f%d":0`, i)
++	}
++	_ = body.WriteByte('}')
++	if nested {
++		_ = body.WriteByte('}')
++	}
++	return []byte(body.String()), []openAIRequestPatch{
++		{path: fmt.Sprintf("%sf%d", prefix, fields-2), value: 1},
++		{path: fmt.Sprintf("%sf%d", prefix, fields-1), value: 2},
++	}
++}
++
++func TestOpenAIRequestPatches_BoundIndexedObjectMembers(t *testing.T) {
++	for _, nested := range []bool{false, true} {
++		for _, fields := range []int{64, 65, 4096} {
++			t.Run(fmt.Sprintf("nested_%t_%d_fields", nested, fields), func(t *testing.T) {
++				body, patches := denseOpenAIRequestPatchFixture(fields, nested)
++				original := bytes.Clone(body)
++				view := requestViewWithPatches(body, patches)
++				require.Equal(t, fields <= 64, view.canBatchPatches(), "dense edited objects must not amplify Doc scratch memory")
++				want, err := applyOpenAIRequestPatchesSequential(body, patches)
++				require.NoError(t, err)
++				got, err := view.ApplyPatches(context.Background())
++				require.NoError(t, err)
++				require.Equal(t, want, got)
++				require.Equal(t, original, body)
++			})
++		}
++	}
++}
++
++func TestOpenAIRequestPatches_LargeUntouchedInputStillBatches(t *testing.T) {
++	dense, _ := denseOpenAIRequestPatchFixture(4096, false)
++	body := []byte(`{"model":"old","input":[{"content":"` + strings.Repeat("a", 1<<20) + `","opaque":` + string(dense) + `}],"reasoning":{"effort":"low"}}`)
++	patches := []openAIRequestPatch{{path: "model", value: "mapped"}, {path: "reasoning.effort", value: "none"}}
++	view := requestViewWithPatches(body, patches)
++	require.True(t, view.canBatchPatches(), "unvisited input objects must remain opaque regardless of their size or member count")
++	want, err := applyOpenAIRequestPatchesSequential(body, patches)
++	require.NoError(t, err)
++	got, err := view.ApplyPatches(context.Background())
++	require.NoError(t, err)
++	require.Equal(t, want, got)
++}
++
++func TestOpenAIRequestPatches_DeletingParentCannotExposeUncheckedDuplicate(t *testing.T) {
++	dense, _ := denseOpenAIRequestPatchFixture(4096, false)
++	body := []byte(`{"model":"old","reasoning":{"effort":"low"},"reasoning":` + string(dense) + `}`)
++	patches := []openAIRequestPatch{{path: "reasoning", delete: true}, {path: "reasoning.effort", value: "none"}}
++	view := requestViewWithPatches(body, patches)
++	require.False(t, view.canBatchPatches(), "deleting the first parent exposes a dense duplicate that the original lookup did not inspect")
++	want, err := applyOpenAIRequestPatchesSequential(body, patches)
++	require.NoError(t, err)
++	got, err := view.ApplyPatches(context.Background())
++	require.NoError(t, err)
++	require.Equal(t, want, got)
++}
++
++func repeatedNestedOpenAIRequestPatchFixture() ([]byte, []openAIRequestPatch) {
++	body := []byte(`{"model":"old","reasoning":{"effort":"low","opaque":"` + strings.Repeat("a", 1<<20) + `"},"input":[]}`)
++	return body, []openAIRequestPatch{
++		{path: "reasoning.effort", value: "medium"},
++		{path: "reasoning.effort", value: "high"},
++		{path: "reasoning.effort", value: "none"},
++	}
++}
++
++func TestOpenAIRequestPatches_RepeatedNestedLeafKeepsOpaqueSiblingBorrowed(t *testing.T) {
++	body, patches := repeatedNestedOpenAIRequestPatchFixture()
++	view := requestViewWithPatches(body, patches)
++	require.True(t, view.canBatchPatches(), "repeated leaf edits do not replace their parent and must remain eligible")
++	want, err := applyOpenAIRequestPatchesSequential(body, patches)
++	require.NoError(t, err)
++	got, err := view.ApplyPatches(context.Background())
++	require.NoError(t, err)
++	require.Equal(t, want, got)
++}
++
++func TestOpenAIRequestPatches_PreserveSequentialWireBehavior(t *testing.T) {
++	tests := []struct {
++		name    string
++		body    string
++		patches []openAIRequestPatch
++	}{
++		{
++			name: "single edit preserves opaque wire fields",
++			body: " \n{\"model\":\"old\", \"opaque\": {\"integer\":9007199254740993,\"decimal\":1.2300e+04,\"zero\":-0,\"text\":\"\\u4f60\\u597d\"}, \"input\":[]}\t ",
++			patches: []openAIRequestPatch{
++				{path: "model", value: "new"},
++			},
++		},
++		{
++			name: "multiple edits preserve opaque wire fields",
++			body: " \n{\"model\":\"old\", \"opaque\": {\"integer\":9007199254740993,\"decimal\":1.2300e+04,\"zero\":-0,\"text\":\"\\u4f60\\u597d\"}, \"input\":[],\"reasoning\":{\"effort\":\"low\",\"future\":true}}\t ",
++			patches: []openAIRequestPatch{
++				{path: "model", value: "new"},
++				{path: "reasoning.effort", value: "none"},
++				{path: "instructions", value: "quoted \"text\"\n你好 <tag>"},
++			},
++		},
++		{
++			name: "duplicate top-level and nested keys",
++			body: `{"model":"first","model":"second","reasoning":{"effort":"low","effort":"high"},"reasoning":{"effort":"max"},"opaque":1,"opaque":2}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: "reasoning.effort", value: "none"},
++				{path: "model", delete: true},
++				{path: "model", value: "final"},
++			},
++		},
++		{
++			name: "forward token normalization followed by clamp",
++			body: `{"model":"old","max_tokens":65536,"max_completion_tokens":1000,"prompt_cache_options":{"future":true},"input":[],"previous_response_id":"resp_1","service_tier":"flex"}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: "max_output_tokens", value: float64(65536)},
++				{path: "max_tokens", delete: true},
++				{path: "max_completion_tokens", delete: true},
++				{path: "prompt_cache_options", delete: true},
++				{path: "max_output_tokens", value: 8192},
++				{path: "previous_response_id", delete: true},
++				{path: "service_tier", value: "priority"},
++			},
++		},
++		{
++			name: "replace parent after child then edit new child",
++			body: `{"model":"gpt-5","reasoning":{"effort":"low","opaque":123},"input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "reasoning.effort", value: "high"},
++				{path: "reasoning", value: map[string]any{"effort": "medium", "future": true}},
++				{path: "reasoning.effort", value: "none"},
++			},
++		},
++		{
++			name: "delete parent and recreate child",
++			body: `{"model":"gpt-5","reasoning":{"effort":"low","opaque":123},"input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "reasoning.effort", value: "high"},
++				{path: "reasoning", delete: true},
++				{path: "reasoning.effort", value: "none"},
++			},
++		},
++		{
++			name: "create replace delete and recreate same field",
++			body: `{"model":"gpt-5","input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "instructions", value: "first"},
++				{path: "instructions", value: "second"},
++				{path: "instructions", delete: true},
++				{path: "instructions", value: "third"},
++			},
++		},
++		{
++			name: "missing deletes around effective edits",
++			body: `{"model":"old","reasoning":{"effort":"low"},"input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "previous_response_id", delete: true},
++				{path: "model", value: "mapped"},
++				{path: "text.verbosity", delete: true},
++				{path: "reasoning.effort", value: "none"},
++				{path: "previous_response_id", delete: true},
++			},
++		},
++		{
++			name: "deleting first middle and last members",
++			body: `{"previous_response_id":"resp_1", "model":"old", "text":{"verbosity":"high","format":{"type":"text"}}, "max_tokens":100}`,
++			patches: []openAIRequestPatch{
++				{path: "previous_response_id", delete: true},
++				{path: "text.verbosity", delete: true},
++				{path: "max_tokens", delete: true},
++			},
++		},
++		{
++			name: "only missing deletes",
++			body: ` {"model":"old", "input":[]} `,
++			patches: []openAIRequestPatch{
++				{path: "previous_response_id", delete: true},
++				{path: "text.verbosity", delete: true},
++			},
++		},
++		{
++			name: "replace scalar parent with object",
++			body: `{"model":"gpt-5","reasoning":null,"input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "reasoning.effort", value: "none"},
++				{path: "instructions", value: ""},
++			},
++		},
++		{
++			name: "scalar types and exact json number",
++			body: `{"model":"gpt-5","input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "store", value: false},
++				{path: "stream", value: true},
++				{path: "max_output_tokens", value: json.Number("9007199254740993")},
++				{path: "instructions", value: nil},
++			},
++		},
++		{
++			name: "existing string parent containing JSON text",
++			body: `{"model":"old","reasoning":"{\"effort\":\"low\"}","input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: "reasoning.effort", value: "none"},
++			},
++		},
++		{
++			name: "parent becomes string before child edit",
++			body: `{"model":"old","reasoning":{"effort":"low"},"input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "reasoning", value: `{"effort":"high"}`},
++				{path: "reasoning.effort", value: "none"},
++			},
++		},
++		{
++			name: "array parent before child edit",
++			body: `{"model":"old","reasoning":[{"effort":"low"}],"input":[]}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: "reasoning.effort", value: "none"},
++			},
++		},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			body := []byte(tt.body)
++			want, wantErr := applyOpenAIRequestPatchesSequential(body, tt.patches)
++			view := requestViewWithPatches(body, tt.patches)
++			require.True(t, view.HasPatches())
++
++			got, err := view.ApplyPatches(context.Background())
++			if wantErr != nil {
++				require.EqualError(t, err, wantErr.Error())
++				require.Equal(t, want, got)
++				require.Equal(t, tt.body, string(body))
++				return
++			}
++			require.NoError(t, err)
++			require.Equal(t, string(want), string(got))
++			require.True(t, json.Valid(got))
++			require.Equal(t, tt.body, string(body), "patching must not mutate the source body")
++		})
++	}
++}
++
++func TestOpenAIRequestPatches_PreserveCallerCancellationPolicy(t *testing.T) {
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	for _, edits := range []int{1, 2} {
++		t.Run(fmt.Sprintf("%d_edits", edits), func(t *testing.T) {
++			body := []byte(`{"model":"old","input":[]}`)
++			view := newOpenAIRequestView(body)
++			for i := 0; i < edits; i++ {
++				view.MarkPatchSet("model", "mapped")
++			}
++			got, err := view.ApplyPatches(ctx)
++			// Forward owns cancellation/drain policy; editing must not change
++			// the existing OAuth path's detached upstream-request behavior.
++			require.NoError(t, err)
++			require.Equal(t, `{"model":"mapped","input":[]}`, string(got))
++			require.Equal(t, `{"model":"old","input":[]}`, string(body))
++		})
++	}
++}
++
++func TestOpenAIRequestPatches_CompatibilityFallback(t *testing.T) {
++	for _, tt := range []struct {
++		name    string
++		body    string
++		patches []openAIRequestPatch
++	}{
++		{
++			name: "malformed object after a valid prefix",
++			body: `{"model":"a","input":[`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "b"},
++				{path: "reasoning.effort", value: "none"},
++			},
++		},
++		{
++			name: "query path",
++			body: `{"model":"old","input":[{"role":"user","content":"hello"}]}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: `input.#(role=="user").content`, value: "new"},
++			},
++		},
++		{
++			name: "special path character",
++			body: `{"model":"old","metadata":{"user*":"old"}}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: "metadata.user*", value: "new"},
++			},
++		},
++		{
++			name: "key under array parent",
++			body: `{"model":"old","reasoning":[1]}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: "reasoning.effort", value: "none"},
++			},
++		},
++		{
++			name: "invalid UTF-8 path",
++			body: `{"model":"old","metadata":{}}`,
++			patches: []openAIRequestPatch{
++				{path: "model", value: "mapped"},
++				{path: "metadata.\xff", value: "new"},
++			},
++		},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			body := []byte(tt.body)
++			want, wantErr := applyOpenAIRequestPatchesSequential(body, tt.patches)
++			view := requestViewWithPatches(body, tt.patches)
++			require.True(t, view.HasPatches())
++			got, gotErr := view.ApplyPatches(context.Background())
++			if wantErr != nil {
++				require.EqualError(t, gotErr, wantErr.Error())
++			} else {
++				require.NoError(t, gotErr)
++			}
++			require.Equal(t, want, got)
++			require.Equal(t, tt.body, string(body))
++		})
++	}
++}
++
++func TestOpenAIRequestPatches_ReserveOutputUntilRequestRelease(t *testing.T) {
++	body := []byte(`{"model":"old","reasoning":{"effort":"low"},"input":[]}`)
++	patches := []openAIRequestPatch{{path: "model", value: "mapped"}, {path: "reasoning.effort", value: "none"}}
++	want, err := applyOpenAIRequestPatchesSequential(body, patches)
++	require.NoError(t, err)
++	limit := int64(len(body) + len(want))
++	budget := httputil.NewBodyMemoryBudget(limit)
++	ctx, release := httputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++	t.Cleanup(release)
++	require.NoError(t, httputil.ReserveRequestBodyMemory(ctx, int64(len(body))))
++	view := requestViewWithPatches(body, patches)
++
++	got, err := view.ApplyPatches(ctx)
++	require.NoError(t, err, "the exact input plus output budget must suffice")
++	require.Equal(t, want, got)
++	probe, releaseProbe := httputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++	t.Cleanup(releaseProbe)
++	require.ErrorIs(t, httputil.ReserveRequestBodyMemory(probe, 1), httputil.ErrRequestBodyMemoryBudget)
++	release()
++	require.NoError(t, httputil.ReserveRequestBodyMemory(probe, limit))
++	// A second release must not refund another request's reservation.
++	release()
++	require.ErrorIs(t, httputil.ReserveRequestBodyMemory(probe, 1), httputil.ErrRequestBodyMemoryBudget)
++}
++
++func TestOpenAIRequestPatches_RejectUnavailableOutputBudget(t *testing.T) {
++	body := []byte(`{"model":"old","reasoning":{"effort":"low"},"input":[]}`)
++	for _, tt := range []struct {
++		name    string
++		patches []openAIRequestPatch
++	}{
++		{name: "batched", patches: []openAIRequestPatch{{path: "model", value: "mapped"}, {path: "reasoning.effort", value: "none"}}},
++		{name: "single", patches: []openAIRequestPatch{{path: "model", value: "mapped"}}},
++		{name: "sequential", patches: []openAIRequestPatch{{path: "model", value: "mapped"}, {path: "metadata", value: map[string]any{"k": "v"}}}},
++	} {
++		want, err := applyOpenAIRequestPatchesSequential(body, tt.patches)
++		require.NoError(t, err)
++		for _, scenario := range []string{"exhausted", "below input", "closed", "canceled and closed"} {
++			t.Run(tt.name+"/"+scenario, func(t *testing.T) {
++				limit := int64(len(want))
++				switch scenario {
++				case "exhausted":
++					limit--
++				case "below input":
++					// Rejected by the up-front input-size reservation, before editing.
++					limit = int64(len(body)) - 1
++				}
++				budget := httputil.NewBodyMemoryBudget(limit)
++				parent, cancel := context.WithCancel(context.Background())
++				t.Cleanup(cancel)
++				ctx, release := httputil.WithRequestBodyMemoryBudget(parent, budget)
++				t.Cleanup(release)
++				switch scenario {
++				case "closed":
++					release()
++				case "canceled and closed":
++					cancel()
++					release()
++				}
++				view := requestViewWithPatches(body, tt.patches)
++				got, err := view.ApplyPatches(ctx)
++				require.ErrorIs(t, err, httputil.ErrRequestBodyMemoryBudget)
++				require.Nil(t, got)
++				probe, releaseProbe := httputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++				t.Cleanup(releaseProbe)
++				require.NoError(t, httputil.ReserveRequestBodyMemory(probe, limit), "failed materialization must not consume the shared budget")
++			})
++		}
++		t.Run(tt.name+"/exact", func(t *testing.T) {
++			budget := httputil.NewBodyMemoryBudget(int64(len(want)))
++			ctx, release := httputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++			t.Cleanup(release)
++			got, err := requestViewWithPatches(body, tt.patches).ApplyPatches(ctx)
++			require.NoError(t, err)
++			require.Equal(t, want, got)
++			probe, releaseProbe := httputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++			t.Cleanup(releaseProbe)
++			require.ErrorIs(t, httputil.ReserveRequestBodyMemory(probe, 1), httputil.ErrRequestBodyMemoryBudget, "the reservation must settle to the exact output")
++		})
++	}
++}
++
++func TestOpenAIRequestPatches_MovePatchesToDecodedBody(t *testing.T) {
++	body := []byte(`{"model":"old","reasoning":[1],"previous_response_id":"resp_1"}`)
++	view := requestViewWithPatches(body, []openAIRequestPatch{
++		{path: "model", value: "mapped"},
++		{path: "reasoning.effort", value: "none"},
++		{path: "previous_response_id", delete: true},
++	})
++	_, err := view.ApplyPatches(context.Background())
++	require.Error(t, err, "raw edits cannot set a key under an array")
++	decoded, err := view.Decode(nil)
++	require.NoError(t, err)
++	view.MovePatchesTo(decoded)
++	require.False(t, view.HasPatches())
++	out, err := json.Marshal(decoded)
++	require.NoError(t, err)
++	require.JSONEq(t, `{"model":"mapped","reasoning":{"effort":"none"}}`, string(out))
++	require.Equal(t, `{"model":"old","reasoning":[1],"previous_response_id":"resp_1"}`, string(body))
++}
++
++func TestOpenAIRequestPatches_ForwardReleasesPatchedBodyWhenAttemptEnds(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	body := []byte(`{"model":"gpt-5","stream":false,"reasoning":{"effort":"minimal"},"max_tokens":1024,"input":[{"type":"message","content":"hi"}]}`)
++	const limit = 1 << 20
++	budget := httputil.NewBodyMemoryBudget(limit)
++	ctx, release := httputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++	t.Cleanup(release)
++	for attempt := range 3 {
++		upstream := &httpUpstreamRecorder{
++			resp: &http.Response{
++				StatusCode: http.StatusOK,
++				Header:     http.Header{"Content-Type": []string{"application/json"}},
++				Body:       io.NopCloser(strings.NewReader(`{"usage":{"input_tokens":1,"output_tokens":2}}`)),
++			},
++		}
++		cfg := &config.Config{}
++		cfg.Security.URLAllowlist.Enabled = false
++		svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream}
++		account := &Account{
++			ID:          int64(attempt + 1),
++			Name:        "openai-apikey",
++			Platform:    PlatformOpenAI,
++			Type:        AccountTypeAPIKey,
++			Concurrency: 1,
++			Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://example.com"},
++			Extra:       map[string]any{"use_responses_api": true},
++		}
++		c, _ := gin.CreateTestContext(httptest.NewRecorder())
++		c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil).WithContext(ctx)
++		SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
++
++		_, err := svc.Forward(ctx, c, account, body)
++		require.NoError(t, err)
++		require.NotNil(t, upstream.lastReq)
++		// Failover attempts must not accumulate rewritten bodies until the handler returns.
++		probe, releaseProbe := httputil.WithRequestBodyMemoryBudget(context.Background(), budget)
++		require.NoError(t, httputil.ReserveRequestBodyMemory(probe, limit), "attempt %d retained its patched body", attempt)
++		releaseProbe()
++	}
++}
++
++func TestOpenAIRequestPatches_ForwardStopsBeforeUpstreamOnOverload(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, tt := range []struct {
++		name string
++		body string
++	}{
++		{
++			name: "final raw patch flush",
++			body: `{"model":"gpt-5","stream":false,"reasoning":{"effort":"minimal"},"max_tokens":1024,"input":[{"type":"message","content":"hi"}]}`,
++		},
++		{
++			name: "flush before schema decode",
++			body: `{"model":"client-alias","stream":false,"reasoning":{"effort":"minimal"},"text":{"format":{"type":"json_schema","name":"test","schema":{"type":"object","properties":{}}}},"input":[{"type":"message","content":"hi"}]}`,
++		},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			upstream := &httpUpstreamRecorder{
++				resp: &http.Response{
++					StatusCode: http.StatusOK,
++					Header:     http.Header{"Content-Type": []string{"application/json"}},
++					Body:       io.NopCloser(strings.NewReader(`{"usage":{"input_tokens":1,"output_tokens":2}}`)),
++				},
++			}
++			cfg := &config.Config{}
++			cfg.Security.URLAllowlist.Enabled = false
++			svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream}
++			account := &Account{
++				ID:          1,
++				Name:        "openai-apikey",
++				Platform:    PlatformOpenAI,
++				Type:        AccountTypeAPIKey,
++				Concurrency: 1,
++				Credentials: map[string]any{
++					"api_key":       "sk-test",
++					"base_url":      "https://example.com",
++					"model_mapping": map[string]any{"client-alias": "gpt-5"},
++				},
++				Extra: map[string]any{"use_responses_api": true},
++			}
++			ctx, release := httputil.WithRequestBodyMemoryBudget(context.Background(), httputil.NewBodyMemoryBudget(1))
++			t.Cleanup(release)
++			c, _ := gin.CreateTestContext(httptest.NewRecorder())
++			c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil).WithContext(ctx)
++			SetOpenAIClientTransport(c, OpenAIClientTransportHTTP)
++
++			result, err := svc.Forward(ctx, c, account, []byte(tt.body))
++			require.ErrorIs(t, err, httputil.ErrRequestBodyMemoryBudget)
++			require.Nil(t, result)
++			require.Nil(t, upstream.lastReq, "overload must not fall back to unbudgeted serialization or forwarding")
++		})
++	}
++}
++
++func TestOpenAIRequestPatches_EffectiveEditsOwnOutput(t *testing.T) {
++	for _, patches := range [][]openAIRequestPatch{
++		{{path: "model", value: "mapped"}},
++		{{path: "previous_response_id", delete: true}},
++		{{path: "model", value: "mapped"}, {path: "reasoning.effort", value: "none"}, {path: "previous_response_id", delete: true}},
++	} {
++		t.Run(fmt.Sprintf("%d_edits_%s", len(patches), patches[0].path), func(t *testing.T) {
++			body := []byte(`{"model":"old","reasoning":{"effort":"low"},"previous_response_id":"resp_1","opaque":"` + strings.Repeat("payload", 4096) + `"}`)
++			view := requestViewWithPatches(body, patches)
++			got, err := view.ApplyPatches(context.Background())
++			require.NoError(t, err)
++			snapshot := bytes.Clone(got)
++
++			// The borrowed source may be released or reused after ApplyPatches returns.
++			for i := range body {
++				body[i] = 'x'
++			}
++			require.Equal(t, snapshot, got)
++			got[0] = '!'
++			require.Equal(t, bytes.Repeat([]byte{'x'}, len(body)), body)
++		})
++	}
++}
++
++type failingOpenAIRequestPatchValue struct {
++	err error
++}
++
++func (v failingOpenAIRequestPatchValue) MarshalJSON() ([]byte, error) {
++	return nil, v.err
++}
++
++func TestOpenAIRequestPatches_PropagateValueErrorWithoutPartialOutput(t *testing.T) {
++	valueErr := errors.New("request patch encoding failed")
++	for _, priorEdits := range []int{0, 1, 2} {
++		t.Run(fmt.Sprintf("after_%d_edits", priorEdits), func(t *testing.T) {
++			body := []byte(`{"model":"old","instructions":"original","input":[]}`)
++			original := bytes.Clone(body)
++			view := newOpenAIRequestView(body)
++			for i := 0; i < priorEdits; i++ {
++				view.MarkPatchSet("model", fmt.Sprintf("mapped-%d", i))
++			}
++			view.MarkPatchSet("instructions", failingOpenAIRequestPatchValue{err: valueErr})
++
++			got, err := view.ApplyPatches(context.Background())
++			require.ErrorIs(t, err, valueErr)
++			require.Nil(t, got)
++			require.Equal(t, original, body)
++		})
++	}
++}
++
++func TestOpenAIRequestPatches_ConcurrentImmutableInput(t *testing.T) {
++	body := []byte(`{"model":"old","reasoning":{"effort":"low"},"previous_response_id":"resp_1","opaque":"` + strings.Repeat("payload", 4096) + `"}`)
++	original := bytes.Clone(body)
++	t.Cleanup(func() {
++		require.Equal(t, original, body)
++	})
++	for worker := 0; worker < 8; worker++ {
++		t.Run(fmt.Sprintf("worker_%d", worker), func(t *testing.T) {
++			t.Parallel()
++			patches := []openAIRequestPatch{
++				{path: "model", value: fmt.Sprintf("model-%d", worker)},
++				{path: "reasoning.effort", value: "none"},
++				{path: "previous_response_id", delete: true},
++			}
++			want, err := applyOpenAIRequestPatchesSequential(body, patches)
++			require.NoError(t, err)
++			for i := 0; i < 16; i++ {
++				view := requestViewWithPatches(body, patches)
++				got, err := view.ApplyPatches(context.Background())
++				require.NoError(t, err)
++				require.Equal(t, want, got)
++				got[0] = '!'
++			}
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_responses_orphan_precheck.go b/backend/internal/service/openai_responses_orphan_precheck.go
+new file mode 100644
+index 000000000..ec9084988
+--- /dev/null
++++ b/backend/internal/service/openai_responses_orphan_precheck.go
+@@ -0,0 +1,133 @@
++package service
++
++import (
++	"bytes"
++	"encoding/json"
++
++	"github.com/tidwall/gjson"
++)
++
++// openAIResponsesInputMayNeedOrphanCleanup only proves that cleanup is a no-op.
++// Possible outputs still use the existing decoder and sanitizer, including its
++// named standalone outputs, call/id fallback and item-reference rules. All byte
++// spans below borrow the immutable request only for this synchronous call.
++func openAIResponsesInputMayNeedOrphanCleanup(body []byte) bool {
++	// Use Get directly: Parse(...).Get(...) differs from GetBytes on malformed
++	// prefixes, where the old gate can still find an input and invoke the decoder.
++	input := gjson.Get(openAIWSPayloadStringView(body), "input")
++	if !input.IsArray() {
++		return false
++	}
++	if !json.Valid(body) {
++		// Preserve the existing decoder's malformed/trailing-JSON error path.
++		return true
++	}
++	if body[skipOpenAIWSJSONSpace(body, 0)] != '{' || input.Index <= 0 || input.Index > len(body)-len(input.Raw) {
++		return true
++	}
++
++	hasPreviousResponseID := false
++	inputSeen, previousResponseIDSeen := false, false
++	if !visitOpenAIResponsesOrphanPrecheckFields(body, func(key, value []byte) bool {
++		switch string(key) {
++		case `"input"`:
++			if inputSeen {
++				return false
++			}
++			inputSeen = true
++		case `"previous_response_id"`:
++			if previousResponseIDSeen {
++				return false
++			}
++			previousResponseIDSeen = true
++			if value[0] == '"' {
++				if bytes.IndexByte(value, '\\') >= 0 {
++					return false
++				}
++				hasPreviousResponseID = len(bytes.TrimSpace(value[1:len(value)-1])) != 0
++			}
++		}
++		return true
++	}) {
++		// GJSON selects first duplicate keys; encoding/json selects the last.
++		// Escaped keys and duplicate relevant keys conservatively use the latter.
++		return true
++	}
++	if hasPreviousResponseID {
++		return false
++	}
++
++	rawInput := body[input.Index : input.Index+len(input.Raw)]
++	for i := 1; ; {
++		i = skipOpenAIWSJSONSpace(rawInput, i)
++		if rawInput[i] == ']' {
++			return false
++		}
++		start := i
++		switch rawInput[i] {
++		case '{', '[', '"':
++			i = skipOpenAIWSJSONValue(rawInput, i)
++		default:
++			// The shared object-value scanner stops at '}', whereas scalar
++			// array members end at ']'. No scalar item can contain a tool output.
++			for rawInput[i] != ',' && rawInput[i] != ']' {
++				i++
++			}
++		}
++		if rawInput[start] == '{' {
++			typeSeen := false
++			if !visitOpenAIResponsesOrphanPrecheckFields(rawInput[start:i], func(key, value []byte) bool {
++				if string(key) != `"type"` {
++					return true
++				}
++				if typeSeen {
++					return false
++				}
++				typeSeen = true
++				if value[0] != '"' {
++					return true
++				}
++				if bytes.IndexByte(value, '\\') >= 0 {
++					return false
++				}
++				return !isCodexToolCallOutputItemType(parseRawJSONView(value).Str)
++			}) {
++				return true
++			}
++		}
++		i = skipOpenAIWSJSONSpace(rawInput, i)
++		if rawInput[i] == ',' {
++			i++
++		}
++	}
++}
++
++// visitOpenAIResponsesOrphanPrecheckFields visits an already-validated object
++// without materializing unrelated strings (including large escaped content).
++// Escaped keys are deliberately left to the full decoder rather than decoded
++// into potentially request-sized temporary strings here.
++func visitOpenAIResponsesOrphanPrecheckFields(object []byte, visit func(key, value []byte) bool) bool {
++	i := skipOpenAIWSJSONSpace(object, 0) + 1
++	for {
++		i = skipOpenAIWSJSONSpace(object, i)
++		if object[i] == '}' {
++			return true
++		}
++		keyStart := i
++		keyEnd := scanOpenAIWSJSONString(object, i)
++		key := object[keyStart:keyEnd]
++		if bytes.IndexByte(key, '\\') >= 0 {
++			return false
++		}
++		i = skipOpenAIWSJSONSpace(object, keyEnd) + 1 // Valid JSON guarantees ':'.
++		valueStart := skipOpenAIWSJSONSpace(object, i)
++		i = skipOpenAIWSJSONValue(object, valueStart)
++		if !visit(key, bytes.TrimSpace(object[valueStart:i])) {
++			return false
++		}
++		i = skipOpenAIWSJSONSpace(object, i)
++		if object[i] == ',' {
++			i++
++		}
++	}
++}
+diff --git a/backend/internal/service/openai_responses_orphan_precheck_benchmark_test.go b/backend/internal/service/openai_responses_orphan_precheck_benchmark_test.go
+new file mode 100644
+index 000000000..73c1c2c6c
+--- /dev/null
++++ b/backend/internal/service/openai_responses_orphan_precheck_benchmark_test.go
+@@ -0,0 +1,49 @@
++package service
++
++import (
++	"fmt"
++	"strings"
++	"testing"
++
++	"github.com/tidwall/gjson"
++)
++
++// These measure only the orphan-cleanup stage, not the complete gateway. B/op
++// is cumulative allocated memory per operation, not retained heap or RSS.
++func BenchmarkOpenAIResponsesOrphanPrecheck(b *testing.B) {
++	for _, size := range []int{64 << 10, 1 << 20, 4 << 20} {
++		for _, previous := range []bool{false, true} {
++			name := fmt.Sprintf("bytes_%d/previous_%t", size, previous)
++			bodyText := `{"input":[{"type":"message","content":"` + strings.Repeat(`text\n`, size/6) + `"}]`
++			if previous {
++				bodyText += `,"previous_response_id":"resp_1"`
++			}
++			body := []byte(bodyText + `}`)
++			b.Run(name+"/before", func(b *testing.B) {
++				b.ReportAllocs()
++				b.SetBytes(int64(len(body)))
++				for b.Loop() {
++					if gjson.GetBytes(body, "input").IsArray() {
++						var request map[string]any
++						if err := decodeOpenAIJSONUseNumber(body, &request); err != nil {
++							b.Fatal(err)
++						}
++						input, _ := request["input"].([]any)
++						if sanitizeOpenAIResponsesOrphanToolOutputs(request, input, previous) {
++							b.Fatal("unexpected cleanup")
++						}
++					}
++				}
++			})
++			b.Run(name+"/after", func(b *testing.B) {
++				b.ReportAllocs()
++				b.SetBytes(int64(len(body)))
++				for b.Loop() {
++					if openAIResponsesInputMayNeedOrphanCleanup(body) {
++						b.Fatal("unexpected cleanup candidate")
++					}
++				}
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/openai_responses_orphan_precheck_test.go b/backend/internal/service/openai_responses_orphan_precheck_test.go
+new file mode 100644
+index 000000000..9e41e8ee6
+--- /dev/null
++++ b/backend/internal/service/openai_responses_orphan_precheck_test.go
+@@ -0,0 +1,170 @@
++package service
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestOpenAIResponsesOrphanPrecheck(t *testing.T) {
++	tests := []struct {
++		name string
++		body string
++		want bool
++	}{
++		{"empty object", `{}`, false},
++		{"array root", `[{"input":[]}]`, false},
++		{"string root", `"input"`, false},
++		{"number root", `1`, false},
++		{"null root", `null`, false},
++		{"leading whitespace", "\r\n\t {\"input\":[{\"type\":\"message\"}]} ", false},
++		{"empty array", `{"input":[]}`, false},
++		{"message", `{"input":[{"type":"message","content":"plain text"}]}`, false},
++		{"escaped content", `{"input":[{"content":"quoted \"type\":\"function_call_output\"\ntext","type":"message"}]}`, false},
++		{"nested output type", `{"input":[{"type":"message","content":[{"type":"function_call_output"}]}]}`, false},
++		{"scalar items", `{"input":[null,true,false,1,"escaped\ntext",[],{"type":"message"},null]}`, false},
++		{"final scalar whitespace", "{\"input\":[{}, \t 12.5 \r\n ]}", false},
++		{"previous response", `{"previous_response_id":" resp_1 ","input":[{"type":"function_call_output","call_id":"missing"}]}`, false},
++		{"previous response unicode whitespace", `{"input":[{"type":"function_call_output"}],"previous_response_id":"　resp_1　"}`, false},
++		{"blank previous response", `{"previous_response_id":"　 ","input":[{"type":"function_call_output"}]}`, true},
++		{"non string previous response", `{"previous_response_id":123,"input":[{"type":"function_call_output"}]}`, true},
++		{"null previous response", `{"previous_response_id":null,"input":[{"type":"function_call_output"}]}`, true},
++		{"orphan output", `{"input":[{"type":"function_call_output","call_id":"missing"}]}`, true},
++		{"trimmed output type", `{"input":[{"type":"　function_call_output　"}]}`, true},
++		{"named standalone output", `{"input":[{"type":"function_call_output","name":"delegate","output":"task"}]}`, true},
++		{"matched id fallback", `{"input":[{"type":"function_call","id":"fc_1"},{"type":"function_call_output","call_id":"fc_1"}]}`, true},
++		{"matched reference", `{"input":[{"type":"item_reference","id":"ref_1"},{"type":"custom_tool_call_output","call_id":"ref_1"}]}`, true},
++		{"search output", `{"input":[{"type":"tool_search_output"}]}`, true},
++		{"mcp output", `{"input":[{"type":"mcp_tool_call_output"}]}`, true},
++		{"non string type", `{"input":[{"type":123},{"type":null},{"type":{"type":"function_call_output"}}]}`, false},
++		{"escaped input key", `{"inpu\u0074":[{"type":"function_call_output"}]}`, true},
++		{"escaped type key", `{"input":[{"ty\u0070e":"function_call_output"}]}`, true},
++		{"escaped output type", `{"input":[{"type":"function_call_\u006futput"}]}`, true},
++		{"escaped previous key", `{"previous_response_\u0069d":"resp_1","input":[{"type":"function_call_output"}]}`, true},
++		{"escaped previous value", `{"previous_response_id":"\u0020","input":[{"type":"function_call_output"}]}`, true},
++		{"duplicate type last output", `{"input":[{"type":"message","type":"function_call_output"}]}`, true},
++		{"duplicate type last message", `{"input":[{"type":"function_call_output","type":"message"}]}`, true},
++		{"duplicate previous last null", `{"previous_response_id":"resp_1","previous_response_id":null,"input":[{"type":"function_call_output"}]}`, true},
++		{"duplicate previous last present", `{"previous_response_id":null,"previous_response_id":"resp_1","input":[{"type":"function_call_output"}]}`, true},
++		{"duplicate input last output", `{"input":[],"input":[{"type":"function_call_output"}]}`, true},
++		{"duplicate input last null", `{"input":[{"type":"function_call_output"}],"input":null}`, true},
++		{"first input non array keeps old gate", `{"input":null,"input":[{"type":"function_call_output"}]}`, false},
++		{"empty body", ``, false},
++		{"malformed without input", `{"model":`, false},
++		{"malformed non array input", `{"input":"text",`, false},
++		{"trailing non array input", `{"input":null} {}`, false},
++		{"garbage prefix array input", `junk{"input":[]}`, true},
++		{"garbage prefix non array input", `junk{"input":null}`, false},
++		{"truncated", `{"input":[{"type":"message"}]`, true},
++		{"trailing object", `{"input":[{"type":"message"}]} {}`, true},
++		{"trailing junk", `{"input":[]}x`, true},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			body := []byte(tt.body)
++			require.Equal(t, tt.want, openAIResponsesInputMayNeedOrphanCleanup(body))
++			require.Equal(t, tt.body, string(body), "precheck must not mutate borrowed input")
++		})
++	}
++}
++
++func TestOpenAIResponsesOrphanPrecheckPreservesSanitizer(t *testing.T) {
++	for _, body := range []string{
++		`{"input":[{"type":"function_call_output","name":"delegate","namespace":"codex_app","output":"task"}]}`,
++		`{"input":[{"type":"function_call_output","call_id":"fc_1","output":"ok"},{"type":"function_call","call_id":" ","id":"fc_1"}]}`,
++		`{"input":[{"type":"tool_search_output","call_id":"ref_1"},{"type":"item_reference","id":"ref_1"}]}`,
++		`{"input":[{"type":"message","type":"function_call_output","call_id":"missing"}]}`,
++		`{"input":[{"type":"function_call_output","type":"message","content":"keep"}]}`,
++		`{"previous_response_id":"resp_1","previous_response_id":null,"input":[{"type":"function_call_output"}]}`,
++		`{"previous_response_id":null,"previous_response_id":"resp_1","input":[{"type":"function_call_output"}]}`,
++		`{"input":[],"input":[{"type":"function_call_output"}]}`,
++		`{"input":[{"type":"function_call_output"}],"input":null}`,
++		`{"inpu\u0074":[{"ty\u0070e":"function_call_\u006futput"}],"vendor":{"count":9007199254740993}}`,
++		`{"input":[{"type":"message","content":"unchanged"}],"vendor":{"count":9007199254740993}}`,
++	} {
++		t.Run(body, func(t *testing.T) {
++			var expected, actual map[string]any
++			require.NoError(t, decodeOpenAIJSONUseNumber([]byte(body), &expected))
++			require.NoError(t, decodeOpenAIJSONUseNumber([]byte(body), &actual))
++			apply := func(request map[string]any) bool {
++				input, _ := request["input"].([]any)
++				return sanitizeOpenAIResponsesOrphanToolOutputs(request, input, firstNonEmptyString(request["previous_response_id"]) != "")
++			}
++			wantChanged := apply(expected)
++			gotChanged := false
++			if openAIResponsesInputMayNeedOrphanCleanup([]byte(body)) {
++				gotChanged = apply(actual)
++			}
++			require.Equal(t, wantChanged, gotChanged)
++			require.Equal(t, expected, actual)
++
++			account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++			normalized, _, err := normalizeOpenAIResponsesWebSocketCompatibilityBody([]byte(body), account, false)
++			require.NoError(t, err)
++			var integrated map[string]any
++			require.NoError(t, decodeOpenAIJSONUseNumber(normalized, &integrated))
++			require.Equal(t, expected, integrated)
++		})
++	}
++}
++
++func TestOpenAIResponsesOrphanPrecheckCompatibilityErrors(t *testing.T) {
++	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	for _, body := range []string{
++		`{"input":[{"type":"message"}]`,
++		`{"previous_response_id":"resp_1","input":[]} {}`,
++		`{"input":[]} trailing`,
++	} {
++		t.Run(body, func(t *testing.T) {
++			require.True(t, openAIResponsesInputMayNeedOrphanCleanup([]byte(body)))
++			_, _, err := normalizeOpenAIResponsesWebSocketCompatibilityBody([]byte(body), account, false)
++			require.Error(t, err)
++		})
++	}
++}
++
++func TestOpenAIResponsesOrphanPrecheckLargeEscapedContent(t *testing.T) {
++	body := []byte(`{"vendor":"` + strings.Repeat(`\n\"`, 1<<16) + `","input":[{"content":"` + strings.Repeat(`\n\"`, 1<<16) + `","type":"message"}]}`)
++	require.False(t, openAIResponsesInputMayNeedOrphanCleanup(body))
++	allocations := testing.AllocsPerRun(5, func() {
++		if openAIResponsesInputMayNeedOrphanCleanup(body) {
++			panic("unexpected cleanup candidate")
++		}
++	})
++	require.Zero(t, allocations, "large borrowed strings must not be unescaped or copied")
++}
++
++func FuzzOpenAIResponsesOrphanPrecheck(f *testing.F) {
++	for _, seed := range []string{
++		`{"input":[{"type":"message","content":"text"}]}`,
++		`{"input":[null,true,false,1,"text",[],{}]}`,
++		`{"input":[{"type":"function_call_output"}]}`,
++		`{"input":[{"type":"message","type":"function_call_output"}]}`,
++		`{"previous_response_id":"resp_1","previous_response_id":null,"input":[]}`,
++		`{"input":[{"ty\u0070e":"function_call_output"}]}`,
++	} {
++		f.Add(seed)
++	}
++	f.Fuzz(func(t *testing.T, raw string) {
++		body := []byte(raw)
++		mayNeedCleanup := openAIResponsesInputMayNeedOrphanCleanup(body)
++		oldEligible := gjson.GetBytes(body, "input").IsArray()
++		if !oldEligible {
++			require.False(t, mayNeedCleanup, "must preserve the old non-array gate, including malformed input")
++			return
++		}
++		var request map[string]any
++		if err := decodeOpenAIJSONUseNumber(body, &request); err != nil {
++			require.True(t, mayNeedCleanup, "must preserve the old decoder's errors")
++			return
++		}
++		// Preserve the old initial first-key array gate, then compare with the
++		// authoritative decoder/sanitizer's last-key behavior.
++		input, _ := request["input"].([]any)
++		if sanitizeOpenAIResponsesOrphanToolOutputs(request, input, firstNonEmptyString(request["previous_response_id"]) != "") && !mayNeedCleanup {
++			t.Fatal("precheck missed required cleanup")
++		}
++	})
++}
+diff --git a/backend/internal/service/sse_transport_limits.go b/backend/internal/service/sse_transport_limits.go
+index f9c535234..9a54f3212 100644
+--- a/backend/internal/service/sse_transport_limits.go
++++ b/backend/internal/service/sse_transport_limits.go
+@@ -7,6 +7,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"sync/atomic"
++	"unsafe"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ )
+@@ -179,6 +180,14 @@ func (r *boundedSSELineReader) ReadLine() ([]byte, error) {
+ 	}
+ }
+ 
++// ReadLineString is ReadLine for callers that keep the line as a string.
++// ReadLine returns a fresh allocation that nothing else retains, so the line is
++// handed over without a second copy.
++func (r *boundedSSELineReader) ReadLineString() (string, error) {
++	line, err := r.ReadLine()
++	return unsafe.String(unsafe.SliceData(line), len(line)), err
++}
++
+ func (s *AntigravityGatewayService) antigravitySSEConfig() *config.Config {
+ 	if s == nil || s.settingService == nil {
+ 		return nil
+diff --git a/backend/internal/service/user.go b/backend/internal/service/user.go
+index 7f19550fa..eabe82407 100644
+--- a/backend/internal/service/user.go
++++ b/backend/internal/service/user.go
+@@ -63,6 +63,9 @@ type User struct {
+ 	// nil = 该 API Key 对应的 (user, group) 无 override；非 nil 时 checkRPM 直接使用，
+ 	// 避免每请求查 DB。字段不持久化到数据库。
+ 	UserGroupRPMOverride *int
++	// UserGroupRPMOverrideGroupID 是 snapshot 已成功查询 override 的分组 ID（0 = 未知）。
++	// 等于当前分组且 UserGroupRPMOverride 为 nil 时表示确认无 override，checkRPM 不再查 DB。
++	UserGroupRPMOverrideGroupID int64
+ 
+ 	APIKeys       []APIKey
+ 	Subscriptions []UserSubscription
+diff --git a/docs/moego-json-batching.md b/docs/moego-json-batching.md
+new file mode 100644
+index 000000000..9485a167b
+--- /dev/null
++++ b/docs/moego-json-batching.md
+@@ -0,0 +1,150 @@
++# OpenAI 请求的 JSON 批量编辑
++
++`openAIRequestView.ApplyPatches` 使用 `github.com/MoeForge/moego/ojson` 的
++`Doc` 合并同一请求上的多次字段修改，最后只生成一次完整结果。依赖固定为
++`v0.1.0-alpha.1`（`d016502783037edc58e422331be2b6775d578c13`）。
++
++这项优化不替换其他 gjson/sjson 调用、encoding/json 解码、协议转换或用量提取。
++未知字段、顺序、重复键、数字拼写和未修改文本由字节级差分测试保护。
++
++## 适用范围
++
++批量路径只接受有效 JSON 对象、2–16 次标量修改、最多四级 ASCII 标识符路径。
++根对象及被修改路径经过的原始父对象最多各 64 个成员。大 input、图片 data URL
++或其他未修改内容不因其大小或内部字段数量而被排除。
++
++下列情况沿用已有的顺序 sjson 实现：单次编辑，查询/索引/非 ASCII 路径，
++异常 JSON，字符串父节点，父子路径交叠，容器或自定义序列化值，以及密集对象。
++这些限制是优化资格判定，不增加请求拒绝规则。
++
++限制对象成员数量很重要：Doc 会为经过的容器建立临时成员索引。一个约 40 KB、
++4096 个短字段的对象，在直接使用 Doc 的实验中会累计分配约 720 KB，原 sjson
++约 82 KB。现在这种对象回到原实现，不再增加该索引。预检只借用原始输入，
++不通过 `Doc.Get` 检查已经修改的父对象，避免其重新物化大型容器。
++
++## 所有权和预算
++
++- 输入 body 在调用期间不可修改；Doc 和预检结果不会跨调用保存。
++- `ApplyPatches` 的每种策略（批量 Doc、单次编辑、顺序 sjson）都产生一份独立
++  输出，统一计入预算：编辑前先按输入长度预留，预算不足时在任何编辑工作之前拒绝；
++  生成后按实际输出长度多退少补，失败则全部退回。批量和非批量请求的拒绝条件相同。
++- Forward 为每次 patch 输出打开 `WithRequestBodyMemoryScope` 子额度。新输出取代
++  旧输出时归还旧额度，Forward 返回时归还最后一份，因此账号切换重试不会在 handler
++  返回前累积改写后的 body。ingress 额度仍随 handler 的既有释放函数归还。
++- 该额度覆盖 patch 输出，不是整个进程堆的上限：顺序 sjson 的中间副本、
++  decode+marshal 回退以及 Doc 成员索引不单独计入，后者通过上面的资格限制控制。
++- Doc 拒绝某次编辑时改用顺序 sjson；sjson 也无法表达时（例如在数组下设置键），
++  Forward 把待处理的 patch 重放到解码后的 map 上，走既有 marshal 回退，不会重复
++  执行同一批 patch。
++- 预算耗尽立即返回，不通过另一种序列化方式绕过预算，也不切换账号重试。
++  未提交 HTTP 响应时返回 503 和 `Retry-After: 1`；已有 SSE 心跳时发出
++  `response.failed`，保留预期 503 的错误记录。
++- 调用方继续决定取消和上游用量排空策略；编辑函数没有新增提前取消语义。
++
++## 兼容性边界
++
++上游 alpha 在 Go 1.27.3 下的差分测试存在非法 UTF-8 路径键的输出字节差异：
++实际 U+FFFD 和 `\ufffd` 解码后值相同，但字节不同。此类路径不进入本次批量路径。
++所有结构体/自定义值也保留原实现，避免改变自定义序列化的调用次数。
++
++## 验证和基准
++
++从 `backend` 运行：
++
++```sh
++go test -race ./internal/service -run '^(TestOpenAIRequestPatches_|TestOpenAIRequestView_|TestOpenAIGatewayService_OAuthLegacy_UpstreamRequestIgnoresClientCancel)' -count=1
++go test -race ./internal/pkg/httputil -run 'Test(ReserveRequestBodyMemory|RequestBodyMemoryBudget)' -count=1
++go test -race ./internal/handler -run '^TestOpenAIForwardRequestBodyMemoryOverload' -count=1
++go test -race github.com/MoeForge/moego/ojson -run '^TestDoc' -count=1
++go test ./internal/service -run '^$' -bench '^BenchmarkOpenAIRequestPatches' -benchmem -benchtime=150ms -count=3 -cpu=1
++```
++
++`SequentialSJSON` 保留原顺序实现作为基准和字节级 oracle。`ApplyPatches` 包含
++优化资格检查和完整 JSON 验证成本；两个基准均不包括 request view 构造。
++既有 `BenchmarkOpenAIResponses_LargeInputRawPatch` 则包含 view 构造。
++
++基准报告的 B/op 是每次调用累计分配字节，不能当作驻留堆或 RSS，也不能直接推断
++整站吞吐、首 token 延迟或上游请求耗时。单次修改应保持相同分配；密集对象回退
++会有额外预检成本。ARM64 的当前 ojson 没有 AMD64 的 AVX2 路径，应单独测量。
++
++### 2026-11-03 实测
++
++Go 1.27.3，每组 150ms × 3，单 CPU，中位数。Linux 使用支持 AVX2 的
++Xeon Skylake，并固定 CPU；Mac 使用 Apple M2。六次修改包含模型、reasoning、
++删除 previous_response_id、输出上限及 service_tier，输入主体是长文本。
++
++| 平台 / 输入 / 修改次数 | 原顺序实现 | 批量实现 | 原累计分配 | 新累计分配 |
++|---|---:|---:|---:|---:|
++| Linux AMD64 / 1 MiB / 6 | 3.816 ms | 0.756 ms | 6,341,302 B | 1,058,416 B |
++| Linux AMD64 / 8 MiB / 6 | 23.162 ms | 5.353 ms | 50,381,747 B | 8,398,448 B |
++| Mac ARM64 / 1 MiB / 6 | 2.446 ms | 1.263 ms | 6,341,291 B | 1,058,416 B |
++| Mac ARM64 / 8 MiB / 6 | 12.023 ms | 9.290 ms | 50,381,720 B | 8,398,448 B |
++
++单次修改在两个平台保持相同累计分配。4096 字段的密集根对象回退后，Linux
++耗时约 170 μs、累计分配 82,081 B，与原实现相当；密集嵌套对象预检增加约 6%
++耗时，分配相同。三个重复嵌套叶节点修改在 Linux 上约快 2.1 倍；Mac 上约慢 8%，
++但两个平台累计分配都从 3,171,120 B 降到 1,057,520 B。收益取决于输入与架构。
++
++相关服务、handler、预算和上游 Doc 定向 race 测试通过；Linux AMD64 构建、
++`go vet` 通过。当前本机 golangci-lint 2.13.2 的导入器最多支持 export data v4，
++无法读取 Go 1.27.3 的 v5，lint 未完成。`go mod tidy -diff` 仅提示清理项目已有的
++旧依赖校验和，本次仅加入 moego 所需校验和，没有混入这些无关清理。
++
++## Messages 与 Responses 热点优化（2026-11-04）
++
++这批优化减少重复工作，保留现有解析器和兼容处理的语义：
++
++- `collectCacheControlPaths` 在同步扫描内借用 system/messages/tools 的原始视图，
++  返回的路径和日志字符串仍拥有独立存储。断点数量限制和 TTL 顺序检查仍分两遍，
++  保留重复键删除后露出下一个值的既有行为。
++- OAuth Responses 的 orphan 清理先检查是否可能需要修改。没有工具输出或存在
++  有效 `previous_response_id` 时跳过完整解码；重复相关键、转义键/类型及疑似工具
++  输出继续走原 decoder/sanitizer。预检复用已有字节范围扫描，不展开大段转义文本。
++  原先的首个 input 数组资格判断、末重复键解码和非法/尾随 JSON 错误保持不变。
++- `RequestBodyRef` 保存成功解析的只读快照，包含独立标量字符串、协议和字段偏移，
++  不额外引用旧 body。未变化的 `CloneForBody`/`ReplaceBody` 恢复快照；显式
++  `RequestBodyRef.Replace` 即使传入同一 slice 也会失效。每次重试仍创建独立 Ref，
++  清空上游接受回调。手工构造、解析失败、协议或 body 改变均继续解析。
++- 复用除了要求 slice 起点和长度相同，还要求内容的 `maphash` 指纹与解析时一致。
++  指纹每次复用需要一遍哈希，远低于完整解析；它让违反只读约定的原地修改退回
++  重新解析，而不是恢复过期的模型、流式标记或字段偏移。
++
++body 的输入与 `Bytes()` 结果均为只读借用；任何仍被请求或重试持有的底层存储都不应
++原地修改。快照的恢复也会覆盖临时改动过的派生标量，与原先重新解析的效果一致。
++快照增加少量固定元数据，不是新的跨请求缓存，没有后台生命周期或大 body 保留。
++
++专用基准：
++
++```sh
++go test ./internal/service -run '^$' -bench '^(BenchmarkCacheControlPathsLargeContent|BenchmarkOpenAIResponsesOrphanPrecheck|BenchmarkGatewayRequestBodyReuse)$' -benchmem -benchtime=150ms -count=3 -cpu=1
++```
++
++`GatewayRequestBodyReuse` 从已经完成首次解析的请求开始，对比一次账号尝试的 clone
++和两次未变化的刷新。`Reparse` 强制走完整解析，包含新增快照的固定成本，不能当作
++旧提交的精确分配基线；`Reuse` 不代表整个请求已不需要 JSON 解析。
++`OpenAIResponsesOrphanPrecheck` 仅比较 orphan 阶段；cache_control 的旧版基线可以
++通过 Go overlay 使用修改前的 `gateway_claude_oauth_body.go` 测量。
++
++实测环境为 Go 1.27.3、Linux AMD64 Xeon Skylake，固定单核、150ms × 3，中位数：
++
++| 组件 / 合成输入 | 对照耗时 | 优化后耗时 | 对照累计分配 | 优化后累计分配 |
++|---|---:|---:|---:|---:|
++| cache_control 无需修改 / 1 MiB | 5.854 ms | 5.119 ms | 2,114,374 B | 476 B |
++| cache_control 无需修改 / 8 MiB | 45.250 ms | 41.575 ms | 16,794,468 B | 476 B |
++| Responses orphan / 4 MiB / 无 previous_response_id | 38.238 ms | 14.168 ms | 28,676,176 B | 10 B |
++| Responses orphan / 4 MiB / 有 previous_response_id | 38.070 ms | 8.252 ms | 28,676,204 B | 6 B |
++| Messages 三次后续解析 / 8 MiB / 强制解析与复用 | 63.068 ms | 0.000234 ms | 840 B | 240 B |
++
++cache_control 输入含固定三个断点和变长普通文本，主要收益是消除复制；两遍扫描仍在。
++Responses 输入含大段转义文本，无需修改，优化后各规模均为 0 allocs/op；少量 B/op
++包含运行时摊销，不能把它解释为整个网关零分配。Messages 一行不包括首次解析，
++也不包括实际执行兼容处理、网络传输或上游推理。这些结果不用于推断整站吞吐。
++
++Messages 一行测量于加入内容指纹之前。加入指纹后每次复用需要一遍 `maphash`：
++Apple M2 上 8 MiB 复用约 2.1 ms（强制解析约 60 ms），1 MiB 约 0.26 ms，
++分配不变（240 B/op）。
++
++服务层相关 unit/race 回归、handler 的取消/切换/预算回归、最终边界用例 race 复验、
++`go vet` 和 Linux 基准程序编译均通过。仓库 fuzz 执行 1,393 次通过；将当前源函数
++原样提取到临时模块后的 15 秒 isolated fuzz 执行 34,363 次通过。`golangci-lint`
++仍受 Go 1.27.3 export data v5 与当前导入器仅支持 v4 的工具链兼容问题阻断。

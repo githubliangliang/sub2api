@@ -1,0 +1,120 @@
+diff --git a/backend/internal/service/account_test_service_antigravity_test.go b/backend/internal/service/account_test_service_antigravity_test.go
+index 6a14ea85c..6291499ad 100644
+--- a/backend/internal/service/account_test_service_antigravity_test.go
++++ b/backend/internal/service/account_test_service_antigravity_test.go
+@@ -80,3 +80,39 @@ func TestAntigravityShouldUseGeminiTestBuilder_UsesMappedModel(t *testing.T) {
+ 	require.False(t, shouldUseAntigravityGeminiTestRequest("gemini-alias", "claude-sonnet-4-6"))
+ 	require.False(t, shouldUseAntigravityGeminiTestRequest("claude-sonnet-4-6", "claude-sonnet-4-6"))
+ }
++
++// Every other platform's connection test sends the admin's prompt (default "hi") and lets the
++// model answer. The Antigravity text test sent "." with maxOutputTokens 1, ignoring the prompt,
++// so thinking models (gemini-4-argon, gemini-3.8-flash) spent that token thinking and the test
++// showed "sent: hi" with an empty response.
++func TestAntigravityBuildGeminiTestRequest_UsesPromptAndRoomToAnswer(t *testing.T) {
++	t.Parallel()
++
++	svc := &AntigravityGatewayService{}
++	for _, tc := range []struct{ prompt, want string }{{"hello there", "hello there"}, {"", "hi"}, {"   ", "hi"}} {
++		raw, err := svc.buildGeminiTestRequestWithPrompt("proj-123", "gemini-4-argon-high", tc.prompt)
++		require.NoError(t, err)
++		var v1Req map[string]any
++		require.NoError(t, json.Unmarshal(raw, &v1Req))
++		inner := v1Req["request"].(map[string]any)
++		parts := inner["contents"].([]any)[0].(map[string]any)["parts"].([]any)
++		require.Equal(t, tc.want, parts[0].(map[string]any)["text"], "prompt %q", tc.prompt)
++		genCfg := inner["generationConfig"].(map[string]any)
++		require.EqualValues(t, antigravityTestMaxOutputTokens, genCfg["maxOutputTokens"])
++		require.GreaterOrEqual(t, antigravityTestMaxOutputTokens, 128, "a thinking model needs room to answer")
++	}
++}
++
++func TestAntigravityBuildClaudeTestRequest_UsesPromptAndRoomToAnswer(t *testing.T) {
++	t.Parallel()
++
++	svc := &AntigravityGatewayService{}
++	raw, err := svc.buildClaudeTestRequest("proj-123", "claude-sonnet-4-6", "hello there")
++	require.NoError(t, err)
++	require.Contains(t, string(raw), "hello there")
++	require.NotContains(t, string(raw), `"text":"."`)
++
++	raw, err = svc.buildClaudeTestRequest("proj-123", "claude-sonnet-4-6", "")
++	require.NoError(t, err)
++	require.Contains(t, string(raw), `"hi"`)
++}
+diff --git a/backend/internal/service/antigravity_gateway_service.go b/backend/internal/service/antigravity_gateway_service.go
+index d2a4d81b1..033c2ee29 100644
+--- a/backend/internal/service/antigravity_gateway_service.go
++++ b/backend/internal/service/antigravity_gateway_service.go
+@@ -396,7 +396,7 @@ func (s *AntigravityGatewayService) TestConnectionWithPrompt(ctx context.Context
+ 	if shouldUseAntigravityGeminiTestRequest(modelID, mappedModel) {
+ 		requestBody, err = s.buildGeminiTestRequestWithPrompt(projectID, mappedModel, prompt)
+ 	} else {
+-		requestBody, err = s.buildClaudeTestRequest(projectID, mappedModel)
++		requestBody, err = s.buildClaudeTestRequest(projectID, mappedModel, prompt)
+ 	}
+ 	if err != nil {
+ 		return nil, fmt.Errorf("构建请求失败: %w", err)
+@@ -505,7 +505,7 @@ func (s *AntigravityGatewayService) buildGeminiTestRequestWithPrompt(projectID,
+ 			{
+ 				"role": "user",
+ 				"parts": []map[string]any{
+-					{"text": "."},
++					{"text": antigravityTestPrompt(prompt)},
+ 				},
+ 			},
+ 		},
+@@ -516,7 +516,7 @@ func (s *AntigravityGatewayService) buildGeminiTestRequestWithPrompt(projectID,
+ 			},
+ 		},
+ 		"generationConfig": map[string]any{
+-			"maxOutputTokens": 1,
++			"maxOutputTokens": antigravityTestMaxOutputTokens,
+ 		},
+ 		"toolConfig": map[string]any{
+ 			"functionCallingConfig": map[string]any{
+@@ -529,17 +529,21 @@ func (s *AntigravityGatewayService) buildGeminiTestRequestWithPrompt(projectID,
+ }
+ 
+ // buildClaudeTestRequest 构建 Claude 格式测试请求并转换为 Gemini 格式
+-// 使用最小 token 消耗：输入 "." + MaxTokens: 1
+-func (s *AntigravityGatewayService) buildClaudeTestRequest(projectID, mappedModel string) ([]byte, error) {
++// 与其他平台一致：发送管理员输入的提示词（默认 "hi"），留出足够的输出 token 以便模型回答。
++func (s *AntigravityGatewayService) buildClaudeTestRequest(projectID, mappedModel, prompt string) ([]byte, error) {
++	content, err := json.Marshal(antigravityTestPrompt(prompt))
++	if err != nil {
++		return nil, err
++	}
+ 	claudeReq := &antigravity.ClaudeRequest{
+ 		Model: mappedModel,
+ 		Messages: []antigravity.ClaudeMessage{
+ 			{
+ 				Role:    "user",
+-				Content: json.RawMessage(`"."`),
++				Content: json.RawMessage(content),
+ 			},
+ 		},
+-		MaxTokens: 1,
++		MaxTokens: antigravityTestMaxOutputTokens,
+ 		Stream:    false,
+ 	}
+ 	return antigravity.TransformClaudeToGemini(claudeReq, projectID, mappedModel)
+@@ -555,6 +559,18 @@ func (s *AntigravityGatewayService) getClaudeTransformOptions(ctx context.Contex
+ 	return opts
+ }
+ 
++// antigravityTestMaxOutputTokens leaves a thinking model room to think and still answer a short
++// test prompt. It was 1, so gemini-4-argon / gemini-3.8-flash returned no text at all.
++const antigravityTestMaxOutputTokens = 256
++
++// antigravityTestPrompt is the admin's test prompt, or "hi" like the other platforms' tests.
++func antigravityTestPrompt(prompt string) string {
++	if trimmed := strings.TrimSpace(prompt); trimmed != "" {
++		return trimmed
++	}
++	return defaultGeminiTextTestPrompt
++}
++
+ // extractContentFromSSEResponse 从 SSE 流式响应中提取文本和内联图片
+ func extractContentFromSSEResponse(respBody []byte) (string, []TestConnectionImage) {
+ 	var texts []string

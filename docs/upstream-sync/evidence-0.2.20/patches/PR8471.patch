@@ -1,0 +1,184 @@
+diff --git a/backend/internal/server/middleware/api_key_auth.go b/backend/internal/server/middleware/api_key_auth.go
+index a595fbdb3..c2dd7bf8f 100644
+--- a/backend/internal/server/middleware/api_key_auth.go
++++ b/backend/internal/server/middleware/api_key_auth.go
+@@ -10,13 +10,18 @@ import (
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+ 
+ 	"github.com/gin-gonic/gin"
++	"go.uber.org/zap"
+ )
+ 
+ const maxAPIKeyAuthorizationHeaderBytes = service.MaxAPIKeyCredentialBytes + 128
+ 
++// statusClientClosedRequest 非标准状态码 499：客户端在响应前断开。
++const statusClientClosedRequest = 499
++
+ // NewAPIKeyAuthMiddleware 创建 API Key 认证中间件
+ func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) APIKeyAuthMiddleware {
+ 	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, cfg))
+@@ -110,6 +115,9 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
+ 				AbortWithError(c, http.StatusServiceUnavailable, "API_KEY_AUTH_OVERLOADED", "API key authentication is temporarily unavailable")
+ 				return
+ 			}
++			if abortIfAPIKeyLookupClientGone(c, err) {
++				return
++			}
+ 			AbortWithError(c, 500, "INTERNAL_ERROR", "Failed to validate API key")
+ 			return
+ 		}
+@@ -447,3 +455,17 @@ func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool)
+ 	}
+ 	return "", "", true
+ }
++
++// abortIfAPIKeyLookupClientGone 处理 GetByKey 的非业务错误。
++// 客户端已断开（连接关闭、HTTP/2 流被取消）时请求 ctx 被取消，查 Key 拿到的只是
++// context 错误，不是服务端故障：以 499 结束并返回 true。其余错误记一行日志（不含 key），
++// 由调用方按 500 处理。
++func abortIfAPIKeyLookupClientGone(c *gin.Context, err error) bool {
++	ctx := c.Request.Context()
++	if ctx.Err() != nil {
++		c.AbortWithStatus(statusClientClosedRequest)
++		return true
++	}
++	logger.FromContext(ctx).Warn("api key lookup failed", zap.Error(err))
++	return false
++}
+diff --git a/backend/internal/server/middleware/api_key_auth_google.go b/backend/internal/server/middleware/api_key_auth_google.go
+index 9efbbcb2c..ec0c34411 100644
+--- a/backend/internal/server/middleware/api_key_auth_google.go
++++ b/backend/internal/server/middleware/api_key_auth_google.go
+@@ -71,6 +71,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
+ 				abortWithGoogleError(c, 503, "API key authentication is temporarily unavailable")
+ 				return
+ 			}
++			if abortIfAPIKeyLookupClientGone(c, err) {
++				return
++			}
+ 			abortWithGoogleError(c, 500, "Failed to validate API key")
+ 			return
+ 		}
+diff --git a/backend/internal/server/middleware/api_key_auth_test.go b/backend/internal/server/middleware/api_key_auth_test.go
+index 964fe8041..daf5cfe1d 100644
+--- a/backend/internal/server/middleware/api_key_auth_test.go
++++ b/backend/internal/server/middleware/api_key_auth_test.go
+@@ -50,6 +50,70 @@ func TestAPIKeyAuthRejectsOversizedCredentialsBeforeLookup(t *testing.T) {
+ 	require.Zero(t, calls.Load())
+ }
+ 
++func TestAPIKeyAuthLookupFailureWhenClientGoneReturns499(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	cfg := &config.Config{RunMode: config.RunModeSimple}
++
++	for _, tc := range []struct {
++		name   string
++		cancel bool
++		want   int
++	}{
++		{name: "client gone", cancel: true, want: statusClientClosedRequest},
++		{name: "server failure", cancel: false, want: http.StatusInternalServerError},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			var cancel context.CancelFunc
++			repo := &stubApiKeyRepo{getByKey: func(lookupCtx context.Context, _ string) (*service.APIKey, error) {
++				if tc.cancel {
++					// 查库期间客户端断开：net/http 取消请求 ctx，驱动返回 context 错误。
++					cancel()
++					return nil, lookupCtx.Err()
++				}
++				return nil, errors.New("db unavailable")
++			}}
++			svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
++
++			for _, mw := range []gin.HandlerFunc{
++				gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg)),
++				APIKeyAuthWithSubscriptionGoogle(svc, nil, cfg),
++			} {
++				var ctx context.Context
++				ctx, cancel = context.WithCancel(context.Background())
++				r := gin.New()
++				r.Use(mw)
++				r.GET("/t", func(c *gin.Context) { c.Status(http.StatusOK) })
++				w := httptest.NewRecorder()
++				req := httptest.NewRequest(http.MethodGet, "/t", nil).WithContext(ctx)
++				req.Header.Set("x-api-key", "sk-test-key")
++				req.Header.Set("x-goog-api-key", "sk-test-key")
++				r.ServeHTTP(w, req)
++				require.Equal(t, tc.want, w.Code)
++				cancel()
++			}
++		})
++	}
++}
++
++func TestAPIKeyAuthRejectsNonUTF8KeyAsInvalid(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	repo := &stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) {
++		// Postgres 拒绝非 UTF-8 参数（SQLSTATE 22021），不应走到这里。
++		return nil, errors.New("invalid byte sequence for encoding UTF8")
++	}}
++	cfg := &config.Config{RunMode: config.RunModeSimple}
++	svc := service.NewAPIKeyService(repo, nil, nil, nil, nil, nil, cfg)
++
++	r := gin.New()
++	r.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(svc, nil, cfg)))
++	r.GET("/t", func(c *gin.Context) { c.Status(http.StatusOK) })
++	w := httptest.NewRecorder()
++	req := httptest.NewRequest(http.MethodGet, "/t", nil)
++	req.Header.Set("x-api-key", "sk-\xff\xfe")
++	r.ServeHTTP(w, req)
++	require.Equal(t, http.StatusUnauthorized, w.Code)
++}
++
+ func TestSimpleModeBypassesQuotaCheck(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 
+diff --git a/backend/internal/service/api_key_service.go b/backend/internal/service/api_key_service.go
+index ec9f2c46d..6b504ee55 100644
+--- a/backend/internal/service/api_key_service.go
++++ b/backend/internal/service/api_key_service.go
+@@ -13,6 +13,7 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
++	"unicode/utf8"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+@@ -735,7 +736,9 @@ func (s *APIKeyService) GetByID(ctx context.Context, id int64) (*APIKey, error)
+ 
+ // GetByKey 根据Key字符串获取API Key（用于认证）
+ func (s *APIKeyService) GetByKey(ctx context.Context, key string) (*APIKey, error) {
+-	if len(key) == 0 || len(key) > MaxAPIKeyCredentialBytes {
++	// 非 UTF-8 的 key 不可能存在（生成和自定义的 key 都是 ASCII），且 Postgres 会以
++	// invalid byte sequence 拒绝该参数；直接按不存在处理，避免返回 500。
++	if len(key) == 0 || len(key) > MaxAPIKeyCredentialBytes || !utf8.ValidString(key) {
+ 		return nil, ErrAPIKeyNotFound
+ 	}
+ 	cacheKey := s.authCacheKey(key)
+diff --git a/backend/internal/service/api_key_service_cache_test.go b/backend/internal/service/api_key_service_cache_test.go
+index 9e9cc734d..692e4ce3d 100644
+--- a/backend/internal/service/api_key_service_cache_test.go
++++ b/backend/internal/service/api_key_service_cache_test.go
+@@ -615,6 +615,16 @@ func TestAPIKeyService_GetByKeyAllowsMaximumLength(t *testing.T) {
+ 	require.Equal(t, int32(1), repoCalls.Load())
+ }
+ 
++func TestAPIKeyService_GetByKeyRejectsNonUTF8BeforeLookup(t *testing.T) {
++	repo := &authRepoStub{getByKeyForAuth: func(context.Context, string) (*APIKey, error) {
++		t.Fatal("non-UTF-8 credential reached repository")
++		return nil, nil
++	}}
++	svc := NewAPIKeyService(repo, nil, nil, nil, nil, nil, &config.Config{})
++	_, err := svc.GetByKey(context.Background(), "sk-\xff\xfe")
++	require.ErrorIs(t, err, ErrAPIKeyNotFound)
++}
++
+ func TestAPIKeyService_AuthLookupBulkheadRejectsExcessMisses(t *testing.T) {
+ 	entered := make(chan struct{})
+ 	release := make(chan struct{})

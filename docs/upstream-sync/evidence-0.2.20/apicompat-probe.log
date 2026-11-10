@@ -1,0 +1,29 @@
+=== RUN   TestIntake020BufferedReasoning
+=== RUN   TestIntake020BufferedReasoning/messages
+    release_intake_020_probe_test.go:13: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/apicompat/release_intake_020_probe_test.go:13
+        	Error:      	"{\"id\":\"r1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"text\":\"\",\"type\":\"text\"}],\"model\":\"test\",\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}" does not contain "visible upstream reasoning"
+        	Test:       	TestIntake020BufferedReasoning/messages
+=== RUN   TestIntake020BufferedReasoning/chat
+    release_intake_020_probe_test.go:13: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/apicompat/release_intake_020_probe_test.go:13
+        	Error:      	"{\"id\":\"r1\",\"object\":\"chat.completion\",\"created\":1794300033,\"model\":\"test\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\"},\"finish_reason\":\"stop\"}]}" does not contain "visible upstream reasoning"
+        	Test:       	TestIntake020BufferedReasoning/chat
+--- FAIL: TestIntake020BufferedReasoning (0.00s)
+    --- FAIL: TestIntake020BufferedReasoning/messages (0.00s)
+    --- FAIL: TestIntake020BufferedReasoning/chat (0.00s)
+=== RUN   TestIntake020CompletedMessageShape
+    release_intake_020_probe_test.go:20: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/apicompat/release_intake_020_probe_test.go:20
+        	Error:      	"{\"type\":\"message\",\"id\":\"m1\",\"role\":\"assistant\",\"status\":\"completed\"}" does not contain "\"content\":[]"
+        	Test:       	TestIntake020CompletedMessageShape
+--- FAIL: TestIntake020CompletedMessageShape (0.00s)
+=== RUN   TestIntake020RefusalWire
+    release_intake_020_probe_test.go:26: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/pkg/apicompat/release_intake_020_probe_test.go:26
+        	Error:      	"{\"item\":{\"content\":[{\"text\":\"\",\"type\":\"refusal\"}],\"id\":\"\",\"role\":\"assistant\",\"type\":\"message\"},\"output_index\":0,\"sequence_number\":0,\"type\":\"response.output_item.done\"}" does not contain "\"refusal\":\"cannot comply\""
+        	Test:       	TestIntake020RefusalWire
+--- FAIL: TestIntake020RefusalWire (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/pkg/apicompat	0.003s
+FAIL

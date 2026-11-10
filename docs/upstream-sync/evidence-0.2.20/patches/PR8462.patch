@@ -1,0 +1,1960 @@
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index 3518463f4..02c61704a 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -656,6 +656,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+ 	// 该判断已排除 Codex 被动 image_gen namespace，避免 CC-only 账号被误过滤（#4476）。
+ 	needsResponses := nativeV2 || legacyCompact
+ 	requiredCapability := openAIResponsesRequiredCapabilityForRequest(imageIntent, needsResponses, requestPlatform)
++	imageSizeRouted := imageIntent && requestPlatform == service.PlatformOpenAI
++	imageSize := ""
++	if imageSizeRouted {
++		imageSize = service.OpenAIResponsesImageRequestSize(body)
++		c.Request = c.Request.WithContext(service.WithOpenAIImageSizeRouting(c.Request.Context(), imageSize))
++	}
+ 
+ 	// 分组利润控制：请求级装配定价上下文——pricingAt 固定本请求的
+ 	// D 与计费高峰因子，选号、槽位终检与全部 failover 重入共用同一门与阈值。
+@@ -702,6 +708,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+ 					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "compact_not_supported", "No available accounts support /responses/compact", streamStarted)
+ 					return
+ 				}
++				if imageSizeRouted {
++					if tier, unsupported := h.gatewayService.OpenAIImageSizeTierUnsupported(c.Request.Context(), apiKey.GroupID, forwardModel, imageSize, requiredCapability, ""); unsupported {
++						service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
++						h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", service.OpenAIImageSizeTierUnsupportedMessage(imageSize, tier), streamStarted)
++						return
++					}
++				}
+ 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, requestPlatform)
+ 				cls = classifySelectionFailureError(err, cls)
+ 				if !cls.ModelNotFound {
+diff --git a/backend/internal/handler/openai_images.go b/backend/internal/handler/openai_images.go
+index beda748cf..95ccbd9a7 100644
+--- a/backend/internal/handler/openai_images.go
++++ b/backend/internal/handler/openai_images.go
+@@ -156,7 +156,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+ 	defer inflightDone()
+ 
+ 	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, body)
+-	requestCtx := service.WithOpenAIImagesEndpoint(service.WithOpenAIImageGenerationIntent(c.Request.Context()))
++	requestCtx := service.WithOpenAIImageSizeRouting(service.WithOpenAIImagesEndpoint(service.WithOpenAIImageGenerationIntent(c.Request.Context())), parsed.Size)
+ 
+ 	maxAccountSwitches := h.maxAccountSwitches
+ 	switchCount := 0
+@@ -189,6 +189,11 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
+ 				zap.Int("excluded_account_count", len(failedAccountIDs)),
+ 			)
+ 			if len(failedAccountIDs) == 0 {
++				if tier, unsupported := h.gatewayService.OpenAIImageSizeTierUnsupported(c.Request.Context(), apiKey.GroupID, routingModel, parsed.Size, "", parsed.RequiredCapabilityForModel(channelMapping.MappedModel)); unsupported {
++					service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
++					h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", service.OpenAIImageSizeTierUnsupportedMessage(parsed.Size, tier), streamStarted)
++					return
++				}
+ 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, clientRequestModel, routingModel, service.PlatformOpenAI)
+ 				if !cls.ModelNotFound {
+ 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
+diff --git a/backend/internal/handler/openai_images_size_routing_test.go b/backend/internal/handler/openai_images_size_routing_test.go
+new file mode 100644
+index 000000000..45596b431
+--- /dev/null
++++ b/backend/internal/handler/openai_images_size_routing_test.go
+@@ -0,0 +1,164 @@
++//go:build unit
++
++package handler
++
++import (
++	"bytes"
++	"context"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++type openAIImagesSizeRoutingAccountRepo struct {
++	openAIImagesFailoverAccountRepo
++}
++
++func (r openAIImagesSizeRoutingAccountRepo) ListModelAvailabilityCandidates(_ context.Context, _ *int64, platforms []string, _ bool) ([]service.Account, error) {
++	var out []service.Account
++	for _, platform := range platforms {
++		out = append(out, r.accountsForPlatform(platform)...)
++	}
++	return out, nil
++}
++
++func newOpenAIImagesSizeRoutingTestHandler(t *testing.T, accounts []service.Account, upstream service.HTTPUpstream) *OpenAIGatewayHandler {
++	t.Helper()
++	cfg := &config.Config{RunMode: config.RunModeSimple}
++	gatewayService := service.NewOpenAIGatewayService(
++		openAIImagesSizeRoutingAccountRepo{openAIImagesFailoverAccountRepo{accounts: accounts}},
++		nil, nil, nil, nil, nil, nil,
++		cfg,
++		nil, nil, nil, nil, nil,
++		upstream,
++		nil, nil, nil, nil, nil, nil, nil, nil,
++	)
++	billingService := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
++	t.Cleanup(billingService.Stop)
++	handler := NewOpenAIGatewayHandler(
++		gatewayService,
++		service.NewConcurrencyService(nil),
++		billingService,
++		service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg),
++		nil, nil, nil, nil,
++		cfg,
++	)
++	handler.maxAccountSwitches = 10
++	return handler
++}
++
++func serveOpenAIImagesSizeRoutingRequest(handler *OpenAIGatewayHandler, groupID int64, body string) (*httptest.ResponseRecorder, *gin.Context) {
++	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader([]byte(body)))
++	req.Header.Set("Content-Type", "application/json")
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = req
++	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
++		ID:      99,
++		GroupID: &groupID,
++		Group:   &service.Group{ID: groupID, AllowImageGeneration: true},
++		User:    &service.User{ID: 100},
++	})
++	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 100, Concurrency: 0})
++	handler.Images(c)
++	return rec, c
++}
++
++func newOpenAIImagesSizeRoutingAccount(id int64, tiers ...any) service.Account {
++	return service.Account{
++		ID:          id,
++		Name:        fmt.Sprintf("image-size-account-%d", id),
++		Platform:    service.PlatformOpenAI,
++		Type:        service.AccountTypeOAuth,
++		Status:      service.StatusActive,
++		Schedulable: true,
++		Priority:    int(id),
++		Credentials: map[string]any{"access_token": fmt.Sprintf("token-%d", id)},
++		Extra:       map[string]any{service.AccountExtraOpenAIImageSizeTiers: tiers},
++	}
++}
++
++func TestOpenAIGatewayHandlerImages_SizeTierMissingFromGroupReturns400(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	upstream := &openAIImagesFailoverHTTPUpstream{}
++	handler := newOpenAIImagesSizeRoutingTestHandler(t, []service.Account{
++		newOpenAIImagesSizeRoutingAccount(1, "1K", "2K"),
++	}, upstream)
++
++	rec, c := serveOpenAIImagesSizeRoutingRequest(handler, 3140, `{"model":"gpt-image-2","prompt":"draw a cat","size":"3840x2160"}`)
++
++	require.Equal(t, http.StatusBadRequest, rec.Code)
++	require.Equal(t, "invalid_request_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
++	require.Contains(t, gjson.GetBytes(rec.Body.Bytes(), "error.message").String(), "4K")
++	require.Empty(t, upstream.calls())
++	reason, _ := c.Get(service.OpsClientBusinessLimitedReasonKey)
++	require.Equal(t, service.OpsClientBusinessLimitedReasonLocalModelConfiguration, reason)
++}
++
++func TestOpenAIGatewayHandlerImages_SizeTierRoutesToAllowedAccounts(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	upstream := &openAIImagesFailoverHTTPUpstream{}
++	handler := newOpenAIImagesSizeRoutingTestHandler(t, []service.Account{
++		newOpenAIImagesSizeRoutingAccount(1, "1K", "2K"),
++		newOpenAIImagesSizeRoutingAccount(2, "4K"),
++		newOpenAIImagesSizeRoutingAccount(3, "4K"),
++	}, upstream)
++
++	rec, _ := serveOpenAIImagesSizeRoutingRequest(handler, 3141, `{"model":"gpt-image-1","prompt":"draw a cat","size":"2880x2880"}`)
++
++	require.Equal(t, http.StatusBadGateway, rec.Code, "the stub upstream fails every attempt")
++	require.Equal(t, []int64{2, 3}, upstream.calls(), "4K requests fail over only across 4K accounts")
++}
++
++func serveOpenAIResponsesSizeRoutingRequest(handler *OpenAIGatewayHandler, groupID int64, body string) (*httptest.ResponseRecorder, *gin.Context) {
++	req := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader([]byte(body)))
++	req.Header.Set("Content-Type", "application/json")
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = req
++	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
++		ID:      99,
++		GroupID: &groupID,
++		Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
++		User:    &service.User{ID: 100},
++	})
++	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 100, Concurrency: 0})
++	handler.Responses(c)
++	return rec, c
++}
++
++func TestOpenAIGatewayHandlerResponses_ImageToolSizeTierMissingFromGroupReturns400(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	upstream := &openAIImagesFailoverHTTPUpstream{}
++	handler := newOpenAIImagesSizeRoutingTestHandler(t, []service.Account{
++		newOpenAIImagesSizeRoutingAccount(1, "1K", "2K"),
++	}, upstream)
++
++	rec, _ := serveOpenAIResponsesSizeRoutingRequest(handler, 3142, `{"model":"gpt-5.4","stream":false,"input":"draw a cat","tools":[{"type":"image_generation","size":"3840x2160"}]}`)
++
++	require.Equal(t, http.StatusBadRequest, rec.Code)
++	require.Equal(t, "invalid_request_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
++	require.Contains(t, gjson.GetBytes(rec.Body.Bytes(), "error.message").String(), "4K")
++	require.Empty(t, upstream.calls())
++}
++
++func TestOpenAIGatewayHandlerResponses_TextRequestIgnoresImageSizeTiers(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	upstream := &openAIImagesFailoverHTTPUpstream{}
++	handler := newOpenAIImagesSizeRoutingTestHandler(t, []service.Account{
++		newOpenAIImagesSizeRoutingAccount(1, "4K"),
++	}, upstream)
++
++	_, _ = serveOpenAIResponsesSizeRoutingRequest(handler, 3143, `{"model":"gpt-5.4","stream":false,"input":"hello","size":"1024x1024"}`)
++
++	require.NotEmpty(t, upstream.calls())
++	require.Equal(t, int64(1), upstream.calls()[0])
++}
+diff --git a/backend/internal/repository/scheduler_cache.go b/backend/internal/repository/scheduler_cache.go
+index 2aa73c61e..f8a283d09 100644
+--- a/backend/internal/repository/scheduler_cache.go
++++ b/backend/internal/repository/scheduler_cache.go
+@@ -1317,6 +1317,8 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
+ 		// 走网关报 no available accounts"。
+ 		"openai_passthrough",
+ 		"openai_oauth_passthrough",
++		// 生图尺寸档位在候选过滤阶段按本投影判定，裁掉后受限账号会接到不允许的档位。
++		service.AccountExtraOpenAIImageSizeTiers,
+ 		"codex_fingerprint_mode",
+ 		"codex_fingerprint_seed",
+ 		"codex_5h_used_percent",
+diff --git a/backend/internal/repository/scheduler_cache_unit_test.go b/backend/internal/repository/scheduler_cache_unit_test.go
+index 2b8dd7865..0a81d5a3c 100644
+--- a/backend/internal/repository/scheduler_cache_unit_test.go
++++ b/backend/internal/repository/scheduler_cache_unit_test.go
+@@ -567,6 +567,23 @@ func TestBuildSchedulerMetadataAccount_KeepsQuotaStateForCachedAccounts(t *testi
+ 	}
+ }
+ 
++func TestBuildSchedulerMetadataAccount_KeepsOpenAIImageSizeTiers(t *testing.T) {
++	account := service.Account{
++		ID:       91,
++		Platform: service.PlatformOpenAI,
++		Type:     service.AccountTypeAPIKey,
++		Extra: map[string]any{
++			service.AccountExtraOpenAIImageSizeTiers: []any{"4K"},
++			"unused_large_field":                     "drop-me",
++		},
++	}
++
++	got := buildSchedulerMetadataAccount(account)
++
++	require.Equal(t, []string{"4K"}, got.OpenAIImageSizeTiers())
++	require.Nil(t, got.Extra["unused_large_field"])
++}
++
+ func TestBuildSchedulerMetadataAccount_KeepsModelRateLimits(t *testing.T) {
+ 	account := service.Account{
+ 		ID:       90,
+diff --git a/backend/internal/service/account_test_service.go b/backend/internal/service/account_test_service.go
+index 6f970eb0f..45d3c7cb1 100644
+--- a/backend/internal/service/account_test_service.go
++++ b/backend/internal/service/account_test_service.go
+@@ -3060,6 +3060,9 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+ 		"n":               1,
+ 		"response_format": "b64_json",
+ 	}
++	if size := account.OpenAIImageTestSize(); size != "" {
++		payload["size"] = size
++	}
+ 	payloadBytes, _ := json.Marshal(payload)
+ 
+ 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(payloadBytes))
+@@ -3156,7 +3159,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
+ 		Endpoint: openAIImagesGenerationsEndpoint,
+ 		Model:    strings.TrimSpace(modelID),
+ 		Prompt:   prompt,
++		Size:     account.OpenAIImageTestSize(),
+ 	}
++	parsed.ExplicitSize = parsed.Size != ""
+ 	applyOpenAIImagesDefaults(parsed)
+ 
+ 	upstreamModel := account.GetMappedModel(parsed.Model)
+diff --git a/backend/internal/service/openai_account_scheduler.go b/backend/internal/service/openai_account_scheduler.go
+index 2cbf1211f..3f2a2c993 100644
+--- a/backend/internal/service/openai_account_scheduler.go
++++ b/backend/internal/service/openai_account_scheduler.go
+@@ -386,6 +386,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
+ 	if s != nil && s.service != nil && s.service.openAIGroupRequiresPrivacySet(ctx, req.GroupID) {
+ 		req.RequirePrivacySet = true
+ 	}
++	ctx = withOpenAIImageSizeStickyAccount(withOpenAIImageSizeStickyAccount(ctx, req.StickyAccountID), req.StickyPreviousAccountID)
+ 	start := time.Now()
+ 	// 命名返回值保证 defer 写入的耗时同时返回给调用方。
+ 	defer func() {
+@@ -409,7 +410,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
+ 			return nil, decision, err
+ 		}
+ 		if selection != nil && selection.Account != nil {
+-			compatible, _ := s.isAccountRequestCompatibleReason(ctx, selection.Account, req)
++			compatible, _ := s.isAccountRequestCompatibleReason(withOpenAIImageSizeStickyAccount(ctx, selection.Account.ID), selection.Account, req)
+ 			hasGroupMetadata := len(selection.Account.GroupIDs) > 0 || len(selection.Account.AccountGroups) > 0
+ 			groupCompatible := !hasGroupMetadata || openAIStickyAccountMatchesGroup(selection.Account, req.GroupID)
+ 			if hasGroupMetadata && s.service != nil {
+@@ -522,6 +523,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
+ 			return nil, false, nil
+ 		}
+ 	}
++	ctx = withOpenAIImageSizeStickyAccount(ctx, accountID)
+ 
+ 	account, err := s.service.getSchedulableAccount(ctx, accountID)
+ 	if err != nil || account == nil {
+@@ -1823,6 +1825,9 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
+ 	if !accountSupportsOpenAICapabilities(account, req.RequiredCapability, req.RequiredImageCapability) {
+ 		return false, "capability_mismatch"
+ 	}
++	if vetoed, reason := openAIImageSizeVetoReason(ctx, account); vetoed {
++		return false, reason
++	}
+ 	// 分组利润控制：不合格账号在候选过滤与抢槽后终检阶段即被排除，
+ 	// 排序/评分/粘性/熔断只在合格账号之间工作；named reason 进入 filter stats。
+ 	if vetoed, reason := openAIProfitControlVetoReason(ctx, account); vetoed {
+@@ -2153,7 +2158,7 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
+ 	return selection, decision, err
+ }
+ 
+-// selectAccountWithScheduler wraps selectAccountWithSchedulerOnce with a
++// selectAccountWithScheduler wraps selectAccountWithSchedulerBySize with a
+ // fail-open second pass for the proxy stream circuit (#5056): when the only
+ // reason no account is available is that every candidate sits behind a
+ // quarantined proxy, the quarantine must degrade to a preference instead of
+@@ -2175,7 +2180,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
+ 	previousResponseCanMove bool,
+ 	useUpstreamTokenCost bool,
+ ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+-	selection, decision, err := s.selectAccountWithSchedulerOnce(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
++	selection, decision, err := s.selectAccountWithSchedulerBySize(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+ 	if err == nil || openAIProxyStreamQuarantineBypassed(ctx) {
+ 		return selection, decision, err
+ 	}
+@@ -2191,7 +2196,42 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
+ 		return selection, decision, err
+ 	}
+ 	s.logOpenAIProxyStreamQuarantineFailOpen(requestedModel, blocked)
+-	return s.selectAccountWithSchedulerOnce(withOpenAIProxyStreamQuarantineBypass(ctx), groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
++	return s.selectAccountWithSchedulerBySize(withOpenAIProxyStreamQuarantineBypass(ctx), groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
++}
++
++// selectAccountWithSchedulerBySize runs selectAccountWithSchedulerOnce once per
++// image size pass recorded by WithOpenAIImageSizeRouting, or once when the
++// request carries no image size. A spillover pass that acquires a slot hands
++// the session binding to bindOpenAIImageSizeSpilloverAccount together with the
++// binding read before the first pass.
++func (s *OpenAIGatewayService) selectAccountWithSchedulerBySize(
++	ctx context.Context,
++	groupID *int64,
++	previousResponseID string,
++	sessionHash string,
++	requestedModel string,
++	excludedIDs map[int64]struct{},
++	requiredTransport OpenAIUpstreamTransport,
++	requiredCapability OpenAIEndpointCapability,
++	requiredImageCapability OpenAIImagesCapability,
++	requireCompact bool,
++	platform string,
++	previousResponseCanMove bool,
++	useUpstreamTokenCost bool,
++) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
++	var initialStickyAccountID int64
++	if strings.TrimSpace(sessionHash) != "" && openAIImageSizeRoutingUsesPreference(ctx) {
++		if accountID, err := s.getStickySessionAccountID(ctx, groupID, sessionHash); err == nil {
++			initialStickyAccountID = accountID
++		}
++	}
++	return selectOpenAIAccountByImageSizePasses(ctx, func(passCtx context.Context) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
++		selection, decision, err := s.selectAccountWithSchedulerOnce(passCtx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
++		if err == nil && selection != nil && selection.Acquired && openAIImageSizeSpilloverPass(passCtx) {
++			s.bindOpenAIImageSizeSpilloverAccount(passCtx, groupID, sessionHash, initialStickyAccountID, selection)
++		}
++		return selection, decision, err
++	})
+ }
+ 
+ type openAIGroupPrivacyRequirementContextKey struct{}
+@@ -2272,7 +2312,7 @@ func (s *OpenAIGatewayService) selectLegacyAccountByPreviousResponse(
+ 	}
+ 	account := selection.Account
+ 	scheduler := &defaultOpenAIAccountScheduler{service: s, stats: newOpenAIAccountRuntimeStats()}
+-	compatible, _ := scheduler.isAccountRequestCompatibleReason(ctx, account, OpenAIAccountScheduleRequest{
++	compatible, _ := scheduler.isAccountRequestCompatibleReason(withOpenAIImageSizeStickyAccount(ctx, account.ID), account, OpenAIAccountScheduleRequest{
+ 		GroupID:                 groupID,
+ 		Platform:                platform,
+ 		RequestedModel:          requestedModel,
+@@ -2323,7 +2363,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
+ 	}
+ 	platform = NormalizeOpenAICompatiblePlatform(platform)
+ 	decision := OpenAIAccountScheduleDecision{}
+-	preserveGuardianParentBinding := preserveOpenAIGuardianParentBinding(ctx, sessionHash)
++	preserveStickyBinding := preserveOpenAIGuardianParentBinding(ctx, sessionHash) || openAIImageSizeSpilloverPass(ctx)
+ 	guardianParentAccountID := int64(0)
+ 	if strings.TrimSpace(previousResponseID) == "" {
+ 		guardianParentAccountID = s.resolveOpenAIGuardianParentAccountID(ctx, groupID)
+@@ -2371,7 +2411,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
+ 			}
+ 		}
+ 		legacySessionHash := sessionHash
+-		if preserveGuardianParentBinding {
++		if preserveStickyBinding {
+ 			legacySessionHash = ""
+ 		}
+ 		if requiredTransport == OpenAIUpstreamTransportAny || requiredTransport == OpenAIUpstreamTransportHTTPSSE {
+@@ -2457,7 +2497,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
+ 		StickyPreviousAccountID: stickyPreviousAccountID,
+ 		StickyWeighted:          stickyWeighted,
+ 		SubscriptionPriority:    subscriptionPriority,
+-		PreserveStickyBinding:   preserveGuardianParentBinding,
++		PreserveStickyBinding:   preserveStickyBinding,
+ 		RequirePrivacySet:       s.openAIGroupRequiresPrivacySet(ctx, groupID),
+ 		PreviousResponseID:      previousResponseID,
+ 		PreviousResponseCanMove: previousResponseCanMove,
+diff --git a/backend/internal/service/openai_gateway_scheduling.go b/backend/internal/service/openai_gateway_scheduling.go
+index af0b73d9d..90728a3f9 100644
+--- a/backend/internal/service/openai_gateway_scheduling.go
++++ b/backend/internal/service/openai_gateway_scheduling.go
+@@ -453,6 +453,9 @@ func openAICompatibleAccountEligibilityFailureReasonBeforeProfit(ctx context.Con
+ 	if requireCompact && openAICompactSupportTier(account) == 0 {
+ 		return "compact_unsupported"
+ 	}
++	if vetoed, reason := openAIImageSizeVetoReason(ctx, account); vetoed {
++		return reason
++	}
+ 	return ""
+ }
+ 
+@@ -970,6 +973,7 @@ func (s *OpenAIGatewayService) tryStickySessionHit(ctx context.Context, groupID
+ 	if _, excluded := excludedIDs[accountID]; excluded {
+ 		return nil
+ 	}
++	ctx = withOpenAIImageSizeStickyAccount(ctx, accountID)
+ 
+ 	account, err := s.getSchedulableAccount(ctx, accountID)
+ 	if err != nil {
+@@ -1153,6 +1157,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
+ 			stickyAccountID = accountID
+ 		}
+ 	}
++	ctx = withOpenAIImageSizeStickyAccount(ctx, stickyAccountID)
+ 	if s.concurrencyService == nil || !cfg.LoadBatchEnabled {
+ 		account, stickyHit, err := s.selectAccountForModelWithExclusionsStickyHit(ctx, groupID, platform, sessionHash, requestedModel, excludedIDs, requireCompact, stickyAccountID, requiredCapability, preferLowUpstreamRate)
+ 		if err != nil {
+diff --git a/backend/internal/service/openai_image_size_routing.go b/backend/internal/service/openai_image_size_routing.go
+new file mode 100644
+index 000000000..7b73a8c6c
+--- /dev/null
++++ b/backend/internal/service/openai_image_size_routing.go
+@@ -0,0 +1,343 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"slices"
++	"strings"
++	"sync/atomic"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++)
++
++// AccountExtraOpenAIImageSizeTiers 是账号允许承接的生图尺寸档位列表，档位口径与
++// ClassifyImageBillingTier 一致（1K/2K/4K）。缺省、空列表或三档齐全表示不限。
++const AccountExtraOpenAIImageSizeTiers = "openai_image_size_tiers"
++
++const openAIImageSizeTierUnsupportedReason = "image_size_tier_unsupported"
++
++var openAIImageSizeTierOrder = []string{ImageBillingSize1K, ImageBillingSize2K, ImageBillingSize4K}
++
++// openAIImageSizeTestSizes 是测试连接按账号最低允许档位发送的尺寸，各档取该档内的常用尺寸。
++var openAIImageSizeTestSizes = map[string]string{
++	ImageBillingSize1K: "1024x1024",
++	ImageBillingSize2K: "1536x1024",
++	ImageBillingSize4K: "3840x2160",
++}
++
++// OpenAIImageSizeTiers 按 1K、2K、4K 顺序返回账号限定的尺寸档位；不限时返回 nil。
++func (a *Account) OpenAIImageSizeTiers() []string {
++	if a == nil || a.Extra == nil {
++		return nil
++	}
++	var values []string
++	switch raw := a.Extra[AccountExtraOpenAIImageSizeTiers].(type) {
++	case []any:
++		for _, item := range raw {
++			if value, ok := item.(string); ok {
++				values = append(values, value)
++			}
++		}
++	case []string:
++		values = raw
++	}
++	tiers := make([]string, 0, len(openAIImageSizeTierOrder))
++	for _, tier := range openAIImageSizeTierOrder {
++		for _, value := range values {
++			if strings.EqualFold(strings.TrimSpace(value), tier) {
++				tiers = append(tiers, tier)
++				break
++			}
++		}
++	}
++	if len(tiers) == 0 || len(tiers) == len(openAIImageSizeTierOrder) {
++		return nil
++	}
++	return tiers
++}
++
++// SupportsOpenAIImageSizeTier 报告账号是否允许承接该尺寸档位。
++func (a *Account) SupportsOpenAIImageSizeTier(tier string) bool {
++	tiers := a.OpenAIImageSizeTiers()
++	return tiers == nil || slices.Contains(tiers, tier)
++}
++
++// OpenAIImageTestSize 返回测试连接应发送的尺寸：不限档位时为空（沿用上游默认），
++// 否则取账号最低允许档位的代表尺寸。
++func (a *Account) OpenAIImageTestSize() string {
++	tiers := a.OpenAIImageSizeTiers()
++	if len(tiers) == 0 {
++		return ""
++	}
++	return openAIImageSizeTestSizes[tiers[0]]
++}
++
++type openAIImageSizeRoutingCtxKey struct{}
++
++type openAIImageSizePassCtxKey struct{}
++
++// WithOpenAIImageSizeRouting 记录生图请求的尺寸参数，OpenAI 选号据此按账号尺寸档位分流。
++func WithOpenAIImageSizeRouting(ctx context.Context, size string) context.Context {
++	if ctx == nil {
++		ctx = context.Background()
++	}
++	return context.WithValue(ctx, openAIImageSizeRoutingCtxKey{}, strings.TrimSpace(size))
++}
++
++func openAIImageSizeRoutingFromContext(ctx context.Context) (string, bool) {
++	if ctx == nil {
++		return "", false
++	}
++	size, ok := ctx.Value(openAIImageSizeRoutingCtxKey{}).(string)
++	return size, ok
++}
++
++type openAIImageSizeStickyAccountsCtxKey struct{}
++
++// withOpenAIImageSizeStickyAccount 在未指定尺寸的选号轮次中标记请求已粘在 accountID 上
++// （会话粘性、previous_response_id），档位偏好不约束这些账号；其他请求原样返回 ctx。
++func withOpenAIImageSizeStickyAccount(ctx context.Context, accountID int64) context.Context {
++	if ctx == nil || accountID <= 0 {
++		return ctx
++	}
++	if pass, _ := ctx.Value(openAIImageSizePassCtxKey{}).(*openAIImageSizePass); pass == nil || pass.tier != "" {
++		return ctx
++	}
++	prev, _ := ctx.Value(openAIImageSizeStickyAccountsCtxKey{}).([]int64)
++	if slices.Contains(prev, accountID) {
++		return ctx
++	}
++	ids := make([]int64, len(prev), len(prev)+1)
++	copy(ids, prev)
++	return context.WithValue(ctx, openAIImageSizeStickyAccountsCtxKey{}, append(ids, accountID))
++}
++
++func isOpenAIImageSizeStickyAccount(ctx context.Context, account *Account) bool {
++	if ctx == nil || account == nil {
++		return false
++	}
++	ids, _ := ctx.Value(openAIImageSizeStickyAccountsCtxKey{}).([]int64)
++	return slices.Contains(ids, account.ID)
++}
++
++// openAIImageSizePass 是一轮选号的尺寸档位约束。
++type openAIImageSizePass struct {
++	// tier 非空时只放行允许该档位的账号（请求尺寸可识别）。
++	tier string
++	// rank 在 tier 为空时生效：只放行档位偏好层级等于 rank 的账号，
++	// 请求已粘在其上的账号（会话粘性、previous_response_id）不受约束。
++	rank int
++	// queuedIDs 是较早轮次只能排队的账号，本轮不再选它们。
++	queuedIDs map[int64]struct{}
++	// nextRank 是本轮排除过的后续层级中最小的一级；为 openAIImageSizePreferenceRanks 时后续各轮没有候选。
++	nextRank atomic.Int32
++}
++
++func (p *openAIImageSizePass) noteLaterRank(rank int) {
++	for {
++		current := p.nextRank.Load()
++		if int32(rank) >= current || p.nextRank.CompareAndSwap(current, int32(rank)) {
++			return
++		}
++	}
++}
++
++// openAIImageSizePreferenceRanks 是未指定尺寸请求的选号层级数，见 openAIImageSizePreferenceRank。
++const openAIImageSizePreferenceRanks = 4
++
++// openAIImageSizePreferenceRank 返回账号在未指定尺寸请求中的偏好层级：
++// 不限档位为 0，允许 4K 为 1，允许 2K（不含 4K）为 2，仅 1K 为 3。
++func openAIImageSizePreferenceRank(tiers []string) int {
++	switch {
++	case tiers == nil:
++		return 0
++	case slices.Contains(tiers, ImageBillingSize4K):
++		return 1
++	case slices.Contains(tiers, ImageBillingSize2K):
++		return 2
++	default:
++		return 3
++	}
++}
++
++// openAIImageSizeVetoReason 判定账号是否被当前选号轮次的尺寸档位约束排除。
++func openAIImageSizeVetoReason(ctx context.Context, account *Account) (bool, string) {
++	if ctx == nil || account == nil {
++		return false, ""
++	}
++	pass, _ := ctx.Value(openAIImageSizePassCtxKey{}).(*openAIImageSizePass)
++	if pass == nil {
++		return false, ""
++	}
++	tiers := account.OpenAIImageSizeTiers()
++	if pass.tier != "" {
++		if tiers == nil || slices.Contains(tiers, pass.tier) {
++			return false, ""
++		}
++		return true, openAIImageSizeTierUnsupportedReason
++	}
++	if _, queued := pass.queuedIDs[account.ID]; queued {
++		return true, openAIImageSizeTierUnsupportedReason
++	}
++	if isOpenAIImageSizeStickyAccount(ctx, account) {
++		return false, ""
++	}
++	rank := openAIImageSizePreferenceRank(tiers)
++	if rank == pass.rank {
++		return false, ""
++	}
++	if rank > pass.rank {
++		pass.noteLaterRank(rank)
++	}
++	return true, openAIImageSizeTierUnsupportedReason
++}
++
++// openAIImageSizeRoutingUsesPreference 报告 ctx 记录的生图尺寸是否按偏好层级逐层选号（未传、auto 或无法识别的尺寸）。
++func openAIImageSizeRoutingUsesPreference(ctx context.Context) bool {
++	size, ok := openAIImageSizeRoutingFromContext(ctx)
++	if !ok {
++		return false
++	}
++	_, explicit := ClassifyImageBillingTier(size)
++	return !explicit
++}
++
++// openAIImageSizeSpilloverPass 报告本轮是否在较早轮次只拿到排队结果之后进行。这些轮次选号时不写会话粘性绑定，
++// 抢到槽位后由 bindOpenAIImageSizeSpilloverAccount 处理绑定。
++func openAIImageSizeSpilloverPass(ctx context.Context) bool {
++	if ctx == nil {
++		return false
++	}
++	pass, _ := ctx.Value(openAIImageSizePassCtxKey{}).(*openAIImageSizePass)
++	return pass != nil && len(pass.queuedIDs) > 0
++}
++
++// bindOpenAIImageSizeSpilloverAccount 处理溢出轮次抢到槽位的选号结果的会话粘性绑定：会话仍绑定在首轮选号前的
++// 账号 initialAccountID 上时保留该绑定，溢出选中的账号只服务本次请求；首轮选号前没有绑定，或绑定已在选号过程中
++// 被清除、改写时，绑定选中的账号。选号结果带利润门时由 handler 在终检通过后绑定，会话保留守护父账号绑定时不改写，
++// 这两种情况这里都不绑定。
++func (s *OpenAIGatewayService) bindOpenAIImageSizeSpilloverAccount(ctx context.Context, groupID *int64, sessionHash string, initialAccountID int64, selection *AccountSelectionResult) {
++	if strings.TrimSpace(sessionHash) == "" || selection == nil || selection.Account == nil || selection.Account.ID <= 0 {
++		return
++	}
++	if selection.ProfitGateActive() || preserveOpenAIGuardianParentBinding(ctx, sessionHash) {
++		return
++	}
++	if initialAccountID > 0 {
++		if current, err := s.getStickySessionAccountID(ctx, groupID, sessionHash); err == nil && current == initialAccountID {
++			return
++		}
++	}
++	_ = s.BindStickySession(ctx, groupID, sessionHash, selection.Account.ID)
++}
++
++type openAIAccountSelectFunc func(ctx context.Context) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error)
++
++// selectOpenAIAccountByImageSizePasses 按尺寸档位约束选号，ctx 未记录生图尺寸时直接选号。
++// 可识别档位的请求只选一轮，只放行允许该档位的账号。未传、auto 或无法识别的尺寸按偏好层级逐层选号：
++// 先选不限档位的账号，再依次降级到允许 4K、2K、1K 的账号，跳过本轮未见到账号的层级。
++// 较早轮次抢到槽位的结果优先；某轮只能排队时把该账号留作后备并继续尝试后续层级，
++// 都抢不到槽位时返回最早的排队结果。返回的 LatencyMs 是各轮合计耗时。
++func selectOpenAIAccountByImageSizePasses(ctx context.Context, selectFn openAIAccountSelectFunc) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
++	size, ok := openAIImageSizeRoutingFromContext(ctx)
++	if !ok {
++		return selectFn(ctx)
++	}
++	if tier, explicit := ClassifyImageBillingTier(size); explicit {
++		return selectFn(context.WithValue(ctx, openAIImageSizePassCtxKey{}, &openAIImageSizePass{tier: tier}))
++	}
++	start := time.Now()
++	var (
++		waiting         *AccountSelectionResult
++		waitingDecision OpenAIAccountScheduleDecision
++		lastDecision    OpenAIAccountScheduleDecision
++		lastErr         error
++	)
++	queuedIDs := make(map[int64]struct{})
++	finish := func(selection *AccountSelectionResult, decision OpenAIAccountScheduleDecision, err error) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
++		decision.LatencyMs = time.Since(start).Milliseconds()
++		return selection, decision, err
++	}
++	for rank := 0; rank < openAIImageSizePreferenceRanks; {
++		pass := &openAIImageSizePass{rank: rank, queuedIDs: queuedIDs}
++		pass.nextRank.Store(openAIImageSizePreferenceRanks)
++		selection, decision, err := selectFn(context.WithValue(ctx, openAIImageSizePassCtxKey{}, pass))
++		switch {
++		case err == nil && selection != nil && selection.Account != nil:
++			if selection.Acquired || selection.WaitPlan == nil {
++				return finish(selection, decision, nil)
++			}
++			if waiting == nil {
++				waiting, waitingDecision = selection, decision
++			}
++			queuedIDs[selection.Account.ID] = struct{}{}
++		case err != nil && !errors.Is(err, ErrNoAvailableAccounts) && !errors.Is(err, ErrNoAvailableCompactAccounts):
++			if waiting != nil {
++				return finish(waiting, waitingDecision, nil)
++			}
++			return finish(selection, decision, err)
++		default:
++			lastDecision, lastErr = decision, err
++		}
++		rank = int(pass.nextRank.Load())
++	}
++	if waiting != nil {
++		return finish(waiting, waitingDecision, nil)
++	}
++	return finish(nil, lastDecision, lastErr)
++}
++
++// OpenAIImageSizeTierUnsupported 报告分组内持久可调度、支持该模型且具备所需端点与生图能力的
++// OpenAI 账号是否都不允许 size 所属档位，并返回该档位。查询绕过调度快照、忽略限流冷却等临时状态；
++// 尺寸无法识别、分组内没有满足模型与能力的账号或查询失败时返回 false。
++func (s *OpenAIGatewayService) OpenAIImageSizeTierUnsupported(
++	ctx context.Context,
++	groupID *int64,
++	requestedModel string,
++	size string,
++	requiredCapability OpenAIEndpointCapability,
++	requiredImageCapability OpenAIImagesCapability,
++) (string, bool) {
++	tier, ok := ClassifyImageBillingTier(size)
++	if !ok || s == nil || s.accountRepo == nil {
++		return "", false
++	}
++	requestedModel = strings.TrimSpace(requestedModel)
++	queryGroupID := groupID
++	includeGrouped := false
++	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
++		queryGroupID = nil
++		includeGrouped = true
++	}
++	accounts, err := s.accountRepo.ListModelAvailabilityCandidates(ctx, queryGroupID, []string{PlatformOpenAI}, includeGrouped)
++	if err != nil {
++		return "", false
++	}
++	hasModelSupport := false
++	for i := range accounts {
++		if requestedModel != "" && !accounts[i].IsModelSupported(requestedModel) {
++			continue
++		}
++		if !accountSupportsOpenAICapabilities(&accounts[i], requiredCapability, requiredImageCapability) {
++			continue
++		}
++		hasModelSupport = true
++		if accounts[i].SupportsOpenAIImageSizeTier(tier) {
++			return "", false
++		}
++	}
++	return tier, hasModelSupport
++}
++
++// OpenAIImageSizeTierUnsupportedMessage 是分组缺少某尺寸档位账号时返回给客户端的错误信息。
++func OpenAIImageSizeTierUnsupportedMessage(size string, tier string) string {
++	return fmt.Sprintf("Image size %q (%s tier) is not supported by any account in this group", strings.TrimSpace(size), tier)
++}
++
++// OpenAIResponsesImageRequestSize 返回 Responses 请求生图工具声明的尺寸，工具未声明时取顶层 size。
++func OpenAIResponsesImageRequestSize(body []byte) string {
++	cfg, _ := resolveOpenAIResponsesImageBillingConfigDetailedFromBody(body, "")
++	return cfg.InputSize
++}
+diff --git a/backend/internal/service/openai_image_size_routing_test.go b/backend/internal/service/openai_image_size_routing_test.go
+new file mode 100644
+index 000000000..aef39c142
+--- /dev/null
++++ b/backend/internal/service/openai_image_size_routing_test.go
+@@ -0,0 +1,589 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/require"
++)
++
++func TestAccountOpenAIImageSizeTiers(t *testing.T) {
++	cases := []struct {
++		name  string
++		extra map[string]any
++		want  []string
++	}{
++		{name: "missing", extra: nil, want: nil},
++		{name: "empty", extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{}}, want: nil},
++		{name: "all tiers", extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{"4K", "1K", "2K"}}, want: nil},
++		{name: "unknown only", extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{"8K", 4}}, want: nil},
++		{name: "not a list", extra: map[string]any{AccountExtraOpenAIImageSizeTiers: "4K"}, want: nil},
++		{name: "ordered and case-insensitive", extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{" 2k", "1K", "2K"}}, want: []string{"1K", "2K"}},
++		{name: "string slice", extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []string{"4K"}}, want: []string{"4K"}},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			account := &Account{Platform: PlatformOpenAI, Extra: tc.extra}
++			require.Equal(t, tc.want, account.OpenAIImageSizeTiers())
++		})
++	}
++
++	lowOnly := &Account{Extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{"1K", "2K"}}}
++	require.True(t, lowOnly.SupportsOpenAIImageSizeTier("2K"))
++	require.False(t, lowOnly.SupportsOpenAIImageSizeTier("4K"))
++	require.True(t, (&Account{}).SupportsOpenAIImageSizeTier("4K"))
++}
++
++func TestAccountOpenAIImageTestSize(t *testing.T) {
++	require.Empty(t, (&Account{}).OpenAIImageTestSize())
++	require.Equal(t, "1024x1024", (&Account{Extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{"2K", "1K"}}}).OpenAIImageTestSize())
++	require.Equal(t, "1536x1024", (&Account{Extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{"2K", "4K"}}}).OpenAIImageTestSize())
++	require.Equal(t, "3840x2160", (&Account{Extra: map[string]any{AccountExtraOpenAIImageSizeTiers: []any{"4K"}}}).OpenAIImageTestSize())
++}
++
++func TestOpenAIResponsesImageRequestSize(t *testing.T) {
++	require.Equal(t, "3840x2160", OpenAIResponsesImageRequestSize([]byte(`{"model":"gpt-5.4","tools":[{"type":"web_search"},{"type":"image_generation","size":"3840x2160"}]}`)))
++	require.Equal(t, "1024x1024", OpenAIResponsesImageRequestSize([]byte(`{"model":"gpt-5.4","size":"1024x1024","tools":[{"type":"image_generation"}]}`)))
++	require.Empty(t, OpenAIResponsesImageRequestSize([]byte(`{"model":"gpt-5.4","tools":[{"type":"image_generation"}]}`)))
++}
++
++func newOpenAIImageSizeTestAccount(id int64, priority int, tiers ...string) Account {
++	extra := map[string]any{}
++	if len(tiers) > 0 {
++		values := make([]any, 0, len(tiers))
++		for _, tier := range tiers {
++			values = append(values, tier)
++		}
++		extra[AccountExtraOpenAIImageSizeTiers] = values
++	}
++	return Account{
++		ID:          id,
++		Platform:    PlatformOpenAI,
++		Type:        AccountTypeAPIKey,
++		Status:      StatusActive,
++		Schedulable: true,
++		Concurrency: 1,
++		Priority:    priority,
++		Extra:       extra,
++	}
++}
++
++type openAIImageSizeSchedulerMode struct {
++	name      string
++	advanced  bool
++	loadBatch bool
++}
++
++var openAIImageSizeSchedulerModes = []openAIImageSizeSchedulerMode{
++	{name: "advanced", advanced: true, loadBatch: true},
++	{name: "legacy_load_batch", loadBatch: true},
++	{name: "legacy_sequential"},
++}
++
++func newOpenAIImageSizeSchedulerTestService(mode openAIImageSizeSchedulerMode, accounts []Account, cache *schedulerTestGatewayCache, concurrency schedulerTestConcurrencyCache) *OpenAIGatewayService {
++	cfg := &config.Config{}
++	cfg.Gateway.Scheduling.LoadBatchEnabled = mode.loadBatch
++	cfg.Gateway.Scheduling.StickySessionMaxWaiting = 3
++	cfg.Gateway.Scheduling.FallbackMaxWaiting = 3
++	if cache == nil {
++		cache = &schedulerTestGatewayCache{}
++	}
++	svc := &OpenAIGatewayService{
++		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
++		cache:              cache,
++		cfg:                cfg,
++		concurrencyService: NewConcurrencyService(concurrency),
++	}
++	if mode.advanced {
++		svc.rateLimitService = newOpenAIAdvancedSchedulerRateLimitService("true")
++	} else {
++		svc.rateLimitService = newOpenAIAdvancedSchedulerRateLimitService("false")
++	}
++	return svc
++}
++
++func selectOpenAIImageSizeTestAccount(t *testing.T, svc *OpenAIGatewayService, groupID int64, sessionHash string, size string) (*AccountSelectionResult, error) {
++	t.Helper()
++	ctx := WithOpenAIImageSizeRouting(context.Background(), size)
++	selection, _, err := svc.SelectAccountWithSchedulerForImages(ctx, &groupID, sessionHash, "gpt-image-2", nil, OpenAIImagesCapabilityNative)
++	return selection, err
++}
++
++func TestSelectAccountWithSchedulerForImages_ExplicitSizeFiltersByTier(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93001)
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81001, 0, "1K", "2K"),
++				newOpenAIImageSizeTestAccount(81002, 5, "4K"),
++			}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, nil, schedulerTestConcurrencyCache{})
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, "", "3840x2160")
++			require.NoError(t, err)
++			require.Equal(t, int64(81002), selection.Account.ID)
++
++			selection, err = selectOpenAIImageSizeTestAccount(t, svc, groupID, "", "1536x1024")
++			require.NoError(t, err)
++			require.Equal(t, int64(81001), selection.Account.ID)
++
++			selection, err = selectOpenAIImageSizeTestAccount(t, svc, groupID, "", "4K")
++			require.NoError(t, err)
++			require.Equal(t, int64(81002), selection.Account.ID)
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_ExplicitSizeWithoutTierAccountFails(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93002)
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81011, 0, "1K", "2K"),
++				newOpenAIImageSizeTestAccount(81012, 0, "2K"),
++			}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, nil, schedulerTestConcurrencyCache{})
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, "", "2880x2880")
++			require.Error(t, err)
++			require.True(t, errors.Is(err, ErrNoAvailableAccounts))
++			require.Nil(t, selection)
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_UnspecifiedSizePreferenceOrder(t *testing.T) {
++	cases := []struct {
++		name     string
++		accounts []Account
++		want     int64
++	}{
++		{
++			name: "unrestricted first",
++			accounts: []Account{
++				newOpenAIImageSizeTestAccount(81021, 0, "4K"),
++				newOpenAIImageSizeTestAccount(81022, 0, "1K", "2K"),
++				newOpenAIImageSizeTestAccount(81023, 9),
++			},
++			want: 81023,
++		},
++		{
++			name: "then 4K",
++			accounts: []Account{
++				newOpenAIImageSizeTestAccount(81031, 0, "1K", "2K"),
++				newOpenAIImageSizeTestAccount(81032, 9, "2K", "4K"),
++			},
++			want: 81032,
++		},
++		{
++			name: "then 2K",
++			accounts: []Account{
++				newOpenAIImageSizeTestAccount(81041, 0, "1K"),
++				newOpenAIImageSizeTestAccount(81042, 9, "2K"),
++			},
++			want: 81042,
++		},
++		{
++			name: "then 1K",
++			accounts: []Account{
++				newOpenAIImageSizeTestAccount(81051, 0, "1K"),
++			},
++			want: 81051,
++		},
++	}
++	for _, mode := range openAIImageSizeSchedulerModes {
++		for _, tc := range cases {
++			t.Run(mode.name+"/"+tc.name, func(t *testing.T) {
++				svc := newOpenAIImageSizeSchedulerTestService(mode, tc.accounts, nil, schedulerTestConcurrencyCache{})
++				for _, size := range []string{"", "auto", "3:2"} {
++					selection, err := selectOpenAIImageSizeTestAccount(t, svc, 93003, "", size)
++					require.NoError(t, err, size)
++					require.Equal(t, tc.want, selection.Account.ID, size)
++				}
++			})
++		}
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_UnspecifiedSizeSkipsBusyPreferredAccount(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81061, 0),
++				newOpenAIImageSizeTestAccount(81062, 9, "4K"),
++			}
++			concurrency := schedulerTestConcurrencyCache{acquireResults: map[int64]bool{81061: false}}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, nil, concurrency)
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, 93004, "", "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81062), selection.Account.ID)
++			require.True(t, selection.Acquired)
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_UnspecifiedSizeSkipsBusyPreferredAccountWithSession(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93009)
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81111, 0),
++				newOpenAIImageSizeTestAccount(81112, 9, "4K"),
++			}
++			for i := range accounts {
++				accounts[i].GroupIDs = []int64{groupID}
++			}
++			cache := &schedulerTestGatewayCache{}
++			concurrency := schedulerTestConcurrencyCache{acquireResults: map[int64]bool{81111: false}}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, cache, concurrency)
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, "image-size-busy-session", "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81112), selection.Account.ID)
++			require.True(t, selection.Acquired)
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_SpilloverToRestrictedAccountKeepsStickyBinding(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93011)
++			sessionHash := "image-size-spillover"
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81131, 0),
++				newOpenAIImageSizeTestAccount(81132, 9, "4K"),
++			}
++			for i := range accounts {
++				accounts[i].GroupIDs = []int64{groupID}
++			}
++			cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{"openai:" + sessionHash: 81131}}
++			concurrency := schedulerTestConcurrencyCache{
++				acquireResults: map[int64]bool{81131: false},
++				waitCounts:     map[int64]int{81131: 3},
++				loadMap:        map[int64]*AccountLoadInfo{81131: {AccountID: 81131, LoadRate: 100, WaitingCount: 3}},
++			}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, cache, concurrency)
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, sessionHash, "")
++			require.NoError(t, err)
++			require.NotNil(t, selection.Account)
++			require.Equal(t, int64(81131), cache.sessionBindings["openai:"+sessionHash], "a spillover pick must not rebind the session")
++			if mode.loadBatch {
++				require.Equal(t, int64(81132), selection.Account.ID)
++				require.True(t, selection.Acquired)
++			}
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_SpilloverWithoutBindingBindsServedAccount(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93012)
++			sessionHash := "image-size-spillover-unbound"
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81141, 0),
++				newOpenAIImageSizeTestAccount(81142, 9, "4K"),
++			}
++			for i := range accounts {
++				accounts[i].GroupIDs = []int64{groupID}
++			}
++			cache := &schedulerTestGatewayCache{}
++			concurrency := schedulerTestConcurrencyCache{
++				acquireResults: map[int64]bool{81141: false},
++				waitCounts:     map[int64]int{81141: 3},
++				loadMap:        map[int64]*AccountLoadInfo{81141: {AccountID: 81141, LoadRate: 100, WaitingCount: 3}},
++			}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, cache, concurrency)
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, sessionHash, "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81142), selection.Account.ID)
++			require.Equal(t, int64(81142), cache.sessionBindings["openai:"+sessionHash])
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_SpilloverReplacesClearedStaleBinding(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93014)
++			sessionHash := "image-size-spillover-stale"
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81161, 0),
++				newOpenAIImageSizeTestAccount(81162, 9, "4K"),
++				newOpenAIImageSizeTestAccount(81163, 0),
++			}
++			accounts[2].Schedulable = false
++			for i := range accounts {
++				accounts[i].GroupIDs = []int64{groupID}
++			}
++			cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{"openai:" + sessionHash: 81163}}
++			concurrency := schedulerTestConcurrencyCache{
++				acquireResults: map[int64]bool{81161: false},
++				waitCounts:     map[int64]int{81161: 3},
++				loadMap:        map[int64]*AccountLoadInfo{81161: {AccountID: 81161, LoadRate: 100, WaitingCount: 3}},
++			}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, cache, concurrency)
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, sessionHash, "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81162), selection.Account.ID)
++			require.True(t, selection.Acquired)
++			require.Equal(t, int64(81162), cache.sessionBindings["openai:"+sessionHash], "a binding that is no longer usable is replaced by the served account")
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_AllPassesQueuedKeepBindingOnReturnedAccount(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93015)
++			sessionHash := "image-size-all-queued"
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81171, 0),
++				newOpenAIImageSizeTestAccount(81172, 9, "4K"),
++			}
++			for i := range accounts {
++				accounts[i].GroupIDs = []int64{groupID}
++			}
++			cache := &schedulerTestGatewayCache{}
++			concurrency := schedulerTestConcurrencyCache{
++				acquireResults: map[int64]bool{81171: false, 81172: false},
++				waitCounts:     map[int64]int{81171: 3, 81172: 3},
++				loadMap: map[int64]*AccountLoadInfo{
++					81171: {AccountID: 81171, LoadRate: 100, WaitingCount: 3},
++					81172: {AccountID: 81172, LoadRate: 100, WaitingCount: 3},
++				},
++			}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, cache, concurrency)
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, sessionHash, "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81171), selection.Account.ID)
++			require.NotNil(t, selection.WaitPlan)
++			bound, ok := cache.sessionBindings["openai:"+sessionHash]
++			if mode.loadBatch {
++				require.False(t, ok, "a queued selection does not bind the session")
++			} else {
++				require.Equal(t, int64(81171), bound, "eager sequential binding stays on the returned queued account")
++			}
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_UnspecifiedSizePrefersHealthyProxyOverQuarantinedUnrestricted(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			quarantinedProxy := int64(71)
++			healthyProxy := int64(72)
++			unrestricted := newOpenAIImageSizeTestAccount(81121, 0)
++			unrestricted.ProxyID = &quarantinedProxy
++			highOnly := newOpenAIImageSizeTestAccount(81122, 9, "4K")
++			highOnly.ProxyID = &healthyProxy
++			svc := newOpenAIImageSizeSchedulerTestService(mode, []Account{unrestricted, highOnly}, nil, schedulerTestConcurrencyCache{})
++			svc.openaiProxyStreamCircuit = newOpenAIProxyStreamCircuit(openAIProxyStreamCircuitSettings{
++				failureThreshold: 1,
++				failureWindow:    time.Minute,
++				quarantineTTL:    10 * time.Minute,
++				maxEntries:       16,
++			})
++			svc.openaiProxyStreamCircuit.recordFailure(quarantinedProxy, time.Now())
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, 93010, "", "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81122), selection.Account.ID, "a restricted account on a healthy proxy beats the quarantine fail-open")
++
++			svc.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{unrestricted}}
++			selection, err = selectOpenAIImageSizeTestAccount(t, svc, 93010, "", "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81121), selection.Account.ID, "fail-open still serves when nothing else can")
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_StickyAccountUnderSizeRouting(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93005)
++			sessionHash := "image-size-sticky"
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81071, 0),
++				newOpenAIImageSizeTestAccount(81072, 9, "1K", "2K"),
++			}
++			for i := range accounts {
++				accounts[i].GroupIDs = []int64{groupID}
++			}
++			cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{
++				"openai:" + sessionHash: 81072,
++			}}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, cache, schedulerTestConcurrencyCache{})
++
++			selection, err := selectOpenAIImageSizeTestAccount(t, svc, groupID, sessionHash, "")
++			require.NoError(t, err)
++			require.Equal(t, int64(81072), selection.Account.ID, "unspecified size keeps the sticky account")
++
++			cache.sessionBindings["openai:"+sessionHash] = 81072
++			selection, err = selectOpenAIImageSizeTestAccount(t, svc, groupID, sessionHash, "3840x2160")
++			require.NoError(t, err)
++			require.Equal(t, int64(81071), selection.Account.ID, "explicit 4K leaves a 1K/2K-only sticky account")
++		})
++	}
++}
++
++func TestSelectAccountWithSchedulerForImages_BusyStickyAccountMatchesUnroutedSelection(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93013)
++			sessionHash := "image-size-busy-sticky"
++			selectWith := func(ctx context.Context) (int64, bool) {
++				accounts := []Account{
++					newOpenAIImageSizeTestAccount(81151, 0),
++					newOpenAIImageSizeTestAccount(81152, 9, "4K"),
++				}
++				for i := range accounts {
++					accounts[i].GroupIDs = []int64{groupID}
++				}
++				cache := &schedulerTestGatewayCache{sessionBindings: map[string]int64{"openai:" + sessionHash: 81151}}
++				concurrency := schedulerTestConcurrencyCache{
++					acquireResults: map[int64]bool{81151: false},
++					loadMap:        map[int64]*AccountLoadInfo{81151: {AccountID: 81151, LoadRate: 100}},
++				}
++				svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, cache, concurrency)
++				selection, _, err := svc.SelectAccountWithSchedulerForImages(ctx, &groupID, sessionHash, "gpt-image-2", nil, OpenAIImagesCapabilityNative)
++				require.NoError(t, err)
++				require.NotNil(t, selection.Account)
++				return selection.Account.ID, selection.Acquired
++			}
++			routedID, routedAcquired := selectWith(WithOpenAIImageSizeRouting(context.Background(), ""))
++			unroutedID, unroutedAcquired := selectWith(context.Background())
++			require.Equal(t, unroutedID, routedID, "a busy sticky account is waited on or escaped exactly as without size routing")
++			require.Equal(t, unroutedAcquired, routedAcquired)
++		})
++	}
++}
++
++func TestSelectAccountWithScheduler_PreviousResponseAccountUnderSizeRouting(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93008)
++			accounts := []Account{
++				newOpenAIImageSizeTestAccount(81101, 0),
++				newOpenAIImageSizeTestAccount(81102, 9, "1K", "2K"),
++			}
++			for i := range accounts {
++				accounts[i].GroupIDs = []int64{groupID}
++			}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, nil, schedulerTestConcurrencyCache{})
++			require.NoError(t, svc.getOpenAIWSStateStore().BindResponseAccount(context.Background(), groupID, "resp_image_size", 81102, time.Hour))
++
++			selectWithSize := func(size string) int64 {
++				ctx := WithOpenAIImageSizeRouting(context.Background(), size)
++				selection, _, err := svc.SelectAccountWithScheduler(ctx, &groupID, "resp_image_size", "", "gpt-5.4", nil, OpenAIUpstreamTransportAny, false)
++				require.NoError(t, err)
++				if selection.ReleaseFunc != nil {
++					selection.ReleaseFunc()
++				}
++				return selection.Account.ID
++			}
++			require.Equal(t, int64(81102), selectWithSize(""), "unspecified size keeps the previous_response account")
++			require.Equal(t, int64(81101), selectWithSize("3840x2160"), "explicit 4K leaves a 1K/2K-only previous_response account")
++		})
++	}
++}
++
++func TestSelectAccountWithScheduler_TextRequestIgnoresImageSizeTiers(t *testing.T) {
++	for _, mode := range openAIImageSizeSchedulerModes {
++		t.Run(mode.name, func(t *testing.T) {
++			groupID := int64(93006)
++			accounts := []Account{newOpenAIImageSizeTestAccount(81081, 0, "4K")}
++			svc := newOpenAIImageSizeSchedulerTestService(mode, accounts, nil, schedulerTestConcurrencyCache{})
++
++			selection, _, err := svc.SelectAccountWithScheduler(context.Background(), &groupID, "", "", "gpt-5.4", nil, OpenAIUpstreamTransportAny, false)
++			require.NoError(t, err)
++			require.Equal(t, int64(81081), selection.Account.ID)
++		})
++	}
++}
++
++func TestSelectOpenAIAccountByImageSizePasses_StopsWhenNoAccountVetoed(t *testing.T) {
++	restricted := newOpenAIImageSizeTestAccount(1, 0, "4K")
++	unrestricted := newOpenAIImageSizeTestAccount(2, 0)
++
++	calls := 0
++	_, _, err := selectOpenAIAccountByImageSizePasses(WithOpenAIImageSizeRouting(context.Background(), ""), func(ctx context.Context) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
++		calls++
++		vetoed, _ := openAIImageSizeVetoReason(ctx, &unrestricted)
++		require.False(t, vetoed)
++		return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
++	})
++	require.ErrorIs(t, err, ErrNoAvailableAccounts)
++	require.Equal(t, 1, calls)
++
++	calls = 0
++	_, _, err = selectOpenAIAccountByImageSizePasses(WithOpenAIImageSizeRouting(context.Background(), ""), func(ctx context.Context) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
++		calls++
++		_, _ = openAIImageSizeVetoReason(ctx, &restricted)
++		return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
++	})
++	require.ErrorIs(t, err, ErrNoAvailableAccounts)
++	require.Equal(t, 2, calls, "the 4K pass admits the 4K-only account, so the 2K and 1K passes are skipped")
++}
++
++func TestSelectOpenAIAccountByImageSizePasses_ReturnsEarliestWaitPlan(t *testing.T) {
++	restricted := newOpenAIImageSizeTestAccount(1, 0, "1K")
++	calls := 0
++	selection, _, err := selectOpenAIAccountByImageSizePasses(WithOpenAIImageSizeRouting(context.Background(), "auto"), func(ctx context.Context) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
++		calls++
++		_, _ = openAIImageSizeVetoReason(ctx, &restricted)
++		if calls == 1 {
++			return &AccountSelectionResult{Account: &Account{ID: 10}, WaitPlan: &AccountWaitPlan{AccountID: 10}}, OpenAIAccountScheduleDecision{}, nil
++		}
++		if calls == 2 {
++			return &AccountSelectionResult{Account: &Account{ID: 11}, WaitPlan: &AccountWaitPlan{AccountID: 11}}, OpenAIAccountScheduleDecision{}, nil
++		}
++		return nil, OpenAIAccountScheduleDecision{}, ErrNoAvailableAccounts
++	})
++	require.NoError(t, err)
++	require.Equal(t, int64(10), selection.Account.ID)
++	require.Equal(t, 2, calls, "the unrestricted pass jumps straight to the 1K-only rank")
++}
++
++func TestOpenAIImageSizeTierUnsupported(t *testing.T) {
++	groupID := int64(93007)
++	lowOnly := newOpenAIImageSizeTestAccount(81091, 0, "1K", "2K")
++	highOnly := newOpenAIImageSizeTestAccount(81092, 0, "4K")
++	textOnly := newOpenAIImageSizeTestAccount(81093, 0)
++	textOnly.Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"}}
++
++	svc := &OpenAIGatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{lowOnly, textOnly}}}
++	tier, unsupported := svc.OpenAIImageSizeTierUnsupported(context.Background(), &groupID, "gpt-image-2", "3840x2160", "", OpenAIImagesCapabilityNative)
++	require.True(t, unsupported)
++	require.Equal(t, "4K", tier)
++
++	_, unsupported = svc.OpenAIImageSizeTierUnsupported(context.Background(), &groupID, "gpt-image-2", "1024x1024", "", OpenAIImagesCapabilityNative)
++	require.False(t, unsupported)
++	_, unsupported = svc.OpenAIImageSizeTierUnsupported(context.Background(), &groupID, "gpt-image-2", "auto", "", OpenAIImagesCapabilityNative)
++	require.False(t, unsupported)
++
++	svc.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{lowOnly, highOnly}}
++	_, unsupported = svc.OpenAIImageSizeTierUnsupported(context.Background(), &groupID, "gpt-image-2", "3840x2160", "", OpenAIImagesCapabilityNative)
++	require.False(t, unsupported)
++
++	svc.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{textOnly}}
++	_, unsupported = svc.OpenAIImageSizeTierUnsupported(context.Background(), &groupID, "gpt-image-2", "3840x2160", "", OpenAIImagesCapabilityNative)
++	require.False(t, unsupported, "no account serves the model: leave classification to model_not_found")
++
++	chatOnly := newOpenAIImageSizeTestAccount(81094, 0)
++	chatOnly.Extra["openai_responses_supported"] = false
++	svc.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{chatOnly, lowOnly}}
++	_, unsupported = svc.OpenAIImageSizeTierUnsupported(context.Background(), &groupID, "gpt-5.4", "3840x2160", OpenAIEndpointCapabilityResponses, "")
++	require.True(t, unsupported, "an unrestricted account without the Responses capability cannot serve the request")
++	_, unsupported = svc.OpenAIImageSizeTierUnsupported(context.Background(), &groupID, "gpt-5.4", "3840x2160", OpenAIEndpointCapabilityChatCompletions, "")
++	require.False(t, unsupported)
++}
+diff --git a/frontend/src/components/account/BulkEditAccountModal.vue b/frontend/src/components/account/BulkEditAccountModal.vue
+index 7acd3ac79..6b839b1a0 100644
+--- a/frontend/src/components/account/BulkEditAccountModal.vue
++++ b/frontend/src/components/account/BulkEditAccountModal.vue
+@@ -193,6 +193,43 @@
+         </p>
+       </div>
+ 
++      <!-- OpenAI images: size tier routing -->
++      <div
++        v-if="allOpenAIPassthroughCapable"
++        class="border-t border-gray-200 pt-4 dark:border-dark-600"
++      >
++        <div class="mb-3 flex items-center justify-between gap-4">
++          <label
++            id="bulk-edit-openai-image-size-tiers-label"
++            class="input-label mb-0"
++            for="bulk-edit-openai-image-size-tiers-enabled"
++          >
++            {{ t('admin.accounts.openai.imageSizeTiers') }}
++          </label>
++          <input
++            v-model="enableOpenAIImageSizeTiers"
++            id="bulk-edit-openai-image-size-tiers-enabled"
++            data-testid="bulk-edit-openai-image-size-tiers-enabled"
++            type="checkbox"
++            aria-controls="bulk-edit-openai-image-size-tiers-body"
++            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
++          />
++        </div>
++        <div
++          id="bulk-edit-openai-image-size-tiers-body"
++          :class="!enableOpenAIImageSizeTiers && 'pointer-events-none opacity-50'"
++          role="group"
++          aria-labelledby="bulk-edit-openai-image-size-tiers-label"
++        >
++          <OpenAIImageSizeTiersField
++            v-model="openAIImageSizeTiers"
++            :disabled="!enableOpenAIImageSizeTiers"
++            hide-label
++            test-id-prefix="bulk-edit-openai-image-size-tier"
++          />
++        </div>
++      </div>
++
+       <!-- Base URL (API Key only) -->
+       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+         <div class="mb-3 flex items-center justify-between">
+@@ -1508,6 +1545,13 @@ import {
+   type HeaderOverrideRow
+ } from '@/components/account/credentialsBuilder'
+ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
++import OpenAIImageSizeTiersField from '@/components/account/OpenAIImageSizeTiersField.vue'
++import {
++  OPENAI_IMAGE_SIZE_TIERS,
++  OPENAI_IMAGE_SIZE_TIERS_EXTRA_KEY,
++  openAIImageSizeTiersPayload,
++  type OpenAIImageSizeTier
++} from '@/components/account/openaiImageSizeTiers'
+ import {
+   OPENAI_WS_MODE_CTX_POOL,
+   OPENAI_WS_MODE_OFF,
+@@ -1661,6 +1705,7 @@ const enableGroups = ref(false)
+ const enableOpenAIPassthrough = ref(false)
+ const enableOpenAIFlattenNamespaces = ref(false)
+ const enableOpenAILongContextBilling = ref(false)
++const enableOpenAIImageSizeTiers = ref(false)
+ const enableOpenAIEndpointCapabilities = ref(false)
+ const enableOpenAIResponsesMode = ref(false)
+ const enableOpenAIWSMode = ref(false)
+@@ -1697,6 +1742,7 @@ const openaiPassthroughEnabled = ref(false)
+ // Codex namespace 工具摊平兼容开关（仅 OAuth），缺省关闭即原样保留
+ const openaiFlattenNamespacesEnabled = ref(false)
+ const openAILongContextBillingEnabled = ref(false)
++const openAIImageSizeTiers = ref<OpenAIImageSizeTier[]>([...OPENAI_IMAGE_SIZE_TIERS])
+ const openAIEndpointCapabilities = ref<OpenAIEndpointCapability[]>([
+   'chat_completions',
+   'embeddings'
+@@ -1996,6 +2042,11 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
+     extra.openai_long_context_billing_enabled = openAILongContextBillingEnabled.value
+   }
+ 
++  if (enableOpenAIImageSizeTiers.value && allOpenAIPassthroughCapable.value) {
++    // extra 按 JSONB 合并写入，不限档位用空列表覆盖旧值。
++    ensureExtra()[OPENAI_IMAGE_SIZE_TIERS_EXTRA_KEY] = openAIImageSizeTiersPayload(openAIImageSizeTiers.value) ?? []
++  }
++
+   if (applyOpenAIEndpointCapabilities) {
+     credentials.openai_capabilities =
+       openAIEndpointCapabilities.value.length === 2 && !openAIEndpointCapabilities.value.includes('seedance')
+@@ -2206,6 +2257,7 @@ const handleSubmit = async () => {
+     enableOpenAIPassthrough.value ||
+     enableOpenAIFlattenNamespaces.value ||
+     (enableOpenAILongContextBilling.value && allOpenAIPassthroughCapable.value) ||
++    (enableOpenAIImageSizeTiers.value && allOpenAIPassthroughCapable.value) ||
+     (enableOpenAIEndpointCapabilities.value && allOpenAIAPIKey.value) ||
+     (enableOpenAIResponsesMode.value && allOpenAIAPIKey.value) ||
+     enableModelRestriction.value ||
+@@ -2368,6 +2420,7 @@ watch(
+       enableOpenAIPassthrough.value = false
+       enableOpenAIFlattenNamespaces.value = false
+       enableOpenAILongContextBilling.value = false
++      enableOpenAIImageSizeTiers.value = false
+       enableOpenAIEndpointCapabilities.value = false
+       enableOpenAIResponsesMode.value = false
+       enableOpenAIWSMode.value = false
+@@ -2386,6 +2439,7 @@ watch(
+       openaiPassthroughEnabled.value = false
+       openaiFlattenNamespacesEnabled.value = false
+       openAILongContextBillingEnabled.value = false
++      openAIImageSizeTiers.value = [...OPENAI_IMAGE_SIZE_TIERS]
+       openAIEndpointCapabilities.value = ['chat_completions', 'embeddings']
+       openAIResponsesMode.value = 'auto'
+       modelRestrictionMode.value = 'whitelist'
+diff --git a/frontend/src/components/account/CreateAccountModal.vue b/frontend/src/components/account/CreateAccountModal.vue
+index cb013a4dd..aa27e6e84 100644
+--- a/frontend/src/components/account/CreateAccountModal.vue
++++ b/frontend/src/components/account/CreateAccountModal.vue
+@@ -3662,6 +3662,14 @@
+         </button>
+       </div>
+ 
++      <!-- OpenAI images: size tier routing -->
++      <div
++        v-if="form.platform === 'openai'"
++        class="border-t border-gray-200 pt-4 dark:border-dark-600"
++      >
++        <OpenAIImageSizeTiersField v-model="openAIImageSizeTiers" />
++      </div>
++
+       <div>
+         <div class="flex items-center justify-between">
+           <div>
+@@ -4154,6 +4162,12 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+ import Select from '@/components/common/Select.vue'
+ import HelpTooltip from '@/components/common/HelpTooltip.vue'
+ import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
++import OpenAIImageSizeTiersField from '@/components/account/OpenAIImageSizeTiersField.vue'
++import {
++  OPENAI_IMAGE_SIZE_TIERS,
++  applyOpenAIImageSizeTiersToExtra,
++  type OpenAIImageSizeTier
++} from '@/components/account/openaiImageSizeTiers'
+ import PlatformIcon from '@/components/common/PlatformIcon.vue'
+ import Icon from '@/components/icons/Icon.vue'
+ import ProxySelector from '@/components/common/ProxySelector.vue'
+@@ -4709,6 +4723,7 @@ const openAICompactMode = ref<OpenAICompactMode>('auto')
+ const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
+ // Images 非流式响应缺 b64_json 时由网关下载 url 回填（仅 OpenAI API Key）。
+ const openAIImagesUrlToB64JsonEnabled = ref(false)
++const openAIImageSizeTiers = ref<OpenAIImageSizeTier[]>([...OPENAI_IMAGE_SIZE_TIERS])
+ const openAIEndpointCapabilities = ref<OpenAIEndpointCapability[]>(['chat_completions', 'embeddings'])
+ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
+ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
+@@ -5227,6 +5242,7 @@ watch(
+     headerOverrideEnabled.value = false
+     headerOverrideRows.value = []
+     openAIImagesUrlToB64JsonEnabled.value = false
++    openAIImageSizeTiers.value = [...OPENAI_IMAGE_SIZE_TIERS]
+     grokOAuthCustomBaseUrlEnabled.value = false
+     grokOAuthBaseUrl.value = ''
+     // Reset OAuth states
+@@ -5663,6 +5679,7 @@ const resetForm = () => {
+   headerOverrideEnabled.value = false
+   headerOverrideRows.value = []
+   openAIImagesUrlToB64JsonEnabled.value = false
++  openAIImageSizeTiers.value = [...OPENAI_IMAGE_SIZE_TIERS]
+   grokOAuthCustomBaseUrlEnabled.value = false
+   grokOAuthBaseUrl.value = ''
+   interceptWarmupRequests.value = false
+@@ -5807,6 +5824,7 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
+   } else {
+     delete extra.images_url_to_b64_json
+   }
++  applyOpenAIImageSizeTiersToExtra(extra, openAIImageSizeTiers.value)
+ 
+   return Object.keys(extra).length > 0 ? extra : undefined
+ }
+diff --git a/frontend/src/components/account/EditAccountModal.vue b/frontend/src/components/account/EditAccountModal.vue
+index 9ca560b51..8182d4d7b 100644
+--- a/frontend/src/components/account/EditAccountModal.vue
++++ b/frontend/src/components/account/EditAccountModal.vue
+@@ -2243,6 +2243,14 @@
+         </button>
+       </div>
+ 
++      <!-- OpenAI images: size tier routing -->
++      <div
++        v-if="account?.platform === 'openai'"
++        class="border-t border-gray-200 pt-4 dark:border-dark-600"
++      >
++        <OpenAIImageSizeTiersField v-model="openAIImageSizeTiers" />
++      </div>
++
+       <div
+         v-if="account?.type === 'apikey'"
+         class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600"
+@@ -3407,6 +3415,13 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+ import Select from '@/components/common/Select.vue'
+ import HelpTooltip from '@/components/common/HelpTooltip.vue'
+ import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
++import OpenAIImageSizeTiersField from '@/components/account/OpenAIImageSizeTiersField.vue'
++import {
++  OPENAI_IMAGE_SIZE_TIERS,
++  applyOpenAIImageSizeTiersToExtra,
++  readOpenAIImageSizeTiers,
++  type OpenAIImageSizeTier
++} from '@/components/account/openaiImageSizeTiers'
+ import Toggle from '@/components/common/Toggle.vue'
+ import Icon from '@/components/icons/Icon.vue'
+ import ProxySelector from '@/components/common/ProxySelector.vue'
+@@ -4154,6 +4169,7 @@ const openAICompactMode = ref<OpenAICompactMode>('auto')
+ const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
+ // Images 非流式响应缺 b64_json 时由网关下载 url 回填（仅 OpenAI API Key）。
+ const openAIImagesUrlToB64JsonEnabled = ref(false)
++const openAIImageSizeTiers = ref<OpenAIImageSizeTier[]>([...OPENAI_IMAGE_SIZE_TIERS])
+ const openAIEndpointCapabilities = ref<OpenAIEndpointCapability[]>(['chat_completions', 'embeddings'])
+ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
+ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
+@@ -4630,6 +4646,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
+ 	allowOverages.value = extra?.allow_overages === true
+ 	upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(extra)
+ 	openAIImagesUrlToB64JsonEnabled.value = extra?.images_url_to_b64_json === true
++	openAIImageSizeTiers.value = readOpenAIImageSizeTiers(extra)
+ 	autoPause5hThreshold.value = typeof extra?.auto_pause_5h_threshold === 'number' ? extra.auto_pause_5h_threshold * 100 : null
+ 	autoPause7dThreshold.value = typeof extra?.auto_pause_7d_threshold === 'number' ? extra.auto_pause_7d_threshold * 100 : null
+ 	autoPause5hDisabled.value = extra?.auto_pause_5h_disabled === true
+@@ -6242,6 +6259,7 @@ const handleSubmit = async () => {
+           newExtra.web_search_emulation = webSearchEmulationMode.value
+         }
+ 		}
++		applyOpenAIImageSizeTiersToExtra(newExtra, openAIImageSizeTiers.value)
+ 		if (autoPause5hThreshold.value != null && autoPause5hThreshold.value > 0) {
+ 			newExtra.auto_pause_5h_threshold = autoPause5hThreshold.value / 100
+ 		} else {
+diff --git a/frontend/src/components/account/OpenAIImageSizeTiersField.vue b/frontend/src/components/account/OpenAIImageSizeTiersField.vue
+new file mode 100644
+index 000000000..bfc800849
+--- /dev/null
++++ b/frontend/src/components/account/OpenAIImageSizeTiersField.vue
+@@ -0,0 +1,52 @@
++<script setup lang="ts">
++import { useI18n } from 'vue-i18n'
++import { OPENAI_IMAGE_SIZE_TIERS, normalizeOpenAIImageSizeTiers, type OpenAIImageSizeTier } from './openaiImageSizeTiers'
++
++const props = defineProps<{
++  disabled?: boolean
++  hideLabel?: boolean
++  testIdPrefix?: string
++}>()
++const model = defineModel<OpenAIImageSizeTier[]>({ default: () => [...OPENAI_IMAGE_SIZE_TIERS] })
++const { t } = useI18n()
++
++const isLastSelected = (tier: OpenAIImageSizeTier) => model.value.length === 1 && model.value[0] === tier
++
++const toggleTier = (tier: OpenAIImageSizeTier, event: Event) => {
++  const input = event.target as HTMLInputElement
++  if (!input.checked && isLastSelected(tier)) {
++    input.checked = true
++    return
++  }
++  const next = input.checked ? [...model.value, tier] : model.value.filter(item => item !== tier)
++  model.value = normalizeOpenAIImageSizeTiers(next)
++}
++
++const testId = (tier: OpenAIImageSizeTier) => `${props.testIdPrefix ?? 'openai-image-size-tier'}-${tier}`
++</script>
++
++<template>
++  <div>
++    <label v-if="!hideLabel" class="input-label mb-2 block">{{ t('admin.accounts.openai.imageSizeTiers') }}</label>
++    <div class="grid grid-cols-3 gap-2">
++      <label
++        v-for="tier in OPENAI_IMAGE_SIZE_TIERS"
++        :key="tier"
++        class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-dark-600"
++        :class="disabled ? 'cursor-not-allowed' : 'cursor-pointer'"
++        :title="isLastSelected(tier) ? t('admin.accounts.openai.imageSizeTiersAtLeastOne') : undefined"
++      >
++        <input
++          type="checkbox"
++          class="rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-500"
++          :data-testid="testId(tier)"
++          :checked="model.includes(tier)"
++          :disabled="disabled"
++          @change="toggleTier(tier, $event)"
++        />
++        <span class="text-gray-700 dark:text-gray-200">{{ tier }}</span>
++      </label>
++    </div>
++    <p class="input-hint">{{ t('admin.accounts.openai.imageSizeTiersDesc') }}</p>
++  </div>
++</template>
+diff --git a/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts b/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
+index daae21b9f..dd23419db 100644
+--- a/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
++++ b/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
+@@ -492,6 +492,42 @@ describe('BulkEditAccountModal', () => {
+     })
+   })
+ 
++  it('生图尺寸档位独立启用，全选时提交空列表表示不限', async () => {
++    const restricted = mountModal({
++      selectedPlatforms: ['openai'],
++      selectedTypes: ['oauth', 'apikey']
++    })
++    await restricted.get('#bulk-edit-openai-image-size-tiers-enabled').setValue(true)
++    await restricted.get('[data-testid="bulk-edit-openai-image-size-tier-4K"]').setValue(false)
++    await restricted.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenLastCalledWith([1, 2], {
++      extra: { openai_image_size_tiers: ['1K', '2K'] }
++    })
++    restricted.unmount()
++
++    vi.mocked(adminAPI.accounts.bulkUpdate).mockClear()
++    const unrestricted = mountModal({
++      selectedPlatforms: ['openai'],
++      selectedTypes: ['apikey']
++    })
++    await unrestricted.get('#bulk-edit-openai-image-size-tiers-enabled').setValue(true)
++    await unrestricted.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
++      extra: { openai_image_size_tiers: [] }
++    })
++    unrestricted.unmount()
++
++    const mixed = mountModal({
++      selectedPlatforms: ['openai', 'anthropic'],
++      selectedTypes: ['apikey']
++    })
++    expect(mixed.find('#bulk-edit-openai-image-size-tiers-enabled').exists()).toBe(false)
++  })
++
+   it('端点能力默认值提交 null，表示恢复两个默认端点', async () => {
+     const wrapper = mountModal({
+       selectedPlatforms: ['openai'],
+diff --git a/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts b/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts
+index 84cfa8112..302c78829 100644
+--- a/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts
++++ b/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts
+@@ -338,6 +338,25 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
+     expect(createAccountMock.mock.calls[0]?.[0]?.extra?.images_url_to_b64_json).toBe(true)
+   })
+ 
++  it('omits image size tiers by default and sends restricted tiers when set', async () => {
++    await submitApiKeyAccount('openai')
++    expect(createAccountMock.mock.calls[0]?.[0]?.extra).not.toHaveProperty('openai_image_size_tiers')
++
++    createAccountMock.mockClear()
++    const wrapper = mountModal()
++    await selectButtonByText(wrapper, 'OpenAI')
++    await selectButtonByText(wrapper, 'API Key')
++    await wrapper.get('form#create-account-form input[type="text"]').setValue('openai account')
++    await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
++    await wrapper.get('[data-testid="openai-image-size-tier-1K"]').setValue(false)
++    await wrapper.get('[data-testid="openai-image-size-tier-2K"]').setValue(false)
++    await wrapper.get('form#create-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(createAccountMock).toHaveBeenCalledTimes(1)
++    expect(createAccountMock.mock.calls[0]?.[0]?.extra?.openai_image_size_tiers).toEqual(['4K'])
++  })
++
+   it('persists upstream model metadata after creating an account from preview', async () => {
+     const wrapper = mountModal()
+     await selectButtonByText(wrapper, 'OpenAI')
+diff --git a/frontend/src/components/account/__tests__/EditAccountModal.spec.ts b/frontend/src/components/account/__tests__/EditAccountModal.spec.ts
+index 9e786042f..3e65714d5 100644
+--- a/frontend/src/components/account/__tests__/EditAccountModal.spec.ts
++++ b/frontend/src/components/account/__tests__/EditAccountModal.spec.ts
+@@ -1040,6 +1040,41 @@ describe('EditAccountModal', () => {
+     expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('images_url_to_b64_json')
+   })
+ 
++  it('writes restricted image size tiers into extra', async () => {
++    const account = buildAccount()
++    updateAccountMock.mockReset()
++    checkMixedChannelRiskMock.mockReset()
++    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
++    updateAccountMock.mockResolvedValue(account)
++
++    const wrapper = mountModal(account)
++    await wrapper.get('[data-testid="openai-image-size-tier-1K"]').setValue(false)
++    await wrapper.get('[data-testid="openai-image-size-tier-2K"]').setValue(false)
++    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
++
++    expect(updateAccountMock).toHaveBeenCalledTimes(1)
++    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_image_size_tiers).toEqual(['4K'])
++  })
++
++  it('removes image size tiers from extra when every tier is selected again', async () => {
++    const account = buildAccount()
++    account.extra = { openai_image_size_tiers: ['1K', '2K'] }
++    updateAccountMock.mockReset()
++    checkMixedChannelRiskMock.mockReset()
++    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
++    updateAccountMock.mockResolvedValue(account)
++
++    const wrapper = mountModal(account)
++    const tier4K = wrapper.get('[data-testid="openai-image-size-tier-4K"]')
++    expect((tier4K.element as HTMLInputElement).checked).toBe(false)
++    await tier4K.setValue(true)
++    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
++
++    expect(updateAccountMock).toHaveBeenCalledTimes(1)
++    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toBeDefined()
++    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('openai_image_size_tiers')
++  })
++
+   it('hides the Codex namespace flatten toggle for non-OAuth OpenAI accounts', async () => {
+     const account = buildAccount()
+     const wrapper = mountModal(account)
+diff --git a/frontend/src/components/account/__tests__/OpenAIImageSizeTiersField.spec.ts b/frontend/src/components/account/__tests__/OpenAIImageSizeTiersField.spec.ts
+new file mode 100644
+index 000000000..f01cb67af
+--- /dev/null
++++ b/frontend/src/components/account/__tests__/OpenAIImageSizeTiersField.spec.ts
+@@ -0,0 +1,63 @@
++import { describe, expect, it, vi } from 'vitest'
++import { mount } from '@vue/test-utils'
++import OpenAIImageSizeTiersField from '../OpenAIImageSizeTiersField.vue'
++import {
++  applyOpenAIImageSizeTiersToExtra,
++  openAIImageSizeTiersPayload,
++  readOpenAIImageSizeTiers
++} from '../openaiImageSizeTiers'
++
++vi.mock('vue-i18n', async () => {
++  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
++  return {
++    ...actual,
++    useI18n: () => ({ t: (key: string) => key })
++  }
++})
++
++describe('openaiImageSizeTiers helpers', () => {
++  it('reads unrestricted extra as all tiers', () => {
++    expect(readOpenAIImageSizeTiers(undefined)).toEqual(['1K', '2K', '4K'])
++    expect(readOpenAIImageSizeTiers({ openai_image_size_tiers: [] })).toEqual(['1K', '2K', '4K'])
++    expect(readOpenAIImageSizeTiers({ openai_image_size_tiers: ['8K'] })).toEqual(['1K', '2K', '4K'])
++  })
++
++  it('reads restricted tiers in canonical order', () => {
++    expect(readOpenAIImageSizeTiers({ openai_image_size_tiers: ['4k', ' 1K'] })).toEqual(['1K', '4K'])
++  })
++
++  it('omits the key when every tier is allowed', () => {
++    expect(openAIImageSizeTiersPayload(['4K', '1K', '2K'])).toBeNull()
++    expect(openAIImageSizeTiersPayload(['2K', '1K'])).toEqual(['1K', '2K'])
++
++    const extra: Record<string, unknown> = { openai_image_size_tiers: ['4K'] }
++    applyOpenAIImageSizeTiersToExtra(extra, ['1K', '2K', '4K'])
++    expect(extra).not.toHaveProperty('openai_image_size_tiers')
++    applyOpenAIImageSizeTiersToExtra(extra, ['4K'])
++    expect(extra.openai_image_size_tiers).toEqual(['4K'])
++  })
++})
++
++describe('OpenAIImageSizeTiersField', () => {
++  it('toggles tiers and keeps at least one selected', async () => {
++    const wrapper = mount(OpenAIImageSizeTiersField, {
++      props: {
++        modelValue: ['1K', '2K', '4K'],
++        'onUpdate:modelValue': (value: string[]) => wrapper.setProps({ modelValue: value as never })
++      }
++    })
++
++    await wrapper.get('[data-testid="openai-image-size-tier-4K"]').setValue(false)
++    expect(wrapper.props('modelValue')).toEqual(['1K', '2K'])
++    await wrapper.get('[data-testid="openai-image-size-tier-1K"]').setValue(false)
++    expect(wrapper.props('modelValue')).toEqual(['2K'])
++
++    const last = wrapper.get('[data-testid="openai-image-size-tier-2K"]')
++    await last.setValue(false)
++    expect((last.element as HTMLInputElement).checked).toBe(true)
++    expect(wrapper.props('modelValue')).toEqual(['2K'])
++
++    await wrapper.get('[data-testid="openai-image-size-tier-4K"]').setValue(true)
++    expect(wrapper.props('modelValue')).toEqual(['2K', '4K'])
++  })
++})
+diff --git a/frontend/src/components/account/openaiImageSizeTiers.ts b/frontend/src/components/account/openaiImageSizeTiers.ts
+new file mode 100644
+index 000000000..6cd003c57
+--- /dev/null
++++ b/frontend/src/components/account/openaiImageSizeTiers.ts
+@@ -0,0 +1,37 @@
++export const OPENAI_IMAGE_SIZE_TIERS = ['1K', '2K', '4K'] as const
++
++export type OpenAIImageSizeTier = (typeof OPENAI_IMAGE_SIZE_TIERS)[number]
++
++export const OPENAI_IMAGE_SIZE_TIERS_EXTRA_KEY = 'openai_image_size_tiers'
++
++// 返回账号允许的档位（按 1K/2K/4K 排序）；未配置、空列表或无有效档位视为三档全允许。
++export function readOpenAIImageSizeTiers(extra: unknown): OpenAIImageSizeTier[] {
++  const raw = (extra as Record<string, unknown> | null | undefined)?.[OPENAI_IMAGE_SIZE_TIERS_EXTRA_KEY]
++  const values = Array.isArray(raw)
++    ? raw.filter((item): item is string => typeof item === 'string').map(item => item.trim().toUpperCase())
++    : []
++  const tiers = OPENAI_IMAGE_SIZE_TIERS.filter(tier => values.includes(tier))
++  return tiers.length > 0 ? tiers : [...OPENAI_IMAGE_SIZE_TIERS]
++}
++
++export function normalizeOpenAIImageSizeTiers(tiers: readonly string[]): OpenAIImageSizeTier[] {
++  return OPENAI_IMAGE_SIZE_TIERS.filter(tier => tiers.includes(tier))
++}
++
++// 三档全选即不限：返回 null，表示 extra 中不写该键（批量编辑以空列表清除）。
++export function openAIImageSizeTiersPayload(tiers: readonly string[]): OpenAIImageSizeTier[] | null {
++  const normalized = normalizeOpenAIImageSizeTiers(tiers)
++  if (normalized.length === 0 || normalized.length === OPENAI_IMAGE_SIZE_TIERS.length) {
++    return null
++  }
++  return normalized
++}
++
++export function applyOpenAIImageSizeTiersToExtra(extra: Record<string, unknown>, tiers: readonly string[]): void {
++  const payload = openAIImageSizeTiersPayload(tiers)
++  if (payload) {
++    extra[OPENAI_IMAGE_SIZE_TIERS_EXTRA_KEY] = payload
++  } else {
++    delete extra[OPENAI_IMAGE_SIZE_TIERS_EXTRA_KEY]
++  }
++}
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index 36ebff4be..4795be4a1 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -687,6 +687,10 @@ export default {
+         imagesUrlToB64Json: 'Image result URL to base64',
+         imagesUrlToB64JsonDesc:
+           'Only applies to non-streaming Images responses of OpenAI API Key accounts. When an upstream image item has a url but no b64_json, the gateway downloads the url and fills b64_json with its base64 content (url is kept) for clients built on the official API; the response is returned unchanged if the download fails.',
++        imageSizeTiers: 'Image size tiers',
++        imageSizeTiersDesc:
++          'Limits the image size tiers this account serves, using the billing tiers: longest edge ≤1024 is 1K, ≤2048 is 2K, larger is 4K (2560x1440 is 4K). Requests with an explicit size are only scheduled to accounts allowing that tier; requests without a size or with auto prefer accounts without a tier limit, then accounts allowing 4K, 2K and 1K in that order. Selecting all tiers means no limit. Applies to the Images API and the Responses image generation tool.',
++        imageSizeTiersAtLeastOne: 'Keep at least one tier',
+         endpointCapabilities: 'Endpoint capabilities',
+         endpointCapabilitiesDesc:
+           'Used by account routing. The text endpoint follows the Responses API support setting above and is shown as Responses, Chat Completions, or auto mode; Embeddings independently controls /v1/embeddings.',
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index d34e534ef..a6ff6363a 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -799,6 +799,10 @@ export default {
+         imagesUrlToB64Json: '生图结果 URL 转 base64',
+         imagesUrlToB64JsonDesc:
+           '仅对 OpenAI API Key 的 Images 非流式响应生效。上游返回的图片缺少 b64_json 但带 url 时，网关下载该 url 并以 base64 回填 b64_json（url 保留），兼容按官方接口实现的客户端；下载失败则原样返回。',
++        imageSizeTiers: '生图尺寸档位',
++        imageSizeTiersDesc:
++          '限制本账号承接的生图尺寸档位，档位与计费一致：最长边 ≤1024 为 1K，≤2048 为 2K，更大为 4K（2560x1440 属于 4K）。指定了尺寸的请求只会调度到允许该档位的账号；未传尺寸或 auto 的请求优先调度到不限档位的账号，没有时依次选允许 4K、2K、1K 的账号。全选即不限，对 Images 接口与 Responses 生图工具生效。',
++        imageSizeTiersAtLeastOne: '至少保留一个档位',
+         endpointCapabilities: '端点能力',
+         endpointCapabilitiesDesc:
+           '用于调度筛选。文本端点会跟随上方 Responses API 支持显示为 Responses、Chat Completions 或自动模式；Embeddings 独立控制 /v1/embeddings。',

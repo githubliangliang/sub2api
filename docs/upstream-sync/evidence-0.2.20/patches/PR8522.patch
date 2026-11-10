@@ -1,0 +1,619 @@
+diff --git a/backend/internal/pkg/antigravity/quota_summary.go b/backend/internal/pkg/antigravity/quota_summary.go
+new file mode 100644
+index 000000000..7f168d4a3
+--- /dev/null
++++ b/backend/internal/pkg/antigravity/quota_summary.go
+@@ -0,0 +1,117 @@
++package antigravity
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"net/http"
++	"strings"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
++)
++
++// quotaSummaryBodyLimit bounds the retrieveUserQuotaSummary response (a few hundred bytes today).
++const quotaSummaryBodyLimit = 1 << 20
++
++// QuotaSummaryBucket is one quota window of a group, e.g. "gemini-5h" or "gemini-weekly".
++type QuotaSummaryBucket struct {
++	BucketID          string  `json:"bucketId"`
++	DisplayName       string  `json:"displayName,omitempty"`
++	Window            string  `json:"window"` // "5h" or "weekly"
++	ResetTime         string  `json:"resetTime,omitempty"`
++	RemainingFraction float64 `json:"remainingFraction"`
++}
++
++// QuotaSummaryGroup is a set of models that share their quota windows.
++type QuotaSummaryGroup struct {
++	DisplayName string               `json:"displayName"`
++	Description string               `json:"description,omitempty"`
++	Buckets     []QuotaSummaryBucket `json:"buckets"`
++}
++
++// QuotaSummaryResponse is the retrieveUserQuotaSummary response.
++//
++// Unlike fetchAvailableModels, which reports one fraction per model (whichever window is
++// tighter), this reports every window of every group, so the 5-hour and the weekly limit can
++// be told apart. Within a group all models share both windows.
++type QuotaSummaryResponse struct {
++	Groups      []QuotaSummaryGroup `json:"groups"`
++	Description string              `json:"description,omitempty"`
++}
++
++// RetrieveUserQuotaSummary reads the account's per-group 5-hour and weekly quota windows,
++// falling back across BaseURLs like FetchAvailableModels.
++func (c *Client) RetrieveUserQuotaSummary(ctx context.Context, accessToken, projectID string) (*QuotaSummaryResponse, error) {
++	var lastErr error
++	for urlIdx, baseURL := range BaseURLs {
++		summary, status, err := c.retrieveUserQuotaSummary(ctx, baseURL, accessToken, projectID)
++		if err == nil {
++			DefaultURLAvailability.MarkSuccess(baseURL)
++			return summary, nil
++		}
++		lastErr = err
++		if urlIdx < len(BaseURLs)-1 && shouldFallbackToNextURL(nil, status) {
++			continue
++		}
++		return nil, err
++	}
++	return nil, lastErr
++}
++
++// RetrieveUserQuotaSummaryFromURL reads the quota summary from one endpoint, without fallback.
++func (c *Client) RetrieveUserQuotaSummaryFromURL(ctx context.Context, baseURL, accessToken, projectID string) (*QuotaSummaryResponse, error) {
++	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
++	if baseURL == "" {
++		return nil, errors.New("retrieveUserQuotaSummary base URL is required")
++	}
++	summary, _, err := c.retrieveUserQuotaSummary(ctx, baseURL, accessToken, projectID)
++	return summary, err
++}
++
++func (c *Client) retrieveUserQuotaSummary(ctx context.Context, baseURL, accessToken, projectID string) (*QuotaSummaryResponse, int, error) {
++	if c == nil || c.httpClient == nil {
++		return nil, 0, errors.New("antigravity client is not configured")
++	}
++	bodyBytes, err := json.Marshal(FetchAvailableModelsRequest{Project: projectID})
++	if err != nil {
++		return nil, 0, fmt.Errorf("marshal retrieveUserQuotaSummary request: %w", err)
++	}
++	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1internal:retrieveUserQuotaSummary", strings.NewReader(string(bodyBytes)))
++	if err != nil {
++		return nil, 0, fmt.Errorf("create retrieveUserQuotaSummary request: %w", err)
++	}
++	req.Header.Set("Authorization", "Bearer "+accessToken)
++	req.Header.Set("Content-Type", "application/json")
++	req.Header.Set("User-Agent", GetUserAgentForContext(ctx))
++
++	resp, err := servertiming.Do(c.httpClient, req)
++	if err != nil {
++		return nil, 0, fmt.Errorf("retrieveUserQuotaSummary request failed: %w", err)
++	}
++	respBody, err := io.ReadAll(io.LimitReader(resp.Body, quotaSummaryBodyLimit+1))
++	_ = resp.Body.Close()
++	if err != nil {
++		return nil, resp.StatusCode, fmt.Errorf("read retrieveUserQuotaSummary response: %w", err)
++	}
++	if len(respBody) > quotaSummaryBodyLimit {
++		return nil, resp.StatusCode, fmt.Errorf("retrieveUserQuotaSummary response exceeds %d bytes", quotaSummaryBodyLimit)
++	}
++	if resp.StatusCode != http.StatusOK {
++		return nil, resp.StatusCode, fmt.Errorf("retrieveUserQuotaSummary failed (HTTP %d): %s", resp.StatusCode, truncateQuotaSummaryBody(respBody))
++	}
++	var summary QuotaSummaryResponse
++	if err := json.Unmarshal(respBody, &summary); err != nil {
++		return nil, resp.StatusCode, fmt.Errorf("parse retrieveUserQuotaSummary response: %w", err)
++	}
++	return &summary, resp.StatusCode, nil
++}
++
++func truncateQuotaSummaryBody(body []byte) string {
++	const max = 300
++	if len(body) > max {
++		return string(body[:max]) + "..."
++	}
++	return string(body)
++}
+diff --git a/backend/internal/pkg/antigravity/quota_summary_test.go b/backend/internal/pkg/antigravity/quota_summary_test.go
+new file mode 100644
+index 000000000..a35508ed2
+--- /dev/null
++++ b/backend/internal/pkg/antigravity/quota_summary_test.go
+@@ -0,0 +1,79 @@
++//go:build unit
++
++package antigravity
++
++import (
++	"context"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++)
++
++// The shape Google returned for a consumer Ultra account on 2026-11-04.
++const quotaSummaryBody = `{
++  "groups": [
++    {"buckets": [
++       {"bucketId": "gemini-weekly", "displayName": "Weekly Limit Remaining", "window": "weekly",
++        "resetTime": "2026-11-11T15:52:48Z", "remainingFraction": 0.75},
++       {"bucketId": "gemini-5h", "displayName": "Five Hour Limit Remaining", "window": "5h",
++        "resetTime": "2026-11-04T20:52:48Z", "remainingFraction": 0.4}],
++     "displayName": "Gemini Models", "description": "Models within this group: Gemini Flash, Gemini Pro"},
++    {"buckets": [
++       {"bucketId": "3p-weekly", "window": "weekly", "resetTime": "2026-11-11T15:52:48Z", "remainingFraction": 1},
++       {"bucketId": "3p-5h", "window": "5h", "remainingFraction": 1}],
++     "displayName": "Claude and GPT models"}
++  ],
++  "description": "Within each group, models share a weekly limit and a 5-hour limit."
++}`
++
++func TestClient_RetrieveUserQuotaSummaryFromURL(t *testing.T) {
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path != "/v1internal:retrieveUserQuotaSummary" || r.Method != http.MethodPost {
++			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
++		}
++		if r.Header.Get("Authorization") != "Bearer tok" {
++			t.Errorf("unexpected authorization header")
++		}
++		var body FetchAvailableModelsRequest
++		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Project != "proj" {
++			t.Errorf("unexpected project: %+v, %v", body, err)
++		}
++		_, _ = w.Write([]byte(quotaSummaryBody))
++	}))
++	defer server.Close()
++
++	client := mustNewClient(t, "")
++	summary, err := client.RetrieveUserQuotaSummaryFromURL(context.Background(), server.URL, "tok", "proj")
++	if err != nil {
++		t.Fatalf("summary: %v", err)
++	}
++	if len(summary.Groups) != 2 || summary.Groups[0].DisplayName != "Gemini Models" {
++		t.Fatalf("groups: %+v", summary.Groups)
++	}
++	weekly := summary.Groups[0].Buckets[0]
++	if weekly.BucketID != "gemini-weekly" || weekly.Window != "weekly" || weekly.RemainingFraction != 0.75 ||
++		weekly.ResetTime != "2026-11-11T15:52:48Z" {
++		t.Fatalf("weekly bucket: %+v", weekly)
++	}
++	if summary.Groups[1].Buckets[1].ResetTime != "" {
++		t.Fatalf("a bucket without resetTime keeps it empty")
++	}
++}
++
++func TestClient_RetrieveUserQuotaSummaryFromURL_Errors(t *testing.T) {
++	for _, tc := range []struct {
++		status int
++		body   string
++	}{{http.StatusForbidden, `{"error":{"code":403}}`}, {http.StatusInternalServerError, `{}`}, {http.StatusOK, `not json`}} {
++		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			w.WriteHeader(tc.status)
++			_, _ = w.Write([]byte(tc.body))
++		}))
++		client := mustNewClient(t, "")
++		if _, err := client.RetrieveUserQuotaSummaryFromURL(context.Background(), server.URL, "tok", "proj"); err == nil {
++			t.Errorf("status %d body %q must be an error", tc.status, tc.body)
++		}
++		server.Close()
++	}
++}
+diff --git a/backend/internal/service/account_usage_service.go b/backend/internal/service/account_usage_service.go
+index 1516e0822..76d22bcef 100644
+--- a/backend/internal/service/account_usage_service.go
++++ b/backend/internal/service/account_usage_service.go
+@@ -155,6 +155,21 @@ type UsageProgress struct {
+ 	LimitRequests    int64        `json:"limit_requests,omitempty"`
+ }
+ 
++// AntigravityQuotaGroup is a group of Antigravity models that share their quota windows.
++type AntigravityQuotaGroup struct {
++	Key         string                    `json:"key"` // bucket prefix, e.g. "gemini" or "3p"
++	Name        string                    `json:"name"`
++	Description string                    `json:"description,omitempty"`
++	Windows     []*AntigravityQuotaWindow `json:"windows"`
++}
++
++// AntigravityQuotaWindow is one window ("5h" or "weekly") of an Antigravity quota group.
++type AntigravityQuotaWindow struct {
++	Window      string     `json:"window"`
++	Utilization float64    `json:"utilization"` // used percentage, 0-100
++	ResetsAt    *time.Time `json:"resets_at"`
++}
++
+ // AntigravityModelQuota Antigravity 单个模型的配额信息
+ type AntigravityModelQuota struct {
+ 	Utilization int    `json:"utilization"` // 使用率 0-100
+@@ -197,6 +212,9 @@ type UsageInfo struct {
+ 
+ 	// Antigravity 多模型配额
+ 	AntigravityQuota map[string]*AntigravityModelQuota `json:"antigravity_quota,omitempty"`
++	// Antigravity per-group 5-hour and weekly windows (retrieveUserQuotaSummary). Within a group
++	// every model shares both windows; fetchAvailableModels cannot tell the two apart.
++	AntigravityQuotaGroups []*AntigravityQuotaGroup `json:"antigravity_quota_groups,omitempty"`
+ 
+ 	// Grok / xAI 被动额度快照
+ 	GrokRequestQuota       *xai.QuotaWindow `json:"grok_request_quota,omitempty"`
+diff --git a/backend/internal/service/antigravity_quota_fetcher.go b/backend/internal/service/antigravity_quota_fetcher.go
+index e296654e6..b2648f0b6 100644
+--- a/backend/internal/service/antigravity_quota_fetcher.go
++++ b/backend/internal/service/antigravity_quota_fetcher.go
+@@ -7,6 +7,7 @@ import (
+ 	"fmt"
+ 	"log/slog"
+ 	"regexp"
++	"sort"
+ 	"strings"
+ 	"time"
+ 
+@@ -86,6 +87,14 @@ func (f *AntigravityQuotaFetcher) FetchQuota(ctx context.Context, account *Accou
+ 	// 转换为 UsageInfo
+ 	usageInfo := f.buildUsageInfo(modelsResp, tierRaw, tierNormalized, loadResp)
+ 
++	// The per-group 5-hour and weekly windows. Not on the critical path: without them the
++	// per-model figures above are shown as before.
++	if summary, err := client.RetrieveUserQuotaSummary(ctx, accessToken, projectID); err != nil {
++		slog.Warn("failed to fetch antigravity quota summary", "account_id", account.ID, "error", err)
++	} else {
++		usageInfo.AntigravityQuotaGroups = buildAntigravityQuotaGroups(summary)
++	}
++
+ 	return &QuotaResult{
+ 		UsageInfo: usageInfo,
+ 		Raw:       modelsRaw,
+@@ -206,6 +215,53 @@ func (f *AntigravityQuotaFetcher) buildUsageInfo(modelsResp *antigravity.FetchAv
+ 	return info
+ }
+ 
++// buildAntigravityQuotaGroups turns a quota summary into display groups, each with its
++// windows ordered 5h then weekly. Returns nil when there is nothing to show.
++func buildAntigravityQuotaGroups(summary *antigravity.QuotaSummaryResponse) []*AntigravityQuotaGroup {
++	if summary == nil {
++		return nil
++	}
++	windowOrder := map[string]int{"5h": 0, "weekly": 1}
++	var groups []*AntigravityQuotaGroup
++	for _, group := range summary.Groups {
++		if len(group.Buckets) == 0 {
++			continue
++		}
++		out := &AntigravityQuotaGroup{Name: group.DisplayName, Description: group.Description}
++		for _, bucket := range group.Buckets {
++			if out.Key == "" {
++				if i := strings.LastIndex(bucket.BucketID, "-"); i > 0 {
++					out.Key = bucket.BucketID[:i]
++				}
++			}
++			used := (1.0 - bucket.RemainingFraction) * 100
++			if used < 0 {
++				used = 0
++			}
++			window := &AntigravityQuotaWindow{Window: bucket.Window, Utilization: used}
++			if bucket.ResetTime != "" {
++				if resetAt, err := time.Parse(time.RFC3339, bucket.ResetTime); err == nil {
++					window.ResetsAt = &resetAt
++				}
++			}
++			out.Windows = append(out.Windows, window)
++		}
++		sort.SliceStable(out.Windows, func(i, j int) bool {
++			oi, iok := windowOrder[out.Windows[i].Window]
++			oj, jok := windowOrder[out.Windows[j].Window]
++			if !iok {
++				oi = len(windowOrder)
++			}
++			if !jok {
++				oj = len(windowOrder)
++			}
++			return oi < oj
++		})
++		groups = append(groups, out)
++	}
++	return groups
++}
++
+ // GetProxyURL 获取账户的代理 URL
+ func (f *AntigravityQuotaFetcher) GetProxyURL(ctx context.Context, account *Account) string {
+ 	if account.ProxyID == nil || f.proxyRepo == nil {
+diff --git a/backend/internal/service/antigravity_quota_groups_test.go b/backend/internal/service/antigravity_quota_groups_test.go
+new file mode 100644
+index 000000000..1fd78018c
+--- /dev/null
++++ b/backend/internal/service/antigravity_quota_groups_test.go
+@@ -0,0 +1,79 @@
++//go:build unit
++
++package service
++
++import (
++	"encoding/json"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
++	"github.com/stretchr/testify/require"
++)
++
++func quotaSummaryFixture() *antigravity.QuotaSummaryResponse {
++	return &antigravity.QuotaSummaryResponse{Groups: []antigravity.QuotaSummaryGroup{
++		{DisplayName: "Gemini Models", Description: "Models within this group: Gemini Flash, Gemini Pro",
++			Buckets: []antigravity.QuotaSummaryBucket{
++				{BucketID: "gemini-weekly", Window: "weekly", ResetTime: "2026-11-11T15:52:48Z", RemainingFraction: 0.75},
++				{BucketID: "gemini-5h", Window: "5h", ResetTime: "2026-11-04T20:52:48Z", RemainingFraction: 0.4},
++			}},
++		{DisplayName: "Claude and GPT models",
++			Buckets: []antigravity.QuotaSummaryBucket{
++				{BucketID: "3p-5h", Window: "5h", RemainingFraction: 1},
++				{BucketID: "3p-weekly", Window: "weekly", ResetTime: "bad-time", RemainingFraction: 1.2},
++			}},
++	}}
++}
++
++// fetchAvailableModels reports one fraction per model, whichever window is tighter, so the
++// 5-hour and the weekly limit could not be told apart. The quota summary reports both.
++func TestBuildQuotaGroups_SplitsFiveHourAndWeekly(t *testing.T) {
++	groups := buildAntigravityQuotaGroups(quotaSummaryFixture())
++	require.Len(t, groups, 2)
++
++	gemini := groups[0]
++	require.Equal(t, "gemini", gemini.Key)
++	require.Equal(t, "Gemini Models", gemini.Name)
++	// Windows are ordered 5h first, then weekly, whatever order Google returns them in.
++	require.Len(t, gemini.Windows, 2)
++	require.Equal(t, "5h", gemini.Windows[0].Window)
++	require.InDelta(t, 60.0, gemini.Windows[0].Utilization, 0.001)
++	require.Equal(t, "2026-11-04T20:52:48Z", gemini.Windows[0].ResetsAt.UTC().Format(time.RFC3339))
++	require.Equal(t, "weekly", gemini.Windows[1].Window)
++	require.InDelta(t, 25.0, gemini.Windows[1].Utilization, 0.001)
++
++	other := groups[1]
++	require.Equal(t, "3p", other.Key)
++	require.Nil(t, other.Windows[0].ResetsAt, "an idle window has no reset time")
++	require.Nil(t, other.Windows[1].ResetsAt, "an unparseable reset time is dropped, not fatal")
++	require.Equal(t, 0.0, other.Windows[1].Utilization, "a fraction above 1 never shows negative usage")
++}
++
++func TestBuildQuotaGroups_EmptyOrNil(t *testing.T) {
++	require.Nil(t, buildAntigravityQuotaGroups(nil))
++	require.Nil(t, buildAntigravityQuotaGroups(&antigravity.QuotaSummaryResponse{}))
++	require.Nil(t, buildAntigravityQuotaGroups(&antigravity.QuotaSummaryResponse{Groups: []antigravity.QuotaSummaryGroup{{DisplayName: "x"}}}),
++		"a group without buckets is not shown")
++}
++
++func TestUsageInfo_QuotaGroupsJSON(t *testing.T) {
++	info := &UsageInfo{AntigravityQuotaGroups: buildAntigravityQuotaGroups(quotaSummaryFixture())}
++	raw, err := json.Marshal(info)
++	require.NoError(t, err)
++	var decoded map[string]any
++	require.NoError(t, json.Unmarshal(raw, &decoded))
++	groups, ok := decoded["antigravity_quota_groups"].([]any)
++	require.True(t, ok, "antigravity_quota_groups must be in the JSON: %s", raw)
++	first := groups[0].(map[string]any)
++	require.Equal(t, "gemini", first["key"])
++	window := first["windows"].([]any)[0].(map[string]any)
++	require.Equal(t, "5h", window["window"])
++	require.Contains(t, window, "resets_at")
++	require.Contains(t, window, "utilization")
++
++	// Absent when there is no summary, so other platforms' JSON is unchanged.
++	raw, err = json.Marshal(&UsageInfo{})
++	require.NoError(t, err)
++	require.NotContains(t, string(raw), "antigravity_quota_groups")
++}
+diff --git a/frontend/src/components/account/AccountUsageCell.vue b/frontend/src/components/account/AccountUsageCell.vue
+index a12527b82..1ac9f1435 100644
+--- a/frontend/src/components/account/AccountUsageCell.vue
++++ b/frontend/src/components/account/AccountUsageCell.vue
+@@ -294,6 +294,23 @@
+         {{ error }}
+       </div>
+ 
++      <!-- Real 5-hour and weekly windows per quota group (retrieveUserQuotaSummary) -->
++      <div v-else-if="antigravityQuotaGroupBars.length > 0" class="space-y-1">
++        <UsageProgressBar
++          v-for="bar in antigravityQuotaGroupBars"
++          :key="bar.key"
++          :label="bar.label"
++          :title="bar.title"
++          :utilization="bar.utilization"
++          :resets-at="bar.resetsAt"
++          :color="bar.color"
++        />
++
++        <div v-if="aiCreditsDisplay" class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
++          💳 {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
++        </div>
++      </div>
++
+       <!-- Usage data from API -->
+       <div v-else-if="hasAntigravityQuotaFromAPI" class="space-y-1">
+         <!-- Gemini 3 Pro -->
+@@ -885,6 +902,42 @@ interface AntigravityUsageResult {
+   resetTime: string | null
+ }
+ 
++// ===== Antigravity quota groups (usageInfo.antigravity_quota_groups) =====
++// The summary reports each group's real 5-hour and weekly window. When present it replaces the
++// per-model bars below, which show only whichever window is tighter for each model.
++const antigravityQuotaGroupBars = computed(() => {
++  const groups = usageInfo.value?.antigravity_quota_groups
++  if (!groups || groups.length === 0) return []
++  const bars: Array<{
++    key: string
++    label: string
++    title: string
++    utilization: number
++    resetsAt: string | null
++    color: 'indigo' | 'emerald' | 'purple' | 'amber'
++  }> = []
++  for (const group of groups) {
++    // 'gemini' = Gemini models, 'gemini-argon-wtu' = the separate Argon quota of Pro plans,
++    // '3p' (or anything else) = Antigravity's Claude and GPT models.
++    const family = group.key === 'gemini' ? 'Gemini' : group.key.startsWith('gemini-argon') ? 'Argon' : 'Other'
++    for (const window of group.windows || []) {
++      const weekly = window.window === 'weekly'
++      const labelKey = `admin.accounts.usageWindow.antigravity${family}${weekly ? 'Weekly' : '5h'}`
++      const color: 'indigo' | 'emerald' | 'purple' | 'amber' =
++        family === 'Gemini' ? (weekly ? 'indigo' : 'emerald') : family === 'Argon' ? 'indigo' : weekly ? 'purple' : 'amber'
++      bars.push({
++        key: `${group.key}-${window.window}`,
++        label: t(labelKey),
++        title: group.name,
++        utilization: Math.round(window.utilization ?? 0),
++        resetsAt: window.resets_at ?? null,
++        color
++      })
++    }
++  }
++  return bars
++})
++
+ // ===== Antigravity quota from API (usageInfo.antigravity_quota) =====
+ 
+ // 检查是否有从 API 获取的配额数据
+diff --git a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+index acbf0884c..4f839cab2 100644
+--- a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
++++ b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+@@ -450,6 +450,66 @@ describe('AccountUsageCell', () => {
+     expect(wrapper.text()).toContain('admin.accounts.usageWindow.gemini3Image|70|2026-03-01T09:00:00Z')
+   })
+ 
++  it('Antigravity shows the 5-hour and weekly window of each quota group when the summary is present', async () => {
++    getUsage.mockResolvedValue({
++      antigravity_quota: {
++        'gemini-3-flash': { utilization: 99, reset_time: '2026-11-11T15:52:48Z' }
++      },
++      antigravity_quota_groups: [
++        {
++          key: 'gemini',
++          name: 'Gemini Models',
++          windows: [
++            { window: '5h', utilization: 60, resets_at: '2026-11-04T20:52:48Z' },
++            { window: 'weekly', utilization: 25, resets_at: '2026-11-11T15:52:48Z' }
++          ]
++        },
++        {
++          key: '3p',
++          name: 'Claude and GPT models',
++          windows: [
++            { window: '5h', utilization: 0, resets_at: null },
++            { window: 'weekly', utilization: 10, resets_at: '2026-11-11T15:52:48Z' }
++          ]
++        },
++        {
++          key: 'gemini-argon-wtu',
++          name: 'Gemini 4 Argon',
++          windows: [{ window: 'weekly', utilization: 20, resets_at: '2026-11-11T17:11:15Z' }]
++        }
++      ]
++    })
++
++    const wrapper = mount(AccountUsageCell, {
++      props: {
++        account: makeAccount({ id: 1003, platform: 'antigravity', type: 'oauth', extra: {} })
++      },
++      global: {
++        stubs: {
++          UsageProgressBar: {
++            props: ['label', 'utilization', 'resetsAt', 'color'],
++            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
++          },
++          AccountQuotaInfo: true
++        }
++      }
++    })
++
++    await flushPromises()
++
++    const bars = wrapper.findAll('.usage-bar').map((bar) => bar.text())
++    expect(bars).toEqual([
++      'admin.accounts.usageWindow.antigravityGemini5h|60|2026-11-04T20:52:48Z',
++      'admin.accounts.usageWindow.antigravityGeminiWeekly|25|2026-11-11T15:52:48Z',
++      'admin.accounts.usageWindow.antigravityOther5h|0|',
++      'admin.accounts.usageWindow.antigravityOtherWeekly|10|2026-11-11T15:52:48Z',
++      // Pro plans' separate Argon quota is its own row, not a second Claude/GPT week.
++      'admin.accounts.usageWindow.antigravityArgonWeekly|20|2026-11-11T17:11:15Z'
++    ])
++    // The per-model figure (one tighter window per model) is not shown next to the real windows.
++    expect(wrapper.text()).not.toContain('gemini3Flash')
++  })
++
+   it('Antigravity 会显示 AI Credits 余额信息', async () => {
+     getUsage.mockResolvedValue({
+       ai_credits: [
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index 4795be4a1..78f7c550d 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -1718,6 +1718,12 @@ export default {
+         gemini3Pro: 'G3P',
+         gemini3Flash: 'G3F',
+         gemini3Image: 'G31FI',
++        antigravityGemini5h: 'G·5h',
++        antigravityGeminiWeekly: 'G·wk',
++        antigravityArgon5h: 'A·5h',
++        antigravityArgonWeekly: 'A·wk',
++        antigravityOther5h: 'C·5h',
++        antigravityOtherWeekly: 'C·wk',
+         claude: 'Claude',
+         grokRequests: 'Req',
+         grokTokens: 'Tok',
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index a6ff6363a..e55b725e9 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -519,6 +519,12 @@ export default {
+         gemini3Pro: 'G3P',
+         gemini3Flash: 'G3F',
+         gemini3Image: 'G31FI',
++        antigravityGemini5h: 'G·5h',
++        antigravityGeminiWeekly: 'G·周',
++        antigravityArgon5h: 'A·5h',
++        antigravityArgonWeekly: 'A·周',
++        antigravityOther5h: 'C·5h',
++        antigravityOtherWeekly: 'C·周',
+         claude: 'Claude',
+         grokRequests: '请求',
+         grokTokens: 'Token',
+diff --git a/frontend/src/types/index.ts b/frontend/src/types/index.ts
+index a33cb9540..96177ba00 100644
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -1442,6 +1442,19 @@ export interface UsageProgress {
+ }
+ 
+ // Antigravity 单个模型的配额信息
++export interface AntigravityQuotaWindow {
++  window: string // '5h' or 'weekly'
++  utilization: number // 0-100
++  resets_at: string | null
++}
++
++export interface AntigravityQuotaGroup {
++  key: string // bucket prefix: 'gemini' or '3p' (Claude and GPT)
++  name: string
++  description?: string
++  windows: AntigravityQuotaWindow[]
++}
++
+ export interface AntigravityModelQuota {
+   utilization: number // 使用率 0-100
+   reset_time: string  // 重置时间 ISO8601
+@@ -1505,6 +1518,8 @@ export interface AccountUsageInfo {
+   gemini_pro_minute?: UsageProgress | null
+   gemini_flash_minute?: UsageProgress | null
+   antigravity_quota?: Record<string, AntigravityModelQuota> | null
++  // Per-group 5-hour and weekly windows (retrieveUserQuotaSummary); every model of a group shares them.
++  antigravity_quota_groups?: AntigravityQuotaGroup[] | null
+   grok_request_quota?: GrokQuotaWindow | null
+   grok_token_quota?: GrokQuotaWindow | null
+   grok_retry_after_seconds?: number | null
