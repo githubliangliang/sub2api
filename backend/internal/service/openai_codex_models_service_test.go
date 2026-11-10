@@ -447,13 +447,12 @@ func TestBuildCodexModelsManifestAdvertisesPriorityServiceTierForFastGPTModels(t
 	require.Len(t, models, 3)
 
 	for _, model := range models {
-		require.Equal(t, []any{
+		require.Contains(t, model["service_tiers"],
 			map[string]any{
 				"id":          "priority",
 				"name":        "Fast",
 				"description": "Priority processing for lower latency.",
-			},
-		}, model["service_tiers"])
+			})
 		require.Nil(t, model["default_service_tier"])
 	}
 }
@@ -3311,5 +3310,27 @@ func TestGPT61SolAPIKeyCatalogContextWindow(t *testing.T) {
 			require.Len(t, models, 1)
 			require.EqualValues(t, tc.want, models[0]["context_window"])
 		})
+	}
+}
+
+func TestAstraUltrafastCatalogUsesAccountCapabilities(t *testing.T) {
+	for _, tc := range []struct {
+		accountType, base, model string
+		want                     bool
+	}{
+		{AccountTypeAPIKey, "https://api.openai.com", "gpt-6-astra", true},
+		{AccountTypeAPIKey, "https://api.openai.com", "gpt-6.1-sol", false},
+		{AccountTypeAPIKey, "https://proxy.example", "gpt-6-astra", false},
+		{AccountTypeOAuth, "https://chatgpt.com", "gpt-6-astra", false},
+	} {
+		account := &Account{Platform: PlatformOpenAI, Type: tc.accountType, Credentials: map[string]any{"base_url": tc.base, "plan_type": "promax"}}
+		caps := accountCodexToolCapabilities(account, tc.model)
+		require.Equal(t, tc.want, bytes.Contains(caps["service_tiers"], []byte("ultrafast")))
+	}
+	// Explicit native null/empty fields and account-provided tiers remain authoritative.
+	for _, raw := range []string{"null", "[]", `[{"id":"ultrafast","name":"Ultrafast"}]`} {
+		dst := map[string]json.RawMessage{"service_tiers": json.RawMessage(raw)}
+		require.False(t, applyCodexToolCapabilities(dst, map[string]json.RawMessage{"service_tiers": json.RawMessage(`[{"id":"priority"}]`)}, false))
+		require.JSONEq(t, raw, string(dst["service_tiers"]))
 	}
 }

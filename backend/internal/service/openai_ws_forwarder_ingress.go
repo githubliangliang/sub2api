@@ -890,6 +890,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			return nil, err
 		}
 		responseModelObserver := &upstreamResponseModelObserver{}
+		var observedServiceTier *string
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
 		}
@@ -958,6 +959,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
 			responseModelObserver.ObserveOpenAI(upstreamMessage, eventType)
+			if tier := extractOpenAIResponseServiceTierFromJSONBytes(upstreamMessage); tier != nil {
+				observedServiceTier = tier
+			}
 			if responseID == "" && eventResponseID != "" {
 				responseID = eventResponseID
 			}
@@ -1167,7 +1171,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					UpstreamModel:                 mappedModel,
 					UpstreamResponseModel:         responseModelObserver.Model(),
 					UpstreamResponseModelConflict: responseModelObserver.Conflict(),
-					ServiceTier:                   extractOpenAIServiceTierFromBody(payload),
+					ServiceTier:                   resolvedOpenAIServiceTier(account, observedServiceTier, extractOpenAIServiceTierFromBody(payload)),
 					ReasoningEffort:               ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, mappedModel, originalModel), payload, mappedModel),
 					Stream:                        reqStream,
 					OpenAIWSMode:                  true,

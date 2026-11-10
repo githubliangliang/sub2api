@@ -379,9 +379,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		}
 	}
 
-	// 移植说明（上游 b7ec3cdad）：上游抽这个闭包时用的是它自己的字段表。本仓库没有
-	// UpstreamResponseServiceTier（属未移植的 service_tier 基座），ServiceTier 也仍是
-	// firstNonNilServiceTier(providerServiceTier, serviceTier)，故此处保留本地两行。
+	// Preserve partial usage with account-aware tier resolution.
 	resultWithUsage := func() *OpenAIForwardResult {
 		return &OpenAIForwardResult{
 			RequestID:                     requestID,
@@ -392,7 +390,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 			UpstreamResponseModel:         observedUpstreamResponseModel(c),
 			UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 			ReasoningEffort:               reasoningEffort,
-			ServiceTier:                   firstNonNilServiceTier(providerServiceTier, serviceTier),
+			ServiceTier:                   resolvedOpenAIServiceTier(account, providerServiceTier, serviceTier),
 			Stream:                        true,
 			Duration:                      time.Since(startTime),
 			FirstTokenMs:                  firstTokenMs,
@@ -560,7 +558,7 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 		UpstreamResponseModel:         observedUpstreamResponseModel(c),
 		UpstreamResponseModelConflict: observedUpstreamResponseModelConflict(c),
 		ReasoningEffort:               reasoningEffort,
-		ServiceTier:                   firstNonNilServiceTier(extractOpenAIResponseServiceTierFromJSONBytes(respBody), serviceTier),
+		ServiceTier:                   resolvedOpenAIServiceTier(account, extractOpenAIResponseServiceTierFromJSONBytes(respBody), serviceTier),
 		Stream:                        false,
 		Duration:                      time.Since(startTime),
 	}, nil

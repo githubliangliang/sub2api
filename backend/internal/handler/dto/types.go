@@ -163,6 +163,8 @@ type Group struct {
 // AdminGroup 是管理员接口使用的 group DTO（包含敏感/内部字段）。
 // 注意：普通用户接口不得返回 model_routing/account_count/account_groups 等内部信息。
 type AdminGroup struct {
+	ForceOpenAIFast bool `json:"force_openai_fast"`
+	FreeOpenAIFast  bool `json:"free_openai_fast"`
 	Group
 
 	// 分组利润控制（五个 token 平台分组可启用；margin/buffer 为小数存储）。

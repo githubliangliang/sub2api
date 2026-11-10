@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -679,6 +680,9 @@ func checkBillingModeRequirements(p ChannelModelPricing) error {
 }
 
 func checkPricesNotNegative(p ChannelModelPricing) error {
+	if p.FastMultiplier != nil && (math.IsNaN(*p.FastMultiplier) || math.IsInf(*p.FastMultiplier, 0) || *p.FastMultiplier <= 0) {
+		return infraerrors.BadRequest("INVALID_FAST_MULTIPLIER", "fast_multiplier must be finite and positive")
+	}
 	checks := []struct {
 		field string
 		val   *float64

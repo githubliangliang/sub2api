@@ -145,6 +145,8 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		return nil
 	}
 	out := &AdminGroup{
+		ForceOpenAIFast:             g.ForceOpenAIFast,
+		FreeOpenAIFast:              g.FreeOpenAIFast,
 		Group:                       groupFromServiceBase(g),
 		ProfitControlEnabled:        g.ProfitControlEnabled,
 		ProfitMinMargin:             g.ProfitMinMargin,

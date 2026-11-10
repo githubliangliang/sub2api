@@ -285,6 +285,16 @@ func AllowMessagesDispatch(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldAllowMessagesDispatch, v))
 }
 
+// ForceOpenaiFast applies equality check predicate on the "force_openai_fast" field. It's identical to ForceOpenaiFastEQ.
+func ForceOpenaiFast(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldForceOpenaiFast, v))
+}
+
+// FreeOpenaiFast applies equality check predicate on the "free_openai_fast" field. It's identical to FreeOpenaiFastEQ.
+func FreeOpenaiFast(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFreeOpenaiFast, v))
+}
+
 // AllowLive applies equality check predicate on the "allow_live" field. It's identical to AllowLiveEQ.
 func AllowLive(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldAllowLive, v))
@@ -2263,6 +2273,26 @@ func AllowMessagesDispatchEQ(v bool) predicate.Group {
 // AllowMessagesDispatchNEQ applies the NEQ predicate on the "allow_messages_dispatch" field.
 func AllowMessagesDispatchNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldAllowMessagesDispatch, v))
+}
+
+// ForceOpenaiFastEQ applies the EQ predicate on the "force_openai_fast" field.
+func ForceOpenaiFastEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldForceOpenaiFast, v))
+}
+
+// ForceOpenaiFastNEQ applies the NEQ predicate on the "force_openai_fast" field.
+func ForceOpenaiFastNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldForceOpenaiFast, v))
+}
+
+// FreeOpenaiFastEQ applies the EQ predicate on the "free_openai_fast" field.
+func FreeOpenaiFastEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFreeOpenaiFast, v))
+}
+
+// FreeOpenaiFastNEQ applies the NEQ predicate on the "free_openai_fast" field.
+func FreeOpenaiFastNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldFreeOpenaiFast, v))
 }
 
 // AllowLiveEQ applies the EQ predicate on the "allow_live" field.

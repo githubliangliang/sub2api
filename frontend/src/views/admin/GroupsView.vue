@@ -1596,7 +1596,19 @@
             />
           </div>
         </div>
-        <!-- OpenAI Live 开关（仅 openai 平台） -->
+        <div v-if="['openai', 'composite'].includes(createForm.platform)" class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4 space-y-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="createForm.force_openai_fast" type="checkbox" />
+            {{ t('admin.settings.openaiFastPolicy.groupForce') }}
+          </label>
+          <p class="text-xs text-gray-500">{{ t('admin.settings.openaiFastPolicy.groupForceHint') }}</p>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="createForm.free_openai_fast" type="checkbox" />
+            {{ t('admin.settings.openaiFastPolicy.groupFree') }}
+          </label>
+          <p class="text-xs text-gray-500">{{ t('admin.settings.openaiFastPolicy.groupFreeHint') }}</p>
+        </div>
+        <!-- OpenAI Live -->
         <div
           v-if="createForm.platform === 'openai'"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
@@ -3355,7 +3367,19 @@
             />
           </div>
         </div>
-        <!-- OpenAI Live 开关（仅 openai 平台） -->
+        <div v-if="['openai', 'composite'].includes(editForm.platform)" class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4 space-y-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="editForm.force_openai_fast" type="checkbox" />
+            {{ t('admin.settings.openaiFastPolicy.groupForce') }}
+          </label>
+          <p class="text-xs text-gray-500">{{ t('admin.settings.openaiFastPolicy.groupForceHint') }}</p>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="editForm.free_openai_fast" type="checkbox" />
+            {{ t('admin.settings.openaiFastPolicy.groupFree') }}
+          </label>
+          <p class="text-xs text-gray-500">{{ t('admin.settings.openaiFastPolicy.groupFreeHint') }}</p>
+        </div>
+        <!-- OpenAI Live -->
         <div
           v-if="editForm.platform === 'openai'"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
@@ -5080,6 +5104,8 @@ const createForm = reactive({
   // OpenAI Messages 调度配置（仅 openai 平台使用）
   allow_messages_dispatch: false,
   allow_live: false,
+  force_openai_fast: false,
+  free_openai_fast: false,
   opus_mapped_model: createMessagesDispatchDefaults.opus_mapped_model,
   sonnet_mapped_model: createMessagesDispatchDefaults.sonnet_mapped_model,
   haiku_mapped_model: createMessagesDispatchDefaults.haiku_mapped_model,
@@ -5443,6 +5469,8 @@ const editForm = reactive({
   // OpenAI Messages 调度配置（仅 openai 平台使用）
   allow_messages_dispatch: false,
   allow_live: false,
+  force_openai_fast: false,
+  free_openai_fast: false,
   default_mapped_model: '',
   opus_mapped_model: editMessagesDispatchDefaults.opus_mapped_model,
   sonnet_mapped_model: editMessagesDispatchDefaults.sonnet_mapped_model,
@@ -5859,6 +5887,7 @@ const groupPricingToForm = (
     cache_write_price: perTokenToMTok(entry.cache_write_price),
     cache_write_1h_price: perTokenToMTok(entry.cache_write_1h_price),
     cache_read_price: perTokenToMTok(entry.cache_read_price),
+    fast_multiplier: entry.fast_multiplier ?? null,
     image_input_price: perTokenToMTok(entry.image_input_price),
     image_output_price: perTokenToMTok(entry.image_output_price),
     per_request_price: entry.per_request_price,
@@ -5879,6 +5908,7 @@ const groupPricingToAPI = (
       cache_write_price: mTokToPerToken(entry.cache_write_price),
       cache_write_1h_price: mTokToPerToken(entry.cache_write_1h_price),
       cache_read_price: mTokToPerToken(entry.cache_read_price),
+      fast_multiplier: entry.fast_multiplier == null || entry.fast_multiplier === "" ? null : Number(entry.fast_multiplier),
       image_input_price: mTokToPerToken(entry.image_input_price),
       image_output_price: mTokToPerToken(entry.image_output_price),
       per_request_price: toNullableNumber(entry.per_request_price),
@@ -5965,6 +5995,8 @@ const closeCreateModal = () => {
   createForm.fallback_group_id_on_invalid_request = null;
   resetMessagesDispatchFormState(createForm);
   createForm.allow_live = false;
+  createForm.force_openai_fast = false;
+  createForm.free_openai_fast = false;
   createForm.require_oauth_only = false;
   createForm.require_privacy_set = false;
   createForm.supported_model_scopes = ["claude", "gemini_text", "gemini_image"];
@@ -6221,6 +6253,8 @@ const handleEdit = async (group: AdminGroup) => {
     group.allow_messages_dispatch ||
     messagesDispatchFormState.allow_messages_dispatch;
   editForm.allow_live = group.allow_live ?? false;
+  editForm.force_openai_fast = group.force_openai_fast ?? false;
+  editForm.free_openai_fast = group.free_openai_fast ?? false;
   editForm.opus_mapped_model = messagesDispatchFormState.opus_mapped_model;
   editForm.sonnet_mapped_model = messagesDispatchFormState.sonnet_mapped_model;
   editForm.haiku_mapped_model = messagesDispatchFormState.haiku_mapped_model;
@@ -6292,6 +6326,8 @@ const closeEditModal = () => {
   editForm.model_pricing = [];
   resetMessagesDispatchFormState(editForm);
   editForm.allow_live = false;
+  editForm.force_openai_fast = false;
+  editForm.free_openai_fast = false;
   resetModelsListState(editModelsListState);
 };
 
@@ -6727,6 +6763,10 @@ watch(
       resetMessagesDispatchFormState(createForm);
       createForm.allow_live = false;
     }
+    if (!["openai", "composite"].includes(newVal)) {
+      createForm.force_openai_fast = false;
+      createForm.free_openai_fast = false;
+    }
     if (!isProfitControlPlatform(newVal)) {
       createForm.profit_control_enabled = false;
       createForm.profit_min_margin_percent = 0;
@@ -6781,6 +6821,10 @@ watch(
     if (!supportsMessagesDispatchPlatform(newVal)) {
       resetMessagesDispatchFormState(editForm);
       editForm.allow_live = false;
+    }
+    if (!["openai", "composite"].includes(newVal)) {
+      editForm.force_openai_fast = false;
+      editForm.free_openai_fast = false;
     }
     if (!isProfitControlPlatform(newVal)) {
       editForm.profit_control_enabled = false;

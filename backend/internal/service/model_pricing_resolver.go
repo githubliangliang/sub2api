@@ -259,6 +259,7 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 			cloned := *resolved.BasePricing
 			resolved.BasePricing = &cloned
 		}
+		resolved.BasePricing.FastMultiplier = chPricing.FastMultiplier
 		applyChannelImagePriceOverrides(chPricing, resolved.BasePricing)
 		return
 	}
@@ -298,6 +299,7 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 		resolved.BasePricing.CacheReadPricePerTokenPriority = *chPricing.CacheReadPrice
 	}
 	// 图片价留空时继承目录，显式 0 保持免费。
+	resolved.BasePricing.FastMultiplier = chPricing.FastMultiplier
 	applyChannelImagePriceOverrides(chPricing, resolved.BasePricing)
 }
 
@@ -372,6 +374,8 @@ func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool, ch
 		pricing.CacheReadPricePerTokenPriority = *iv.CacheReadPrice
 	}
 	if base != nil {
+		pricing.FastMultiplier = base.FastMultiplier
+		pricing.UltrafastMultiplier = base.UltrafastMultiplier
 		pricing.ImageInputPricePerToken = base.ImageInputPricePerToken
 		pricing.ImageOutputPricePerToken = base.ImageOutputPricePerToken
 		pricing.ImageOutputPriceExplicit = base.ImageOutputPriceExplicit

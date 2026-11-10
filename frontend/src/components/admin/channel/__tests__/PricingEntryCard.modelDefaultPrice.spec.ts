@@ -106,3 +106,17 @@ describe('PricingEntryCard default price auto-fill', () => {
     }
   })
 })
+
+
+describe('Fast pricing input', () => {
+  it('edits and clears a dimensionless Fast multiplier without changing token prices', async () => {
+    const entry = { ...createEntry(['gpt-6-astra']), input_price: 10, fast_multiplier: 3 }
+    const wrapper = shallowMount(PricingEntryCard, { props: { entry, platform: 'openai' } })
+    const field = wrapper.find('input[placeholder="admin.settings.openaiFastPolicy.fastMultiplierHint"]')
+    expect((field.element as HTMLInputElement).value).toBe('3')
+    await field.setValue('2.5')
+    expect(emittedEntries(wrapper).at(-1)).toMatchObject({ fast_multiplier: '2.5', input_price: 10 })
+    await field.setValue('')
+    expect(emittedEntries(wrapper).at(-1)).toMatchObject({ fast_multiplier: null, input_price: 10 })
+  })
+})

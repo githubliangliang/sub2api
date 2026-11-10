@@ -94,6 +94,8 @@ type BillingCache interface {
 
 // ModelPricing 模型价格配置（per-token价格，与LiteLLM格式一致）
 type ModelPricing struct {
+	FastMultiplier                     *float64
+	UltrafastMultiplier                float64
 	InputPricePerToken                 float64 // 每token输入价格 (USD)
 	InputPricePerTokenPriority         float64 // priority service tier 下每token输入价格 (USD)
 	ImageInputPricePerToken            float64 // 图片输入 token 价格 (USD)，用于多模态 embedding 等图文不同价场景；为 0 时回退到 InputPricePerToken
@@ -123,8 +125,7 @@ const (
 
 func normalizeBillingServiceTier(serviceTier string) string {
 	normalized := strings.ToLower(strings.TrimSpace(serviceTier))
-	// Billing alias only: clients send "fast" for the same paid priority
-	// tier. This is not send-side Fast mode (0.1.180 §7.2).
+	// Fast is the billing alias for the priority tier.
 	if normalized == "fast" {
 		return "priority"
 	}
@@ -132,7 +133,14 @@ func normalizeBillingServiceTier(serviceTier string) string {
 }
 
 func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bool {
-	if pricing == nil || normalizeBillingServiceTier(serviceTier) != "priority" {
+	if pricing == nil {
+		return false
+	}
+	tier := normalizeBillingServiceTier(serviceTier)
+	if tier != "priority" && tier != "fast" {
+		return false
+	}
+	if pricing.FastMultiplier != nil {
 		return false
 	}
 	return pricing.InputPricePerTokenPriority > 0 || pricing.OutputPricePerTokenPriority > 0 ||
@@ -141,7 +149,7 @@ func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bo
 
 func serviceTierCostMultiplier(serviceTier string) float64 {
 	switch normalizeBillingServiceTier(serviceTier) {
-	case "priority":
+	case "priority", "fast", OpenAIFastTierUltrafast:
 		return 2.0
 	case "flex":
 		return 0.5
@@ -1225,6 +1233,7 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
 		pricing.CacheReadPricePerToken = *channelPricing.CacheReadPrice
 		pricing.CacheReadPricePerTokenPriority = *channelPricing.CacheReadPrice
 	}
+	pricing.FastMultiplier = channelPricing.FastMultiplier
 	applyChannelImagePriceOverrides(channelPricing, pricing)
 	return pricing, nil
 }
@@ -1379,7 +1388,7 @@ func (s *BillingService) computeTokenBreakdown(
 			cacheCreationPrice = pricing.CacheCreationPricePerTokenPriority
 		}
 	} else {
-		tierMultiplier = serviceTierCostMultiplier(serviceTier)
+		tierMultiplier = configuredServiceTierMultiplier(serviceTier, pricing)
 	}
 
 	longContextPricingEligible := applyLongCtx && s.shouldApplySessionLongContextPricing(tokens, pricing)
@@ -1592,10 +1601,17 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	// GPT-6.1 Sol/Terra explicit cache-write prices, including zero, apply to priority at 2x.
 	needsGPT61CachePriority := (openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized)) && pricing.CacheCreationPriceExplicit &&
 		pricing.CacheCreationPricePerTokenPriority != pricing.CacheCreationPricePerToken*2
-	if !needsLongContextPolicy && !needsCacheCreationPolicy && !needsGPT61CachePriority {
+	fastRatio := openAIModelFastPricingRatio(normalized)
+	if !needsLongContextPolicy && !needsCacheCreationPolicy && !needsGPT61CachePriority && fastRatio <= 0 {
 		return pricing
 	}
 	cloned := *pricing
+	if isOpenAIGPT6AstraModel(normalized) {
+		cloned.UltrafastMultiplier = 6
+	}
+	if fastRatio > 0 {
+		enforceOpenAIFastPricingRatio(&cloned, fastRatio)
+	}
 	if needsGPT61CachePriority {
 		cloned.CacheCreationPricePerTokenPriority = cloned.CacheCreationPricePerToken * 2
 	}
@@ -2132,5 +2148,48 @@ func getDefaultGrokImagineVideoPrice(model string, resolution string) (float64, 
 		}
 	default:
 		return 0, false
+	}
+}
+
+func configuredServiceTierMultiplier(serviceTier string, pricing *ModelPricing) float64 {
+	if pricing != nil {
+		if normalizeBillingServiceTier(serviceTier) == OpenAIFastTierUltrafast && pricing.UltrafastMultiplier > 0 {
+			return pricing.UltrafastMultiplier
+		}
+		switch normalizeBillingServiceTier(serviceTier) {
+		case "priority", "fast":
+			if pricing.FastMultiplier != nil {
+				return *pricing.FastMultiplier
+			}
+		}
+	}
+	return serviceTierCostMultiplier(serviceTier)
+}
+
+func openAIModelFastPricingRatio(normalized string) float64 {
+	switch normalized {
+	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
+		return 2.0
+	case "gpt-5.5":
+		return 2.5
+	default:
+		if isOpenAIGPT6AstraModel(normalized) {
+			return 2.0
+		}
+		return 0
+	}
+}
+
+func enforceOpenAIFastPricingRatio(pricing *ModelPricing, ratio float64) {
+	if pricing == nil || ratio <= 0 {
+		return
+	}
+	pricing.InputPricePerTokenPriority = pricing.InputPricePerToken * ratio
+	pricing.OutputPricePerTokenPriority = pricing.OutputPricePerToken * ratio
+	if pricing.CacheReadPricePerToken > 0 {
+		pricing.CacheReadPricePerTokenPriority = pricing.CacheReadPricePerToken * ratio
+	}
+	if pricing.CacheCreationPricePerToken > 0 {
+		pricing.CacheCreationPricePerTokenPriority = pricing.CacheCreationPricePerToken * ratio
 	}
 }

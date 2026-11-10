@@ -44,7 +44,7 @@ func partialOpenAIStreamResult(c *gin.Context, resp *http.Response, account *Acc
 		Duration:                      time.Since(startTime),
 		FirstTokenMs:                  streamResult.firstTokenMs,
 		ClientDisconnect:              streamResult.clientDisconnect,
-		ServiceTier:                   firstNonNilServiceTier(streamResult.serviceTier, requestedServiceTier),
+		ServiceTier:                   resolvedOpenAIServiceTier(account, streamResult.serviceTier, requestedServiceTier),
 	}
 	return result
 }
@@ -582,7 +582,12 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
-	if rawTier := requestView.ServiceTier; rawTier != "" {
+	rawTier := requestView.ServiceTier
+	if openAIGroupForcesFast(ctx, account) {
+		rawTier = OpenAIFastTierPriority
+		markPatchSet("service_tier", rawTier)
+	}
+	if rawTier != "" {
 		if normTier := normalizedOpenAIServiceTierValue(rawTier); normTier != "" {
 			action, errMsg := s.evaluateOpenAIFastPolicy(ctx, account, upstreamModel, normTier)
 			switch action {
@@ -608,6 +613,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
+	if rawTier == "" && s.shouldForceOpenAIFastPriorityForMissingTier(ctx, account, upstreamModel) {
+		markPatchSet("service_tier", OpenAIFastTierPriority)
+	}
 	if bodyModified {
 		if requestView.HasPatches() {
 			if patchedBody, patchErr := requestView.ApplyPatches(); patchErr == nil {
@@ -1133,6 +1141,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if usage == nil {
 			usage = &OpenAIUsage{}
 		}
+		serviceTier = resolvedOpenAIServiceTier(account, serviceTier, requestedServiceTier)
 		logOpenAIServiceTierDifference(c, account, resp.Header.Get("x-request-id"), requestedServiceTier, serviceTier)
 
 		forwardResult := &OpenAIForwardResult{

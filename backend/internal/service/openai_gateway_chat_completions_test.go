@@ -1334,7 +1334,7 @@ func TestForwardAsChatCompletions_BufferedUsesProviderServiceTier(t *testing.T) 
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.ServiceTier)
-	require.Equal(t, "default", *result.ServiceTier)
+	require.Equal(t, "priority", *result.ServiceTier, "Codex OAuth default echo does not downgrade Fast")
 	require.Equal(t, "default", gjson.Get(rec.Body.String(), "service_tier").String())
 }
 

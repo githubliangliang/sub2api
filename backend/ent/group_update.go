@@ -975,6 +975,34 @@ func (_u *GroupUpdate) SetNillableAllowMessagesDispatch(v *bool) *GroupUpdate {
 	return _u
 }
 
+// SetForceOpenaiFast sets the "force_openai_fast" field.
+func (_u *GroupUpdate) SetForceOpenaiFast(v bool) *GroupUpdate {
+	_u.mutation.SetForceOpenaiFast(v)
+	return _u
+}
+
+// SetNillableForceOpenaiFast sets the "force_openai_fast" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableForceOpenaiFast(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetForceOpenaiFast(*v)
+	}
+	return _u
+}
+
+// SetFreeOpenaiFast sets the "free_openai_fast" field.
+func (_u *GroupUpdate) SetFreeOpenaiFast(v bool) *GroupUpdate {
+	_u.mutation.SetFreeOpenaiFast(v)
+	return _u
+}
+
+// SetNillableFreeOpenaiFast sets the "free_openai_fast" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableFreeOpenaiFast(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetFreeOpenaiFast(*v)
+	}
+	return _u
+}
+
 // SetAllowLive sets the "allow_live" field.
 func (_u *GroupUpdate) SetAllowLive(v bool) *GroupUpdate {
 	_u.mutation.SetAllowLive(v)
@@ -1812,6 +1840,12 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AllowMessagesDispatch(); ok {
 		_spec.SetField(group.FieldAllowMessagesDispatch, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ForceOpenaiFast(); ok {
+		_spec.SetField(group.FieldForceOpenaiFast, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.FreeOpenaiFast(); ok {
+		_spec.SetField(group.FieldFreeOpenaiFast, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.AllowLive(); ok {
 		_spec.SetField(group.FieldAllowLive, field.TypeBool, value)
@@ -3118,6 +3152,34 @@ func (_u *GroupUpdateOne) SetNillableAllowMessagesDispatch(v *bool) *GroupUpdate
 	return _u
 }
 
+// SetForceOpenaiFast sets the "force_openai_fast" field.
+func (_u *GroupUpdateOne) SetForceOpenaiFast(v bool) *GroupUpdateOne {
+	_u.mutation.SetForceOpenaiFast(v)
+	return _u
+}
+
+// SetNillableForceOpenaiFast sets the "force_openai_fast" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableForceOpenaiFast(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetForceOpenaiFast(*v)
+	}
+	return _u
+}
+
+// SetFreeOpenaiFast sets the "free_openai_fast" field.
+func (_u *GroupUpdateOne) SetFreeOpenaiFast(v bool) *GroupUpdateOne {
+	_u.mutation.SetFreeOpenaiFast(v)
+	return _u
+}
+
+// SetNillableFreeOpenaiFast sets the "free_openai_fast" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableFreeOpenaiFast(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetFreeOpenaiFast(*v)
+	}
+	return _u
+}
+
 // SetAllowLive sets the "allow_live" field.
 func (_u *GroupUpdateOne) SetAllowLive(v bool) *GroupUpdateOne {
 	_u.mutation.SetAllowLive(v)
@@ -3985,6 +4047,12 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AllowMessagesDispatch(); ok {
 		_spec.SetField(group.FieldAllowMessagesDispatch, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ForceOpenaiFast(); ok {
+		_spec.SetField(group.FieldForceOpenaiFast, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.FreeOpenaiFast(); ok {
+		_spec.SetField(group.FieldFreeOpenaiFast, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.AllowLive(); ok {
 		_spec.SetField(group.FieldAllowLive, field.TypeBool, value)

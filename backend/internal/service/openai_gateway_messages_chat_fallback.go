@@ -81,7 +81,8 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	convertedEffort := chatReq.ReasoningEffort
 	reasoningEffort := &convertedEffort
 	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
-	serviceTier := extractOpenAIServiceTierFromBody(body)
+	chatReq.ServiceTier = requestedMessagesOpenAIServiceTier(c, body)
+	var serviceTier *string
 
 	chatBody, err := json.Marshal(chatReq)
 	if err != nil {
@@ -107,11 +108,15 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 			}
 		}
 	}
-	// Unlike forwardResponsesViaRawChatCompletions, applyOpenAIFastPolicyToBody
-	// is intentionally skipped: Anthropic Messages bodies carry no service_tier,
-	// so the converted Chat Completions body never contains one and the policy
-	// would always be a no-op on this path.
-
+	chatBody, err = s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, chatBody)
+	if err != nil {
+		var blocked *OpenAIFastBlockedError
+		if errors.As(err, &blocked) {
+			writeAnthropicError(c, http.StatusForbidden, "permission_error", blocked.Error())
+		}
+		return nil, err
+	}
+	serviceTier = extractOpenAIServiceTierFromBody(chatBody)
 	logger.L().Debug("openai messages: forwarding via raw chat completions",
 		zap.Int64("account_id", account.ID),
 		zap.String("original_model", originalModel),
@@ -187,7 +192,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
 		BillingModel:    billingModel,
 		UpstreamModel:   upstreamModel,
 		ReasoningEffort: reasoningEffort,
-		ServiceTier:     firstNonNilServiceTier(providerServiceTier, serviceTier),
+		ServiceTier:     resolvedOpenAIServiceTier(nil, providerServiceTier, serviceTier),
 		Stream:          false,
 		Duration:        time.Since(startTime),
 	}, nil
@@ -247,7 +252,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 			BillingModel:     billingModel,
 			UpstreamModel:    upstreamModel,
 			ReasoningEffort:  reasoningEffort,
-			ServiceTier:      firstNonNilServiceTier(normalizeOpenAIServiceTier(scan.ServiceTier), serviceTier),
+			ServiceTier:      resolvedOpenAIServiceTier(nil, normalizeOpenAIServiceTier(scan.ServiceTier), serviceTier),
 			Stream:           true,
 			Duration:         time.Since(startTime),
 			FirstTokenMs:     scan.FirstTokenMs,
@@ -283,7 +288,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
 		BillingModel:     billingModel,
 		UpstreamModel:    upstreamModel,
 		ReasoningEffort:  reasoningEffort,
-		ServiceTier:      firstNonNilServiceTier(providerServiceTier, serviceTier),
+		ServiceTier:      resolvedOpenAIServiceTier(nil, providerServiceTier, serviceTier),
 		Stream:           true,
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     scan.FirstTokenMs,

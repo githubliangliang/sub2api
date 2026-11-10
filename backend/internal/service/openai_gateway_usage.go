@@ -322,6 +322,17 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		)
 	}
 
+	if groupBillsOpenAIFastAtStandard(apiKey, billingAccount, serviceTier) {
+		standardCost, standardErr := s.calculateOpenAIRecordUsageCost(ctx, result, apiKey, billingModels,
+			multiplier, imageMultiplier, videoMultiplier, baseMultiplier, tokens, "", longContextBillingGate, modelLongContextExempt)
+		if standardErr != nil && !isUsagePricingUnavailableError(standardErr) {
+			return standardErr
+		}
+		if standardErr == nil && cost != nil && standardCost != nil {
+			cost.ActualCost = standardCost.ActualCost
+		}
+	}
+
 	usageLog := &UsageLog{
 		UserID:                user.ID,
 		APIKeyID:              apiKey.ID,
@@ -1031,5 +1042,23 @@ func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.C
 	}
 	if snapshot := ParseCodexRateLimitHeaders(headers); snapshot != nil {
 		s.updateCodexUsageSnapshot(ctx, accountID, snapshot)
+	}
+}
+
+func groupBillsOpenAIFastAtStandard(apiKey *APIKey, account *Account, serviceTier string) bool {
+	if apiKey == nil || apiKey.Group == nil || !apiKey.Group.FreeOpenAIFast {
+		return false
+	}
+	if account == nil || !account.IsOpenAI() {
+		return false
+	}
+	if !groupSupportsOpenAIFast(apiKey.Group.Platform) {
+		return false
+	}
+	switch normalizeBillingServiceTier(serviceTier) {
+	case "priority", "fast":
+		return true
+	default:
+		return false
 	}
 }

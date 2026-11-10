@@ -57,6 +57,7 @@ type updateChannelRequest struct {
 }
 
 type channelModelPricingRequest struct {
+	FastMultiplier    *float64                 `json:"fast_multiplier" binding:"omitempty,gt=0"`
 	Platform          string                   `json:"platform" binding:"omitempty,max=50"`
 	Models            []string                 `json:"models" binding:"required,min=1,max=100"`
 	BillingMode       string                   `json:"billing_mode" binding:"omitempty,oneof=token per_request image"`
@@ -110,6 +111,7 @@ type channelResponse struct {
 }
 
 type channelModelPricingResponse struct {
+	FastMultiplier    *float64                  `json:"fast_multiplier" binding:"omitempty,gt=0"`
 	ID                int64                     `json:"id"`
 	Platform          string                    `json:"platform"`
 	Models            []string                  `json:"models"`
@@ -229,6 +231,7 @@ func pricingToResponse(p *service.ChannelModelPricing) channelModelPricingRespon
 		CacheWritePrice:   p.CacheWritePrice,
 		CacheWrite1hPrice: p.CacheWrite1hPrice,
 		CacheReadPrice:    p.CacheReadPrice,
+		FastMultiplier:    p.FastMultiplier,
 		ImageInputPrice:   p.ImageInputPrice,
 		ImageOutputPrice:  p.ImageOutputPrice,
 		PerRequestPrice:   p.PerRequestPrice,
@@ -284,6 +287,7 @@ func pricingRequestToService(reqs []channelModelPricingRequest) []service.Channe
 			CacheWritePrice:   r.CacheWritePrice,
 			CacheWrite1hPrice: r.CacheWrite1hPrice,
 			CacheReadPrice:    r.CacheReadPrice,
+			FastMultiplier:    r.FastMultiplier,
 			ImageInputPrice:   r.ImageInputPrice,
 			ImageOutputPrice:  r.ImageOutputPrice,
 			PerRequestPrice:   r.PerRequestPrice,

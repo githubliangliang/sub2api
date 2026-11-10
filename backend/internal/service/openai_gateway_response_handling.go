@@ -1231,13 +1231,6 @@ func extractOpenAIResponseServiceTierFromJSONBytes(body []byte) *string {
 	return nil
 }
 
-func firstNonNilServiceTier(provider, requested *string) *string {
-	if provider != nil {
-		return provider
-	}
-	return requested
-}
-
 func logOpenAIServiceTierDifference(c *gin.Context, account *Account, requestID string, requested, provider *string) {
 	if provider == nil {
 		return

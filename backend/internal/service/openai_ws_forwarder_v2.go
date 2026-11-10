@@ -37,6 +37,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		return nil, wrapOpenAIWSFallback("invalid_state", errors.New("service or account is nil"))
 	}
 	responseModelObserver := &upstreamResponseModelObserver{}
+	var observedServiceTier *string
 
 	wsURL, err := s.buildOpenAIResponsesWSURL(account)
 	if err != nil {
@@ -413,7 +414,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			UpstreamResponseModelConflict: responseModelObserver.Conflict(),
 			ImageCount:                    imageCounter.Count(),
 			ImageOutputSizes:              imageCounter.Sizes(),
-			ServiceTier:                   extractOpenAIServiceTier(reqBody),
+			ServiceTier:                   resolvedOpenAIServiceTier(account, observedServiceTier, extractOpenAIServiceTier(reqBody)),
 			ReasoningEffort:               extractOpenAIReasoningEffort(reqBody, mappedModel, originalModel),
 			Stream:                        reqStream,
 			OpenAIWSMode:                  true,
@@ -601,6 +602,9 @@ readLoop:
 			continue
 		}
 		responseModelObserver.ObserveOpenAI(message, eventType)
+		if tier := extractOpenAIResponseServiceTierFromJSONBytes(message); tier != nil {
+			observedServiceTier = tier
+		}
 		eventCount++
 		if firstEventType == "" {
 			firstEventType = eventType

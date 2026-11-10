@@ -949,12 +949,12 @@ func normalizeOpenAIServiceTier(raw string) *string {
 	if value == "fast" {
 		value = "priority"
 	}
-	// 放过 OpenAI 官方文档定义的所有合法 tier 值：priority/flex/auto/default/scale。
-	// 对 Codex 客户端零影响（Codex 只发 priority 或 flex，见 codex-rs/core/src/client.rs），
-	// 但能让直连 OpenAI SDK 的用户透传 auto/default/scale 以便抓包/调试。
-	// 真未知值仍返回 nil，由 normalizeResponsesBodyServiceTier 从 body 中删除。
+	// 放过 OpenAI 官方文档定义的合法 tier 值，以及 Codex/API 新增的 ultrafast。
+	// Codex 客户端会发 priority、flex 或 ultrafast；直连 OpenAI SDK 的用户还会
+	// 透传 auto/default/scale。真未知值仍返回 nil，由
+	// normalizeResponsesBodyServiceTier 从 body 中删除。
 	switch value {
-	case "priority", "flex", "auto", "default", "scale":
+	case "priority", "flex", "auto", "default", "scale", OpenAIFastTierUltrafast:
 		return &value
 	default:
 		return nil
@@ -1032,7 +1032,11 @@ func evaluateOpenAIFastPolicyWithSettings(settings *OpenAIFastPolicySettings, us
 				continue
 			}
 			ruleTier := strings.ToLower(strings.TrimSpace(rule.ServiceTier))
-			if ruleTier != "" && ruleTier != OpenAIFastTierAny && ruleTier != tier {
+			if tier == OpenAIFastTierMissing {
+				if ruleTier != OpenAIFastTierMissing {
+					continue
+				}
+			} else if ruleTier != "" && ruleTier != OpenAIFastTierAny && ruleTier != tier {
 				continue
 			}
 			eff := BetaPolicyRule{
@@ -1116,8 +1120,22 @@ func (s *OpenAIGatewayService) applyOpenAIFastPolicyToBody(ctx context.Context, 
 	if len(body) == 0 {
 		return body, nil
 	}
+	if openAIGroupForcesFast(ctx, account) {
+		updated, err := sjson.SetBytes(body, "service_tier", OpenAIFastTierPriority)
+		if err != nil {
+			return body, fmt.Errorf("force group service_tier priority on body: %w", err)
+		}
+		body = updated
+	}
 	rawTier := gjson.GetBytes(body, "service_tier").String()
 	if rawTier == "" {
+		if s.shouldForceOpenAIFastPriorityForMissingTier(ctx, account, model) {
+			updated, err := sjson.SetBytes(body, "service_tier", OpenAIFastTierPriority)
+			if err != nil {
+				return body, fmt.Errorf("force missing service_tier priority on body: %w", err)
+			}
+			return updated, nil
+		}
 		return body, nil
 	}
 	normTier := normalizedOpenAIServiceTierValue(rawTier)
@@ -1227,8 +1245,26 @@ func (s *OpenAIGatewayService) applyOpenAIFastPolicyToWSResponseCreate(
 	if frameType != "response.create" {
 		return frame, nil, nil
 	}
+	if _, err := ValidateOpenAIServiceTierField(frame); err != nil {
+		return frame, &OpenAIFastBlockedError{Message: err.Error()}, nil
+	}
+
+	if openAIGroupForcesFast(ctx, account) {
+		updated, err := sjson.SetBytes(frame, "service_tier", OpenAIFastTierPriority)
+		if err != nil {
+			return frame, nil, fmt.Errorf("force group service_tier priority in ws frame: %w", err)
+		}
+		frame = updated
+	}
 	rawTier := gjson.GetBytes(frame, "service_tier").String()
 	if rawTier == "" {
+		if s.shouldForceOpenAIFastPriorityForMissingTier(ctx, account, model) {
+			updated, err := sjson.SetBytes(frame, "service_tier", OpenAIFastTierPriority)
+			if err != nil {
+				return frame, nil, fmt.Errorf("force missing service_tier priority in ws frame: %w", err)
+			}
+			return updated, nil, nil
+		}
 		return frame, nil, nil
 	}
 	normTier := normalizedOpenAIServiceTierValue(rawTier)
@@ -1630,4 +1666,71 @@ func validateGPT61SolCompatRequest(body []byte, model string) error {
 		}
 	}
 	return nil
+}
+
+func (s *OpenAIGatewayService) shouldForceOpenAIFastPriorityForMissingTier(ctx context.Context, account *Account, model string) bool {
+	if account == nil || account.Platform != PlatformOpenAI {
+		return false
+	}
+	action, _ := s.evaluateOpenAIFastPolicy(ctx, account, model, OpenAIFastTierMissing)
+	return action == OpenAIFastPolicyActionForcePriority
+}
+
+func openAIGroupForcesFast(ctx context.Context, account *Account) bool {
+	if ctx == nil || account == nil || account.Platform != PlatformOpenAI {
+		return false
+	}
+	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	return IsGroupContextValid(group) && groupSupportsOpenAIFast(group.Platform) && group.ForceOpenAIFast
+}
+
+// ErrInvalidOpenAIServiceTier indicates a request carried a service_tier value
+// that is not a known OpenAI tier. HTTP handlers translate it into a 400
+// invalid_request_error so malformed values are rejected up front instead of
+// being silently stripped (which would mask the user's intent to use fast
+// mode).
+type ErrInvalidOpenAIServiceTier struct {
+	Value string
+}
+
+func (e *ErrInvalidOpenAIServiceTier) Error() string {
+	return fmt.Sprintf("invalid service_tier %q: must be one of auto, default, fast, flex, priority, scale, ultrafast", e.Value)
+}
+
+const invalidOpenAIServiceTierValueMaxLen = 64
+
+func boundInvalidOpenAIServiceTierValue(raw string) string {
+	if len(raw) <= invalidOpenAIServiceTierValueMaxLen {
+		return raw
+	}
+	return raw[:invalidOpenAIServiceTierValueMaxLen] + "..."
+}
+
+// ValidateOpenAIServiceTierField validates the service_tier field of a raw
+// OpenAI-compatible request body (/v1/responses and /v1/chat/completions).
+//
+//   - absent / null → valid, returns "" (field omitted keeps current behavior)
+//   - "fast" → normalized to "priority" (the two are equivalent; the canonical
+//     value is what reaches the OpenAI upstream)
+//   - "priority" / "flex" / "auto" / "default" / "scale" / "ultrafast" → valid, returned as-is
+//   - an explicitly present non-string value, an empty string, or any other
+//     unknown value → *ErrInvalidOpenAIServiceTier (handler maps to HTTP 400),
+//     matching OpenAI's enum validation semantics
+func ValidateOpenAIServiceTierField(body []byte) (string, error) {
+	tierResult := gjson.GetBytes(body, "service_tier")
+	if !tierResult.Exists() || tierResult.Type == gjson.Null {
+		return "", nil
+	}
+	if tierResult.Type != gjson.String {
+		return "", &ErrInvalidOpenAIServiceTier{Value: "<non-string>"}
+	}
+	raw := strings.TrimSpace(tierResult.String())
+	if raw == "" {
+		return "", &ErrInvalidOpenAIServiceTier{Value: raw}
+	}
+	norm := normalizedOpenAIServiceTierValue(raw)
+	if norm == "" {
+		return "", &ErrInvalidOpenAIServiceTier{Value: boundInvalidOpenAIServiceTierValue(raw)}
+	}
+	return norm, nil
 }

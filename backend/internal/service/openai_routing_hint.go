@@ -44,7 +44,7 @@ func setOpenAICodexRoutingHint(headers http.Header, account *Account, model stri
 	// selects; default, missing, and other gateway-compatible API values remain
 	// model-only rather than expanding the ChatGPT routing protocol here.
 	switch canonicalTier {
-	case OpenAIFastTierPriority, OpenAIFastTierFlex:
+	case OpenAIFastTierPriority, OpenAIFastTierFlex, OpenAIFastTierUltrafast:
 	default:
 		canonicalTier = ""
 	}

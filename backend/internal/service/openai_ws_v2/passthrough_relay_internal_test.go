@@ -568,3 +568,24 @@ func TestObserveUpstreamMessage_ResponseIDFallbackPolicy(t *testing.T) {
 	require.True(t, observed.terminal)
 	require.Equal(t, "resp_fallback", observed.responseID)
 }
+
+func TestRelayServiceTierIsTurnLocalAndKeepsLastValidObservation(t *testing.T) {
+	state := &relayState{}
+	start := time.Unix(0, 0)
+	now := func() time.Time { return start.Add(time.Second) }
+	observeUpstreamMessage(state, []byte(`{"type":"response.created","response":{"id":"tier1","service_tier":"ultrafast"}}`), start, now, nil)
+	observeUpstreamMessage(state, []byte(`{"type":"response.in_progress","response":{"id":"tier1","service_tier":"unknown"}}`), start, now, nil)
+	first := observeUpstreamMessage(state, []byte(`{"type":"response.completed","response":{"id":"tier1","usage":{"input_tokens":1}}}`), start, now, nil)
+	require.Equal(t, "ultrafast", first.responseServiceTier)
+	var turn RelayTurnResult
+	emitTurnComplete(func(v RelayTurnResult) { turn = v }, state, first)
+	require.Equal(t, "ultrafast", turn.ResponseServiceTier)
+	observeUpstreamMessage(state, []byte(`{"type":"response.created","response":{"id":"tier2","service_tier":"ultrafast"}}`), start, now, nil)
+	second := observeUpstreamMessage(state, []byte(`{"type":"response.completed","response":{"id":"tier2","service_tier":"priority","usage":{"input_tokens":1}}}`), start, now, nil)
+	require.Equal(t, "priority", second.responseServiceTier)
+	third := observeUpstreamMessage(state, []byte(`{"type":"response.completed","response":{"id":"tier3","usage":{"input_tokens":1}}}`), start, now, nil)
+	require.Empty(t, third.responseServiceTier)
+	var result RelayResult
+	enrichResult(&result, state, time.Second)
+	require.Empty(t, result.ResponseServiceTier)
+}

@@ -1,5 +1,7 @@
 # 上游合并指南
 
+用户选定 Fast/Free Fast/Ultrafast 已完整整合（2026-11-10）：[范围](./PORTING-fast-tiers.md)、[OpenSpec](../../openspec/changes/port-upstream-fast-tiers/README.md)、[使用与验收](./implementation-fast-tiers/README.md)。补齐各入口转发/目录/计价/分组与渠道配置，SQLite228、鉴权快照20；VERSION1.1.23、Go1.27.3、依赖不变。全量unit、race、构建、lint、真实SQLite与浏览器验证通过，变更保留工作区。历史文档保持原状态快照，其它第三档能力独立；没有发布或业务部署。
+
 用户选定窗口输出TPS已实现（2026-11-04）：[补充范围与patch sites](./PORTING-output-tps-distribution.md)、[OpenSpec](../../openspec/changes/port-upstream-output-tps-distribution/README.md)、[实际验收证据](./implementation-output-tps-distribution/README.md)。历史#7911日志TPS已完成，本次补齐运维整窗口P5/P10/P50/均值/样本数，采用SQLite连续插值，raw/auto/preagg口径一致；自身2秒超时保留概览，父取消/截止和其它数据库错误传播。54包backend unit、embed build、lint0、三包定向race及SQLite/adminHTTP通过；frontend2174/2既有跳过、typecheck/lint/build/critical及真实浏览器桌面/全屏/移动/筛选/刷新通过。保留VERSION1.1.22、Go1.27.3、SQLite227和依赖/生成代码，实现已提交`f333aa5f3`，未部署业务实例；本次第三档已获用户选择，其它按需能力独立。新增通用经验：窗口分位数必须由逐请求样本计算，不能合并小时分位数；SQLite取消可能丢弃连接，执行中断测试不能依赖连接私有内存库。
 
 OpenSpec 归档（2026-11-01）：9 个已完成活动变更、305 项任务已归档；当前共 28 个归档、1,073 项已关闭任务，活动变更为 0。74 个主规格汇总 356 个非支付需求，本次新增 105 个需求并更新 1 个既有需求。主规格记录 WS 默认 1.0、SQLite 227 配额清理和已批准的净化器维护边界；来源、方案、设计、delta 规格、任务、验收及历史证据原文保留，九份原 README 另存归档前快照。见[归档清单](../../openspec/changes/archive/README.md)、[主规格](../../openspec/specs/)与[归档核对](../../openspec/changes/archive/verification-followup-2026-11-01.json)。下列评估与实施条目保留原时点口径，当前完成状态以归档清单为准。

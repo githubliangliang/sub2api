@@ -122,6 +122,11 @@
               <input :value="entry.cache_write_1h_price" @input="emitField('cache_write_1h_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
+            <div v-if="['openai', 'anthropic', 'composite'].includes(platform ?? '')">
+              <label class="text-xs text-gray-400">{{ t('admin.settings.openaiFastPolicy.fastMultiplier') }}</label>
+              <input :value="entry.fast_multiplier" @input="emitField('fast_multiplier', ($event.target as HTMLInputElement).value)"
+                type="number" step="any" min="0.000001" class="input mt-0.5 text-sm" :placeholder="t('admin.settings.openaiFastPolicy.fastMultiplierHint')" />
+            </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheReadPrice') }}</label>
               <input :value="entry.cache_read_price" @input="emitField('cache_read_price', ($event.target as HTMLInputElement).value)"

@@ -397,7 +397,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 
 	// Propagate ServiceTier and ReasoningEffort to result for billing
 	if result != nil {
-		result.ServiceTier = firstNonNilServiceTier(result.ServiceTier, requestedServiceTier)
+		result.ServiceTier = resolvedOpenAIServiceTier(account, result.ServiceTier, requestedServiceTier)
 		logOpenAIServiceTierDifference(c, account, result.RequestID, requestedServiceTier, result.ServiceTier)
 		if handleErr == nil && responsesReq.Reasoning != nil && responsesReq.Reasoning.Effort != "" {
 			re := responsesReq.Reasoning.Effort

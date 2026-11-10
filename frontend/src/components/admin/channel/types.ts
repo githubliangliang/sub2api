@@ -16,6 +16,7 @@ export interface IntervalFormEntry {
 }
 
 export interface PricingFormEntry {
+  fast_multiplier?: number | string | null
   models: string[]
   billing_mode: BillingMode
   input_price: number | string | null

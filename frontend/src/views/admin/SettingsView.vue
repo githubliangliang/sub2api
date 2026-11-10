@@ -11970,6 +11970,8 @@ const openaiFastPolicyTierOptions = computed(() => [
     label: t("admin.settings.openaiFastPolicy.tierPriority"),
   },
   { value: "flex", label: t("admin.settings.openaiFastPolicy.tierFlex") },
+  { value: "ultrafast", label: t("admin.settings.openaiFastPolicy.tierUltrafast") },
+  { value: "missing", label: t("admin.settings.openaiFastPolicy.tierMissing") },
 ]);
 
 const openaiFastPolicyActionOptions = computed(() => [

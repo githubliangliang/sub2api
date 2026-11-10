@@ -400,6 +400,7 @@ export default {
     serviceTier: 'Service tier',
     serviceTierPriority: 'Fast',
     serviceTierFlex: 'Flex',
+    serviceTierUltrafast: 'Ultrafast',
     serviceTierStandard: 'Standard',
     rate: 'Rate',
     original: 'Original',

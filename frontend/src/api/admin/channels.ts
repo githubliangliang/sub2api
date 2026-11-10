@@ -23,6 +23,7 @@ export interface PricingInterval {
 }
 
 export interface ChannelModelPricing {
+  fast_multiplier?: number | null
   id?: number
   platform: string
   models: string[]

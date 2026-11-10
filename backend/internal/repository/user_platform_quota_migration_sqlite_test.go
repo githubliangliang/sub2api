@@ -20,7 +20,7 @@ func TestUserPlatformQuotaMigration227UpgradesRealSQLite226Database(t *testing.T
 	entries, err := migrations.FS.ReadDir(".")
 	require.NoError(t, err)
 	for _, entry := range entries {
-		if entry.Name() == "227_purge_unlimited_user_platform_quotas.sql" {
+		if entry.Name() >= "227_" {
 			continue
 		}
 		data, err := migrations.FS.ReadFile(entry.Name())

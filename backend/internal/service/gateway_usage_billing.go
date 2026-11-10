@@ -1131,12 +1131,13 @@ func (s *GatewayService) calculateTokenCost(
 			RateMultiplier: multiplier,
 			Resolver:       s.resolver,
 			Resolved:       resolved,
+			ServiceTier:    optionalStringValue(result.ServiceTier),
 		})
 	} else if opts.LongContextThreshold > 0 {
 		// 长上下文双倍计费（如 Gemini 200K 阈值）
 		cost, err = s.billingService.CalculateCostWithLongContext(billingModel, tokens, multiplier, opts.LongContextThreshold, opts.LongContextMultiplier)
 	} else {
-		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
+		cost, err = s.billingService.CalculateCostWithServiceTier(billingModel, tokens, multiplier, optionalStringValue(result.ServiceTier))
 	}
 	if err != nil {
 		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)

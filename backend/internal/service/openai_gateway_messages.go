@@ -34,6 +34,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	if _, err := ValidateOpenAIServiceTierField(body); err != nil {
+		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return nil, err
+	}
 	// Sanitize the shared tool schema before choosing Responses, Chat, or Grok.
 	if sanitized, changed, err := sanitizeOpenAIResponsesToolParameterTypes(body); err != nil {
 		return nil, err
@@ -145,10 +149,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	responsesReq.Stream = true
 	isStream := true
 
-	// 3b. Handle BetaFastMode → service_tier: "priority"
-	if containsBetaToken(c.GetHeader("anthropic-beta"), claude.BetaFastMode) {
-		responsesReq.ServiceTier = "priority"
-	}
+	// Preserve explicit compatibility tiers; native speed=fast and the legacy
+	// Fast beta header map to OpenAI priority when no tier is specified.
+	responsesReq.ServiceTier = requestedMessagesOpenAIServiceTier(c, body)
 
 	responsesReq.Model = upstreamModel
 	if responsesReq.Reasoning != nil {
@@ -508,7 +511,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	// Propagate ServiceTier and ReasoningEffort to result for billing
 	if result != nil {
-		result.ServiceTier = firstNonNilServiceTier(result.ServiceTier, requestedServiceTier)
+		result.ServiceTier = resolvedOpenAIServiceTier(account, result.ServiceTier, requestedServiceTier)
 		logOpenAIServiceTierDifference(c, account, result.RequestID, requestedServiceTier, result.ServiceTier)
 		if handleErr == nil {
 			if compatContinuationEnabled && promptCacheKey != "" && result.ResponseID != "" {
@@ -1385,4 +1388,15 @@ func copyOpenAIUsageFromResponsesUsage(usage *apicompat.ResponsesUsage) OpenAIUs
 		result.CacheReadInputTokens = usage.InputTokensDetails.CachedTokens
 	}
 	return result
+}
+
+func requestedMessagesOpenAIServiceTier(c *gin.Context, body []byte) string {
+	if tier := extractOpenAIServiceTierFromBody(body); tier != nil {
+		return *tier
+	}
+	speed := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "speed").String()))
+	if speed == "fast" || (speed == "" && containsBetaToken(c.GetHeader("anthropic-beta"), claude.BetaFastMode)) {
+		return "priority"
+	}
+	return ""
 }

@@ -12,6 +12,8 @@ describe('usageServiceTier utils', () => {
   it('preserves supported tiers', () => {
     expect(normalizeUsageServiceTier('priority')).toBe('priority')
     expect(normalizeUsageServiceTier('flex')).toBe('flex')
+    expect(normalizeUsageServiceTier(' Ultrafast ')).toBe('ultrafast')
+    expect(getUsageServiceTierLabel('ultrafast', key => key)).toBe('usage.serviceTierUltrafast')
   })
 
   it('formats empty values as standard', () => {
