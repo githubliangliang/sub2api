@@ -1,0 +1,64 @@
+//go:build unit
+package service
+
+import (
+ "context"
+ "crypto/sha256"
+ "fmt"
+ "encoding/json"
+ "testing"
+ "net/http"
+ "net/http/httptest"
+ "time"
+ "github.com/Wei-Shaw/sub2api/internal/config"
+ "github.com/gin-gonic/gin"
+ "github.com/stretchr/testify/require"
+)
+
+func TestIntake021_SessionPrefix(t *testing.T) {
+ a := []byte(`{"model":"gpt-6.1-terra","input":[{"role":"system","content":"fixed"},{"role":"user","content":"question"}]}`)
+ b := []byte(`{"model":"gpt-6.1-terra","input":[{"role":"system","content":"fixed"},{"role":"user","content":"question"},{"type":"function_call_output","call_id":"x","output":"answer"},{"role":"developer","content":"dynamic reminder"}]}`)
+ require.Equal(t, deriveOpenAIContentSessionSeed(a), deriveOpenAIContentSessionSeed(b))
+}
+func TestIntake021_SonnetPrice(t *testing.T) {
+ s := &BillingService{fallbackPrices:make(map[string]*ModelPricing)}; s.initFallbackPricing()
+ require.InDelta(t, 0.1e-6, s.fallbackPrices["claude-sonnet-5-5"].CacheReadPricePerToken, 1e-12)
+}
+func TestIntake021_GeminiThought(t *testing.T) {
+ raw:=[]byte(`{"candidates":[{"content":{"parts":[{"text":"private planning","thought":true},{"text":"answer"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2,"thoughtsTokenCount":7,"totalTokenCount":19}}`)
+ var resp map[string]any; require.NoError(t,json.Unmarshal(raw,&resp))
+ got,_ := convertGeminiToClaudeMessage(resp,"gemini-test",raw,false)
+ b,e:=json.Marshal(got);require.NoError(t,e)
+ require.NotContains(t,string(b),"private planning")
+ require.Contains(t,string(b),"answer")
+}
+type intake021Remote struct {body []byte; hash string; downloads int}
+func (r *intake021Remote) FetchPricingJSON(context.Context,string)([]byte,error){r.downloads++; return r.body,nil}
+func (r *intake021Remote) FetchHashText(context.Context,string)(string,error){return r.hash,nil}
+func TestIntake021_PricingHash(t *testing.T){
+ old:=[]byte(`{"model-test":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
+ next:=[]byte(`{"model-test":{"input_cost_per_token":0.000003,"output_cost_per_token":0.000006}}`)
+ r:=&intake021Remote{body:old,hash:fmt.Sprintf("%x",sha256.Sum256(next))}
+ s:=NewPricingService(&config.Config{Pricing:config.PricingConfig{DataDir:t.TempDir(),RemoteURL:"https://example.com/pricing.json",HashURL:"https://example.com/pricing.sha256"}},r)
+ require.NoError(t,s.ForceUpdate()); r.body=next
+ require.NoError(t,s.syncWithRemote())
+ require.Equal(t,2,r.downloads)
+ require.InDelta(t,3e-6,s.GetModelPricing("model-test").InputCostPerToken,1e-12)
+}
+func TestIntake021_ImageStatus(t *testing.T){
+ gin.SetMode(gin.TestMode)
+ w:=httptest.NewRecorder(); c,_:=gin.CreateTestContext(w)
+ c.Request=httptest.NewRequest(http.MethodPost,"/v1/images/generations",nil)
+ c.Request.Header.Set("X-Codex-Image-Turn-Id","intake")
+ stop:=StartOpenAIImagesJSONKeepalive(c,5*time.Millisecond)
+ time.Sleep(30*time.Millisecond); stop()
+ c.JSON(http.StatusBadRequest,gin.H{"error":"upstream rejected"})
+ require.Equal(t,http.StatusBadRequest,w.Code)
+}
+func TestIntake021_FastFreeInputControl(t *testing.T){
+ s:=&BillingService{fallbackPrices:make(map[string]*ModelPricing)};s.initFallbackPricing()
+ zero:=0.0; price:=&ChannelModelPricing{InputPrice:&zero}
+ ordinary,e:=s.calculateCostInternal("gpt-6.1-terra",UsageTokens{InputTokens:100,OutputTokens:10},1,"",price);require.NoError(t,e)
+ fast,e:=s.calculateCostInternal("gpt-6.1-terra",UsageTokens{InputTokens:100,OutputTokens:10},1,"priority",price);require.NoError(t,e)
+ require.Zero(t,fast.InputCost);require.InDelta(t,2*ordinary.OutputCost,fast.OutputCost,1e-12)
+}

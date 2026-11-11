@@ -1696,6 +1696,11 @@ func (s *GatewayService) hydrateSelectedAccount(ctx context.Context, account *Ac
 func (s *GatewayService) newSelectionResult(ctx context.Context, sessionID string, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
 	hydrated, err := s.hydrateSelectedAccount(ctx, account)
 	if err != nil {
+		// The caller receives ReleaseFunc only on success. Release the acquired
+		// concurrency slot here as well as the fork's account session below.
+		if release != nil {
+			release()
+		}
 		s.ReleaseAccountSession(context.WithoutCancel(ctx), account, sessionID)
 		return nil, err
 	}

@@ -1,0 +1,320 @@
+diff --git a/backend/internal/service/openai_account_runtime_block_fastpath.go b/backend/internal/service/openai_account_runtime_block_fastpath.go
+index 942ea07bc..50ebf955e 100644
+--- a/backend/internal/service/openai_account_runtime_block_fastpath.go
++++ b/backend/internal/service/openai_account_runtime_block_fastpath.go
+@@ -104,6 +104,18 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
+ 	// Capacity shedding describes this request, not account health. Keep the
+ 	// account schedulable while the request-local retry budget handles recovery.
+ 	if account != nil && account.Platform == PlatformOpenAI && isOpenAIRequestScopedCapacityShed("", responseBody) {
++		// An explicit model-scoped rule overrides the default retry policy without
++		// turning a request-level overload into an account-wide health failure.
++		model := firstRequestedModel(canonicalModel)
++		if s != nil && s.rateLimitService != nil && model != "" && account.IsTempUnschedulableEnabled() {
++			ruleBody := openAICapacityShedRuleBody(responseBody)
++			matches := matchTempUnschedulableRules(account, statusCode, ruleBody)
++			if len(matches) > 0 && matches[0].rule.Scope == TempUnschedScopeModel {
++				stateCtx, cancel := openAIAccountStateContext(ctx)
++				defer cancel()
++				return s.rateLimitService.HandleTempUnschedulable(stateCtx, account, statusCode, ruleBody, model)
++			}
++		}
+ 		return false
+ 	}
+ 	stateCtx, cancel := openAIAccountStateContext(ctx)
+diff --git a/backend/internal/service/openai_capacity_shed_model_rule_test.go b/backend/internal/service/openai_capacity_shed_model_rule_test.go
+new file mode 100644
+index 000000000..8e5848633
+--- /dev/null
++++ b/backend/internal/service/openai_capacity_shed_model_rule_test.go
+@@ -0,0 +1,217 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func openAICapacityShedModelRuleAccount(accountType string) *Account {
++	return &Account{
++		ID: 101, Platform: PlatformOpenAI, Type: accountType, Status: StatusActive, Schedulable: true,
++		Credentials: map[string]any{
++			"temp_unschedulable_enabled": true,
++			"temp_unschedulable_rules": []any{map[string]any{
++				"error_code": http.StatusServiceUnavailable, "keywords": []any{"overloaded"},
++				"duration_minutes": 5, "scope": TempUnschedScopeModel,
++			}},
++			"model_mapping": map[string]any{"alias": "gpt-6.1-sol", "gpt-6.1-sol": "must-not-remap"},
++		},
++	}
++}
++
++func TestOpenAICapacityShedModelRule_StreamReaders(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	readers := []struct {
++		name string
++		run  func(*OpenAIGatewayService, *gin.Context, *http.Response, *Account, []byte) error
++	}{
++		{"stream", func(s *OpenAIGatewayService, c *gin.Context, r *http.Response, a *Account, _ []byte) error {
++			_, err := s.handleStreamingResponse(c.Request.Context(), r, c, a, time.Now(), "alias", "gpt-6.1-sol")
++			return err
++		}},
++		{"passthrough", func(s *OpenAIGatewayService, c *gin.Context, r *http.Response, a *Account, _ []byte) error {
++			_, err := s.handleStreamingResponsePassthrough(c.Request.Context(), r, c, a, time.Now(), "alias", "gpt-6.1-sol")
++			return err
++		}},
++		{"buffered", func(s *OpenAIGatewayService, c *gin.Context, r *http.Response, a *Account, body []byte) error {
++			_, err := s.handleSSEToJSON(r, c, a, body, "alias", "gpt-6.1-sol")
++			return err
++		}},
++		{"buffered_passthrough", func(s *OpenAIGatewayService, c *gin.Context, r *http.Response, a *Account, body []byte) error {
++			_, err := s.handlePassthroughSSEToJSON(r, c, a, body, "alias", "gpt-6.1-sol")
++			return err
++		}},
++	}
++	for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken, AccountTypeAPIKey} {
++		for _, reader := range readers {
++			for _, frame := range []struct{ name, payload string }{
++				{"error", `{"type":"error","error":{"code":"server_is_overloaded","type":"service_unavailable_error","message":"Our servers are currently overloaded. Please try again later."}}`},
++				{"response.failed", `{"type":"response.failed","response":{"error":{"code":"slow_down","message":"overloaded"}}}`},
++			} {
++				t.Run(accountType+"/"+reader.name+"/"+frame.name, func(t *testing.T) {
++					repo := &modelNotFoundAccountRepoStub{}
++					svc := &OpenAIGatewayService{rateLimitService: &RateLimitService{accountRepo: repo}}
++					account := openAICapacityShedModelRuleAccount(accountType)
++					rec := httptest.NewRecorder()
++					c, _ := gin.CreateTestContext(rec)
++					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++					body := "data: " + frame.payload + "\n\n"
++					resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}},
++						Body: io.NopCloser(strings.NewReader(body))}
++
++					err := reader.run(svc, c, resp, account, []byte(body))
++
++					var failover *UpstreamFailoverError
++					require.ErrorAs(t, err, &failover)
++					require.Len(t, repo.modelRateLimitCalls, 1)
++					require.False(t, failover.RetryableOnSameAccount, "a matching model cooldown must stop same-account replay")
++					require.True(t, failover.RequestScopedTransient, "do not enable generic account-wide cooldowns")
++					require.Equal(t, http.StatusServiceUnavailable, failover.ClientStatusCode)
++					call := repo.modelRateLimitCalls[0]
++					require.Equal(t, "gpt-6.1-sol", call.scope, "use the already mapped scheduling model")
++					require.WithinDuration(t, time.Now().Add(5*time.Minute), call.resetAt, time.Second)
++					var state TempUnschedState
++					require.NoError(t, json.Unmarshal([]byte(call.reason), &state))
++					require.Equal(t, TempUnschedScopeModel, state.Scope)
++					require.Equal(t, http.StatusServiceUnavailable, state.StatusCode)
++					require.Zero(t, repo.tempCalls)
++					require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
++					require.False(t, c.Writer.Written())
++					require.Empty(t, rec.Body.String())
++				})
++			}
++		}
++	}
++}
++
++func TestOpenAICapacityShedModelRule_HTTP(t *testing.T) {
++	account := openAICapacityShedModelRuleAccount(AccountTypeOAuth)
++	repo := &modelNotFoundAccountRepoStub{}
++	svc := &OpenAIGatewayService{rateLimitService: &RateLimitService{accountRepo: repo}}
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++	body := []byte(`{"error":{"code":"server_is_overloaded","message":"overloaded"}}`)
++	err := svc.handleFailoverErrorResponsePassthrough(context.Background(),
++		&http.Response{StatusCode: http.StatusServiceUnavailable, Header: http.Header{}}, c, account,
++		[]byte(`{"model":"alias"}`), body)
++	var failover *UpstreamFailoverError
++	require.ErrorAs(t, err, &failover)
++	require.False(t, failover.RetryableOnSameAccount)
++	require.True(t, failover.RequestScopedTransient)
++	require.Len(t, repo.modelRateLimitCalls, 1)
++	require.Equal(t, "gpt-6.1-sol", repo.modelRateLimitCalls[0].scope)
++	require.Zero(t, repo.tempCalls)
++	require.False(t, c.Writer.Written())
++}
++
++func TestOpenAICapacityShedModelRule_ProtectionBoundaries(t *testing.T) {
++	for _, tt := range []struct {
++		name   string
++		change func(*Account, map[string]any)
++		model  string
++	}{
++		{"disabled", func(a *Account, _ map[string]any) { a.Credentials["temp_unschedulable_enabled"] = false }, "gpt-6.1-sol"},
++		{"no_rules", func(a *Account, _ map[string]any) { delete(a.Credentials, "temp_unschedulable_rules") }, "gpt-6.1-sol"},
++		{"unknown_model", func(*Account, map[string]any) {}, ""},
++		{"account_scope", func(_ *Account, r map[string]any) { r["scope"] = TempUnschedScopeAccount }, "gpt-6.1-sol"},
++		{"legacy_scope", func(_ *Account, r map[string]any) { delete(r, "scope") }, "gpt-6.1-sol"},
++		{"keyword_mismatch", func(_ *Account, r map[string]any) { r["keywords"] = []any{"other error"} }, "gpt-6.1-sol"},
++		{"status_mismatch", func(_ *Account, r map[string]any) { r["error_code"] = http.StatusBadGateway }, "gpt-6.1-sol"},
++		{"pool_mode", func(a *Account, _ map[string]any) { a.Credentials["pool_mode"] = true }, "gpt-6.1-sol"},
++		{"excluded_status", func(a *Account, _ map[string]any) {
++			a.Credentials["custom_error_codes_enabled"] = true
++			a.Credentials["custom_error_codes"] = []any{float64(http.StatusTooManyRequests)}
++		}, "gpt-6.1-sol"},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			account := openAICapacityShedModelRuleAccount(AccountTypeAPIKey)
++			rule := account.Credentials["temp_unschedulable_rules"].([]any)[0].(map[string]any)
++			tt.change(account, rule)
++			repo := &modelNotFoundAccountRepoStub{}
++			svc := &OpenAIGatewayService{rateLimitService: &RateLimitService{accountRepo: repo}}
++			payload := []byte(`{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}`)
++			failover := svc.newOpenAIStreamFailoverErrorWithModel(nil, account, false, "", payload, "overloaded", tt.model)
++			require.True(t, failover.RetryableOnSameAccount)
++			require.True(t, failover.RequestScopedTransient)
++			require.Empty(t, repo.modelRateLimitCalls)
++			require.Zero(t, repo.tempCalls)
++			require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
++		})
++	}
++}
++
++func TestOpenAICapacityShedModelRule_WriteFailureDoesNotBlockAccount(t *testing.T) {
++	repo := &modelNotFoundAccountRepoStub{modelRateLimitErr: errors.New("write failed")}
++	svc := &OpenAIGatewayService{rateLimitService: &RateLimitService{accountRepo: repo}}
++	account := openAICapacityShedModelRuleAccount(AccountTypeOAuth)
++	payload := []byte(`{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}`)
++	failover := svc.newOpenAIStreamFailoverErrorWithModel(nil, account, false, "", payload, "overloaded", "gpt-6.1-sol")
++	require.False(t, failover.RetryableOnSameAccount)
++	require.True(t, failover.RequestScopedTransient)
++	require.Len(t, repo.modelRateLimitCalls, 1)
++	require.Zero(t, repo.tempCalls)
++	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
++}
++
++func TestOpenAICapacityShedModelRule_ErrorFieldsOnly(t *testing.T) {
++	for _, tt := range []struct {
++		name, payload, keyword string
++		matched                bool
++	}{
++		{"output_is_not_an_error", `{"type":"response.failed","response":{"output":[{"text":"overloaded"}],"error":{"code":"slow_down","message":"try again"}}}`, "", false},
++		{"metadata_is_not_an_error", `{"type":"error","metadata":{"prompt":"overloaded"},"error":{"code":"slow_down","message":"try again"}}`, "", false},
++		{"model_is_not_an_error", `{"type":"response.failed","response":{"model":"overloaded-model","error":{"code":"slow_down","message":"try again"}}}`, "", false},
++		{"flat_metadata_is_not_an_error", `{"type":"error","message":"Our servers are currently overloaded. Please try again later.","metadata":{"prompt":"cooldown-marker"}}`, "cooldown-marker", false},
++		{"root_error_code_matches", `{"type":"error","error":{"code":"server_is_overloaded","message":"try again"},"metadata":{"prompt":"private-output-marker"}}`, "", true},
++		{"nested_error_code_matches", `{"type":"response.failed","response":{"output":[{"text":"private-output-marker"}],"error":{"code":"server_is_overloaded"}}}`, "", true},
++		{"flat_error_message_matches", `{"type":"error","message":"Our servers are currently overloaded. Please try again later.","metadata":{"prompt":"private-output-marker"}}`, "", true},
++		{"error_message_matches", `{"type":"response.failed","response":{"error":{"code":"slow_down","message":"overloaded"}}}`, "", true},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			repo := &modelNotFoundAccountRepoStub{}
++			svc := &OpenAIGatewayService{rateLimitService: &RateLimitService{accountRepo: repo}}
++			account := openAICapacityShedModelRuleAccount(AccountTypeOAuth)
++			if tt.keyword != "" {
++				rule := account.Credentials["temp_unschedulable_rules"].([]any)[0].(map[string]any)
++				rule["keywords"] = []any{tt.keyword}
++			}
++			payload := []byte(tt.payload)
++			failover := svc.newOpenAIStreamFailoverErrorWithModel(nil, account, false, "", payload,
++				extractOpenAISSEErrorMessage(payload), "gpt-6.1-sol")
++			require.Equal(t, !tt.matched, failover.RetryableOnSameAccount)
++			require.True(t, failover.RequestScopedTransient)
++			if tt.matched {
++				require.Len(t, repo.modelRateLimitCalls, 1)
++				require.NotContains(t, repo.modelRateLimitCalls[0].reason, "private-output-marker")
++			} else {
++				require.Empty(t, repo.modelRateLimitCalls)
++			}
++			require.Zero(t, repo.tempCalls)
++		})
++	}
++}
++
++func TestOpenAICapacityShedModelRule_OtherPlatformKeepsDefault(t *testing.T) {
++	repo := &modelNotFoundAccountRepoStub{}
++	svc := &OpenAIGatewayService{rateLimitService: &RateLimitService{accountRepo: repo}}
++	account := openAICapacityShedModelRuleAccount(AccountTypeOAuth)
++	account.Platform = PlatformGrok
++	payload := []byte(`{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}`)
++	failover := svc.newOpenAIStreamFailoverErrorWithModel(nil, account, false, "", payload, "overloaded", "grok-4")
++	require.Empty(t, repo.modelRateLimitCalls)
++	require.Zero(t, repo.tempCalls)
++	require.True(t, failover.RetryableOnSameAccount)
++	require.True(t, failover.RequestScopedTransient)
++}
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index 9afdc10c8..bf3debe63 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -1455,6 +1455,36 @@ func openAIStream403AccountFailure(payload []byte, message string) bool {
+ 	return isOpenAIUpstreamAccessStateError(message, payload) || openAIStreamCredentialAuthFailure(payload)
+ }
+ 
++// openAICapacityShedRuleBody excludes response output and metadata from custom
++// cooldown keyword matching and from the persisted rule reason.
++func openAICapacityShedRuleBody(payload []byte) []byte {
++	if !gjson.ValidBytes(payload) {
++		return payload
++	}
++	errorFields := gjson.GetBytes(payload, "response.error")
++	if !errorFields.IsObject() {
++		errorFields = gjson.GetBytes(payload, "error")
++	}
++	var errorValue any
++	if errorFields.IsObject() {
++		errorValue = json.RawMessage(errorFields.Raw)
++	} else {
++		// Some compatible providers send flat errors instead of an error object.
++		flat := make(map[string]json.RawMessage)
++		for _, key := range []string{"code", "type", "message", "param", "headers"} {
++			if value := gjson.GetBytes(payload, key); value.Exists() {
++				flat[key] = json.RawMessage(value.Raw)
++			}
++		}
++		errorValue = flat
++	}
++	body, err := marshalOpenAIUpstreamJSON(gin.H{"error": errorValue})
++	if err != nil {
++		return nil
++	}
++	return body
++}
++
+ func openAIStreamFailedEventPassthroughBody(payload []byte, failedMessage string) []byte {
+ 	if len(payload) == 0 || !gjson.ValidBytes(payload) {
+ 		return payload
+@@ -1615,13 +1645,16 @@ func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffects(
+ 	canonicalModel ...string,
+ ) (int, bool) {
+ 	statusCode := openAIStreamFailureStatus(payload, message)
++	if statusCode == http.StatusServiceUnavailable && (account == nil || account.Platform != PlatformOpenAI) {
++		return statusCode, false
++	}
+ 	switch statusCode {
+ 	case http.StatusForbidden:
+ 		if !openAIStream403AccountFailure(payload, message) {
+ 			return statusCode, false
+ 		}
+ 		fallthrough
+-	case http.StatusUnauthorized, http.StatusTooManyRequests, 529:
++	case http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusServiceUnavailable, 529:
+ 		ctx := context.Background()
+ 		if c != nil && c.Request != nil {
+ 			ctx = c.Request.Context()
+diff --git a/backend/internal/service/openai_gateway_upstream_errors.go b/backend/internal/service/openai_gateway_upstream_errors.go
+index 69d10bb23..db13c916e 100644
+--- a/backend/internal/service/openai_gateway_upstream_errors.go
++++ b/backend/internal/service/openai_gateway_upstream_errors.go
+@@ -455,6 +455,10 @@ func (s *OpenAIGatewayService) newOpenAIAccountFailoverErrorWithClassificationHe
+ 		upstreamMsg,
+ 		retryableOnSameAccount || oauth429Retry,
+ 	)
++	if shouldDisable && account != nil && account.Platform == PlatformOpenAI && failoverErr.RequestScopedTransient {
++		// A configured model cooldown takes precedence over capacity-shed replay.
++		failoverErr.RetryableOnSameAccount = false
++	}
+ 	if oauth429Retry {
+ 		failoverErr.SameAccountRetryDeadline = s.openAIOAuth429RetryDeadline(account)
+ 		failoverErr.SameAccountRetryDelay = openAIOAuth429SameAccountRetryDelay(responseHeaders, failoverErr.SameAccountRetryDeadline)

@@ -1,0 +1,79 @@
+# 实施任务（已完成）
+
+- [x] 核对实际实施起点与冻结来源，记录保护文件哈希。
+
+## F01 Codex 元数据与 failover
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：普通 response.metadata 对照通过；真实文本、工具输出及终态按既有语义发送，不把所有 codex.* 任意当作可丢弃内容。
+- [x] 验收：两种元数据后跟 overload，在普通及透传 SSE 都返回可换号错误且下游未写出。
+
+## F02 Responses 密封参数与 namespace
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：现有 terminal 与 item.done 原文路径已经通过；只补 delta accumulator 缺口，不重复重构已实现的终态保真。
+- [x] 验收：普通/透传、terminal output、item.done、delta fallback 三形态逐字段比对，工具参数字节和 usage 保留。
+
+## F03 CC Switch reasoning 封装
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：文本、tool_use、tool_result、签名顺序不变；不把未知所有签名一概删除。
+- [x] 验收：合法/非法/带空白封装均不作为 encrypted_content 发送，普通密文继续往返。
+
+## F04 Responses 工具回合会话种子
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：首个系统/开发者提示、模型、工具、instructions、首用户差异仍隔离；显式 session-id/prompt_cache_key 优先。
+- [x] 验收：用户/assistant/function call/output/input_text 五种前缀边界；多回合工具消息仍命中原粘性账号。
+
+## F05 账号补全失败释放并发槽
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：本地 newSelectionResult 多一个 sessionID 参数且已有 ReleaseAccountSession；不可用上游函数整体覆盖。
+- [x] 验收：取消、仓储错误、账号消失时release恰好一次；成功时交给调用者释放。
+
+## F06 价格目录 hash 与正文一致
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：远端hash缺失/大小写、无效JSON、网络失败、fallback/override及热重载并发保留，失败不发布半成品。
+- [x] 验收：hash接口先更新、正文后更新：下一轮必须再次下载并更新价格；随后内容一致可跳过。
+
+## F07 Sonnet 5.5 缓存读兜底价
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：显式自定义0与覆盖价优先；其它模型和输出/缓存创建费率不改。
+- [x] 验收：远端缺失、资源定价与 Billing fallback 三路、别名及Fast费用校验。
+
+## F08 Gemini 非流式正文排除思考摘要
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：本地缺 isGeminiThoughtPart，但来源helper仅4行布尔判断；只补这一最小前置，不导入320行完整thinking策略。
+- [x] 验收：Messages和Chat两消费者、仅thought终态、混合工具与thoughtSignature、MAX_TOKENS及thoughts token统计。
+
+## F09 Antigravity 并行工具图片顺序
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：支持原生 functionResponse.parts 的模型继续嵌入媒体；单工具及无图片顺序不回退。
+- [x] 验收：至少两张图片加纯文本工具结果，Claude/Gemini既有模型和Responses兼容入口都保留ID、内容和顺序。
+
+## F10 Codex 图片请求保留错误状态码
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：其它客户端保留既有心跳，流式不改；该header不是认证。只维护现有图片入口，不引入2.6或新原生路由。
+- [x] 验收：真实本地HTTP generation/edit延迟错误与成功；超过原心跳间隔仍能返回400，并检查代理超时。
+
+## F11 Responses UTF-8 输入边界
+
+- [x] 以本地消费者建立修复前复现或维护项基线，区分测试适配失败与产品缺陷。
+- [x] 实现选定行为及最小前置，覆盖边界：本次探针仅证明非法字节进入model字段检查，不证明曾产生真实上游503或PG故障；保留大小/预算释放和鉴权次序。
+- [x] 验收：非法首/中/尾字节、截断多字节、流/非流、compact；有效中文/emoji继续进入字段检查；真实handler不得发起上游重试。
+
+## 组合门禁
+
+- [x] backend全量unit、embed build、lint与相关race通过并保存命令/输出。
+- [x] 实际HTTP/SQLite/miniredis验证usage settlement/dedup、固定quota窗口、迁移及Fast价格不回退。
+- [x] 对涉及前端完成typecheck/lint/test/build/critical和真实浏览器，对不涉及项明确记录不适用。
+- [x] 对资源/性能变更测量1C1G相关成本，迁移先临时数据库验证，对不涉及项记录不适用。
+- [x] 填入实际实现SHA/产品哈希、逐簇结果与遗留，严格校验OpenSpec并检查历史文件未修改。
+
+2026-11-11：39/39 完成。逐簇结果、隔离验收与共享工作区并行改动边界见 [verification](verification.md)。实施前原文保存在 [original-tasks.md](../../../docs/upstream-sync/implementation-0.2.21-tier1/original-tasks.md)。

@@ -1,0 +1,179 @@
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index 3616da328..f33d4792b 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -498,10 +498,12 @@ func generateChatCmplID() string {
+ // ---------------------------------------------------------------------------
+ 
+ type bufferedFuncCall struct {
+-	OutputIndex int
+-	CallID      string
+-	Name        string
+-	Args        strings.Builder
++	OutputIndex           int
++	CallID                string
++	Name                  string
++	Namespace             string
++	EncryptedFunctionArgs json.RawMessage
++	Args                  strings.Builder
+ }
+ 
+ // BufferedResponseAccumulator collects content from Responses SSE delta events
+@@ -540,9 +542,11 @@ func (a *BufferedResponseAccumulator) ProcessEvent(event *ResponsesStreamEvent)
+ 			idx := len(a.funcCalls)
+ 			a.outputIndexToFuncIdx[event.OutputIndex] = idx
+ 			a.funcCalls = append(a.funcCalls, bufferedFuncCall{
+-				OutputIndex: event.OutputIndex,
+-				CallID:      event.Item.CallID,
+-				Name:        event.Item.Name,
++				OutputIndex:           event.OutputIndex,
++				CallID:                event.Item.CallID,
++				Name:                  event.Item.Name,
++				Namespace:             event.Item.Namespace,
++				EncryptedFunctionArgs: event.Item.EncryptedFunctionArgs,
+ 			})
+ 		}
+ 	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
+@@ -607,10 +611,12 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
+ 
+ 	for i := range a.funcCalls {
+ 		out = append(out, ResponsesOutput{
+-			Type:      "function_call",
+-			CallID:    a.funcCalls[i].CallID,
+-			Name:      a.funcCalls[i].Name,
+-			Arguments: a.funcCalls[i].Args.String(),
++			Type:                  "function_call",
++			CallID:                a.funcCalls[i].CallID,
++			Name:                  a.funcCalls[i].Name,
++			Namespace:             a.funcCalls[i].Namespace,
++			EncryptedFunctionArgs: a.funcCalls[i].EncryptedFunctionArgs,
++			Arguments:             a.funcCalls[i].Args.String(),
+ 		})
+ 	}
+ 
+diff --git a/backend/internal/pkg/apicompat/types.go b/backend/internal/pkg/apicompat/types.go
+index ffa8960cb..130f0ff63 100644
+--- a/backend/internal/pkg/apicompat/types.go
++++ b/backend/internal/pkg/apicompat/types.go
+@@ -417,6 +417,9 @@ type ResponsesOutput struct {
+ 	Arguments string `json:"arguments,omitempty"`
+ 	// 来源为 namespace 子工具时的归属命名空间（codex 按 namespace+name 路由该调用）。
+ 	Namespace string `json:"namespace,omitempty"`
++	// Preserve the upstream encryption marker, including explicit null/[];
++	// omitting it can make sealed arguments appear to be plaintext.
++	EncryptedFunctionArgs json.RawMessage `json:"encrypted_function_args,omitempty"`
+ 
+ 	// type=custom_tool_call（custom/freeform 工具，input 为自由文本）
+ 	Input string `json:"input,omitempty"`
+diff --git a/backend/internal/service/openai_responses_sealed_call_test.go b/backend/internal/service/openai_responses_sealed_call_test.go
+new file mode 100644
+index 000000000..31d1406c2
+--- /dev/null
++++ b/backend/internal/service/openai_responses_sealed_call_test.go
+@@ -0,0 +1,106 @@
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const arguments = `{"message":"synthetic-sealed-message"}`
++	for _, marker := range []struct {
++		name string
++		raw  string
++	}{
++		{name: "encrypted", raw: `["message"]`},
++		{name: "plaintext", raw: `[]`},
++		{name: "null", raw: `null`},
++		{name: "absent"},
++	} {
++		for _, shape := range []string{"terminal_output", "item_done", "delta_fallback"} {
++			for _, passthrough := range []bool{false, true} {
++				mode := "normal"
++				if passthrough {
++					mode = "passthrough"
++				}
++				t.Run(marker.name+"/"+shape+"/"+mode, func(t *testing.T) {
++					item := map[string]any{
++						"type": "function_call", "call_id": "call_sealed", "name": "send_message",
++						"namespace": "collaboration", "arguments": arguments,
++					}
++					if marker.raw != "" {
++						item["encrypted_function_args"] = json.RawMessage(marker.raw)
++					}
++					output := []any{}
++					var frames []string
++					addFrame := func(event map[string]any) {
++						encoded, err := json.Marshal(event)
++						require.NoError(t, err)
++						frames = append(frames, "data: "+string(encoded)+"\n\n")
++					}
++					switch shape {
++					case "terminal_output":
++						output = append(output, item)
++					case "item_done":
++						addFrame(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
++					case "delta_fallback":
++						item["arguments"] = ""
++						addFrame(map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
++						addFrame(map[string]any{"type": "response.function_call_arguments.delta", "output_index": 0, "delta": arguments})
++					}
++					addFrame(map[string]any{
++						"type": "response.completed",
++						"response": map[string]any{
++							"id": "resp_sealed", "model": "test-model", "status": "completed", "output": output,
++							"usage": map[string]int{"input_tokens": 7, "output_tokens": 3, "total_tokens": 10},
++						},
++					})
++
++					rec := httptest.NewRecorder()
++					c, _ := gin.CreateTestContext(rec)
++					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++					resp := &http.Response{
++						StatusCode: http.StatusOK,
++						Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++						Body:       io.NopCloser(strings.NewReader(strings.Join(frames, ""))),
++					}
++					account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++					svc := newCompactBridgeTestService()
++					if passthrough {
++						result, err := svc.handleNonStreamingResponsePassthrough(context.Background(), resp, c, account, "test-model", "test-model")
++						require.NoError(t, err)
++						require.Equal(t, 7, result.usage.InputTokens)
++					} else {
++						result, err := svc.handleNonStreamingResponse(context.Background(), resp, c, account, "test-model", "test-model")
++						require.NoError(t, err)
++						require.Equal(t, 7, result.usage.InputTokens)
++					}
++					require.Equal(t, http.StatusOK, rec.Code)
++					require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
++					body := rec.Body.Bytes()
++					require.Len(t, gjson.GetBytes(body, "output").Array(), 1)
++					call := gjson.GetBytes(body, "output.0")
++					require.Equal(t, "function_call", call.Get("type").String())
++					require.Equal(t, "call_sealed", call.Get("call_id").String())
++					require.Equal(t, "send_message", call.Get("name").String())
++					require.Equal(t, arguments, call.Get("arguments").String())
++					if marker.raw == "" {
++						require.False(t, call.Get("encrypted_function_args").Exists())
++					} else {
++						require.Equal(t, marker.raw, call.Get("encrypted_function_args").Raw)
++					}
++					require.Equal(t, "collaboration", call.Get("namespace").String())
++				})
++			}
++		}
++	}
++}

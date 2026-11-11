@@ -1,0 +1,21 @@
+package repository
+import("context";"testing";"time";"github.com/stretchr/testify/require")
+func TestIntake021_SQLiteCoveringIndexFeasibility(t *testing.T){
+ db:=openUsageStatsSQLite(t)
+ start:=time.Date(2026,11,1,0,0,0,0,time.UTC);end:=start.Add(30*24*time.Hour)
+ tx,e:=db.Begin();require.NoError(t,e)
+ stmt,e:=tx.Prepare(`INSERT INTO usage_logs (user_id,api_key_id,account_id,request_id,model,actual_cost,created_at) VALUES (1,?,1,?,'intake',0.01,?)`);require.NoError(t,e)
+ for i:=0;i<20000;i++{_,e=stmt.Exec(i%10+1,i,start.Add(time.Duration(i)*time.Second));require.NoError(t,e)}
+ require.NoError(t,stmt.Close());require.NoError(t,tx.Commit())
+ repo:=newUsageLogRepositoryWithSQL(nil,db)
+ before,e:=repo.GetBatchAPIKeyUsageStats(context.Background(),[]int64{1,2,3},start,end);require.NoError(t,e)
+ explain:=func()string{
+ rows,e:=db.Query(`EXPLAIN QUERY PLAN SELECT api_key_id, SUM(actual_cost) FILTER (WHERE created_at>=? AND created_at<?), SUM(actual_cost) FILTER (WHERE created_at>=?) FROM usage_logs WHERE api_key_id IN (1,2,3) AND created_at>=? GROUP BY api_key_id`,start,end,start,start);require.NoError(t,e);defer rows.Close();text:=""
+ for rows.Next(){var id,parent,unused int;var detail string;require.NoError(t,rows.Scan(&id,&parent,&unused,&detail));text+=detail+";"};require.NoError(t,rows.Err());return text
+ }
+ t.Log("before",explain())
+ _,e=db.Exec(`CREATE INDEX idx_intake_api_key_created_cost ON usage_logs(api_key_id,created_at,actual_cost)`);require.NoError(t,e)
+ plan:=explain();t.Log("after",plan);require.Contains(t,plan,"COVERING INDEX idx_intake_api_key_created_cost")
+ after,e:=repo.GetBatchAPIKeyUsageStats(context.Background(),[]int64{1,2,3},start,end);require.NoError(t,e);require.Equal(t,before,after)
+ t.Log("synthetic rows=20000; actual modernc SQLite, full baseline migrations; feasibility only, no production latency claim")
+}

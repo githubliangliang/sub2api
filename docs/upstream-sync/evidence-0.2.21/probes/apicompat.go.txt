@@ -1,0 +1,12 @@
+package apicompat
+import("encoding/json";"testing";"github.com/stretchr/testify/require")
+func TestIntake021_ForeignReasoning(t *testing.T){
+ for _,sig:=range []string{"ccswitch-openai-reasoning-v1:payload","native-ciphertext"}{
+  t.Run(sig,func(t *testing.T){
+   blocks,_:=json.Marshal([]AnthropicContentBlock{{Type:"thinking",Signature:sig},{Type:"text",Text:"answer"}})
+   out,err:=AnthropicToResponses(&AnthropicRequest{Model:"gpt-6.1-terra",MaxTokens:1024,Messages:[]AnthropicMessage{{Role:"assistant",Content:blocks}}});require.NoError(t,err)
+   if sig=="native-ciphertext"{require.Contains(t,string(out.Input),sig)}else{require.NotContains(t,string(out.Input),sig)}
+   require.Contains(t,string(out.Input),"answer")
+  })
+ }
+}

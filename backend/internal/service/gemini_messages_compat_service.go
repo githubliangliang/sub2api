@@ -2896,7 +2896,8 @@ func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel strin
 						if !ok {
 							continue
 						}
-						if text, ok := pm["text"].(string); ok && text != "" {
+						// 思考摘要不属于正文；非流式响应不输出思考内容。
+						if text, ok := pm["text"].(string); ok && text != "" && !isGeminiThoughtPart(pm) {
 							contentBlocks = append(contentBlocks, map[string]any{
 								"type": "text",
 								"text": text,
@@ -3983,4 +3984,10 @@ func isVertexSharedCapacity429(body []byte) bool {
 		return false
 	}
 	return !strings.Contains(msg, "quota") && !strings.Contains(msg, "provisioned throughput")
+}
+
+// isGeminiThoughtPart distinguishes thought text from visible text, even when both carry a signature.
+func isGeminiThoughtPart(part map[string]any) bool {
+	thought, _ := part["thought"].(bool)
+	return thought
 }

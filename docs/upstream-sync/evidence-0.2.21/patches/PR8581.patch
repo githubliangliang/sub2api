@@ -1,0 +1,166 @@
+diff --git a/frontend/src/components/account/AccountUsageCell.vue b/frontend/src/components/account/AccountUsageCell.vue
+index d3bd7963c..f6a753383 100644
+--- a/frontend/src/components/account/AccountUsageCell.vue
++++ b/frontend/src/components/account/AccountUsageCell.vue
+@@ -1,5 +1,5 @@
+ <template>
+-  <div ref="rootRef" v-if="showUsageWindows">
++  <div ref="rootRef" v-if="showUsageWindows" :aria-busy="loading || activeQueryLoading">
+     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
+     <template
+       v-if="
+@@ -8,7 +8,7 @@
+       "
+     >
+       <!-- Loading state -->
+-      <div v-if="loading" class="space-y-1.5">
++      <div v-if="loading && !usageInfo" class="space-y-1.5">
+         <!-- OAuth: 3 rows, Setup Token: 1 row -->
+         <div class="flex items-center gap-1">
+           <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+@@ -99,12 +99,12 @@
+           <button
+             type="button"
+             class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+-            :disabled="activeQueryLoading"
++            :disabled="activeQueryLoading || loading"
+             @click="loadActiveUsage"
+           >
+             <svg
+               class="h-2.5 w-2.5"
+-              :class="{ 'animate-spin': activeQueryLoading }"
++              :class="{ 'animate-spin': activeQueryLoading || loading }"
+               fill="none"
+               stroke="currentColor"
+               viewBox="0 0 24 24"
+@@ -154,12 +154,12 @@
+             <button
+               type="button"
+               class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+-              :disabled="activeQueryLoading"
++              :disabled="activeQueryLoading || loading"
+               @click="loadActiveUsage"
+             >
+               <svg
+                 class="h-2.5 w-2.5"
+-                :class="{ 'animate-spin': activeQueryLoading }"
++                :class="{ 'animate-spin': activeQueryLoading || loading }"
+                 fill="none"
+                 stroke="currentColor"
+                 viewBox="0 0 24 24"
+diff --git a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+index cae7984aa..76423ed2d 100644
+--- a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
++++ b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+@@ -130,6 +130,26 @@ describe('AccountUsageCell', () => {
+     })
+   })
+ 
++  it('keeps cached Claude quota visible while a replacement batch is loading', async () => {
++    const requestBatchedUsage = vi.fn()
++    const wrapper = mount(AccountUsageCell, {
++      props: { account: makeAccount({ id: 98101, platform: 'anthropic', type: 'oauth' }), requestBatchedUsage,
++        batchedUsage: { five_hour: { utilization: 21 } }, batchedUsageLoading: false },
++      global: { stubs: { UsageProgressBar: { props: ['utilization'], template: '<div data-test="quota">{{ utilization }}</div>' }, AccountQuotaInfo: true } }
++    })
++    await flushPromises()
++    const quota = wrapper.get('[data-test="quota"]').element
++    await wrapper.setProps({ batchedUsageLoading: true })
++    expect(wrapper.get('[data-test="quota"]').text()).toBe('21')
++    expect(wrapper.get('[data-test="quota"]').element).toBe(quota)
++    expect(wrapper.find('.animate-pulse').exists()).toBe(false)
++    expect(wrapper.attributes('aria-busy')).toBe('true')
++    await wrapper.setProps({ batchedUsage: { five_hour: { utilization: 44 } }, batchedUsageLoading: false })
++    expect(wrapper.get('[data-test="quota"]').text()).toBe('44')
++    expect(wrapper.get('[data-test="quota"]').element).toBe(quota)
++    wrapper.unmount()
++  })
++
+   it('renders eligible Ollama Cloud state and forwards query updates', async () => {
+     const wrapper = mount(AccountUsageCell, {
+       props: {
+diff --git a/frontend/src/views/admin/AccountsView.vue b/frontend/src/views/admin/AccountsView.vue
+index 6d71337fd..7384e4858 100644
+--- a/frontend/src/views/admin/AccountsView.vue
++++ b/frontend/src/views/admin/AccountsView.vue
+@@ -191,12 +191,12 @@
+           @select-all-results="handleSelectAllResults"
+           @toggle-schedulable="handleBulkToggleSchedulable"
+         />
+-        <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
++        <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden" :aria-busy="loading" :inert="loading && accounts.length > 0">
+         <DataTable
+           ref="dataTableRef"
+           :columns="cols"
+           :data="accounts"
+-          :loading="loading"
++          :loading="loading && accounts.length === 0"
+           row-key="id"
+           :server-side-sort="true"
+           @sort="handleSort"
+diff --git a/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts b/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts
+index 828f20d6e..9d8d7266e 100644
+--- a/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts
++++ b/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts
+@@ -62,13 +62,13 @@ vi.mock('vue-i18n', async () => {
+ })
+ 
+ const DataTableStub = defineComponent({
+-  props: { data: { type: Array, default: () => [] } },
++  props: { data: { type: Array, default: () => [] }, loading: Boolean },
+   template: `
+     <div>
+-      <div v-for="row in data" :key="row.id" :data-account-name="row.name">
++      <template v-if="!loading"><div v-for="row in data" :key="row.id" :data-account-name="row.name">
+         <slot name="cell-groups" :row="row" />
+         <slot name="cell-actions" :row="row" />
+-      </div>
++      </div></template>
+     </div>
+   `
+ })
+@@ -101,7 +101,7 @@ function mountView(stubActionMenu = true) {
+         AppLayout: { template: '<div><slot /></div>' },
+         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
+         DataTable: DataTableStub,
+-        AccountTableActions: { template: '<div><slot name="after" /></div>' },
++        AccountTableActions: { template: `<div><button data-test="manual-refresh" @click="$emit('refresh')">refresh</button><slot name="after" /></div>` },
+         AccountTableFilters: true,
+         AccountBulkActionsBar: true,
+         Pagination: true,
+@@ -189,6 +189,35 @@ describe('admin AccountsView lite account list', () => {
+     wrapper.unmount()
+   })
+ 
++  it('keeps existing rows mounted and busy while a manual list refresh is pending', async () => {
++    const wrapper = mountView()
++    await flushPromises()
++    const row = wrapper.get('[data-account-name="compact row"]').element
++    let finish: (value: unknown) => void = () => {}
++    listAccounts.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
++    await wrapper.get('[data-test="manual-refresh"]').trigger('click')
++    await flushPromises()
++    expect(wrapper.getComponent(DataTableStub).props('loading')).toBe(false)
++    expect(wrapper.get('[data-account-name="compact row"]').element).toBe(row)
++    expect(wrapper.find('[aria-busy="true"]').attributes()).toHaveProperty('inert')
++    finish({ items: [{ ...listRow, name: 'updated row' }], total: 1, page: 1, page_size: 20, pages: 1 })
++    await flushPromises()
++    expect(wrapper.get('[data-account-name="updated row"]').element).toBe(row)
++    expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false)
++    wrapper.unmount()
++  })
++
++  it('still shows initial loading when no rows are available', async () => {
++    let finish: (value: unknown) => void = () => {}
++    listAccounts.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
++    const wrapper = mountView()
++    await flushPromises()
++    expect(wrapper.getComponent(DataTableStub).props('loading')).toBe(true)
++    finish({ items: [listRow], total: 1, page: 1, page_size: 20, pages: 1 })
++    await flushPromises()
++    wrapper.unmount()
++  })
++
+   it('maps group_ids through the group catalog for the table cell', async () => {
+     const wrapper = mountView()
+     await flushPromises()

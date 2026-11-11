@@ -1,0 +1,375 @@
+diff --git a/backend/internal/payment/provider/easypay.go b/backend/internal/payment/provider/easypay.go
+index 76469a2b3..a5426e4cc 100644
+--- a/backend/internal/payment/provider/easypay.go
++++ b/backend/internal/payment/provider/easypay.go
+@@ -50,7 +50,8 @@ type easyPayCustomMethod struct {
+ }
+ 
+ // NewEasyPay creates a new EasyPay provider.
+-// config keys: pid, pkey, apiBase, notifyUrl, returnUrl, cid, cidAlipay, cidWxpay
++// config keys: pid, pkey, apiBase, notifyUrl, returnUrl, cid, cidAlipay, cidWxpay,
++// refundSuccessCode (0 or 1; defaults to 1).
+ func NewEasyPay(instanceID string, config map[string]string) (*EasyPay, error) {
+ 	for _, k := range []string{"pid", "pkey", "apiBase", "notifyUrl", "returnUrl"} {
+ 		if strings.TrimSpace(config[k]) == "" {
+@@ -61,6 +62,9 @@ func NewEasyPay(instanceID string, config map[string]string) (*EasyPay, error) {
+ 	for k, v := range config {
+ 		cfg[k] = v
+ 	}
++	if code := strings.TrimSpace(cfg["refundSuccessCode"]); code != "" && code != "0" && code != "1" {
++		return nil, fmt.Errorf("easypay refundSuccessCode must be 0 or 1")
++	}
+ 	cfg["apiBase"] = normalizeEasyPayAPIBase(cfg["apiBase"])
+ 	return &EasyPay{
+ 		instanceID: instanceID,
+@@ -371,7 +375,7 @@ func (e *EasyPay) queryOrder(ctx context.Context, outTradeNo string) (*easyPayQu
+ 	}
+ 	// An explicit failure code wins over any paid-looking status field that
+ 	// may accompany it.
+-	if resp.Code != nil && !easyPayResponseCodeIsSuccess(resp.Code) {
++	if resp.Code != nil && !easyPayResponseCodeIsSuccess(resp.Code, easypayCodeSuccess) {
+ 		msg := strings.TrimSpace(resp.Msg)
+ 		if msg == "" {
+ 			msg = summarizeEasyPayResponse(body)
+@@ -506,6 +510,12 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
+ }
+ 
+ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payment.RefundResponse, error) {
++	// Compatible gateways disagree on refund codes. Keep the existing default
++	// unless this instance explicitly selects a zero-success refund protocol.
++	successCode := easypayCodeSuccess
++	if strings.TrimSpace(e.config["refundSuccessCode"]) == "0" {
++		successCode = 0
++	}
+ 	attempts := e.refundAttempts(req)
+ 	if len(attempts) == 0 {
+ 		return nil, fmt.Errorf("easypay refund missing order identifier")
+@@ -516,7 +526,7 @@ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payme
+ 		if err != nil {
+ 			return nil, fmt.Errorf("easypay refund request: %w", err)
+ 		}
+-		if err := parseEasyPayRefundResponse(status, body); err != nil {
++		if err := parseEasyPayRefundResponse(status, body, successCode); err != nil {
+ 			if firstErr == nil {
+ 				firstErr = err
+ 			}
+@@ -573,7 +583,7 @@ func isEasyPayRefundOrderNotFound(err error) bool {
+ 		strings.Contains(lower, "not exist")
+ }
+ 
+-func parseEasyPayRefundResponse(status int, body []byte) error {
++func parseEasyPayRefundResponse(status int, body []byte, successCode int) error {
+ 	summary := summarizeEasyPayResponse(body)
+ 	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+ 		return fmt.Errorf("easypay refund HTTP %d: %s", status, summary)
+@@ -597,7 +607,7 @@ func parseEasyPayRefundResponse(status int, body []byte) error {
+ 	if err := json.Unmarshal(body, &resp); err != nil {
+ 		return fmt.Errorf("easypay refund non-JSON response (HTTP %d): %s", status, summary)
+ 	}
+-	if !easyPayResponseCodeIsSuccess(resp.Code) {
++	if !easyPayResponseCodeIsSuccess(resp.Code, successCode) {
+ 		msg := strings.TrimSpace(resp.Msg)
+ 		if msg == "" {
+ 			msg = summary
+@@ -607,13 +617,13 @@ func parseEasyPayRefundResponse(status int, body []byte) error {
+ 	return nil
+ }
+ 
+-func easyPayResponseCodeIsSuccess(code any) bool {
++func easyPayResponseCodeIsSuccess(code any, successCode int) bool {
+ 	switch v := code.(type) {
+ 	case float64:
+-		return int(v) == easypayCodeSuccess
++		return v == float64(successCode)
+ 	case string:
+ 		n, err := strconv.Atoi(strings.TrimSpace(v))
+-		return err == nil && n == easypayCodeSuccess
++		return err == nil && n == successCode
+ 	default:
+ 		return false
+ 	}
+diff --git a/backend/internal/payment/provider/easypay_refund_test.go b/backend/internal/payment/provider/easypay_refund_test.go
+index 730e82fef..d1e811d19 100644
+--- a/backend/internal/payment/provider/easypay_refund_test.go
++++ b/backend/internal/payment/provider/easypay_refund_test.go
+@@ -180,6 +180,60 @@ func TestEasyPayRefundResponseErrors(t *testing.T) {
+ 	}
+ }
+ 
++func TestEasyPayRefundSuccessCode(t *testing.T) {
++	t.Parallel()
++
++	for _, successCode := range []string{"", "1", "0"} {
++		t.Run("configured="+successCode, func(t *testing.T) {
++			t.Parallel()
++			for _, code := range []string{`0`, `"0"`, `1`, `"1"`, `-1`, `1.5`, `0.5`, `null`, `false`, `""`} {
++				t.Run("response="+code, func(t *testing.T) {
++					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++						_, _ = w.Write([]byte(`{"code":` + code + `,"msg":"gateway result"}`))
++					}))
++					defer server.Close()
++					provider, err := NewEasyPay("test-instance", map[string]string{
++						"pid": "1001", "pkey": "test-key", "apiBase": server.URL,
++						"notifyUrl": "https://site.example/notify", "returnUrl": "https://site.example/return",
++						"refundSuccessCode": successCode,
++					})
++					if err != nil {
++						t.Fatal(err)
++					}
++					resp, err := provider.Refund(context.Background(), payment.RefundRequest{OrderID: "out-456", Amount: "1.50"})
++					wantSuccess := code == `1` || code == `"1"`
++					if successCode == "0" {
++						wantSuccess = code == `0` || code == `"0"`
++					}
++					if wantSuccess {
++						if err != nil || resp == nil || resp.Status != payment.ProviderStatusSuccess {
++							t.Fatalf("Refund() = %+v, %v; want success", resp, err)
++						}
++					} else if err == nil || resp != nil {
++						t.Fatalf("Refund() = %+v, %v; want rejection", resp, err)
++					}
++				})
++			}
++		})
++	}
++}
++
++func TestNewEasyPayRejectsInvalidRefundSuccessCode(t *testing.T) {
++	t.Parallel()
++	for _, code := range []string{"-1", "2", "0.5", "0,1", "auto"} {
++		t.Run(code, func(t *testing.T) {
++			_, err := NewEasyPay("test-instance", map[string]string{
++				"pid": "1001", "pkey": "test-key", "apiBase": "https://pay.example",
++				"notifyUrl": "https://site.example/notify", "returnUrl": "https://site.example/return",
++				"refundSuccessCode": code,
++			})
++			if err == nil {
++				t.Fatal("NewEasyPay accepted an invalid refund success code")
++			}
++		})
++	}
++}
++
+ func TestSummarizeEasyPayResponsePreservesUTF8(t *testing.T) {
+ 	t.Parallel()
+ 
+diff --git a/backend/internal/service/payment_refund_test.go b/backend/internal/service/payment_refund_test.go
+index 834c7f457..340e8eb4f 100644
+--- a/backend/internal/service/payment_refund_test.go
++++ b/backend/internal/service/payment_refund_test.go
+@@ -6,7 +6,10 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"net/http"
++	"net/http/httptest"
+ 	"strconv"
++	"sync/atomic"
+ 	"testing"
+ 	"time"
+ 
+@@ -208,6 +211,115 @@ func TestExecuteRefundUsesActualAvailableBalanceDeduction(t *testing.T) {
+ 	require.Contains(t, audit.Detail, `"balanceDeducted":25`)
+ }
+ 
++func TestExecuteEasyPayRefundSuccessCode(t *testing.T) {
++	for _, tc := range []struct {
++		name, configuredCode, responseCode string
++		amount                             float64
++		wantSuccess                        bool
++	}{
++		{name: "zero success full", configuredCode: "0", responseCode: "0", amount: 100, wantSuccess: true},
++		{name: "zero success partial", configuredCode: "0", responseCode: "0", amount: 40, wantSuccess: true},
++		{name: "default one success", responseCode: "1", amount: 100, wantSuccess: true},
++		{name: "default zero failure", responseCode: "0", amount: 100},
++		{name: "zero protocol one failure", configuredCode: "0", responseCode: "1", amount: 100},
++		{name: "zero protocol negative failure", configuredCode: "0", responseCode: "-1", amount: 100},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			ctx := context.Background()
++			client := newPaymentConfigServiceTestClient(t)
++			var calls atomic.Int32
++			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				calls.Add(1)
++				if r.URL.Path != "/api.php" || r.URL.Query().Get("act") != "refund" || r.FormValue("out_trade_no") != "refund_protocol_order" {
++					t.Errorf("unexpected refund request: %s", r.URL)
++					w.WriteHeader(http.StatusBadRequest)
++					return
++				}
++				_, _ = fmt.Fprintf(w, `{"code":%s,"msg":"gateway result"}`, tc.responseCode)
++			}))
++			defer server.Close()
++			user, err := client.User.Create().SetEmail("refund-protocol@example.com").
++				SetPasswordHash("hash").SetUsername("refund-protocol").Save(ctx)
++			require.NoError(t, err)
++			inst, err := client.PaymentProviderInstance.Create().SetProviderKey(payment.TypeEasyPay).
++				SetName("refund-protocol").SetConfig("{}").SetSupportedTypes("wxpay").
++				SetEnabled(true).SetRefundEnabled(true).Save(ctx)
++			require.NoError(t, err)
++			order, err := client.PaymentOrder.Create().
++				SetUserID(user.ID).SetUserEmail(user.Email).SetUserName(user.Username).
++				SetAmount(100).SetPayAmount(100).SetFeeRate(0).
++				SetRechargeCode("REFUND-PROTOCOL").SetOutTradeNo("refund_protocol_order").
++				SetPaymentType(payment.TypeWxpay).SetPaymentTradeNo("trade-protocol").
++				SetOrderType(payment.OrderTypeBalance).SetStatus(OrderStatusCompleted).
++				SetExpiresAt(time.Now().Add(time.Hour)).SetPaidAt(time.Now()).
++				SetClientIP("127.0.0.1").SetSrcHost("api.example.com").
++				SetProviderInstanceID(strconv.FormatInt(inst.ID, 10)).Save(ctx)
++			require.NoError(t, err)
++			balance := 200.0
++			repo := &mockUserRepo{
++				getByIDUser: &User{Balance: balance},
++				deductAvailableBalanceFn: func(_ context.Context, id int64, amount float64) (float64, error) {
++					require.Equal(t, user.ID, id)
++					balance -= amount
++					return amount, nil
++				},
++				updateBalanceFn: func(_ context.Context, id int64, amount float64) error {
++					require.Equal(t, user.ID, id)
++					balance += amount
++					return nil
++				},
++			}
++			svc := &PaymentService{entClient: client, userRepo: repo, loadBalancer: &easyPayRefundLoadBalancer{
++				config: map[string]string{
++					"pid": "1001", "pkey": "test-key", "apiBase": server.URL,
++					"notifyUrl": "https://site.example/notify", "returnUrl": "https://site.example/return",
++					"refundSuccessCode": tc.configuredCode,
++				},
++			}}
++			plan, early, err := svc.PrepareRefund(ctx, order.ID, tc.amount, "protocol regression", false, true)
++			require.NoError(t, err)
++			require.Nil(t, early)
++			result, err := svc.ExecuteRefund(ctx, plan)
++			require.NoError(t, err)
++			require.NotNil(t, result)
++			require.Equal(t, tc.wantSuccess, result.Success)
++			require.Equal(t, int32(1), calls.Load(), "do not retry a refund based on a different success code")
++			stored, err := client.PaymentOrder.Get(ctx, order.ID)
++			require.NoError(t, err)
++			wantStatus := OrderStatusCompleted
++			if tc.wantSuccess {
++				wantStatus = OrderStatusRefunded
++				if tc.amount < order.Amount {
++					wantStatus = OrderStatusPartiallyRefunded
++				}
++				require.Equal(t, tc.amount, stored.RefundAmount)
++				require.NotNil(t, stored.RefundAt)
++				require.Equal(t, 200-tc.amount, balance)
++			} else {
++				require.Zero(t, stored.RefundAmount)
++				require.Nil(t, stored.RefundAt)
++				require.Equal(t, 200.0, balance)
++			}
++			require.Equal(t, wantStatus, stored.Status)
++			failed, err := client.PaymentAuditLog.Query().Where(
++				paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)),
++				paymentauditlog.ActionEQ("REFUND_GATEWAY_FAILED"),
++			).Exist(ctx)
++			require.NoError(t, err)
++			require.Equal(t, !tc.wantSuccess, failed)
++		})
++	}
++}
++
++type easyPayRefundLoadBalancer struct {
++	captureLoadBalancer
++	config map[string]string
++}
++
++func (lb *easyPayRefundLoadBalancer) GetInstanceConfig(context.Context, int64) (map[string]string, error) {
++	return lb.config, nil
++}
++
+ func TestGwRefundRejectsAlipayMerchantIdentitySnapshotMismatch(t *testing.T) {
+ 	ctx := context.Background()
+ 	client := newPaymentConfigServiceTestClient(t)
+diff --git a/frontend/src/components/payment/__tests__/PaymentProviderDialog.spec.ts b/frontend/src/components/payment/__tests__/PaymentProviderDialog.spec.ts
+index 0126faab0..03cb36093 100644
+--- a/frontend/src/components/payment/__tests__/PaymentProviderDialog.spec.ts
++++ b/frontend/src/components/payment/__tests__/PaymentProviderDialog.spec.ts
+@@ -84,6 +84,7 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
+           template: '<div><slot /><slot name="footer" /></div>',
+         },
+         Select: {
++          name: 'Select',
+           props: ['modelValue', 'options', 'disabled'],
+           template: '<div />',
+         },
+@@ -121,6 +122,34 @@ describe('PaymentProviderDialog callback URLs', () => {
+   })
+ })
+ 
++describe('PaymentProviderDialog EasyPay refund protocol', () => {
++  it.each([undefined, '1', '0'])('loads and saves the refund success code %s', async (storedCode) => {
++    const provider = providerFactory({
++      provider_key: 'easypay', name: 'EasyPay', supported_types: ['alipay'],
++      config: {
++        pid: 'pid-1', apiBase: 'https://pay.example.com',
++        ...(storedCode === undefined ? {} : { refundSuccessCode: storedCode }),
++      },
++    })
++    const wrapper = mountDialog({ editing: provider })
++    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
++    await nextTick()
++
++    const selector = wrapper.findAllComponents({ name: 'Select' }).find(select =>
++      select.props('options').some((option: { value: string }) => option.value === '0'),
++    )
++    expect(selector, 'refund success code selector').toBeDefined()
++    expect(selector!.props('modelValue')).toBe(storedCode ?? '1')
++    const selectedCode = storedCode === '0' ? '1' : '0'
++    selector!.vm.$emit('update:modelValue', selectedCode)
++    await wrapper.find('form').trigger('submit')
++
++    const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
++    expect(payload.config.refundSuccessCode).toBe(selectedCode)
++    wrapper.unmount()
++  })
++})
++
+ describe('PaymentProviderDialog payment guide', () => {
+   it('shows no payment guide for providers without a flow guide', () => {
+     const wrapper = mountDialog()
+diff --git a/frontend/src/components/payment/providerConfig.ts b/frontend/src/components/payment/providerConfig.ts
+index 395c32725..aa59d2373 100644
+--- a/frontend/src/components/payment/providerConfig.ts
++++ b/frontend/src/components/payment/providerConfig.ts
+@@ -129,6 +129,11 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
+     { key: 'pid', label: 'PID', sensitive: false },
+     { key: 'pkey', label: 'PKey', sensitive: true },
+     { key: 'apiBase', label: '', sensitive: false },
++    {
++      key: 'refundSuccessCode', label: '', sensitive: false, defaultValue: '1',
++      hintKey: 'admin.settings.payment.field_refundSuccessCodeHint',
++      options: [{ value: '1', label: '1' }, { value: '0', label: '0' }],
++    },
+     { key: 'cidAlipay', label: '', sensitive: false, optional: true },
+     { key: 'cidWxpay', label: '', sensitive: false, optional: true },
+   ],
+diff --git a/frontend/src/i18n/locales/en/admin/settings.ts b/frontend/src/i18n/locales/en/admin/settings.ts
+index 689e06433..5141c2897 100644
+--- a/frontend/src/i18n/locales/en/admin/settings.ts
++++ b/frontend/src/i18n/locales/en/admin/settings.ts
+@@ -893,6 +893,8 @@ export default {
+         field_cid: 'Channel ID',
+         field_cidAlipay: 'Alipay Channel ID',
+         field_cidWxpay: 'WeChat Channel ID',
++        field_refundSuccessCode: 'Refund success code',
++        field_refundSuccessCodeHint: 'Use the success code documented by this gateway\'s refund API. Default: 1 (e.g. ZPAY). Select 0 only for gateways that document it. Payment creation and order queries still require 1.',
+         easypayCustomMethods: 'Custom EasyPay methods',
+         easypayCustomMethodsHint: 'Add provider-specific methods supported by this EasyPay endpoint. The payment type is stored on Sub2API orders; the upstream type is sent as EasyPay type.',
+         addCustomMethod: 'Add method',
+diff --git a/frontend/src/i18n/locales/zh/admin/settings.ts b/frontend/src/i18n/locales/zh/admin/settings.ts
+index f48160dbe..9658045e5 100644
+--- a/frontend/src/i18n/locales/zh/admin/settings.ts
++++ b/frontend/src/i18n/locales/zh/admin/settings.ts
+@@ -888,6 +888,8 @@ export default {
+         field_cid: '支付渠道 ID',
+         field_cidAlipay: '支付宝渠道 ID',
+         field_cidWxpay: '微信渠道 ID',
++        field_refundSuccessCode: '退款成功码',
++        field_refundSuccessCodeHint: '按当前网关的退款接口文档选择成功码。默认 1（如 ZPAY），仅在网关文档规定时选择 0。此设置只影响退款，下单和查单仍要求成功码为 1。',
+         easypayCustomMethods: '易支付自定义支付方式',
+         easypayCustomMethodsHint: '添加当前易支付服务商额外支持的支付方式。支付方式会记录到 Sub2API 订单中，上游 type 会作为易支付 type 参数提交。',
+         addCustomMethod: '添加方式',

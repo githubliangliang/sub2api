@@ -1,0 +1,260 @@
+diff --git a/backend/internal/repository/migrations_runner.go b/backend/internal/repository/migrations_runner.go
+index 8c69eb50d..5ec51a0e9 100644
+--- a/backend/internal/repository/migrations_runner.go
++++ b/backend/internal/repository/migrations_runner.go
+@@ -64,6 +64,8 @@ const usageLogsEffectiveRequestedModelIndex = "idx_usage_logs_effective_requeste
+ const usageLogsEffectiveUpstreamModelIndex = "idx_usage_logs_effective_upstream_model_created"
+ const usageLogsUpstreamRequestIDIndexMigration = "233_add_usage_log_upstream_request_id_index_notx.sql"
+ const usageLogsUpstreamRequestIDIndex = "idx_usage_logs_upstream_request_id"
++const usageLogsAPIKeyCostIndexMigration = "249_add_usage_logs_api_key_cost_index_notx.sql"
++const usageLogsAPIKeyCostIndex = "idx_usage_logs_api_key_created_cost"
+ 
+ type migrationChecksumCompatibilityRule struct {
+ 	fileChecksum       string
+@@ -309,6 +311,8 @@ func prepareNonTransactionalMigration(ctx context.Context, db migrationConnectio
+ 		return nil
+ 	case usageLogsUpstreamRequestIDIndexMigration:
+ 		return dropInvalidIndexIfPresent(ctx, db, usageLogsUpstreamRequestIDIndex)
++	case usageLogsAPIKeyCostIndexMigration:
++		return dropInvalidIndexIfPresent(ctx, db, usageLogsAPIKeyCostIndex)
+ 	default:
+ 		return nil
+ 	}
+diff --git a/backend/internal/repository/migrations_runner_api_key_cost_index_test.go b/backend/internal/repository/migrations_runner_api_key_cost_index_test.go
+new file mode 100644
+index 000000000..a9c6e1ee4
+--- /dev/null
++++ b/backend/internal/repository/migrations_runner_api_key_cost_index_test.go
+@@ -0,0 +1,49 @@
++package repository
++
++import (
++	"context"
++	"database/sql"
++	"testing"
++	"testing/fstest"
++
++	sqlmock "github.com/DATA-DOG/go-sqlmock"
++	"github.com/stretchr/testify/require"
++)
++
++func TestApplyMigrationsFS_NonTransactionalMigration_APIKeyCostIndexDropsInvalidIndexBeforeRetry(t *testing.T) {
++	db, mock, err := sqlmock.New()
++	require.NoError(t, err)
++	defer func() { _ = db.Close() }()
++
++	prepareMigrationsBootstrapExpectations(mock)
++	mock.ExpectQuery("SELECT checksum FROM schema_migrations WHERE filename = \\$1").
++		WithArgs(usageLogsAPIKeyCostIndexMigration).
++		WillReturnError(sql.ErrNoRows)
++	mock.ExpectQuery("SELECT EXISTS \\(").
++		WithArgs(usageLogsAPIKeyCostIndex).
++		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
++	mock.ExpectExec("DROP INDEX CONCURRENTLY IF EXISTS idx_usage_logs_api_key_created_cost").
++		WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectExec("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_logs_api_key_created_cost").
++		WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectExec("INSERT INTO schema_migrations \\(filename, checksum\\) VALUES \\(\\$1, \\$2\\)").
++		WithArgs(usageLogsAPIKeyCostIndexMigration, sqlmock.AnyArg()).
++		WillReturnResult(sqlmock.NewResult(1, 1))
++	mock.ExpectExec("SELECT pg_advisory_unlock\\(\\$1\\)").
++		WithArgs(migrationsAdvisoryLockID).
++		WillReturnResult(sqlmock.NewResult(0, 1))
++
++	fsys := fstest.MapFS{
++		usageLogsAPIKeyCostIndexMigration: &fstest.MapFile{
++			Data: []byte(`
++CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_logs_api_key_created_cost
++    ON usage_logs (api_key_id, created_at)
++    INCLUDE (actual_cost);
++`),
++		},
++	}
++
++	err = applyMigrationsFS(context.Background(), db, fsys)
++	require.NoError(t, err)
++	require.NoError(t, mock.ExpectationsWereMet())
++}
+diff --git a/backend/migrations/249_add_usage_logs_api_key_cost_index_notx.sql b/backend/migrations/249_add_usage_logs_api_key_cost_index_notx.sql
+new file mode 100644
+index 000000000..740e1e516
+--- /dev/null
++++ b/backend/migrations/249_add_usage_logs_api_key_cost_index_notx.sql
+@@ -0,0 +1,5 @@
++-- Serve per-key 30-day / today cost sums (API key list usage column) from the index alone,
++-- instead of fetching hundreds of thousands of usage_logs heap rows per page load.
++CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_logs_api_key_created_cost
++    ON usage_logs (api_key_id, created_at)
++    INCLUDE (actual_cost);
+diff --git a/backend/migrations/usage_log_api_key_cost_index_test.go b/backend/migrations/usage_log_api_key_cost_index_test.go
+new file mode 100644
+index 000000000..5a6866751
+--- /dev/null
++++ b/backend/migrations/usage_log_api_key_cost_index_test.go
+@@ -0,0 +1,18 @@
++package migrations
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestUsageLogAPIKeyCostIndexMigration(t *testing.T) {
++	content, err := FS.ReadFile("249_add_usage_logs_api_key_cost_index_notx.sql")
++	require.NoError(t, err)
++
++	sql := strings.Join(strings.Fields(string(content)), " ")
++	require.Contains(t, sql, "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_usage_logs_api_key_created_cost")
++	require.Contains(t, sql, "ON usage_logs (api_key_id, created_at)")
++	require.Contains(t, sql, "INCLUDE (actual_cost)")
++}
+diff --git a/frontend/src/views/user/KeysView.vue b/frontend/src/views/user/KeysView.vue
+index dd779a0a8..df56222ca 100644
+--- a/frontend/src/views/user/KeysView.vue
++++ b/frontend/src/views/user/KeysView.vue
+@@ -212,13 +212,22 @@
+             <div class="text-sm">
+               <div class="flex items-center gap-1.5">
+                 <span class="text-gray-500 dark:text-gray-400">{{ t('keys.today') }}:</span>
+-                <span class="font-medium text-gray-900 dark:text-white">
++                <span
++                  v-if="usageLoading && !usageStats[row.id]"
++                  data-test="usage-pending"
++                  class="inline-block h-3 w-14 animate-pulse rounded bg-gray-200 dark:bg-dark-600"
++                />
++                <span v-else class="font-medium text-gray-900 dark:text-white">
+                   ${{ (usageStats[row.id]?.today_actual_cost ?? 0).toFixed(4) }}
+                 </span>
+               </div>
+               <div class="mt-0.5 flex items-center gap-1.5">
+                 <span class="text-gray-500 dark:text-gray-400">{{ t('keys.total') }}:</span>
+-                <span class="font-medium text-gray-900 dark:text-white">
++                <span
++                  v-if="usageLoading && !usageStats[row.id]"
++                  class="inline-block h-3 w-14 animate-pulse rounded bg-gray-200 dark:bg-dark-600"
++                />
++                <span v-else class="font-medium text-gray-900 dark:text-white">
+                   ${{ (usageStats[row.id]?.total_actual_cost ?? 0).toFixed(4) }}
+                 </span>
+               </div>
+@@ -1378,6 +1387,7 @@ const submitting = ref(false)
+ const now = ref(new Date())
+ let resetTimer: ReturnType<typeof setInterval> | null = null
+ const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
++const usageLoading = ref(false)
+ const userGroupRates = ref<Record<number, number>>({})
+ 
+ const pagination = ref({
+@@ -1589,6 +1599,7 @@ const loadApiKeys = async () => {
+   abortController = controller
+   const { signal } = controller
+   loading.value = true
++  usageLoading.value = false
+   try {
+     // Build filters
+     const filters: {
+@@ -1613,18 +1624,10 @@ const loadApiKeys = async () => {
+     pagination.value.total = response.total
+     pagination.value.pages = response.pages
+ 
+-    // Load usage stats for all API keys in the list
++    // 用量统计要聚合 30 天的 usage_logs，可能比列表慢很多：不阻塞表格渲染，单独加载
++    usageLoading.value = response.items.length > 0
+     if (response.items.length > 0) {
+-      const keyIds = response.items.map((k) => k.id)
+-      try {
+-        const usageResponse = await usageAPI.getDashboardApiKeysUsage(keyIds, { signal })
+-        if (signal.aborted) return
+-        usageStats.value = usageResponse.stats
+-      } catch (e) {
+-        if (!isAbortError(e)) {
+-          console.error('Failed to load usage stats:', e)
+-        }
+-      }
++      void loadUsageStats(response.items.map((k) => k.id), signal)
+     }
+   } catch (error) {
+     if (isAbortError(error)) {
+@@ -1638,6 +1641,22 @@ const loadApiKeys = async () => {
+   }
+ }
+ 
++const loadUsageStats = async (keyIds: number[], signal: AbortSignal) => {
++  try {
++    const usageResponse = await usageAPI.getDashboardApiKeysUsage(keyIds, { signal })
++    if (signal.aborted) return
++    usageStats.value = usageResponse.stats
++  } catch (e) {
++    if (!isAbortError(e)) {
++      console.error('Failed to load usage stats:', e)
++    }
++  } finally {
++    if (!signal.aborted) {
++      usageLoading.value = false
++    }
++  }
++}
++
+ const loadGroups = async () => {
+   try {
+     groups.value = await userGroupsAPI.getAvailable()
+diff --git a/frontend/src/views/user/__tests__/KeysView.spec.ts b/frontend/src/views/user/__tests__/KeysView.spec.ts
+index ebf80be0a..dbda4f4fc 100644
+--- a/frontend/src/views/user/__tests__/KeysView.spec.ts
++++ b/frontend/src/views/user/__tests__/KeysView.spec.ts
+@@ -156,7 +156,7 @@ const TablePageLayoutStub = {
+ 
+ const DataTableStub = {
+   name: 'DataTable',
+-  props: { columns: Array, data: Array, selectedKeys: Array, selectable: Boolean },
++  props: { columns: Array, data: Array, selectedKeys: Array, selectable: Boolean, loading: Boolean },
+   emits: ['sort', 'update:selectedKeys'],
+   template: `
+     <div>
+@@ -177,6 +177,9 @@ const DataTableStub = {
+         <div data-test="current-concurrency">
+           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
+         </div>
++        <div data-test="usage">
++          <slot name="cell-usage" :row="row" />
++        </div>
+         <div
+           v-if="columns.some((col) => col.key === 'last_used_ip')"
+           data-test="last-used-ip"
+@@ -654,4 +657,34 @@ describe('user KeysView column settings', () => {
+       expect(optionIds(wrapper)).toHaveLength(12)
+     })
+   })
++
++  describe('usage stats loading', () => {
++    it('renders the key list without waiting for slow usage stats', async () => {
++      let resolveUsage!: (value: { stats: Record<string, unknown> }) => void
++      getDashboardApiKeysUsage.mockReturnValue(new Promise((resolve) => { resolveUsage = resolve }))
++      const wrapper = await mountView()
++
++      const table = wrapper.findComponent({ name: 'DataTable' })
++      expect(table.props('loading')).toBe(false)
++      expect(table.props('data')).toHaveLength(1)
++      expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(true)
++
++      resolveUsage({
++        stats: { 1: { api_key_id: 1, today_actual_cost: 0.5, total_actual_cost: 12.25 } },
++      })
++      await flushPromises()
++      expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(false)
++      expect(wrapper.get('[data-test="usage"]').text()).toContain('$12.2500')
++    })
++
++    it('stops showing usage placeholders when the usage request fails', async () => {
++      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
++      getDashboardApiKeysUsage.mockRejectedValue(new Error('timeout'))
++      const wrapper = await mountView()
++
++      expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(false)
++      expect(wrapper.get('[data-test="usage"]').text()).toContain('$0.0000')
++      consoleError.mockRestore()
++    })
++  })
+ })

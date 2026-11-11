@@ -136,7 +136,7 @@ var (
 	claudeSonnet55FallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken: 2e-6, OutputCostPerToken: 10e-6,
 		CacheCreationInputTokenCost: 2.5e-6, CacheCreationInputTokenCostAbove1hr: 4e-6,
-		CacheReadInputTokenCost: 0.2e-6,
+		CacheReadInputTokenCost: 0.1e-6,
 		LiteLLMProvider:         "anthropic", Mode: "chat", SupportsPromptCaching: true,
 	}
 	openAIGPT56SolFallbackPricing = &LiteLLMModelPricing{
@@ -400,7 +400,7 @@ func (s *PricingService) checkAndUpdatePricing() error {
 		localHash := s.localHash
 		s.mu.RUnlock()
 
-		if localHash == "" || remoteHash != localHash {
+		if localHash == "" || !strings.EqualFold(remoteHash, localHash) {
 			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs on startup (local=%s remote=%s), downloading...",
 				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
 			if err := s.downloadPricingData(); err != nil {
@@ -443,7 +443,7 @@ func (s *PricingService) syncWithRemote() error {
 		localHash := s.localHash
 		s.mu.RUnlock()
 
-		if localHash == "" || remoteHash != localHash {
+		if localHash == "" || !strings.EqualFold(remoteHash, localHash) {
 			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs (local=%s remote=%s), downloading new version...",
 				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
 			return s.downloadPricingData()
@@ -630,10 +630,10 @@ func (s *PricingService) downloadPricingData() error {
 		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to save file: %v", err)
 	}
 
-	// 使用远程哈希作为同步锚点，防止重复下载
-	// 当远程哈希不可用时，回退到数据本身的哈希
+	// 只有远程哈希与下载正文一致时才将其作为同步锚点。
+	// 不匹配时保留正文哈希，让下一轮同步重试，避免旧数据被误标为最新。
 	syncHash := dataHashStr
-	if remoteHash != "" {
+	if strings.EqualFold(remoteHash, dataHashStr) {
 		syncHash = remoteHash
 	}
 	hashFile := s.getHashFilePath()

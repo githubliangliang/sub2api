@@ -1,0 +1,71 @@
+diff --git a/backend/internal/service/openai_codex_metadata_events_test.go b/backend/internal/service/openai_codex_metadata_events_test.go
+new file mode 100644
+index 000000000..6cb2e2393
+--- /dev/null
++++ b/backend/internal/service/openai_codex_metadata_events_test.go
+@@ -0,0 +1,51 @@
++package service
++
++import (
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestRelayStallsMetadataBeforeCapacityFailure(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, metadata := range []string{
++		`{"type":"response.metadata","response_id":"r","metadata":{"route":"test"}}`,
++		`{"type":"codex.rate_limits","rate_limits":{}}`,
++		`{"type":"codex.response.metadata","response_id":"r","metadata":{}}`,
++	} {
++		for _, passthrough := range []bool{false, true} {
++			name := metadata
++			if passthrough {
++				name += "/passthrough"
++			}
++			t.Run(name, func(t *testing.T) {
++				svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
++				rec := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(rec)
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++				stream := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"r\"}}\n\n" +
++					"data: " + metadata + "\n\n" +
++					"data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"server_is_overloaded\",\"message\":\"Our servers are currently overloaded. Please try again later.\"}}}\n\n"
++				resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(stream))}
++				account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++				var err error
++				if passthrough {
++					_, err = svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
++				} else {
++					_, err = svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
++				}
++				var failover *UpstreamFailoverError
++				require.ErrorAs(t, err, &failover)
++				require.Empty(t, rec.Body.String(), "metadata must stay attempt-local until real output")
++				require.True(t, failover.RequestScopedTransient)
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index af55cc090..9afdc10c8 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -1052,7 +1052,8 @@ func openAIStreamEventIsMetadata(eventType string) bool {
+ 	switch strings.TrimSpace(eventType) {
+ 	// Queuing and moderation metadata do not commit model output or disarm the
+ 	// first-output timeout; a following overload must remain safe to retry.
+-	case "response.created", "response.queued", "response.in_progress", "response.metadata", "keepalive":
++	case "response.created", "response.queued", "response.in_progress", "response.metadata",
++		"codex.rate_limits", "codex.response.metadata", "keepalive":
+ 		return true
+ 	default:
+ 		return false

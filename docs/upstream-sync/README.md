@@ -1,5 +1,18 @@
 # 上游合并指南
 
+v0.2.21第一档已完成（2026-11-11）：F01–F11，39/39任务；[验收](../../openspec/changes/port-upstream-0.2.21-tier1/verification.md) / [实施证据](./implementation-0.2.21-tier1/README.md)。基于`4f4c80c3c`，独立tier1快照54包unit、embed build、lint0、五包race126顶层测试及实际HTTP/SQLite/miniredis通过。覆盖Codex协议/会话/错误状态、并发槽释放、定价hash与缓存读价、Gemini思考与工具媒体、UTF-8边界。共享工作区出现并行tier2改动，额外修改不归入本批验收；完整tier1 patch仍在共享工作区。保持VERSION1.1.24/Go1.27.3/SQLite228/auth snapshot21、依赖/前端/生成代码及64MiB/40MiB/120s默认值。实现随本次提交保存，未发布/推送/业务部署；下方评估状态保留原始时点含义。
+
+最新评估（2026-11-11）：[PORTING-0.2.21.md](./PORTING-0.2.21.md)，v0.2.20→v0.2.21，基线已发布v1.1.24 / `4f4c80c3c` / Go1.27.3 / SQLite228 / auth snapshot21。44非merge、33PR+1直接提交，214候选文件态A0/C121/X80/N13。建议[第一档11簇](../../openspec/changes/port-upstream-0.2.21-tier1/README.md)、[第二档12簇](../../openspec/changes/port-upstream-0.2.21-tier2/README.md)，**两批提案未实施**。完整来源、探针与核验见[证据索引](./evidence-0.2.21/MANIFEST.md)。旧v0.2.20两档已实现并包含于v1.1.24，下方旧评估措辞保持历史原意。
+
+- [x] 冻结release/tag/main/fork，完整PR覆盖与全部文件先反后正，保护产品及历史哈希。
+- [x] 全候选分档并重述旧遗留；核实最小前置，优先Claude Code、Codex和共享网关正确性。
+- [x] 后端8包定向基线、前端59测试通过；四包overlay编译并复现16个顶层行为缺口，负对照通过。
+- [x] 实际modernc SQLite完整基线迁移（最大编号228）、20000合成记录验证覆盖索引可行性；不作为生产收益或实施验收。
+- [x] 建立两份未实施OpenSpec；所有实施任务未勾选，verification证据槽为空。
+- [ ] 按后续用户选定范围实施与验收；新能力按需，支付排除。
+
+本轮教训：发布说明里的修复可能只对应新增字段（12h TTL/Fast）；自适应预算的最低1GiB不能保护1GiB实例；terminal/item.done/delta应分别验字段；原子token轮换需可控并发复现；槽位补偿要保留本地会话释放；小helper与缺完整消费者分开；SQLite覆盖查询计划不等于生产收益。见[§9](./PORTING-0.2.21.md#9-本轮通用教训)。
+
 v0.2.20第二档已完成（2026-11-10）：S01–S11，38/38任务；[实际验收](../../openspec/changes/port-upstream-0.2.20-tier2/verification.md) / [实施证据](./implementation-0.2.20-tier2/README.md)。基于第一档`29681fdf5`，后端全量unit/embed build/lint0、定向race及真实HTTP/SQLite/miniredis通过；frontend2186/2既有跳过、critical179/2、typecheck/lint/build和实际浏览器导出/429/耗尽/离页取消/移动端通过。64MiB请求体预算经1GiB/1CPU隔离压力验证；默认SSE行40MiB，读写停滞120秒。VERSION1.1.23/Go1.27.3/SQLite228、依赖/Ent不变；auth snapshot21，Wire重新生成共享缓存清理。实现于2026-11-11随本次提交保存，等待归档，无发布或业务部署；历史评估与来源保持冻结。
 
 本轮实施经验：来源的后台图片入口判断要在实际起点复查；缓存过期与手动清扫不能重复创建timer；最后终态必须优先于先前completed；资源层压力不应宣传成完整实例总堆保证；导出重试必须保留取消和换号边界。

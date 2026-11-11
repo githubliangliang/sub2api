@@ -1,0 +1,11 @@
+package antigravity
+import("encoding/json";"testing";"github.com/stretchr/testify/require")
+func TestIntake021_ParallelToolImages(t *testing.T){
+ raw:=json.RawMessage(`[{"type":"tool_result","tool_use_id":"a","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQID"}}]},{"type":"tool_result","tool_use_id":"b","content":"done"}]`)
+ for _,multi:=range []bool{false,true}{
+  t.Run(map[bool]string{false:"sideband",true:"native"}[multi],func(t *testing.T){
+   p,_,err:=buildParts(raw,map[string]string{"a":"image","b":"exec"},false,multi);require.NoError(t,err)
+   require.GreaterOrEqual(t,len(p),2);require.NotNil(t,p[0].FunctionResponse);require.NotNil(t,p[1].FunctionResponse)
+  })
+ }
+}

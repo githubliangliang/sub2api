@@ -1,0 +1,373 @@
+diff --git a/backend/internal/handler/auth_oauth_pending_flow_test.go b/backend/internal/handler/auth_oauth_pending_flow_test.go
+index dd8e1c03f..730d3299d 100644
+--- a/backend/internal/handler/auth_oauth_pending_flow_test.go
++++ b/backend/internal/handler/auth_oauth_pending_flow_test.go
+@@ -2881,6 +2881,10 @@ func (s *oauthPendingFlowRefreshTokenCacheStub) DeleteTokenFamily(context.Contex
+ 	return nil
+ }
+ 
++func (s *oauthPendingFlowRefreshTokenCacheStub) ConsumeRefreshToken(context.Context, string) (*service.RefreshTokenData, error) {
++	return nil, service.ErrRefreshTokenNotFound
++}
++
+ func (s *oauthPendingFlowRefreshTokenCacheStub) AddToUserTokenSet(context.Context, int64, string, time.Duration) error {
+ 	return nil
+ }
+diff --git a/backend/internal/handler/auth_wechat_oauth_test.go b/backend/internal/handler/auth_wechat_oauth_test.go
+index e291b7e7d..9b8a01eca 100644
+--- a/backend/internal/handler/auth_wechat_oauth_test.go
++++ b/backend/internal/handler/auth_wechat_oauth_test.go
+@@ -1478,6 +1478,10 @@ func (s *wechatOAuthRefreshTokenCacheStub) DeleteTokenFamily(context.Context, st
+ 	return nil
+ }
+ 
++func (s *wechatOAuthRefreshTokenCacheStub) ConsumeRefreshToken(context.Context, string) (*service.RefreshTokenData, error) {
++	return nil, service.ErrRefreshTokenNotFound
++}
++
+ func (s *wechatOAuthRefreshTokenCacheStub) AddToUserTokenSet(context.Context, int64, string, time.Duration) error {
+ 	return nil
+ }
+diff --git a/backend/internal/handler/user_handler_test.go b/backend/internal/handler/user_handler_test.go
+index 796c64f33..14df95bb7 100644
+--- a/backend/internal/handler/user_handler_test.go
++++ b/backend/internal/handler/user_handler_test.go
+@@ -440,6 +440,10 @@ func (s *userHandlerRefreshTokenCacheStub) DeleteTokenFamily(context.Context, st
+ 	return nil
+ }
+ 
++func (s *userHandlerRefreshTokenCacheStub) ConsumeRefreshToken(context.Context, string) (*service.RefreshTokenData, error) {
++	return nil, service.ErrRefreshTokenNotFound
++}
++
+ func (s *userHandlerRefreshTokenCacheStub) AddToUserTokenSet(context.Context, int64, string, time.Duration) error {
+ 	return nil
+ }
+diff --git a/backend/internal/repository/refresh_token_cache.go b/backend/internal/repository/refresh_token_cache.go
+index b01bd4769..2d131aecc 100644
+--- a/backend/internal/repository/refresh_token_cache.go
++++ b/backend/internal/repository/refresh_token_cache.go
+@@ -3,6 +3,7 @@ package repository
+ import (
+ 	"context"
+ 	"encoding/json"
++	"errors"
+ 	"fmt"
+ 	"time"
+ 
+@@ -10,6 +11,18 @@ import (
+ 	"github.com/redis/go-redis/v9"
+ )
+ 
++// consumeRefreshTokenScript atomically reads and deletes a refresh token.
++// Rotation must only succeed for one concurrent caller, otherwise the same
++// token can be exchanged twice (double-spend).
++var consumeRefreshTokenScript = redis.NewScript(`
++	local value = redis.call('GET', KEYS[1])
++	if not value then
++		return nil
++	end
++	redis.call('DEL', KEYS[1])
++	return value
++`)
++
+ const (
+ 	refreshTokenKeyPrefix   = "refresh_token:"
+ 	userRefreshTokensPrefix = "user_refresh_tokens:"
+@@ -70,6 +83,21 @@ func (c *refreshTokenCache) DeleteRefreshToken(ctx context.Context, tokenHash st
+ 	return c.rdb.Del(ctx, key).Err()
+ }
+ 
++func (c *refreshTokenCache) ConsumeRefreshToken(ctx context.Context, tokenHash string) (*service.RefreshTokenData, error) {
++	val, err := consumeRefreshTokenScript.Run(ctx, c.rdb, []string{refreshTokenKey(tokenHash)}).Text()
++	if err != nil {
++		if errors.Is(err, redis.Nil) {
++			return nil, service.ErrRefreshTokenNotFound
++		}
++		return nil, err
++	}
++	var data service.RefreshTokenData
++	if err := json.Unmarshal([]byte(val), &data); err != nil {
++		return nil, fmt.Errorf("unmarshal refresh token data: %w", err)
++	}
++	return &data, nil
++}
++
+ func (c *refreshTokenCache) DeleteUserRefreshTokens(ctx context.Context, userID int64) error {
+ 	// Get all token hashes for this user
+ 	tokenHashes, err := c.GetUserTokenHashes(ctx, userID)
+diff --git a/backend/internal/repository/refresh_token_cache_test.go b/backend/internal/repository/refresh_token_cache_test.go
+new file mode 100644
+index 000000000..c745a58c4
+--- /dev/null
++++ b/backend/internal/repository/refresh_token_cache_test.go
+@@ -0,0 +1,75 @@
++//go:build unit
++
++package repository
++
++import (
++	"context"
++	"errors"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/alicebob/miniredis/v2"
++	"github.com/redis/go-redis/v9"
++	"github.com/stretchr/testify/require"
++)
++
++func newRefreshTokenCacheForTest(t *testing.T) *refreshTokenCache {
++	t.Helper()
++	mr := miniredis.RunT(t)
++	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
++	t.Cleanup(func() { _ = rdb.Close() })
++	return &refreshTokenCache{rdb: rdb}
++}
++
++type consumeResult struct {
++	data *service.RefreshTokenData
++	err  error
++}
++
++// 同一个 refresh token 被并发消费时，只能有一个调用成功。
++func TestRefreshTokenCacheConsumeIsAtomic(t *testing.T) {
++	cache := newRefreshTokenCacheForTest(t)
++	ctx := context.Background()
++
++	require.NoError(t, cache.StoreRefreshToken(ctx, "hash-1", &service.RefreshTokenData{
++		UserID:   7,
++		FamilyID: "family-1",
++	}, time.Minute))
++
++	const workers = 16
++	results := make(chan consumeResult, workers)
++	start := make(chan struct{})
++	var wg sync.WaitGroup
++	for i := 0; i < workers; i++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			<-start
++			data, err := cache.ConsumeRefreshToken(ctx, "hash-1")
++			results <- consumeResult{data: data, err: err}
++		}()
++	}
++	close(start)
++	wg.Wait()
++	close(results)
++
++	successes, notFound := 0, 0
++	for result := range results {
++		switch {
++		case result.err == nil:
++			successes++
++			require.Equal(t, int64(7), result.data.UserID)
++		case errors.Is(result.err, service.ErrRefreshTokenNotFound):
++			notFound++
++		default:
++			t.Fatalf("unexpected consume error: %v", result.err)
++		}
++	}
++	require.Equal(t, 1, successes)
++	require.Equal(t, workers-1, notFound)
++
++	_, err := cache.GetRefreshToken(ctx, "hash-1")
++	require.ErrorIs(t, err, service.ErrRefreshTokenNotFound)
++}
+diff --git a/backend/internal/service/auth_service.go b/backend/internal/service/auth_service.go
+index ded56e1e1..5dbe3bca2 100644
+--- a/backend/internal/service/auth_service.go
++++ b/backend/internal/service/auth_service.go
+@@ -1869,10 +1869,15 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
+ 		}
+ 	}
+ 
+-	// Token轮转：立即使旧Token失效
+-	if err := s.refreshTokenCache.DeleteRefreshToken(ctx, tokenHash); err != nil {
+-		logger.LegacyPrintf("service.auth", "[Auth] Failed to delete old refresh token: %v", err)
+-		// 继续处理，不影响主流程
++	// Token轮转：原子消费旧Token。并发刷新时只有一个请求能成功，
++	// 其余请求拿到 ErrRefreshTokenNotFound，避免同一个 Refresh Token 被兑换两次。
++	if _, err := s.refreshTokenCache.ConsumeRefreshToken(ctx, tokenHash); err != nil {
++		if errors.Is(err, ErrRefreshTokenNotFound) {
++			logger.LegacyPrintf("service.auth", "[Auth] Refresh token already consumed, possible reuse attack")
++			return nil, ErrRefreshTokenInvalid
++		}
++		logger.LegacyPrintf("service.auth", "[Auth] Failed to consume old refresh token: %v", err)
++		return nil, ErrServiceUnavailable
+ 	}
+ 
+ 	// 生成新的Token对，保持同一个家族ID
+diff --git a/backend/internal/service/auth_service_email_bind_test.go b/backend/internal/service/auth_service_email_bind_test.go
+index c41734c40..a728b4107 100644
+--- a/backend/internal/service/auth_service_email_bind_test.go
++++ b/backend/internal/service/auth_service_email_bind_test.go
+@@ -919,6 +919,24 @@ func (s *emailBindRefreshTokenCacheStub) DeleteRefreshToken(_ context.Context, t
+ 	return nil
+ }
+ 
++func (s *emailBindRefreshTokenCacheStub) ConsumeRefreshToken(_ context.Context, tokenHash string) (*service.RefreshTokenData, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	data, ok := s.tokens[tokenHash]
++	if !ok {
++		return nil, service.ErrRefreshTokenNotFound
++	}
++	delete(s.tokens, tokenHash)
++	for _, tokenSet := range s.userSets {
++		delete(tokenSet, tokenHash)
++	}
++	for _, tokenSet := range s.families {
++		delete(tokenSet, tokenHash)
++	}
++	cloned := *data
++	return &cloned, nil
++}
++
+ func (s *emailBindRefreshTokenCacheStub) DeleteUserRefreshTokens(_ context.Context, userID int64) error {
+ 	s.mu.Lock()
+ 	defer s.mu.Unlock()
+diff --git a/backend/internal/service/auth_service_refresh_race_test.go b/backend/internal/service/auth_service_refresh_race_test.go
+new file mode 100644
+index 000000000..c177fc2ff
+--- /dev/null
++++ b/backend/internal/service/auth_service_refresh_race_test.go
+@@ -0,0 +1,104 @@
++//go:build unit
++
++package service_test
++
++import (
++	"context"
++	"errors"
++	"sync"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++)
++
++// barrierRefreshTokenCacheStub 让所有并发请求都先读到旧 token，再统一放行，
++// 从而确定性地复现 "Get 之后、消费之前" 的 double-spend 窗口。
++type barrierRefreshTokenCacheStub struct {
++	*emailBindRefreshTokenCacheStub
++
++	target  int
++	barrier chan struct{}
++	mu      sync.Mutex
++	reads   int
++}
++
++func newBarrierRefreshTokenCacheStub(target int) *barrierRefreshTokenCacheStub {
++	return &barrierRefreshTokenCacheStub{
++		emailBindRefreshTokenCacheStub: newEmailBindRefreshTokenCacheStub(),
++		target:                         target,
++		barrier:                        make(chan struct{}),
++	}
++}
++
++func (s *barrierRefreshTokenCacheStub) GetRefreshToken(ctx context.Context, tokenHash string) (*service.RefreshTokenData, error) {
++	data, err := s.emailBindRefreshTokenCacheStub.GetRefreshToken(ctx, tokenHash)
++
++	s.mu.Lock()
++	s.reads++
++	if s.reads == s.target {
++		close(s.barrier)
++	}
++	s.mu.Unlock()
++	<-s.barrier
++	return data, err
++}
++
++// 同一个 refresh token 并发刷新时，只能有一个请求成功兑换，其余必须失败。
++func TestAuthServiceRefreshTokenPairConsumesTokenOnce(t *testing.T) {
++	ctx := context.Background()
++	const workers = 8
++	cache := newBarrierRefreshTokenCacheStub(workers)
++
++	user := &service.User{
++		ID:           41,
++		Email:        "refresh-race@example.com",
++		Username:     "refresh-race",
++		Role:         service.RoleUser,
++		Status:       service.StatusActive,
++		TokenVersion: 1,
++	}
++	cfg := &config.Config{
++		JWT: config.JWTConfig{
++			Secret:                   "test-refresh-race-secret",
++			ExpireHour:               1,
++			AccessTokenExpireMinutes: 60,
++			RefreshTokenExpireDays:   7,
++		},
++	}
++	svc := service.NewAuthService(nil, newEmailBindUserRepoStub(user), nil, cache, cfg, nil, nil, nil, nil, nil, nil, nil, nil)
++
++	pair, err := svc.GenerateTokenPair(ctx, user, "")
++	require.NoError(t, err)
++
++	start := make(chan struct{})
++	errs := make(chan error, workers)
++	var wg sync.WaitGroup
++	for i := 0; i < workers; i++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			<-start
++			_, refreshErr := svc.RefreshTokenPair(ctx, pair.RefreshToken)
++			errs <- refreshErr
++		}()
++	}
++	close(start)
++	wg.Wait()
++	close(errs)
++
++	successes, invalid := 0, 0
++	for refreshErr := range errs {
++		switch {
++		case refreshErr == nil:
++			successes++
++		case errors.Is(refreshErr, service.ErrRefreshTokenInvalid):
++			invalid++
++		default:
++			t.Fatalf("unexpected refresh error: %v", refreshErr)
++		}
++	}
++	require.Equal(t, 1, successes)
++	require.Equal(t, workers-1, invalid)
++}
+diff --git a/backend/internal/service/auth_service_register_test.go b/backend/internal/service/auth_service_register_test.go
+index 076cd025d..a1e211bac 100644
+--- a/backend/internal/service/auth_service_register_test.go
++++ b/backend/internal/service/auth_service_register_test.go
+@@ -149,6 +149,10 @@ func (s *refreshTokenCacheStub) DeleteTokenFamily(context.Context, string) error
+ 	return nil
+ }
+ 
++func (s *refreshTokenCacheStub) ConsumeRefreshToken(context.Context, string) (*RefreshTokenData, error) {
++	return nil, ErrRefreshTokenNotFound
++}
++
+ func (s *refreshTokenCacheStub) AddToUserTokenSet(context.Context, int64, string, time.Duration) error {
+ 	return nil
+ }
+diff --git a/backend/internal/service/refresh_token_cache.go b/backend/internal/service/refresh_token_cache.go
+index 9d49495ac..179fe79d7 100644
+--- a/backend/internal/service/refresh_token_cache.go
++++ b/backend/internal/service/refresh_token_cache.go
+@@ -44,6 +44,11 @@ type RefreshTokenCache interface {
+ 	// 用于Token轮转时使旧Token失效
+ 	DeleteRefreshToken(ctx context.Context, tokenHash string) error
+ 
++	// ConsumeRefreshToken 原子地读取并删除 Refresh Token。
++	// 并发轮转时只有一个调用能成功，其余返回 ErrRefreshTokenNotFound，
++	// 用于避免同一个 Refresh Token 被重复兑换（double-spend）。
++	ConsumeRefreshToken(ctx context.Context, tokenHash string) (*RefreshTokenData, error)
++
+ 	// DeleteUserRefreshTokens 删除用户的所有Refresh Token
+ 	// 用于密码更改或用户主动登出所有设备
+ 	DeleteUserRefreshTokens(ctx context.Context, userID int64) error

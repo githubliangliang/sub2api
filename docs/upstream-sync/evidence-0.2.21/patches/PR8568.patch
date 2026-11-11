@@ -1,0 +1,229 @@
+diff --git a/backend/internal/repository/scheduler_cache_test.go b/backend/internal/repository/scheduler_cache_test.go
+index 0542842fd..d6dfe7e01 100644
+--- a/backend/internal/repository/scheduler_cache_test.go
++++ b/backend/internal/repository/scheduler_cache_test.go
+@@ -1,8 +1,10 @@
+ package repository
+ 
+ import (
++	"encoding/json"
+ 	"strings"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+ 	"github.com/stretchr/testify/require"
+@@ -54,6 +56,34 @@ func TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity(t *testing.T) {
+ 	require.Empty(t, metadata.GetCredential("access_token"))
+ }
+ 
++func TestSchedulerMetadataAccountKeepsProArgonQuotaIsolation(t *testing.T) {
++	account := service.Account{
++		ID: 25, Platform: service.PlatformAntigravity, Type: service.AccountTypeOAuth,
++		Status: service.StatusActive, Schedulable: true,
++		Credentials: map[string]any{
++			"plan_type": "Pro", "access_token": "secret-access-token", "refresh_token": "secret-refresh-token",
++		},
++		Extra: map[string]any{
++			"model_rate_limits": map[string]any{
++				"antigravity:gemini:argon": map[string]any{
++					"rate_limit_reset_at": time.Now().Add(time.Hour).Format(time.RFC3339),
++				},
++			},
++		},
++	}
++	_, payload, err := marshalSchedulerCacheAccount(account)
++	require.NoError(t, err)
++	var metadata service.Account
++	require.NoError(t, json.Unmarshal([]byte(payload), &metadata))
++	require.Equal(t, "Pro", metadata.GetCredential("plan_type"))
++	require.Empty(t, metadata.GetCredential("access_token"))
++	require.Empty(t, metadata.GetCredential("refresh_token"))
++	require.False(t, metadata.IsSchedulableForModel("gemini-4-argon-low"))
++	require.Positive(t, metadata.GetRateLimitRemainingTime("gemini-4-argon-low"))
++	require.True(t, metadata.IsSchedulableForModel("gemini-3.8-flash"))
++	require.Zero(t, metadata.GetRateLimitRemainingTime("gemini-3.8-flash"))
++}
++
+ func TestSchedulerMetadataAccountProjectsUpstreamBillingProbe(t *testing.T) {
+ 	lastError := strings.Repeat("upstream diagnostic ", 512)
+ 	probe := map[string]any{
+diff --git a/backend/internal/service/antigravity_gateway_retry.go b/backend/internal/service/antigravity_gateway_retry.go
+index 2be464bbe..70920eba0 100644
+--- a/backend/internal/service/antigravity_gateway_retry.go
++++ b/backend/internal/service/antigravity_gateway_retry.go
+@@ -882,7 +882,7 @@ func (s *AntigravityGatewayService) setAntigravityModelRateLimits(ctx context.Co
+ 	if account == nil || repo == nil {
+ 		return false
+ 	}
+-	keys := antigravityModelRateLimitKeys(modelName)
++	keys := antigravityModelRateLimitKeys(account, modelName)
+ 	if len(keys) == 0 {
+ 		return false
+ 	}
+diff --git a/backend/internal/service/antigravity_pro_quota_rate_limit_test.go b/backend/internal/service/antigravity_pro_quota_rate_limit_test.go
+new file mode 100644
+index 000000000..34b2ab419
+--- /dev/null
++++ b/backend/internal/service/antigravity_pro_quota_rate_limit_test.go
+@@ -0,0 +1,104 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"net/http"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestAntigravityModelRateLimits_ProArgonQuotaIsolation(t *testing.T) {
++	plans := []struct {
++		name     string
++		value    any
++		separate bool
++	}{
++		{name: "Pro", value: "Pro", separate: true},
++		{name: "normalized Pro", value: " pro ", separate: true},
++		{name: "Pro tier ID", value: "g1-pro-tier", separate: true},
++		{name: "Ultra", value: "Ultra"},
++		{name: "Ultra tier ID", value: "g1-ultra-tier"},
++		{name: "Ultra lite tier ID", value: "g1-ultra-lite-tier"},
++		{name: "free", value: "Free"},
++		{name: "unknown", value: "enterprise"},
++		{name: "missing"},
++		{name: "malformed", value: 42},
++	}
++	pools := []struct {
++		name      string
++		exhausted string
++		same      []string
++		other     []string
++	}{
++		{
++			name:      "Argon exhausted",
++			exhausted: "gemini-4-argon-high",
++			same:      []string{"gemini-4-argon-high", "gemini-4-argon-low", "gemini-4-argon-medium", "client-argon"},
++			other:     []string{"gemini-3.8-flash", "gemini-2.5-pro"},
++		},
++		{
++			name:      "other Gemini exhausted",
++			exhausted: "gemini-3.8-flash",
++			same:      []string{"gemini-3.8-flash", "gemini-2.5-pro"},
++			other:     []string{"gemini-4-argon-high", "gemini-4-argon-low", "gemini-4-argon-medium", "client-argon"},
++		},
++	}
++	for _, plan := range plans {
++		for _, pool := range pools {
++			t.Run(plan.name+"/"+pool.name, func(t *testing.T) {
++				account := &Account{
++					ID: 789, Platform: PlatformAntigravity, Status: StatusActive, Schedulable: true,
++					Credentials: map[string]any{
++						"plan_type": plan.value,
++						"model_mapping": map[string]any{
++							"gemini-4-argon-high":   "gemini-4-argon-high",
++							"gemini-4-argon-low":    "gemini-4-argon-low",
++							"gemini-4-argon-medium": "gemini-4-argon-medium",
++							"client-argon":          "gemini-4-argon-high",
++							"gemini-3.8-flash":      "gemini-3.8-flash",
++							"gemini-2.5-pro":        "gemini-2.5-pro",
++							"gemini-3-pro-image":    "gemini-3-pro-image",
++							"claude-sonnet-4-6":     "claude-sonnet-4-6",
++						},
++					},
++				}
++				repo := &stubAntigravityAccountRepo{}
++				svc := &AntigravityGatewayService{}
++				resetAt := time.Now().Add(time.Hour)
++				require.True(t, svc.setAntigravityModelRateLimits(context.Background(), repo, account,
++					pool.exhausted, "[test]", http.StatusTooManyRequests, resetAt, false))
++
++				// Recreate the persisted limits, then read a fresh account through JSON,
++				// as the scheduler does instead of using the forwarding account object.
++				limits := make(map[string]any)
++				for _, call := range repo.modelRateLimitCalls {
++					require.Equal(t, account.ID, call.accountID)
++					limits[call.modelKey] = map[string]any{"rate_limit_reset_at": call.resetAt.Format(time.RFC3339)}
++				}
++				account.Extra = map[string]any{modelRateLimitsKey: limits}
++				data, err := json.Marshal(account)
++				require.NoError(t, err)
++				var snapshot Account
++				require.NoError(t, json.Unmarshal(data, &snapshot))
++
++				for _, model := range pool.same {
++					require.False(t, snapshot.IsSchedulableForModel(model), "exhausted pool: %s", model)
++					require.Positive(t, snapshot.GetRateLimitRemainingTime(model), "exhausted pool: %s", model)
++				}
++				for _, model := range pool.other {
++					require.Equal(t, plan.separate, snapshot.IsSchedulableForModel(model), "other pool: %s", model)
++					require.Equal(t, !plan.separate, snapshot.GetRateLimitRemainingTime(model) > 0, "other pool: %s", model)
++				}
++				for _, model := range []string{"gemini-3-pro-image", "claude-sonnet-4-6"} {
++					require.True(t, snapshot.IsSchedulableForModel(model), "unrelated model: %s", model)
++					require.Zero(t, snapshot.GetRateLimitRemainingTime(model))
++				}
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/model_rate_limit.go b/backend/internal/service/model_rate_limit.go
+index 46e3419e0..fc181de07 100644
+--- a/backend/internal/service/model_rate_limit.go
++++ b/backend/internal/service/model_rate_limit.go
+@@ -6,12 +6,14 @@ import (
+ 	"strings"
+ 	"time"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+ )
+ 
+ const (
+ 	modelRateLimitsKey                 = "model_rate_limits"
+ 	antigravityGeminiModelRateLimitKey = "antigravity:gemini"
++	antigravityArgonModelRateLimitKey  = "antigravity:gemini:argon"
+ 	openAIImageGenerationRateLimitKey  = "openai:image_generation"
+ 	openAICodexSparkRateLimitReason    = "openai_codex_spark_rate_limit"
+ 	// anthropicFableRateLimitKey 是 Anthropic 7d_oi（Fable 专属 7d 窗口）限流的
+@@ -80,9 +82,7 @@ func (a *Account) modelRateLimitKeysForRequest(ctx context.Context, requestedMod
+ 	keys := []string{modelKey}
+ 	switch a.Platform {
+ 	case PlatformAntigravity:
+-		if isAntigravityGeminiModel(modelKey) && !isAntigravityGeminiImageModel(modelKey) && modelKey != antigravityGeminiModelRateLimitKey {
+-			keys = append(keys, antigravityGeminiModelRateLimitKey)
+-		}
++		return antigravityModelRateLimitKeys(a, modelKey)
+ 	case PlatformOpenAI:
+ 		if openAIImageGenerationRateLimitApplies(ctx, requestedModel, modelKey) && modelKey != openAIImageGenerationRateLimitKey {
+ 			keys = append(keys, openAIImageGenerationRateLimitKey)
+@@ -159,14 +159,23 @@ func isAntigravityGeminiModel(model string) bool {
+ 	return strings.HasPrefix(normalizeAntigravityModelName(model), "gemini-")
+ }
+ 
+-func antigravityModelRateLimitKeys(model string) []string {
++func antigravityModelRateLimitKeys(account *Account, model string) []string {
+ 	model = strings.TrimSpace(model)
+ 	if model == "" {
+ 		return nil
+ 	}
+ 	keys := []string{model}
+ 	if isAntigravityGeminiModel(model) && !isAntigravityGeminiImageModel(model) && model != antigravityGeminiModelRateLimitKey {
+-		keys = append(keys, antigravityGeminiModelRateLimitKey)
++		familyKey := antigravityGeminiModelRateLimitKey
++		// Pro has a separate Argon quota pool. Ultra and unknown plans retain
++		// the shared Gemini scope; Argon variants still cool down together.
++		if account != nil && strings.EqualFold(strings.TrimSpace(antigravity.TierIDToPlanType(account.GetCredential("plan_type"))), "Pro") {
++			normalized := normalizeAntigravityModelName(model)
++			if normalized == "gemini-4-argon" || strings.HasPrefix(normalized, "gemini-4-argon-") {
++				familyKey = antigravityArgonModelRateLimitKey
++			}
++		}
++		keys = append(keys, familyKey)
+ 	}
+ 	return keys
+ }

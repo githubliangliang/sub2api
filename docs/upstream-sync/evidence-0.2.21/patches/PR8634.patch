@@ -1,0 +1,249 @@
+diff --git a/backend/internal/pkg/claude/effort_catalog.go b/backend/internal/pkg/claude/effort_catalog.go
+index 2764adc07..66efeab97 100644
+--- a/backend/internal/pkg/claude/effort_catalog.go
++++ b/backend/internal/pkg/claude/effort_catalog.go
+@@ -57,6 +57,16 @@ func IsHaiku55(model string) bool {
+ 	return normalizeEffortModelID(model) == "claude-haiku-5-5"
+ }
+ 
++// IsFable52 identifies Fable 5.2 after provider/local suffix normalization.
++func IsFable52(model string) bool {
++	return normalizeEffortModelID(model) == "claude-fable-5-2"
++}
++
++// IsMythos52 identifies Mythos 5.2 after provider/local suffix normalization.
++func IsMythos52(model string) bool {
++	return normalizeEffortModelID(model) == "claude-mythos-5-2"
++}
++
+ func normalizeEffortModelID(model string) string {
+ 	id := strings.ToLower(strings.TrimSpace(model))
+ 	id = strings.TrimPrefix(id, "models/")
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index ffc9210a6..ca526bd8b 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -445,7 +445,19 @@ func (s *BillingService) initFallbackPricing() {
+ 		LongContextInputMultiplier:  5,
+ 		LongContextOutputMultiplier: 5,
+ 	}
+-	// Claude Fable 5.x uses the same input/output and cache-write prices, while
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		p := claude52FallbackPricing
++		s.fallbackPrices[model] = &ModelPricing{
++			InputPricePerToken:         p.InputCostPerToken,
++			OutputPricePerToken:        p.OutputCostPerToken,
++			CacheCreationPricePerToken: p.CacheCreationInputTokenCost,
++			CacheCreation5mPrice:       p.CacheCreationInputTokenCost,
++			CacheCreation1hPrice:       p.CacheCreationInputTokenCostAbove1hr,
++			CacheReadPricePerToken:     p.CacheReadInputTokenCost,
++			SupportsCacheBreakdown:     true,
++		}
++	}
++	// Claude Fable 5.0 and 5.1 use the same input/output and cache-write prices, while
+ 	// Fable 5.1 reduces cache reads from $1 to $0.25 per MTok.
+ 	s.fallbackPrices["claude-fable-5"] = &ModelPricing{
+ 		InputPricePerToken:         10e-6,
+@@ -1065,6 +1077,12 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+ 	}
+ 
+ 	// 按模型系列匹配
++	if claude.IsFable52(modelLower) {
++		return s.fallbackPrices["claude-fable-5-2"]
++	}
++	if claude.IsMythos52(modelLower) {
++		return s.fallbackPrices["claude-mythos-5-2"]
++	}
+ 	if isClaudeFable51Model(modelLower) {
+ 		return s.fallbackPrices["claude-fable-5-1"]
+ 	}
+diff --git a/backend/internal/service/claude52_pricing_test.go b/backend/internal/service/claude52_pricing_test.go
+new file mode 100644
+index 000000000..b1515904c
+--- /dev/null
++++ b/backend/internal/service/claude52_pricing_test.go
+@@ -0,0 +1,114 @@
++package service
++
++import (
++	"context"
++	"os"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/require"
++)
++
++func TestClaude52Pricing(t *testing.T) {
++	embedded, err := os.ReadFile("../../resources/model-pricing/model_prices_and_context_window.json")
++	require.NoError(t, err)
++
++	for _, family := range []string{"fable", "mythos"} {
++		model := "claude-" + family + "-5-2"
++		for _, source := range []string{"no_catalog", "older_catalog", "embedded_catalog", "fable_only_remote_catalog"} {
++			t.Run(family+"/"+source, func(t *testing.T) {
++				var catalog *PricingService
++				switch source {
++				case "older_catalog":
++					catalog = newStubPricingServiceFromJSON(t, `{
++						"claude-fable-5-1": {"input_cost_per_token": 1e-5, "output_cost_per_token": 5e-5},
++						"claude-sonnet-4-5": {"input_cost_per_token": 3e-6, "output_cost_per_token": 1.5e-5}
++					}`)
++				case "fable_only_remote_catalog":
++					// The default remote catalog already prices Fable 5.2 correctly.
++					catalog = newStubPricingServiceFromJSON(t, `{
++						"claude-fable-5-2": {"input_cost_per_token": 8e-6, "output_cost_per_token": 40e-6,
++						"cache_creation_input_token_cost": 10e-6, "cache_creation_input_token_cost_above_1hr": 16e-6,
++						"cache_read_input_token_cost": 0.2e-6}
++					}`)
++				case "embedded_catalog":
++					catalog = newStubPricingServiceFromJSON(t, string(embedded))
++				}
++				svc := NewBillingService(&config.Config{}, catalog)
++				for _, name := range []string{model, "models/" + model, "anthropic/" + model, "anthropic." + model, "global.anthropic." + model} {
++					t.Run(name, func(t *testing.T) {
++						pricing, err := svc.GetModelPricing(name)
++						require.NoError(t, err)
++						require.InDelta(t, 8e-6, pricing.InputPricePerToken, 1e-12)
++						require.InDelta(t, 40e-6, pricing.OutputPricePerToken, 1e-12)
++						require.InDelta(t, 10e-6, pricing.CacheCreationPricePerToken, 1e-12)
++						require.InDelta(t, 10e-6, pricing.CacheCreation5mPrice, 1e-12)
++						require.InDelta(t, 16e-6, pricing.CacheCreation1hPrice, 1e-12)
++						require.InDelta(t, 0.2e-6, pricing.CacheReadPricePerToken, 1e-12)
++						require.True(t, pricing.SupportsCacheBreakdown)
++					})
++				}
++
++				// Cache writes have distinct TTL rates and are counted only once.
++				tokens := UsageTokens{InputTokens: 250000, OutputTokens: 200, CacheCreationTokens: 1000,
++					CacheCreation5mTokens: 600, CacheCreation1hTokens: 400, CacheReadTokens: 3000}
++				for _, tier := range []string{"", "fast", "priority"} {
++					t.Run("cost/"+tier, func(t *testing.T) {
++						multiplier := 1.0
++						if tier != "" {
++							multiplier = 2
++						}
++						cost, err := svc.CalculateCostWithServiceTier(model, tokens, 1.5, tier)
++						require.NoError(t, err)
++						require.InDelta(t, 2*multiplier, cost.InputCost, 1e-12)
++						require.InDelta(t, 0.008*multiplier, cost.OutputCost, 1e-12)
++						require.InDelta(t, 0.0124*multiplier, cost.CacheCreationCost, 1e-12)
++						require.InDelta(t, 0.0006*multiplier, cost.CacheReadCost, 1e-12)
++						require.InDelta(t, 2.021*multiplier, cost.TotalCost, 1e-12)
++						require.InDelta(t, 3.0315*multiplier, cost.ActualCost, 1e-12)
++						require.False(t, cost.LongContextBillingApplied)
++
++						unified, err := svc.CalculateCostUnified(CostInput{
++							Ctx: context.Background(), Model: model, Tokens: tokens, RateMultiplier: 1.5,
++							ServiceTier: tier, Resolver: NewModelPricingResolver(nil, svc),
++						})
++						require.NoError(t, err)
++						cost.BillingMode = string(BillingModeToken)
++						require.Equal(t, cost, unified)
++					})
++				}
++			})
++		}
++	}
++}
++
++func TestClaude52CatalogOverridesAndVersionBoundaries(t *testing.T) {
++	for _, family := range []string{"fable", "mythos"} {
++		model := "claude-" + family + "-5-2"
++		t.Run(family+"/catalog_override", func(t *testing.T) {
++			catalog := newStubPricingServiceFromJSON(t, `{"`+model+`": {
++				"input_cost_per_token": 0, "output_cost_per_token": 7e-6,
++				"cache_creation_input_token_cost": 0, "cache_read_input_token_cost": 0
++			}}`)
++			svc := NewBillingService(&config.Config{}, catalog)
++			pricing, err := svc.GetModelPricing(model)
++			require.NoError(t, err)
++			require.Zero(t, pricing.InputPricePerToken)
++			require.InDelta(t, 7e-6, pricing.OutputPricePerToken, 1e-12)
++			require.Zero(t, pricing.CacheCreationPricePerToken)
++			require.Zero(t, pricing.CacheReadPricePerToken)
++			for _, name := range []string{model, "anthropic/" + model, "global.anthropic." + model} {
++				require.Same(t, catalog.pricingData[model], catalog.GetModelPricing(name))
++			}
++		})
++	}
++
++	svc := NewBillingService(&config.Config{}, nil)
++	for _, model := range []string{"claude-fable-5", "claude-fable-5-1", "claude-fable-5-20", "claude-fable-5-2-preview", "claude-mythos-5-20"} {
++		t.Run(model, func(t *testing.T) {
++			pricing, err := svc.GetModelPricing(model)
++			require.NoError(t, err)
++			require.NotEqual(t, 8e-6, pricing.InputPricePerToken)
++		})
++	}
++}
+diff --git a/backend/internal/service/pricing_service.go b/backend/internal/service/pricing_service.go
+index fb86bbc37..f973b5abe 100644
+--- a/backend/internal/service/pricing_service.go
++++ b/backend/internal/service/pricing_service.go
+@@ -142,6 +142,14 @@ var (
+ 		Mode:                                "chat",
+ 		SupportsPromptCaching:               true,
+ 	}
++	// Fable/Mythos 5.2 share the official price card, including both cache TTLs:
++	// https://platform.claude.com/docs/en/about-claude/pricing
++	claude52FallbackPricing = &LiteLLMModelPricing{
++		InputCostPerToken: 8e-6, OutputCostPerToken: 40e-6,
++		CacheCreationInputTokenCost: 10e-6, CacheCreationInputTokenCostAbove1hr: 16e-6,
++		CacheReadInputTokenCost: 0.2e-6,
++		LiteLLMProvider:         "anthropic", Mode: "chat", SupportsPromptCaching: true,
++	}
+ 	claudeOpus55FallbackPricing = &LiteLLMModelPricing{
+ 		InputCostPerToken: 4e-6, OutputCostPerToken: 20e-6,
+ 		CacheCreationInputTokenCost: 5e-6, CacheCreationInputTokenCostAbove1hr: 8e-6,
+@@ -1451,6 +1459,19 @@ func (s *PricingService) extractBaseName(model string) string {
+ // matchByModelFamily 基于模型系列匹配
+ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
+ 	model = normalizeAntigravityClaudeTierAlias(model)
++	var claude52Model string
++	switch {
++	case claude.IsFable52(model):
++		claude52Model = "claude-fable-5-2"
++	case claude.IsMythos52(model):
++		claude52Model = "claude-mythos-5-2"
++	}
++	if claude52Model != "" {
++		if pricing, ok := s.pricingData[claude52Model]; ok {
++			return pricing
++		}
++		return claude52FallbackPricing
++	}
+ 	if claude.IsOpus55(model) {
+ 		if pricing, ok := s.pricingData["claude-opus-5-5"]; ok {
+ 			return pricing
+diff --git a/backend/resources/model-pricing/model_prices_and_context_window.json b/backend/resources/model-pricing/model_prices_and_context_window.json
+index 89b7e1f63..0f48dc14f 100644
+--- a/backend/resources/model-pricing/model_prices_and_context_window.json
++++ b/backend/resources/model-pricing/model_prices_and_context_window.json
+@@ -229,6 +229,26 @@
+     "cache_read_input_token_cost_batches": 5e-09,
+     "context_window": 1050000
+   },
++  "claude-fable-5-2": {
++    "cache_creation_input_token_cost": 1e-05,
++    "cache_creation_input_token_cost_above_1hr": 1.6e-05,
++    "cache_read_input_token_cost": 2e-07,
++    "input_cost_per_token": 8e-06,
++    "output_cost_per_token": 4e-05,
++    "litellm_provider": "anthropic",
++    "mode": "chat",
++    "supports_prompt_caching": true
++  },
++  "claude-mythos-5-2": {
++    "cache_creation_input_token_cost": 1e-05,
++    "cache_creation_input_token_cost_above_1hr": 1.6e-05,
++    "cache_read_input_token_cost": 2e-07,
++    "input_cost_per_token": 8e-06,
++    "output_cost_per_token": 4e-05,
++    "litellm_provider": "anthropic",
++    "mode": "chat",
++    "supports_prompt_caching": true
++  },
+   "claude-opus-5-5": {
+     "cache_creation_input_token_cost": 5e-06,
+     "cache_creation_input_token_cost_above_1hr": 8e-06,

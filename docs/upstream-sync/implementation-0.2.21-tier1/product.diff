@@ -1,0 +1,1506 @@
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index 6380949fc..890639dcc 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -15,6 +15,7 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
++	"unicode/utf8"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+@@ -347,6 +348,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+ 		return
+ 	}
+ 
++	// Validate bytes before compact/JSON normalization can replace invalid UTF-8.
++	if !utf8.Valid(body) {
++		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Request body must be valid UTF-8 JSON. Send UTF-8 encoded bytes.")
++		return
++	}
++
+ 	setOpsRequestContext(c, "", false)
+ 	sessionHashBody := body
+ 	body, ok = h.normalizeOpenAIResponsesCompactRequest(c, reqLog, body)
+diff --git a/backend/internal/pkg/antigravity/request_transformer.go b/backend/internal/pkg/antigravity/request_transformer.go
+index 71764d2ac..537dcb32f 100644
+--- a/backend/internal/pkg/antigravity/request_transformer.go
++++ b/backend/internal/pkg/antigravity/request_transformer.go
+@@ -514,6 +514,7 @@ func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDu
+ 		return nil, false, fmt.Errorf("parse content blocks: %w", err)
+ 	}
+ 
++	var toolMediaParts []GeminiPart
+ 	for _, block := range blocks {
+ 		switch block.Type {
+ 		case "text":
+@@ -601,14 +602,15 @@ func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDu
+ 				for _, part := range media {
+ 					response.Parts = append(response.Parts, GeminiFunctionResponsePart{InlineData: part.InlineData})
+ 				}
++			} else {
++				toolMediaParts = append(toolMediaParts, media...)
+ 			}
+ 			parts = append(parts, GeminiPart{FunctionResponse: response})
+-			if !multimodalToolResults {
+-				parts = append(parts, media...)
+-			}
+ 		}
+ 	}
+ 
++	parts = append(parts, toolMediaParts...)
++
+ 	return parts, strippedThinking, nil
+ }
+ 
+diff --git a/backend/internal/pkg/antigravity/request_transformer_test.go b/backend/internal/pkg/antigravity/request_transformer_test.go
+index eb703da14..66bbe6837 100644
+--- a/backend/internal/pkg/antigravity/request_transformer_test.go
++++ b/backend/internal/pkg/antigravity/request_transformer_test.go
+@@ -743,13 +743,13 @@ func TestTransformClaudeToGemini_ToolResultImagesReachUpstream(t *testing.T) {
+ 	require.Equal(t, "toolu_img_1", userParts[0].FunctionResponse.ID)
+ 	require.Equal(t, "loaded colors.png", userParts[0].FunctionResponse.Response["result"])
+ 
+-	require.NotNil(t, userParts[1].InlineData)
+-	require.Equal(t, "image/png", userParts[1].InlineData.MimeType)
+-	require.Equal(t, "aGVsbG8=", userParts[1].InlineData.Data)
++	require.NotNil(t, userParts[1].FunctionResponse)
++	require.Equal(t, "read_image", userParts[1].FunctionResponse.Name)
++	require.Equal(t, "Command executed successfully.", userParts[1].FunctionResponse.Response["result"])
+ 
+-	require.NotNil(t, userParts[2].FunctionResponse)
+-	require.Equal(t, "read_image", userParts[2].FunctionResponse.Name)
+-	require.Equal(t, "Command executed successfully.", userParts[2].FunctionResponse.Response["result"])
++	require.NotNil(t, userParts[2].InlineData)
++	require.Equal(t, "image/png", userParts[2].InlineData.MimeType)
++	require.Equal(t, "aGVsbG8=", userParts[2].InlineData.Data)
+ 
+ 	require.NotNil(t, userParts[3].InlineData)
+ 	require.Equal(t, "image/jpeg", userParts[3].InlineData.MimeType)
+diff --git a/backend/internal/pkg/antigravity/tool_result_images_test.go b/backend/internal/pkg/antigravity/tool_result_images_test.go
+index 87e359450..6f68f7888 100644
+--- a/backend/internal/pkg/antigravity/tool_result_images_test.go
++++ b/backend/internal/pkg/antigravity/tool_result_images_test.go
+@@ -101,3 +101,45 @@ func TestToolResultMediaPlacement(t *testing.T) {
+ 		})
+ 	}
+ }
++
++func TestParallelToolResultsKeepFunctionResponsesContiguousBeforeMedia(t *testing.T) {
++	for _, model := range []string{"claude-opus-5-5-medium", "claude-sonnet-4-6", "gemini-2.5-flash"} {
++		t.Run(model, func(t *testing.T) {
++			raw := []byte(`{"model":"` + model + `","input":[
++ {"type":"function_call","call_id":"call_img_1","name":"view_image","arguments":"{\"path\":\"a.png\"}"},
++ {"type":"function_call","call_id":"call_img_2","name":"view_image","arguments":"{\"path\":\"b.jpg\"}"},
++ {"type":"function_call","call_id":"call_cmd_3","name":"exec_command","arguments":"{\"cmd\":\"ls\"}"},
++ {"type":"function_call_output","call_id":"call_img_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AQID"}]},
++ {"type":"function_call_output","call_id":"call_img_2","output":[{"type":"input_text","text":"loaded b.jpg"},{"type":"input_image","image_url":"data:image/jpeg;base64,BAUG"}]},
++ {"type":"function_call_output","call_id":"call_cmd_3","output":"README.md"}
++ ]}`)
++			var req apicompat.ResponsesRequest
++			require.NoError(t, json.Unmarshal(raw, &req))
++			anthropic, err := apicompat.ResponsesToAnthropicRequest(&req)
++			require.NoError(t, err)
++			body, err := json.Marshal(anthropic)
++			require.NoError(t, err)
++			var claude ClaudeRequest
++			require.NoError(t, json.Unmarshal(body, &claude))
++			wire, err := TransformClaudeToGeminiWithOptions(&claude, "test-project", model, TransformOptions{})
++			require.NoError(t, err)
++
++			parts := gjson.GetBytes(wire, "request.contents.1.parts").Array()
++			require.Len(t, parts, 5)
++
++			require.Equal(t, "call_img_1", parts[0].Get("functionResponse.id").String())
++			require.Equal(t, "view_image", parts[0].Get("functionResponse.name").String())
++			require.Equal(t, "call_img_2", parts[1].Get("functionResponse.id").String())
++			require.Equal(t, "view_image", parts[1].Get("functionResponse.name").String())
++			require.Equal(t, "loaded b.jpg", parts[1].Get("functionResponse.response.result").String())
++			require.Equal(t, "call_cmd_3", parts[2].Get("functionResponse.id").String())
++			require.Equal(t, "exec_command", parts[2].Get("functionResponse.name").String())
++			require.Equal(t, "README.md", parts[2].Get("functionResponse.response.result").String())
++
++			require.Equal(t, "image/png", parts[3].Get("inlineData.mimeType").String())
++			require.Equal(t, "AQID", parts[3].Get("inlineData.data").String())
++			require.Equal(t, "image/jpeg", parts[4].Get("inlineData.mimeType").String())
++			require.Equal(t, "BAUG", parts[4].Get("inlineData.data").String())
++		})
++	}
++}
+diff --git a/backend/internal/pkg/apicompat/anthropic_responses_test.go b/backend/internal/pkg/apicompat/anthropic_responses_test.go
+index 5402fa449..32004d05f 100644
+--- a/backend/internal/pkg/apicompat/anthropic_responses_test.go
++++ b/backend/internal/pkg/apicompat/anthropic_responses_test.go
+@@ -1,6 +1,7 @@
+ package apicompat
+ 
+ import (
++	"encoding/base64"
+ 	"encoding/json"
+ 	"testing"
+ 
+@@ -197,6 +198,50 @@ func TestAnthropicToResponses_ThinkingSignatureBecomesReasoning(t *testing.T) {
+ 	assert.Equal(t, "function_call", items[3].Type)
+ }
+ 
++func TestAnthropicToResponses_ForeignReasoningEnvelopePreservesToolHistory(t *testing.T) {
++	envelope := "ccswitch-openai-reasoning-v1:" + base64.RawURLEncoding.EncodeToString([]byte(
++		`{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"gAAAA-foreign"}`,
++	))
++	for _, tc := range []struct{ name, signature string }{
++		{"valid envelope", envelope},
++		{"surrounding whitespace", " \n" + envelope + "\t"},
++		{"malformed envelope", "ccswitch-openai-reasoning-v1:not-base64!"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			blocks, err := json.Marshal([]AnthropicContentBlock{
++				{Type: "thinking", Signature: tc.signature},
++				{Type: "thinking", Signature: "native-ciphertext"},
++				{Type: "text", Text: "Checking now."},
++				{Type: "tool_use", ID: "call_1", Name: "lookup", Input: json.RawMessage(`{"key":"value"}`)},
++			})
++			require.NoError(t, err)
++			resp, err := AnthropicToResponses(&AnthropicRequest{
++				Model: "gpt-6.1-sol", MaxTokens: 1024,
++				Messages: []AnthropicMessage{
++					{Role: "user", Content: json.RawMessage(`"Check this"`)},
++					{Role: "assistant", Content: blocks},
++					{Role: "user", Content: json.RawMessage(`[{"type":"tool_result","tool_use_id":"call_1","content":"found"}]`)},
++				},
++			})
++			require.NoError(t, err)
++			var items []ResponsesInputItem
++			require.NoError(t, json.Unmarshal(resp.Input, &items))
++			require.Len(t, items, 5)
++			require.Equal(t, "reasoning", items[1].Type)
++			require.Equal(t, "native-ciphertext", items[1].EncryptedContent)
++			require.Equal(t, "assistant", items[2].Role)
++			require.JSONEq(t, `[{"type":"output_text","text":"Checking now."}]`, string(items[2].Content))
++			require.Equal(t, "function_call", items[3].Type)
++			require.Equal(t, "call_1", items[3].CallID)
++			require.Equal(t, "lookup", items[3].Name)
++			require.JSONEq(t, `{"key":"value"}`, items[3].Arguments)
++			require.Equal(t, "function_call_output", items[4].Type)
++			require.Equal(t, "call_1", items[4].CallID)
++			require.Equal(t, "found", items[4].Output)
++		})
++	}
++}
++
+ func TestAnthropicToResponses_MaxTokensFloor(t *testing.T) {
+ 	req := &AnthropicRequest{
+ 		Model:     "gpt-5.2",
+diff --git a/backend/internal/pkg/apicompat/anthropic_to_responses.go b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+index df7c967f2..8d09617a4 100644
+--- a/backend/internal/pkg/apicompat/anthropic_to_responses.go
++++ b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+@@ -302,6 +302,11 @@ func anthropicAssistantToResponses(raw json.RawMessage) ([]ResponsesInputItem, e
+ 		if sig == "" || strings.HasPrefix(sig, "gAAAA") {
+ 			continue
+ 		}
++		// CC Switch carries a JSON reasoning item in this versioned envelope,
++		// not provider ciphertext. Ignore the foreign state when resuming directly.
++		if strings.HasPrefix(sig, "ccswitch-openai-reasoning-v1:") {
++			continue
++		}
+ 		items = append(items, ResponsesInputItem{
+ 			Type:             "reasoning",
+ 			EncryptedContent: sig,
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index a3ce7017f..c79a72a00 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -496,10 +496,12 @@ func generateChatCmplID() string {
+ // ---------------------------------------------------------------------------
+ 
+ type bufferedFuncCall struct {
+-	OutputIndex int
+-	CallID      string
+-	Name        string
+-	Args        strings.Builder
++	OutputIndex           int
++	CallID                string
++	Name                  string
++	Namespace             string
++	EncryptedFunctionArgs json.RawMessage
++	Args                  strings.Builder
+ }
+ 
+ // BufferedResponseAccumulator collects content from Responses SSE delta events
+@@ -538,9 +540,11 @@ func (a *BufferedResponseAccumulator) ProcessEvent(event *ResponsesStreamEvent)
+ 			idx := len(a.funcCalls)
+ 			a.outputIndexToFuncIdx[event.OutputIndex] = idx
+ 			a.funcCalls = append(a.funcCalls, bufferedFuncCall{
+-				OutputIndex: event.OutputIndex,
+-				CallID:      event.Item.CallID,
+-				Name:        event.Item.Name,
++				OutputIndex:           event.OutputIndex,
++				CallID:                event.Item.CallID,
++				Name:                  event.Item.Name,
++				Namespace:             event.Item.Namespace,
++				EncryptedFunctionArgs: event.Item.EncryptedFunctionArgs,
+ 			})
+ 		}
+ 	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
+@@ -605,10 +609,12 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
+ 
+ 	for i := range a.funcCalls {
+ 		out = append(out, ResponsesOutput{
+-			Type:      "function_call",
+-			CallID:    a.funcCalls[i].CallID,
+-			Name:      a.funcCalls[i].Name,
+-			Arguments: a.funcCalls[i].Args.String(),
++			Type:                  "function_call",
++			CallID:                a.funcCalls[i].CallID,
++			Name:                  a.funcCalls[i].Name,
++			Namespace:             a.funcCalls[i].Namespace,
++			EncryptedFunctionArgs: a.funcCalls[i].EncryptedFunctionArgs,
++			Arguments:             a.funcCalls[i].Args.String(),
+ 		})
+ 	}
+ 
+diff --git a/backend/internal/pkg/apicompat/types.go b/backend/internal/pkg/apicompat/types.go
+index c85367855..3f34b594a 100644
+--- a/backend/internal/pkg/apicompat/types.go
++++ b/backend/internal/pkg/apicompat/types.go
+@@ -413,6 +413,9 @@ type ResponsesOutput struct {
+ 	Arguments string `json:"arguments,omitempty"`
+ 	// 来源为 namespace 子工具时的归属命名空间（codex 按 namespace+name 路由该调用）。
+ 	Namespace string `json:"namespace,omitempty"`
++	// Preserve the upstream encryption marker, including explicit null/[];
++	// omitting it can make sealed arguments appear to be plaintext.
++	EncryptedFunctionArgs json.RawMessage `json:"encrypted_function_args,omitempty"`
+ 
+ 	// type=custom_tool_call（custom/freeform 工具，input 为自由文本）
+ 	Input string `json:"input,omitempty"`
+diff --git a/backend/internal/service/antigravity_tool_result_images_test.go b/backend/internal/service/antigravity_tool_result_images_test.go
+index b254c18da..f555e0d0d 100644
+--- a/backend/internal/service/antigravity_tool_result_images_test.go
++++ b/backend/internal/service/antigravity_tool_result_images_test.go
+@@ -62,3 +62,26 @@ func toolImageCompatWire(t *testing.T, raw []byte, model string) []byte {
+ 	require.NoError(t, err)
+ 	return wire
+ }
++
++func TestAntigravityResponsesParallelToolResultImagesKeepFunctionResponsesContiguous(t *testing.T) {
++	for _, model := range []string{"claude-opus-5-5-medium", "gemini-2.5-flash"} {
++		t.Run(model, func(t *testing.T) {
++			raw := []byte(`{"model":"client-alias","input":[
++ {"type":"function_call","call_id":"call_img_1","name":"view_image","arguments":"{}"},
++ {"type":"function_call","call_id":"call_img_2","name":"view_image","arguments":"{}"},
++ {"type":"function_call","call_id":"call_cmd_3","name":"exec_command","arguments":"{}"},
++ {"type":"function_call_output","call_id":"call_img_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AQID"}]},
++ {"type":"function_call_output","call_id":"call_img_2","output":[{"type":"input_text","text":"second image"},{"type":"input_image","image_url":"data:image/jpeg;base64,BAUG"}]},
++ {"type":"function_call_output","call_id":"call_cmd_3","output":"done"}
++ ]}`)
++			wire := toolImageCompatWire(t, raw, model)
++			parts := gjson.GetBytes(wire, "request.contents.1.parts").Array()
++			require.Len(t, parts, 5)
++			require.Equal(t, "view_image", parts[0].Get("functionResponse.name").String())
++			require.Equal(t, "view_image", parts[1].Get("functionResponse.name").String())
++			require.Equal(t, "exec_command", parts[2].Get("functionResponse.name").String())
++			require.Equal(t, "AQID", parts[3].Get("inlineData.data").String())
++			require.Equal(t, "BAUG", parts[4].Get("inlineData.data").String())
++		})
++	}
++}
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index 22aef859c..7e1d723c4 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -322,7 +322,7 @@ func (s *BillingService) initFallbackPricing() {
+ 		InputPricePerToken:         2e-6,
+ 		OutputPricePerToken:        10e-6,
+ 		CacheCreationPricePerToken: 2.5e-6,
+-		CacheReadPricePerToken:     0.2e-6,
++		CacheReadPricePerToken:     0.1e-6,
+ 		CacheCreation5mPrice:       2.5e-6,
+ 		CacheCreation1hPrice:       4e-6,
+ 		SupportsCacheBreakdown:     true,
+diff --git a/backend/internal/service/gateway_scheduling.go b/backend/internal/service/gateway_scheduling.go
+index b05498230..ba54d1f3d 100644
+--- a/backend/internal/service/gateway_scheduling.go
++++ b/backend/internal/service/gateway_scheduling.go
+@@ -1696,6 +1696,11 @@ func (s *GatewayService) hydrateSelectedAccount(ctx context.Context, account *Ac
+ func (s *GatewayService) newSelectionResult(ctx context.Context, sessionID string, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
+ 	hydrated, err := s.hydrateSelectedAccount(ctx, account)
+ 	if err != nil {
++		// The caller receives ReleaseFunc only on success. Release the acquired
++		// concurrency slot here as well as the fork's account session below.
++		if release != nil {
++			release()
++		}
+ 		s.ReleaseAccountSession(context.WithoutCancel(ctx), account, sessionID)
+ 		return nil, err
+ 	}
+diff --git a/backend/internal/service/gemini_chat_completions_compat_service_test.go b/backend/internal/service/gemini_chat_completions_compat_service_test.go
+index e4ebf7a83..cf32b74e9 100644
+--- a/backend/internal/service/gemini_chat_completions_compat_service_test.go
++++ b/backend/internal/service/gemini_chat_completions_compat_service_test.go
+@@ -161,3 +161,65 @@ func TestGeminiResponseToChatCompletionsRetainsTextAndToolBehavior(t *testing.T)
+ 	require.Equal(t, "get_weather", choice.Message.ToolCalls[0].Function.Name)
+ 	require.JSONEq(t, `{"city":"Paris"}`, choice.Message.ToolCalls[0].Function.Arguments)
+ }
++
++func TestGeminiResponseToChatCompletionsOmitsThoughtParts(t *testing.T) {
++	rawData := []byte(`{"candidates":[{"content":{"role":"model","parts":[` +
++		`{"text":"**Solving the puzzle**\n\nThe ball costs 0.05.\n\n\n","thought":true},` +
++		`{"text":"0.05","thoughtSignature":"sig_1"}]},"finishReason":"STOP","index":0}],` +
++		`"usageMetadata":{"promptTokenCount":36,"candidatesTokenCount":4,"thoughtsTokenCount":217,"totalTokenCount":257}}`)
++	var geminiResp map[string]any
++	require.NoError(t, json.Unmarshal(rawData, &geminiResp))
++
++	got, usage, err := geminiResponseToChatCompletions(geminiResp, "gemini-test", rawData, nil)
++	require.NoError(t, err)
++	require.Len(t, got.Choices, 1)
++
++	var content string
++	require.NoError(t, json.Unmarshal(got.Choices[0].Message.Content, &content))
++	require.Equal(t, "0.05", content)
++	require.Empty(t, got.Choices[0].Message.ReasoningContent)
++	require.Equal(t, "stop", got.Choices[0].FinishReason)
++	require.Equal(t, 221, usage.OutputTokens)
++}
++
++func TestGeminiResponseToChatCompletionsThoughtOnlyResponse(t *testing.T) {
++	rawData := []byte(`{"candidates":[{"content":{"role":"model","parts":[` +
++		`{"text":"Still reasoning about","thought":true}]},"finishReason":"MAX_TOKENS","index":0}],` +
++		`"usageMetadata":{"promptTokenCount":36,"candidatesTokenCount":0,"thoughtsTokenCount":64,"totalTokenCount":100}}`)
++	var geminiResp map[string]any
++	require.NoError(t, json.Unmarshal(rawData, &geminiResp))
++
++	got, usage, err := geminiResponseToChatCompletions(geminiResp, "gemini-test", rawData, nil)
++	require.NoError(t, err)
++	require.Len(t, got.Choices, 1)
++	require.Empty(t, got.Choices[0].Message.Content)
++	require.Empty(t, got.Choices[0].Message.ReasoningContent)
++	require.Equal(t, "length", got.Choices[0].FinishReason)
++	require.Equal(t, 64, usage.OutputTokens)
++}
++
++func TestConvertGeminiToClaudeMessageOmitsThoughtParts(t *testing.T) {
++	geminiResp := map[string]any{
++		"candidates": []any{map[string]any{
++			"content": map[string]any{"parts": []any{
++				map[string]any{"text": "planning the call", "thought": true},
++				map[string]any{"text": "checking", "thought": false},
++				map[string]any{"functionCall": map[string]any{"name": "get_weather", "args": map[string]any{"city": "Paris"}}, "thoughtSignature": "sig_1"},
++			}},
++			"finishReason": "STOP",
++		}},
++	}
++	rawData, err := json.Marshal(geminiResp)
++	require.NoError(t, err)
++
++	got, _ := convertGeminiToClaudeMessage(geminiResp, "gemini-test", rawData, false)
++	content, ok := got["content"].([]any)
++	require.True(t, ok)
++	require.Len(t, content, 2)
++	require.Equal(t, map[string]any{"type": "text", "text": "checking"}, content[0])
++	toolUse, ok := content[1].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, "tool_use", toolUse["type"])
++	require.Equal(t, "get_weather", toolUse["name"])
++	require.Equal(t, "tool_use", got["stop_reason"])
++}
+diff --git a/backend/internal/service/gemini_messages_compat_service.go b/backend/internal/service/gemini_messages_compat_service.go
+index 09f024267..ad21a9b6d 100644
+--- a/backend/internal/service/gemini_messages_compat_service.go
++++ b/backend/internal/service/gemini_messages_compat_service.go
+@@ -2896,7 +2896,8 @@ func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel strin
+ 						if !ok {
+ 							continue
+ 						}
+-						if text, ok := pm["text"].(string); ok && text != "" {
++						// 思考摘要不属于正文；非流式响应不输出思考内容。
++						if text, ok := pm["text"].(string); ok && text != "" && !isGeminiThoughtPart(pm) {
+ 							contentBlocks = append(contentBlocks, map[string]any{
+ 								"type": "text",
+ 								"text": text,
+@@ -3984,3 +3985,9 @@ func isVertexSharedCapacity429(body []byte) bool {
+ 	}
+ 	return !strings.Contains(msg, "quota") && !strings.Contains(msg, "provisioned throughput")
+ }
++
++// isGeminiThoughtPart distinguishes thought text from visible text, even when both carry a signature.
++func isGeminiThoughtPart(part map[string]any) bool {
++	thought, _ := part["thought"].(bool)
++	return thought
++}
+diff --git a/backend/internal/service/model_prices_0211_test.go b/backend/internal/service/model_prices_0211_test.go
+index 614e742cd..056cf0eed 100644
+--- a/backend/internal/service/model_prices_0211_test.go
++++ b/backend/internal/service/model_prices_0211_test.go
+@@ -15,14 +15,14 @@ func TestSonnet55AndGPT61PricingSourcesAndOverrides(t *testing.T) {
+ 	catalog := &PricingService{}
+ 	catalog.pricingData, err = catalog.parsePricingData(data)
+ 	require.NoError(t, err)
+-	for source, svc := range map[string]*BillingService{"fallback": newTestBillingService(), "catalog": NewBillingService(&config.Config{}, catalog)} {
++	for source, svc := range map[string]*BillingService{"fallback": newTestBillingService(), "catalog": NewBillingService(&config.Config{}, catalog), "remote-missing": NewBillingService(&config.Config{}, &PricingService{pricingData: map[string]*LiteLLMModelPricing{}})} {
+ 		for _, model := range []string{"claude-sonnet-5-5", "anthropic/claude-sonnet-5.5", "us.anthropic.claude-sonnet-5-5"} {
+ 			t.Run(source+"/"+model, func(t *testing.T) {
+ 				cost, err := svc.CalculateCost(model, UsageTokens{InputTokens: 100000, OutputTokens: 500, CacheReadTokens: 1000, CacheCreationTokens: 1000, CacheCreation5mTokens: 400, CacheCreation1hTokens: 600}, 1)
+ 				require.NoError(t, err)
+ 				require.InDelta(t, 0.2, cost.InputCost, 1e-10)
+ 				require.InDelta(t, 0.0034, cost.CacheCreationCost, 1e-10)
+-				require.InDelta(t, 0.0002, cost.CacheReadCost, 1e-10)
++				require.InDelta(t, 0.0001, cost.CacheReadCost, 1e-10)
+ 				require.InDelta(t, 0.005, cost.OutputCost, 1e-10)
+ 			})
+ 		}
+diff --git a/backend/internal/service/openai_content_session_seed.go b/backend/internal/service/openai_content_session_seed.go
+index 2acf29872..8524f6d66 100644
+--- a/backend/internal/service/openai_content_session_seed.go
++++ b/backend/internal/service/openai_content_session_seed.go
+@@ -19,8 +19,7 @@ const contentStablePrefixSessionSeedPrefix = "compat_csp_"
+ // deriveOpenAIContentSessionSeed builds a stable session seed from an
+ // OpenAI-format request body. Only fields constant across conversation turns
+ // are included: model, tools/functions definitions, the leading system/developer
+-// prompt prefix in Chat messages, instructions (Responses API), and the first
+-// user message.
++// prompt prefix, instructions (Responses API), and the first user message.
+ // Supports both Chat Completions (messages) and Responses API (input).
+ func deriveOpenAIContentSessionSeed(body []byte) string {
+ 	if len(body) == 0 {
+@@ -148,15 +147,19 @@ scanRoot:
+ 			_, _ = b.WriteString("|input=")
+ 			_, _ = b.WriteString(inp.String())
+ 		} else if inp.IsArray() {
++			systemPrefixOpen := true
+ 			inp.ForEach(func(_, item gjson.Result) bool {
+ 				role := item.Get("role").String()
+ 				switch role {
+ 				case "system", "developer":
+-					_, _ = b.WriteString("|system=")
+-					if c := item.Get("content"); c.Exists() {
+-						_, _ = b.WriteString(normalizeCompatSeedJSON(json.RawMessage(c.Raw)))
++					if systemPrefixOpen {
++						_, _ = b.WriteString("|system=")
++						if c := item.Get("content"); c.Exists() {
++							_, _ = b.WriteString(normalizeCompatSeedJSON(json.RawMessage(c.Raw)))
++						}
+ 					}
+ 				case "user":
++					systemPrefixOpen = false
+ 					if !firstUserCaptured {
+ 						_, _ = b.WriteString("|first_user=")
+ 						if c := item.Get("content"); c.Exists() {
+@@ -164,6 +167,10 @@ scanRoot:
+ 						}
+ 						firstUserCaptured = true
+ 					}
++				default:
++					// Match Chat: reminders appended after conversation/tool items
++					// must not change the identity of an existing session.
++					systemPrefixOpen = false
+ 				}
+ 				if !firstUserCaptured && item.Get("type").String() == "input_text" {
+ 					_, _ = b.WriteString("|first_user=")
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index 611ac5aff..ea22a4c9b 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -839,7 +839,8 @@ func openAIStreamEventIsMetadata(eventType string) bool {
+ 	switch strings.TrimSpace(eventType) {
+ 	// Queuing and moderation metadata do not commit model output or disarm the
+ 	// first-output timeout; a following overload must remain safe to retry.
+-	case "response.created", "response.queued", "response.in_progress", "response.metadata", "keepalive":
++	case "response.created", "response.queued", "response.in_progress", "response.metadata",
++		"codex.rate_limits", "codex.response.metadata", "keepalive":
+ 		return true
+ 	default:
+ 		return false
+diff --git a/backend/internal/service/openai_images_json_keepalive.go b/backend/internal/service/openai_images_json_keepalive.go
+index 6ad79b1ae..a47856444 100644
+--- a/backend/internal/service/openai_images_json_keepalive.go
++++ b/backend/internal/service/openai_images_json_keepalive.go
+@@ -32,10 +32,17 @@ type openAIImagesJSONKeepalive struct {
+ 
+ // StartOpenAIImagesJSONKeepalive starts whitespace heartbeats for a
+ // non-streaming Images request. A non-positive interval disables the feature.
++// Codex's native Images client relies on the HTTP status to distinguish errors
++// from ImageResponse JSON. Keep its status uncommitted until the result exists;
++// otherwise a late error becomes HTTP 200 and is misreported as missing image
++// fields (for example, "created") instead of the upstream error.
+ func StartOpenAIImagesJSONKeepalive(c *gin.Context, interval time.Duration) func() {
+ 	if c == nil || c.Writer == nil || interval <= 0 {
+ 		return func() {}
+ 	}
++	if c.GetHeader("X-Codex-Image-Turn-Id") != "" {
++		return func() {}
++	}
+ 	originalWriter := c.Writer
+ 	k := &openAIImagesJSONKeepalive{
+ 		writer: originalWriter,
+diff --git a/backend/internal/service/openai_images_json_keepalive_test.go b/backend/internal/service/openai_images_json_keepalive_test.go
+index a7207b3ad..9f86bf37f 100644
+--- a/backend/internal/service/openai_images_json_keepalive_test.go
++++ b/backend/internal/service/openai_images_json_keepalive_test.go
+@@ -76,6 +76,35 @@ func TestOpenAIImagesJSONKeepalive_FastErrorPreservesStatus(t *testing.T) {
+ 	require.Equal(t, "invalid size", gjson.Get(rec.Body.String(), "error.message").String())
+ }
+ 
++func TestOpenAIImagesJSONKeepalive_CodexLateErrorPreservesStatus(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, path := range []string{"/v1/images/generations", "/v1/images/edits"} {
++		t.Run(path, func(t *testing.T) {
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(rec)
++			c.Request = httptest.NewRequest(http.MethodPost, path, nil)
++			c.Request.Header.Set("X-Codex-Image-Turn-Id", "native-image-turn")
++			stop := StartOpenAIImagesJSONKeepalive(c, 5*time.Millisecond)
++			defer stop()
++
++			// Reproduce an error arriving after a normal heartbeat would have
++			// committed HTTP 200. Native Codex must see the real error status.
++			time.Sleep(20 * time.Millisecond)
++			wrote := writeOpenAIImagesUpstreamErrorResponse(c, &OpenAIImagesUpstreamError{
++				StatusCode: http.StatusTooManyRequests,
++				ErrorType:  "rate_limit_error",
++				Code:       "image_rate_limit",
++				Message:    "image quota exceeded",
++			})
++			require.True(t, wrote)
++			require.Equal(t, http.StatusTooManyRequests, rec.Code)
++			require.False(t, rec.Flushed)
++			require.Equal(t, "image_rate_limit", gjson.Get(rec.Body.String(), "error.code").String())
++			require.Equal(t, "image quota exceeded", gjson.Get(rec.Body.String(), "error.message").String())
++		})
++	}
++}
++
+ func TestOpenAIImagesJSONKeepalive_LateErrorRemainsJSON(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	rec := httptest.NewRecorder()
+diff --git a/backend/internal/service/pricing_service.go b/backend/internal/service/pricing_service.go
+index 0815f4b1f..08b5365a8 100644
+--- a/backend/internal/service/pricing_service.go
++++ b/backend/internal/service/pricing_service.go
+@@ -136,7 +136,7 @@ var (
+ 	claudeSonnet55FallbackPricing = &LiteLLMModelPricing{
+ 		InputCostPerToken: 2e-6, OutputCostPerToken: 10e-6,
+ 		CacheCreationInputTokenCost: 2.5e-6, CacheCreationInputTokenCostAbove1hr: 4e-6,
+-		CacheReadInputTokenCost: 0.2e-6,
++		CacheReadInputTokenCost: 0.1e-6,
+ 		LiteLLMProvider:         "anthropic", Mode: "chat", SupportsPromptCaching: true,
+ 	}
+ 	openAIGPT56SolFallbackPricing = &LiteLLMModelPricing{
+@@ -400,7 +400,7 @@ func (s *PricingService) checkAndUpdatePricing() error {
+ 		localHash := s.localHash
+ 		s.mu.RUnlock()
+ 
+-		if localHash == "" || remoteHash != localHash {
++		if localHash == "" || !strings.EqualFold(remoteHash, localHash) {
+ 			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs on startup (local=%s remote=%s), downloading...",
+ 				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
+ 			if err := s.downloadPricingData(); err != nil {
+@@ -443,7 +443,7 @@ func (s *PricingService) syncWithRemote() error {
+ 		localHash := s.localHash
+ 		s.mu.RUnlock()
+ 
+-		if localHash == "" || remoteHash != localHash {
++		if localHash == "" || !strings.EqualFold(remoteHash, localHash) {
+ 			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs (local=%s remote=%s), downloading new version...",
+ 				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
+ 			return s.downloadPricingData()
+@@ -630,10 +630,10 @@ func (s *PricingService) downloadPricingData() error {
+ 		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to save file: %v", err)
+ 	}
+ 
+-	// 使用远程哈希作为同步锚点，防止重复下载
+-	// 当远程哈希不可用时，回退到数据本身的哈希
++	// 只有远程哈希与下载正文一致时才将其作为同步锚点。
++	// 不匹配时保留正文哈希，让下一轮同步重试，避免旧数据被误标为最新。
+ 	syncHash := dataHashStr
+-	if remoteHash != "" {
++	if strings.EqualFold(remoteHash, dataHashStr) {
+ 		syncHash = remoteHash
+ 	}
+ 	hashFile := s.getHashFilePath()
+diff --git a/backend/resources/model-pricing/model_prices_and_context_window.json b/backend/resources/model-pricing/model_prices_and_context_window.json
+index f1119bae7..55f116778 100644
+--- a/backend/resources/model-pricing/model_prices_and_context_window.json
++++ b/backend/resources/model-pricing/model_prices_and_context_window.json
+@@ -981,7 +981,7 @@
+   "claude-sonnet-5-5": {
+     "cache_creation_input_token_cost": 2.5e-06,
+     "cache_creation_input_token_cost_above_1hr": 4e-06,
+-    "cache_read_input_token_cost": 2e-07,
++    "cache_read_input_token_cost": 1e-07,
+     "input_cost_per_token": 2e-06,
+     "litellm_provider": "anthropic",
+     "max_input_tokens": 1000000,
+diff --git a/backend/internal/handler/openai_images_native_route_test.go b/backend/internal/handler/openai_images_native_route_test.go
+new file mode 100644
+index 000000000..e63e1544e
+--- /dev/null
++++ b/backend/internal/handler/openai_images_native_route_test.go
+@@ -0,0 +1,203 @@
++//go:build unit
++
++package handler
++
++import (
++	"bytes"
++	"context"
++	"fmt"
++	"io"
++	"mime/multipart"
++	"net/http"
++	"net/http/httptest"
++	"net/http/httputil"
++	"net/url"
++	"strings"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++// Run the real Images handler, scheduler, parser and forwarding service over
++// HTTP with fixture authentication, an account repository and a local upstream.
++type nativeImageRouteUpstream struct {
++	service.HTTPUpstream
++	target *url.URL
++	client *http.Client
++}
++
++func (u *nativeImageRouteUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
++	forwarded := req.Clone(req.Context())
++	forwarded.URL.Scheme = u.target.Scheme
++	forwarded.URL.Host = u.target.Host
++	return u.client.Do(forwarded)
++}
++
++func newNativeImageRoute(t *testing.T, delay time.Duration, status int) (*httptest.Server, *atomic.Int64) {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	var calls atomic.Int64
++	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		calls.Add(1)
++		require.Equal(t, http.MethodPost, r.Method)
++		switch r.URL.Path {
++		case "/v1/images/generations":
++			body, err := io.ReadAll(r.Body)
++			require.NoError(t, err)
++			require.Equal(t, "gpt-image-1", gjson.GetBytes(body, "model").String())
++		case "/v1/images/edits":
++			require.NoError(t, r.ParseMultipartForm(1<<20))
++			defer func() {
++				if r.MultipartForm != nil {
++					_ = r.MultipartForm.RemoveAll()
++				}
++			}()
++			require.Equal(t, "gpt-image-1", r.FormValue("model"))
++			part, _, err := r.FormFile("image")
++			require.NoError(t, err)
++			_ = part.Close()
++		default:
++			t.Errorf("unexpected upstream path: %s", r.URL.Path)
++		}
++		time.Sleep(delay)
++		w.Header().Set("Content-Type", "application/json")
++		w.WriteHeader(status)
++		if status == http.StatusOK {
++			_, _ = io.WriteString(w, `{"created":1710000000,"data":[{"b64_json":"aW1hZ2U="}]}`)
++		} else {
++			_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","code":"native_route_rejected","message":"delayed image rejection"}}`)
++		}
++	}))
++	t.Cleanup(upstream.Close)
++	target, err := url.Parse(upstream.URL)
++	require.NoError(t, err)
++	cfg := &config.Config{RunMode: config.RunModeSimple}
++	cfg.Gateway.ImageNonstreamKeepaliveInterval = 1
++	repo := openAIImagesFailoverAccountRepo{accounts: []service.Account{{ID: 1, Name: "fixture", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{"api_key": "fixture-key", "base_url": "https://fixture.example/v1"}}}}
++	transport := &nativeImageRouteUpstream{target: target, client: upstream.Client()}
++	deferred := service.NewDeferredService(repo, nil, time.Minute)
++	gateway := service.NewOpenAIGatewayService(repo, nil, nil, nil, nil, nil, nil, cfg, nil, nil, service.NewBillingService(cfg, nil), nil, nil, transport, deferred, nil, nil, nil, nil, nil, nil, nil)
++	billing := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
++	t.Cleanup(billing.Stop)
++	handler := NewOpenAIGatewayHandler(gateway, service.NewConcurrencyService(nil), billing, service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
++	router := gin.New()
++	router.Use(func(c *gin.Context) {
++		groupID := int64(1)
++		c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 1, GroupID: &groupID, Group: &service.Group{ID: 1, AllowImageGeneration: true}, User: &service.User{ID: 1}})
++		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1})
++	})
++	router.POST("/v1/images/generations", handler.Images)
++	router.POST("/v1/images/edits", handler.Images)
++	server := httptest.NewServer(router)
++	t.Cleanup(server.Close)
++	return server, &calls
++}
++
++func nativeImageRequest(t *testing.T, endpoint string, native bool) *http.Request {
++	t.Helper()
++	var body bytes.Buffer
++	contentType := "application/json"
++	if strings.HasSuffix(endpoint, "/edits") {
++		writer := multipart.NewWriter(&body)
++		require.NoError(t, writer.WriteField("model", "gpt-image-1"))
++		require.NoError(t, writer.WriteField("prompt", "edit fixture"))
++		part, err := writer.CreateFormFile("image", "input.png")
++		require.NoError(t, err)
++		_, err = part.Write([]byte("fixture-image"))
++		require.NoError(t, err)
++		require.NoError(t, writer.Close())
++		contentType = writer.FormDataContentType()
++	} else {
++		_, _ = body.WriteString(`{"model":"gpt-image-1","prompt":"fixture"}`)
++	}
++	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, &body)
++	require.NoError(t, err)
++	req.Header.Set("Content-Type", contentType)
++	if native {
++		req.Header.Set("X-Codex-Image-Turn-Id", "fixture-turn")
++	}
++	return req
++}
++
++func TestNativeImagesRoutesDelayedResponse(t *testing.T) {
++	for _, path := range []string{"/v1/images/generations", "/v1/images/edits"} {
++		for _, status := range []int{http.StatusBadRequest, http.StatusOK} {
++			t.Run(fmt.Sprintf("%s/%d", path, status), func(t *testing.T) {
++				gateway, calls := newNativeImageRoute(t, 1200*time.Millisecond, status)
++				target, err := url.Parse(gateway.URL)
++				require.NoError(t, err)
++				proxy := httputil.NewSingleHostReverseProxy(target)
++				baseTransport, ok := http.DefaultTransport.(*http.Transport)
++				require.True(t, ok)
++				transport := baseTransport.Clone()
++				transport.ResponseHeaderTimeout = 3 * time.Second
++				defer transport.CloseIdleConnections()
++				proxy.Transport = transport
++				downstream := httptest.NewServer(proxy)
++				defer downstream.Close()
++				started := time.Now()
++				resp, err := downstream.Client().Do(nativeImageRequest(t, downstream.URL+path, true))
++				require.NoError(t, err)
++				defer func() { _ = resp.Body.Close() }()
++				require.GreaterOrEqual(t, time.Since(started), 1200*time.Millisecond, "no heartbeat may commit early headers")
++				body, err := io.ReadAll(resp.Body)
++				require.NoError(t, err)
++				require.Equal(t, status, resp.StatusCode, string(body))
++				require.EqualValues(t, 1, calls.Load())
++				require.True(t, gjson.ValidBytes(body), string(body))
++				require.NotContains(t, string(body), "event:")
++				if status == http.StatusOK {
++					require.EqualValues(t, 1710000000, gjson.GetBytes(body, "created").Int())
++					require.Equal(t, "aW1hZ2U=", gjson.GetBytes(body, "data.0.b64_json").String())
++				} else {
++					require.Equal(t, "native_route_rejected", gjson.GetBytes(body, "error.code").String())
++					require.Equal(t, "delayed image rejection", gjson.GetBytes(body, "error.message").String())
++				}
++			})
++		}
++	}
++}
++
++// This is a real HTTP proxy header deadline. Native clients intentionally get
++// no heartbeat: a deadline below image latency fails, while a sufficiently long
++// deadline is covered above. Ordinary clients retain their heartbeat behavior.
++func TestNativeImagesRoutesProxyTimeout(t *testing.T) {
++	for _, path := range []string{"/v1/images/generations", "/v1/images/edits"} {
++		for _, native := range []bool{true, false} {
++			t.Run(fmt.Sprintf("%s/native=%t", path, native), func(t *testing.T) {
++				gateway, calls := newNativeImageRoute(t, 1600*time.Millisecond, http.StatusOK)
++				target, err := url.Parse(gateway.URL)
++				require.NoError(t, err)
++				proxy := httputil.NewSingleHostReverseProxy(target)
++				baseTransport, ok := http.DefaultTransport.(*http.Transport)
++				require.True(t, ok)
++				transport := baseTransport.Clone()
++				transport.ResponseHeaderTimeout = 1300 * time.Millisecond
++				defer transport.CloseIdleConnections()
++				proxy.Transport = transport
++				proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) { w.WriteHeader(http.StatusGatewayTimeout) }
++				downstream := httptest.NewServer(proxy)
++				defer downstream.Close()
++				resp, err := downstream.Client().Do(nativeImageRequest(t, downstream.URL+path, native))
++				require.NoError(t, err)
++				defer func() { _ = resp.Body.Close() }()
++				body, err := io.ReadAll(resp.Body)
++				require.NoError(t, err)
++				if native {
++					require.Equal(t, http.StatusGatewayTimeout, resp.StatusCode)
++				} else {
++					require.Equal(t, http.StatusOK, resp.StatusCode)
++					require.Equal(t, "aW1hZ2U=", gjson.GetBytes(body, "data.0.b64_json").String())
++				}
++				require.EqualValues(t, 1, calls.Load())
++			})
++		}
++	}
++}
+diff --git a/backend/internal/handler/openai_responses_utf8_test.go b/backend/internal/handler/openai_responses_utf8_test.go
+new file mode 100644
+index 000000000..b685a97d7
+--- /dev/null
++++ b/backend/internal/handler/openai_responses_utf8_test.go
+@@ -0,0 +1,106 @@
++package handler
++
++import (
++	"bytes"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
++
++	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestOpenAIResponses_RejectsInvalidUTF8BeforeRouting(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, suffix := range []string{"", `,"stream":false`, `,"stream":true`} {
++		for _, invalid := range [][]byte{{0xbb, 0xd8, 0xb8, 0xb4}, {0xe4, 0xbd}, {0xff}} {
++			t.Run(fmt.Sprintf("%s/%x", suffix, invalid), func(t *testing.T) {
++				body := append([]byte(`{"input":"`), invalid...)
++				body = append(body, []byte(`"`+suffix+`}`)...)
++				w := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(w)
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
++				groupID := int64(2)
++				c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 101, GroupID: &groupID, User: &service.User{ID: 1}})
++				c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
++				h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
++				h.Responses(c)
++				require.Equal(t, http.StatusBadRequest, w.Code)
++				require.Contains(t, w.Body.String(), "valid UTF-8 JSON")
++				require.Contains(t, w.Body.String(), "invalid_request_error")
++			})
++		}
++	}
++}
++
++func TestOpenAIResponses_ValidUnicodeReachesFieldValidation(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	w := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(w)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"input":"回复 ok 🌍"}`))
++	groupID := int64(2)
++	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 101, GroupID: &groupID, User: &service.User{ID: 1}})
++	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
++	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
++	h.Responses(c)
++	require.Equal(t, http.StatusBadRequest, w.Code)
++	require.Contains(t, w.Body.String(), "model is required")
++	require.NotContains(t, w.Body.String(), "UTF-8")
++}
++
++func TestOpenAIResponsesUTF8HTTPBoundaryAndBudget(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	budget := pkghttputil.NewBodyMemoryBudget(1 << 20)
++	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
++	router := gin.New()
++	router.Use(middleware.RequestBodyLimit(4096, budget))
++	router.Use(func(c *gin.Context) {
++		if c.GetHeader("X-Fixture-Auth") == "yes" {
++			groupID := int64(2)
++			c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 101, GroupID: &groupID, User: &service.User{ID: 1}})
++			c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1})
++		}
++	})
++	router.POST("/v1/responses", h.Responses)
++	router.POST("/v1/responses/compact", h.Responses)
++	server := httptest.NewServer(router)
++	defer server.Close()
++	// The real handler has no forwarding dependencies: reaching scheduling would
++	// fail differently. Each malformed request must exit at byte validation.
++	for _, path := range []string{"/v1/responses", "/v1/responses/compact"} {
++		for _, stream := range []bool{false, true} {
++			valid := []byte(fmt.Sprintf(`{"model":"gpt-6.1-terra","input":"回复 🌍","stream":%t}`, stream))
++			for _, position := range []int{0, len(valid) / 2, len(valid)} {
++				for _, bad := range [][]byte{{0xff}, {0xc0, 0xaf}, {0xe4, 0xbd}} {
++					body := append(append(append([]byte{}, valid[:position]...), bad...), valid[position:]...)
++					req, err := http.NewRequest(http.MethodPost, server.URL+path, bytes.NewReader(body))
++					require.NoError(t, err)
++					req.Header.Set("X-Fixture-Auth", "yes")
++					resp, err := server.Client().Do(req)
++					require.NoError(t, err)
++					raw, err := io.ReadAll(resp.Body)
++					require.NoError(t, err)
++					require.NoError(t, resp.Body.Close())
++					require.Equal(t, http.StatusBadRequest, resp.StatusCode)
++					require.Contains(t, string(raw), "valid UTF-8 JSON")
++				}
++			}
++		}
++	}
++	req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/responses", bytes.NewReader([]byte{0xff}))
++	require.NoError(t, err)
++	resp, err := server.Client().Do(req)
++	require.NoError(t, err)
++	require.NoError(t, resp.Body.Close())
++	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
++	// Ingress releases the full reservation even on early UTF-8 rejection.
++	ctx, release := pkghttputil.WithRequestBodyMemoryBudget(t.Context(), budget)
++	defer release()
++	require.NoError(t, pkghttputil.ReserveRequestBodyMemory(ctx, 1<<20))
++}
+diff --git a/backend/internal/service/gateway_scheduling_slot_release_test.go b/backend/internal/service/gateway_scheduling_slot_release_test.go
+new file mode 100644
+index 000000000..fdefd2460
+--- /dev/null
++++ b/backend/internal/service/gateway_scheduling_slot_release_test.go
+@@ -0,0 +1,87 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"errors"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++// hydrate 失败时，已经占用的并发槽位必须在返回前释放，否则调用方拿不到
++// ReleaseFunc，槽位会一直泄漏到 TTL 到期。
++func TestGatewayServiceNewSelectionResultReleasesSlotOnHydrationError(t *testing.T) {
++	svc := &GatewayService{
++		schedulerSnapshot: &SchedulerSnapshotService{},
++	}
++
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++
++	released := 0
++	selection, err := svc.newSelectionResult(ctx, "intake", &Account{ID: 42}, true, func() { released++ }, nil)
++
++	require.Error(t, err)
++	require.Nil(t, selection)
++	require.Equal(t, 1, released)
++}
++
++// hydrate 成功时不能提前释放槽位，ReleaseFunc 应原样交给调用方。
++func TestGatewayServiceNewSelectionResultKeepsReleaseOnSuccess(t *testing.T) {
++	account := &Account{ID: 42, Platform: PlatformAnthropic}
++	cache := &snapshotHydrationCache{
++		accounts: map[int64]*Account{account.ID: account},
++	}
++	svc := &GatewayService{
++		schedulerSnapshot: NewSchedulerSnapshotService(cache, nil, nil, nil, nil),
++	}
++
++	released := 0
++	selection, err := svc.newSelectionResult(context.Background(), "intake", account, true, func() { released++ }, nil)
++
++	require.NoError(t, err)
++	require.NotNil(t, selection)
++	require.Zero(t, released)
++	require.NotNil(t, selection.ReleaseFunc)
++
++	selection.ReleaseFunc()
++	require.Equal(t, 1, released)
++}
++
++// Use the real snapshot fallback and session release paths on all failure shapes.
++type tier121HydrationRepo struct {
++	AccountRepository
++	err error
++}
++
++func (r tier121HydrationRepo) GetByID(context.Context, int64) (*Account, error) { return nil, r.err }
++func TestGatewayServiceNewSelectionResultReleasesBothResources(t *testing.T) {
++	for _, mode := range []string{"cancelled", "repository-error", "disappeared"} {
++		t.Run(mode, func(t *testing.T) {
++			ctx, cancel := context.WithCancel(context.Background())
++			defer cancel()
++			repo := tier121HydrationRepo{}
++			if mode == "cancelled" {
++				cancel()
++			}
++			if mode == "repository-error" {
++				repo.err = errors.New("synthetic repository failure")
++			}
++			sessions := newSessionLimitReleaseCacheStub()
++			svc := &GatewayService{schedulerSnapshot: NewSchedulerSnapshotService(nil, nil, repo, nil, nil), sessionLimitCache: sessions}
++			released := 0
++			result, err := svc.newSelectionResult(ctx, "turn-session", newSessionLimitTestAccount(), true, func() { released++ }, nil)
++			require.Error(t, err)
++			require.Nil(t, result)
++			require.Equal(t, 1, released)
++			require.Equal(t, []string{"turn-session"}, sessions.unregistered[42])
++			// Waiting selections own no concurrency release function.
++			_, err = svc.newSelectionResult(ctx, "wait-session", newSessionLimitTestAccount(), false, nil, &AccountWaitPlan{})
++			require.Error(t, err)
++			require.Equal(t, 1, released)
++			require.Equal(t, []string{"turn-session", "wait-session"}, sessions.unregistered[42])
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_codex_metadata_events_test.go b/backend/internal/service/openai_codex_metadata_events_test.go
+new file mode 100644
+index 000000000..05a0ee00e
+--- /dev/null
++++ b/backend/internal/service/openai_codex_metadata_events_test.go
+@@ -0,0 +1,67 @@
++package service
++
++import (
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestRelayStallsMetadataBeforeCapacityFailure(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, metadata := range []string{
++		`{"type":"response.metadata","response_id":"r","metadata":{"route":"test"}}`,
++		`{"type":"codex.rate_limits","rate_limits":{}}`,
++		`{"type":"codex.response.metadata","response_id":"r","metadata":{}}`,
++	} {
++		for _, passthrough := range []bool{false, true} {
++			name := metadata
++			if passthrough {
++				name += "/passthrough"
++			}
++			t.Run(name, func(t *testing.T) {
++				svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
++				rec := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(rec)
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++				stream := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"r\"}}\n\n" +
++					"data: " + metadata + "\n\n" +
++					"data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"server_is_overloaded\",\"message\":\"Our servers are currently overloaded. Please try again later.\"}}}\n\n"
++				resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(stream))}
++				account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++				var err error
++				if passthrough {
++					var result *openaiStreamingResultPassthrough
++					result, err = svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
++					require.NotNil(t, result)
++					require.Nil(t, result.firstTokenMs)
++				} else {
++					var result *openaiStreamingResult
++					result, err = svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
++					require.NotNil(t, result)
++					require.Nil(t, result.firstTokenMs)
++				}
++				var failover *UpstreamFailoverError
++				require.ErrorAs(t, err, &failover)
++				require.False(t, c.Writer.Written())
++				require.Empty(t, rec.Body.String(), "metadata must stay attempt-local until real output")
++				require.True(t, failover.RequestScopedTransient)
++			})
++		}
++	}
++}
++
++func TestCodexMetadataClassificationRetainsRealOutput(t *testing.T) {
++	for _, kind := range []string{"response.output_text.delta", "response.output_item.added", "response.function_call_arguments.delta", "response.completed", "response.done", "codex.custom_output"} {
++		require.False(t, openAIStreamEventIsMetadata(kind), kind)
++	}
++	for _, kind := range []string{"codex.rate_limits", "codex.response.metadata", "response.metadata"} {
++		require.True(t, openAIStreamEventIsMetadata(kind), kind)
++	}
++}
+diff --git a/backend/internal/service/openai_content_session_seed_responses_test.go b/backend/internal/service/openai_content_session_seed_responses_test.go
+new file mode 100644
+index 000000000..bef6b021c
+--- /dev/null
++++ b/backend/internal/service/openai_content_session_seed_responses_test.go
+@@ -0,0 +1,120 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/sjson"
++)
++
++func TestDeriveOpenAIContentSessionSeed_ResponsesLeadingPrefix(t *testing.T) {
++	makeBody := func(items ...string) []byte {
++		return []byte(`{"model":"gpt-5.4","instructions":"Be concise.","tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}],"input":[` + strings.Join(items, ",") + `]}`)
++	}
++	prefix := []string{
++		`{"role":"system","content":"System A"}`,
++		`{"role":"developer","content":[{"type":"input_text","text":"Developer B"}]}`,
++	}
++	boundaries := []struct {
++		name string
++		item string
++	}{
++		{"user", `{"role":"user","content":"First question"}`},
++		{"assistant", `{"role":"assistant","content":"Earlier answer"}`},
++		{"function_call", `{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"}`},
++		{"function_call_output", `{"type":"function_call_output","call_id":"call_1","output":"Result"}`},
++		{"input_text", `{"type":"input_text","text":"First question"}`},
++	}
++	for _, boundary := range boundaries {
++		for _, role := range []string{"system", "developer"} {
++			t.Run(boundary.name+"/"+role, func(t *testing.T) {
++				items := append(append([]string(nil), prefix...), boundary.item)
++				baseline := makeBody(append(items, `{"role":"user","content":"First question"}`)...)
++				reminder := `{"role":"` + role + `","content":[{"type":"input_text","text":"Dynamic reminder"}]}`
++				continued := makeBody(append(items, reminder, `{"role":"user","content":"First question"}`, `{"role":"user","content":"Follow-up"}`)...)
++				seed := deriveOpenAIContentSessionSeed(baseline)
++				require.Contains(t, seed, "System A")
++				require.Contains(t, seed, "Developer B")
++				require.Contains(t, seed, "First question")
++				require.Equal(t, seed, deriveOpenAIContentSessionSeed(continued), "later reminders must not change the session identity")
++			})
++		}
++	}
++
++	t.Run("stable fields still distinguish sessions", func(t *testing.T) {
++		body := makeBody(append(prefix, `{"role":"user","content":"First question"}`)...)
++		seed := deriveOpenAIContentSessionSeed(body)
++		for _, change := range [][2]string{
++			{"gpt-5.4", "gpt-5.5"},
++			{"Be concise.", "Be detailed."},
++			{"lookup", "search"},
++			{"System A", "System C"},
++			{"Developer B", "Developer C"},
++			{"First question", "Compacted question"},
++		} {
++			t.Run(change[0], func(t *testing.T) {
++				require.NotEqual(t, seed, deriveOpenAIContentSessionSeed([]byte(strings.ReplaceAll(string(body), change[0], change[1]))))
++			})
++		}
++	})
++}
++
++func TestOpenAIGatewayService_ResponsesToolLoopKeepsStickyAccount(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	first := []byte(`{"model":"gpt-5.4","input":[{"role":"system","content":"Be helpful."},{"role":"user","content":"Look up the weather"}]}`)
++	continued := []byte(`{"model":"gpt-5.4","input":[{"role":"system","content":"Be helpful."},{"role":"user","content":"Look up the weather"},{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":"Sunny"},{"role":"developer","content":"Answer using the tool result."},{"role":"user","content":"And tomorrow?"}]}`)
++	for _, mode := range []string{"false", "true"} {
++		for _, identity := range []string{"content", "header", "prompt_cache_key"} {
++			t.Run("advanced="+mode+"/"+identity, func(t *testing.T) {
++				t.Cleanup(resetOpenAIAdvancedSchedulerSettingCacheForTest)
++				c, _ := gin.CreateTestContext(httptest.NewRecorder())
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++				firstBody, nextBody := first, continued
++				switch identity {
++				case "header":
++					c.Request.Header.Set("session-id", "stable-conversation")
++				case "prompt_cache_key":
++					var err error
++					firstBody, err = sjson.SetBytes(first, "prompt_cache_key", "stable-conversation")
++					require.NoError(t, err)
++					nextBody, err = sjson.SetBytes(continued, "prompt_cache_key", "stable-conversation")
++					require.NoError(t, err)
++				}
++				require.True(t, json.Valid(firstBody))
++				require.True(t, json.Valid(nextBody))
++				groupID := int64(10)
++				cfg := &config.Config{}
++				cfg.Gateway.OpenAIWS.LBTopK = 1
++				svc := &OpenAIGatewayService{
++					accountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{
++						{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 100, GroupIDs: []int64{groupID}},
++						{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 0, GroupIDs: []int64{groupID}},
++					}},
++					cfg:                cfg,
++					rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService(mode),
++					concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
++				}
++				firstHash := svc.GenerateSessionHash(c, firstBody)
++				require.NotEmpty(t, firstHash)
++				svc.cache = &schedulerTestGatewayCache{sessionBindings: map[string]int64{"openai:" + firstHash: 1}}
++				selection, decision, err := svc.SelectAccountWithScheduler(context.Background(), &groupID, "", svc.GenerateSessionHash(c, nextBody), "gpt-5.4", nil, OpenAIUpstreamTransportAny, false)
++				require.NoError(t, err)
++				require.NotNil(t, selection)
++				if selection.ReleaseFunc != nil {
++					defer selection.ReleaseFunc()
++				}
++				require.Equal(t, int64(1), selection.Account.ID, "a reminder must not lose a healthy existing binding to the higher-priority account")
++				require.True(t, decision.StickySessionHit)
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/openai_responses_sealed_call_test.go b/backend/internal/service/openai_responses_sealed_call_test.go
+new file mode 100644
+index 000000000..4c27ae288
+--- /dev/null
++++ b/backend/internal/service/openai_responses_sealed_call_test.go
+@@ -0,0 +1,108 @@
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const arguments = `{"message":"synthetic-sealed-message"}`
++	for _, marker := range []struct {
++		name string
++		raw  string
++	}{
++		{name: "encrypted", raw: `["message"]`},
++		{name: "plaintext", raw: `[]`},
++		{name: "null", raw: `null`},
++		{name: "absent"},
++	} {
++		for _, shape := range []string{"terminal_output", "item_done", "delta_fallback"} {
++			for _, passthrough := range []bool{false, true} {
++				mode := "normal"
++				if passthrough {
++					mode = "passthrough"
++				}
++				t.Run(marker.name+"/"+shape+"/"+mode, func(t *testing.T) {
++					item := map[string]any{
++						"type": "function_call", "call_id": "call_sealed", "name": "send_message",
++						"namespace": "collaboration", "arguments": arguments,
++					}
++					if marker.raw != "" {
++						item["encrypted_function_args"] = json.RawMessage(marker.raw)
++					}
++					output := []any{}
++					var frames []string
++					addFrame := func(event map[string]any) {
++						encoded, err := json.Marshal(event)
++						require.NoError(t, err)
++						frames = append(frames, "data: "+string(encoded)+"\n\n")
++					}
++					switch shape {
++					case "terminal_output":
++						output = append(output, item)
++					case "item_done":
++						addFrame(map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
++					case "delta_fallback":
++						item["arguments"] = ""
++						addFrame(map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
++						addFrame(map[string]any{"type": "response.function_call_arguments.delta", "output_index": 0, "delta": arguments})
++					}
++					addFrame(map[string]any{
++						"type": "response.completed",
++						"response": map[string]any{
++							"id": "resp_sealed", "model": "test-model", "status": "completed", "output": output,
++							"usage": map[string]int{"input_tokens": 7, "output_tokens": 3, "total_tokens": 10},
++						},
++					})
++
++					rec := httptest.NewRecorder()
++					c, _ := gin.CreateTestContext(rec)
++					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++					resp := &http.Response{
++						StatusCode: http.StatusOK,
++						Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++						Body:       io.NopCloser(strings.NewReader(strings.Join(frames, ""))),
++					}
++					account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++					svc := newCompactBridgeTestService()
++					if passthrough {
++						result, err := svc.handleNonStreamingResponsePassthrough(context.Background(), resp, c, account, "test-model", "test-model")
++						require.NoError(t, err)
++						require.Equal(t, 7, result.usage.InputTokens)
++						require.Equal(t, 3, result.usage.OutputTokens)
++					} else {
++						result, err := svc.handleNonStreamingResponse(context.Background(), resp, c, account, "test-model", "test-model")
++						require.NoError(t, err)
++						require.Equal(t, 7, result.usage.InputTokens)
++						require.Equal(t, 3, result.usage.OutputTokens)
++					}
++					require.Equal(t, http.StatusOK, rec.Code)
++					require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
++					body := rec.Body.Bytes()
++					require.Len(t, gjson.GetBytes(body, "output").Array(), 1)
++					call := gjson.GetBytes(body, "output.0")
++					require.Equal(t, "function_call", call.Get("type").String())
++					require.Equal(t, "call_sealed", call.Get("call_id").String())
++					require.Equal(t, "send_message", call.Get("name").String())
++					require.Equal(t, arguments, call.Get("arguments").String())
++					if marker.raw == "" {
++						require.False(t, call.Get("encrypted_function_args").Exists())
++					} else {
++						require.Equal(t, marker.raw, call.Get("encrypted_function_args").Raw)
++					}
++					require.Equal(t, "collaboration", call.Get("namespace").String())
++				})
++			}
++		}
++	}
++}
+diff --git a/backend/internal/service/tier121_price_test.go b/backend/internal/service/tier121_price_test.go
+new file mode 100644
+index 000000000..86761a9d9
+--- /dev/null
++++ b/backend/internal/service/tier121_price_test.go
+@@ -0,0 +1,43 @@
++package service
++
++import (
++	"os"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/require"
++)
++
++func TestTier121SonnetPrice(t *testing.T) {
++	data, err := os.ReadFile("../../resources/model-pricing/model_prices_and_context_window.json")
++	require.NoError(t, err)
++	catalog := &PricingService{}
++	catalog.pricingData, err = catalog.parsePricingData(data)
++	require.NoError(t, err)
++	fallback := &BillingService{fallbackPrices: make(map[string]*ModelPricing)}
++	fallback.initFallbackPricing()
++	for source, s := range map[string]*BillingService{"billing": fallback, "catalog": NewBillingService(&config.Config{}, catalog), "remote-missing": NewBillingService(&config.Config{}, &PricingService{pricingData: map[string]*LiteLLMModelPricing{}})} {
++		for _, model := range []string{"claude-sonnet-5-5", "anthropic/claude-sonnet-5.5", "us.anthropic.claude-sonnet-5-5"} {
++			t.Run(source+"/"+model, func(t *testing.T) {
++				tokens := UsageTokens{InputTokens: 1000, OutputTokens: 100, CacheReadTokens: 1000000}
++				ordinary, err := s.calculateCostInternal(model, tokens, 1, "", nil)
++				require.NoError(t, err)
++				fast, err := s.calculateCostInternal(model, tokens, 1, "priority", nil)
++				require.NoError(t, err)
++				require.InDelta(t, 0.1, ordinary.CacheReadCost, 1e-12)
++				require.InDelta(t, 0.2, fast.CacheReadCost, 1e-12)
++				require.InDelta(t, 2*ordinary.InputCost, fast.InputCost, 1e-12)
++				require.InDelta(t, 2*ordinary.OutputCost, fast.OutputCost, 1e-12)
++				for _, override := range []float64{0, 0.7e-6} {
++					cost, err := s.calculateCostInternal(model, tokens, 1, "priority", &ChannelModelPricing{CacheReadPrice: &override})
++					require.NoError(t, err)
++					require.InDelta(t, 1e6*override, cost.CacheReadCost, 1e-12)
++					multiplier := 3.0
++					cost, err = s.calculateCostInternal(model, tokens, 1, "priority", &ChannelModelPricing{CacheReadPrice: &override, FastMultiplier: &multiplier})
++					require.NoError(t, err)
++					require.InDelta(t, 3e6*override, cost.CacheReadCost, 1e-12)
++				}
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/tier121_pricing_hash_test.go b/backend/internal/service/tier121_pricing_hash_test.go
+new file mode 100644
+index 000000000..560abbd0a
+--- /dev/null
++++ b/backend/internal/service/tier121_pricing_hash_test.go
+@@ -0,0 +1,91 @@
++package service
++
++import (
++	"context"
++	"crypto/sha256"
++	"errors"
++	"fmt"
++	"os"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/require"
++)
++
++type tier121PricingRemote struct {
++	body             []byte
++	hash             string
++	downloads        int
++	bodyErr, hashErr error
++}
++
++func (r *tier121PricingRemote) FetchPricingJSON(context.Context, string) ([]byte, error) {
++	r.downloads++
++	return r.body, r.bodyErr
++}
++func (r *tier121PricingRemote) FetchHashText(context.Context, string) (string, error) {
++	return r.hash, r.hashErr
++}
++func tier121PricingService(t *testing.T, r *tier121PricingRemote) *PricingService {
++	t.Helper()
++	return NewPricingService(&config.Config{Pricing: config.PricingConfig{DataDir: t.TempDir(), RemoteURL: "https://example.com/pricing.json", HashURL: "https://example.com/pricing.sha256"}}, r)
++}
++func TestTier121PricingHash(t *testing.T) {
++	old := []byte(`{"model-test":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
++	next := []byte(`{"model-test":{"input_cost_per_token":0.000003,"output_cost_per_token":0.000006}}`)
++	r := &tier121PricingRemote{body: old, hash: fmt.Sprintf("%x", sha256.Sum256(next))}
++	s := tier121PricingService(t, r)
++	require.NoError(t, s.ForceUpdate())
++	require.Equal(t, fmt.Sprintf("%x", sha256.Sum256(old)), s.localHash)
++	saved, err := os.ReadFile(s.getHashFilePath())
++	require.NoError(t, err)
++	require.Equal(t, s.localHash+"\n", string(saved))
++	r.body = next
++	require.NoError(t, s.syncWithRemote())
++	require.Equal(t, 2, r.downloads)
++	require.InDelta(t, 3e-6, s.GetModelPricing("model-test").InputCostPerToken, 1e-12)
++	require.NoError(t, s.syncWithRemote())
++	require.Equal(t, 2, r.downloads)
++	saved, err = os.ReadFile(s.getPricingFilePath())
++	require.NoError(t, err)
++	require.Equal(t, next, saved)
++	// Hash casing does not change the identity of the downloaded bytes.
++	r.hash = strings.ToUpper(r.hash)
++	require.NoError(t, s.syncWithRemote())
++	require.Equal(t, 2, r.downloads)
++}
++func TestTier121PricingFailureDoesNotPublish(t *testing.T) {
++	body := []byte(`{"model-test":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
++	for _, mode := range []string{"invalid-json", "network", "missing-hash", "hash-network", "uppercase"} {
++		t.Run(mode, func(t *testing.T) {
++			r := &tier121PricingRemote{body: body, hash: fmt.Sprintf("%x", sha256.Sum256(body))}
++			s := tier121PricingService(t, r)
++			require.NoError(t, s.ForceUpdate())
++			before := s.localHash
++			switch mode {
++			case "invalid-json":
++				r.body = []byte(`{"broken":`)
++			case "network":
++				r.bodyErr = errors.New("synthetic transport failure")
++			case "missing-hash":
++				r.hash = ""
++			case "hash-network":
++				r.hashErr = errors.New("synthetic hash failure")
++			case "uppercase":
++				r.hash = strings.ToUpper(r.hash)
++			}
++			err := s.ForceUpdate()
++			if mode == "invalid-json" || mode == "network" {
++				require.Error(t, err)
++			} else {
++				require.NoError(t, err)
++			}
++			require.True(t, strings.EqualFold(before, s.localHash))
++			require.InDelta(t, 1e-6, s.GetModelPricing("model-test").InputCostPerToken, 1e-12)
++			saved, err := os.ReadFile(s.getPricingFilePath())
++			require.NoError(t, err)
++			require.Equal(t, body, saved)
++		})
++	}
++}

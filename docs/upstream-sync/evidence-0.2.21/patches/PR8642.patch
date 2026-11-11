@@ -1,0 +1,235 @@
+diff --git a/backend/internal/service/payment_config_service.go b/backend/internal/service/payment_config_service.go
+index ad5583da2..547bc95e2 100644
+--- a/backend/internal/service/payment_config_service.go
++++ b/backend/internal/service/payment_config_service.go
+@@ -337,9 +337,15 @@ func (s *PaymentConfigService) getStripePublishableKey(ctx context.Context) stri
+ // and cannot be meaningfully decomposed without introducing unnecessary abstraction.
+ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req UpdatePaymentConfigRequest) error {
+ 	if req.BalanceRechargeMultiplier != nil {
+-		if math.IsNaN(*req.BalanceRechargeMultiplier) || math.IsInf(*req.BalanceRechargeMultiplier, 0) || *req.BalanceRechargeMultiplier <= 0 {
++		v := *req.BalanceRechargeMultiplier
++		if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+ 			return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier must be greater than 0")
+ 		}
++		// 6 位小数可容纳实时汇率（如 1 USD = 7.100000 CNY → 0.140845），
++		// 到账金额仍按结算币种精度取整，余额不会被放大精度。
++		if balanceRechargeMultiplierHasExcessPrecision(v) {
++			return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier allows at most 6 decimal places")
++		}
+ 	}
+ 	if req.SubscriptionUSDToCNYRate != nil {
+ 		v := *req.SubscriptionUSDToCNYRate
+@@ -392,7 +398,7 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
+ 		m[SettingBalancePayDisabled] = formatBoolOrEmpty(req.BalanceDisabled)
+ 	}
+ 	if req.BalanceRechargeMultiplier != nil {
+-		m[SettingBalanceRechargeMult] = formatPositiveFloat(req.BalanceRechargeMultiplier)
++		m[SettingBalanceRechargeMult] = formatBalanceRechargeMultiplier(req.BalanceRechargeMultiplier)
+ 	}
+ 	if req.SubscriptionUSDToCNYRate != nil {
+ 		m[SettingSubscriptionUSDToCNYRate] = formatPositiveFloatExact(req.SubscriptionUSDToCNYRate)
+@@ -474,6 +480,21 @@ func formatPositiveFloat(v *float64) string {
+ 	return strconv.FormatFloat(*v, 'f', 2, 64)
+ }
+ 
++const balanceRechargeMultiplierMaxDecimals = 6
++
++func balanceRechargeMultiplierHasExcessPrecision(v float64) bool {
++	scaled := v * math.Pow(10, balanceRechargeMultiplierMaxDecimals)
++	return math.Abs(scaled-math.Round(scaled)) > 1e-6
++}
++
++func formatBalanceRechargeMultiplier(v *float64) string {
++	if v == nil || *v <= 0 {
++		return "" // empty → parsePaymentConfig uses default
++	}
++	rounded := math.Round(*v*math.Pow(10, balanceRechargeMultiplierMaxDecimals)) / math.Pow(10, balanceRechargeMultiplierMaxDecimals)
++	return strconv.FormatFloat(rounded, 'f', -1, 64)
++}
++
+ // formatPositiveFloatExact 保留完整精度，用于汇率等对小数位敏感的配置。
+ func formatPositiveFloatExact(v *float64) string {
+ 	if v == nil || *v <= 0 {
+diff --git a/backend/internal/service/payment_config_service_test.go b/backend/internal/service/payment_config_service_test.go
+index 900866ef9..f914bf7e9 100644
+--- a/backend/internal/service/payment_config_service_test.go
++++ b/backend/internal/service/payment_config_service_test.go
+@@ -554,3 +554,49 @@ func TestUpdatePaymentConfig_PersistsExplicitEmptyAndFalseValues(t *testing.T) {
+ func paymentConfigStrPtr(value string) *string {
+ 	return &value
+ }
++
++func TestUpdatePaymentConfig_PersistsBalanceRechargeMultiplierWithUpToSixDecimals(t *testing.T) {
++	tests := []struct {
++		name       string
++		multiplier float64
++		want       string
++	}{
++		{"six decimals", 0.140845, "0.140845"},
++		{"two decimals", 0.15, "0.15"},
++		{"float artifact", 0.1 + 0.2, "0.3"},
++		{"integer", 1, "1"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			repo := &paymentConfigSettingRepoStub{}
++			svc := &PaymentConfigService{settingRepo: repo}
++			multiplier := tt.multiplier
++
++			err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
++				BalanceRechargeMultiplier: &multiplier,
++			})
++			if err != nil {
++				t.Fatalf("UpdatePaymentConfig returned error: %v", err)
++			}
++			if got := repo.updates[SettingBalanceRechargeMult]; got != tt.want {
++				t.Fatalf("stored multiplier = %q, want %q", got, tt.want)
++			}
++		})
++	}
++}
++
++func TestUpdatePaymentConfig_RejectsBalanceRechargeMultiplierWithMoreThanSixDecimals(t *testing.T) {
++	repo := &paymentConfigSettingRepoStub{}
++	svc := &PaymentConfigService{settingRepo: repo}
++	multiplier := 0.1408454
++
++	err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
++		BalanceRechargeMultiplier: &multiplier,
++	})
++	if err == nil {
++		t.Fatal("expected UpdatePaymentConfig to reject more than 6 decimal places")
++	}
++	if _, ok := repo.updates[SettingBalanceRechargeMult]; ok {
++		t.Fatalf("multiplier was persisted despite validation error: %q", repo.updates[SettingBalanceRechargeMult])
++	}
++}
+diff --git a/frontend/src/i18n/locales/en/admin/settings.ts b/frontend/src/i18n/locales/en/admin/settings.ts
+index 5141c2897..868097a92 100644
+--- a/frontend/src/i18n/locales/en/admin/settings.ts
++++ b/frontend/src/i18n/locales/en/admin/settings.ts
+@@ -775,7 +775,7 @@ export default {
+         maxAmount: 'Maximum Amount',
+         dailyLimit: 'Daily Limit',
+         balanceRechargeMultiplier: 'Balance Recharge Multiplier',
+-        balanceRechargeMultiplierHint: 'How many USD balance the user receives for each 1 CNY paid',
++        balanceRechargeMultiplierHint: 'How many USD balance the user receives for each 1 CNY paid (up to 6 decimal places, e.g. for live FX rates)',
+         balanceRechargePreview: 'Preview: 1 CNY = {usd} USD',
+         subscriptionUsdToCnyRate: 'Subscription USD to CNY Rate',
+         subscriptionUsdToCnyRateHint:
+diff --git a/frontend/src/i18n/locales/zh/admin/settings.ts b/frontend/src/i18n/locales/zh/admin/settings.ts
+index 9658045e5..31c2dba3f 100644
+--- a/frontend/src/i18n/locales/zh/admin/settings.ts
++++ b/frontend/src/i18n/locales/zh/admin/settings.ts
+@@ -770,7 +770,7 @@ export default {
+         maxAmount: '最高金额',
+         dailyLimit: '每日限额',
+         balanceRechargeMultiplier: '余额充值倍率',
+-        balanceRechargeMultiplierHint: '用户每支付 1 CNY 可获得多少 USD 余额',
++        balanceRechargeMultiplierHint: '用户每支付 1 CNY 可获得多少 USD 余额（最多 6 位小数，可按实时汇率配置）',
+         balanceRechargePreview: '预览：1 CNY = {usd} USD',
+         subscriptionUsdToCnyRate: '订阅 CNY 换算汇率',
+         subscriptionUsdToCnyRateHint:
+diff --git a/frontend/src/utils/__tests__/rechargeBonus.spec.ts b/frontend/src/utils/__tests__/rechargeBonus.spec.ts
+index 25561b50e..b4cba9b7a 100644
+--- a/frontend/src/utils/__tests__/rechargeBonus.spec.ts
++++ b/frontend/src/utils/__tests__/rechargeBonus.spec.ts
+@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
+ import {
+   calculateRechargeBonus,
+   describeRechargeBonusIntervals,
++  formatBalanceRechargeMultiplier,
+   formatRechargeBonusNumber,
+   isDuplicateRechargeBonusMinAmount,
+   isRechargeBonusPercentValidForMode,
+@@ -138,4 +139,13 @@ describe('rechargeBonus helpers', () => {
+     expect(formatRechargeBonusNumber(12.5)).toBe('12.5')
+     expect(formatRechargeBonusNumber(100.1)).toBe('100.1')
+   })
++
++  it('formats balance recharge multiplier with up to six decimals', () => {
++    expect(formatBalanceRechargeMultiplier(0.140845)).toBe('0.140845')
++    expect(formatBalanceRechargeMultiplier(0.15)).toBe('0.15')
++    expect(formatBalanceRechargeMultiplier(0.5)).toBe('0.50')
++    expect(formatBalanceRechargeMultiplier(1)).toBe('1.00')
++    expect(formatBalanceRechargeMultiplier(0.1408454)).toBe('0.140845')
++    expect(formatBalanceRechargeMultiplier(Number.NaN)).toBe('1.00')
++  })
+ })
+diff --git a/frontend/src/utils/rechargeBonus.ts b/frontend/src/utils/rechargeBonus.ts
+index 25f1b97fb..09a9e3d67 100644
+--- a/frontend/src/utils/rechargeBonus.ts
++++ b/frontend/src/utils/rechargeBonus.ts
+@@ -205,3 +205,13 @@ export function formatRechargeBonusNumber(value: number): string {
+   if (!Number.isFinite(value)) return '0'
+   return String(Number(value.toFixed(2)))
+ }
++
++export const BALANCE_RECHARGE_MULTIPLIER_MAX_DECIMALS = 6
++
++// 余额充值倍率展示：最多 6 位小数、至少 2 位（0.140845 → "0.140845"，0.5 → "0.50"，1 → "1.00"）。
++export function formatBalanceRechargeMultiplier(value: number): string {
++  const normalized = Number.isFinite(value) && value > 0 ? value : 1
++  const text = String(Number(normalized.toFixed(BALANCE_RECHARGE_MULTIPLIER_MAX_DECIMALS)))
++  const [integerPart, fractionPart = ''] = text.split('.')
++  return `${integerPart}.${fractionPart.padEnd(2, '0')}`
++}
+diff --git a/frontend/src/views/admin/SettingsView.vue b/frontend/src/views/admin/SettingsView.vue
+index a0a5149f9..2b68683d9 100644
+--- a/frontend/src/views/admin/SettingsView.vue
++++ b/frontend/src/views/admin/SettingsView.vue
+@@ -8038,8 +8038,8 @@
+                           ) || 1
+                       "
+                       type="number"
+-                      step="0.01"
+-                      min="0.01"
++                      step="0.000001"
++                      min="0.000001"
+                       class="input"
+                     />
+                     <p class="mt-0.5 text-xs text-gray-400">
+@@ -8054,10 +8054,10 @@
+                     >
+                       {{
+                         t("admin.settings.payment.balanceRechargePreview", {
+-                          usd: (
++                          usd: formatBalanceRechargeMultiplier(
+                             Number(form.payment_balance_recharge_multiplier) ||
+-                            1
+-                          ).toFixed(2),
++                              1,
++                          ),
+                         })
+                       }}
+                     </p>
+@@ -9016,6 +9016,7 @@ import AdminAccessKeysSettings from "@/components/admin/settings/AdminAccessKeys
+ import TotpStepUpDialog from "@/components/auth/TotpStepUpDialog.vue";
+ import { affiliatesAPI, type AffiliateAdminEntry, type SimpleUser as AffiliateSimpleUser } from "@/api/admin/affiliates";
+ import { extractApiErrorMessage, extractI18nErrorMessage } from "@/utils/apiError";
++import { formatBalanceRechargeMultiplier } from "@/utils/rechargeBonus";
+ import { useAppStore } from "@/stores";
+ import { useAdminSettingsStore } from "@/stores/adminSettings";
+ import { normalizeVisibleMethod } from "@/components/payment/paymentFlow";
+diff --git a/frontend/src/views/user/PaymentView.vue b/frontend/src/views/user/PaymentView.vue
+index 4e64af2ef..247ddd5ce 100644
+--- a/frontend/src/views/user/PaymentView.vue
++++ b/frontend/src/views/user/PaymentView.vue
+@@ -103,7 +103,7 @@
+                   <span :class="bonusQuote.percent > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-900 dark:text-white'">${{ creditedAmount.toFixed(2) }}</span>
+                 </div>
+                 <p v-if="balanceRechargeMultiplier !== 1" class="border-t border-gray-200 pt-2 text-xs text-gray-500 dark:border-dark-600 dark:text-gray-400">
+-                  {{ t('payment.rechargeRatePreview', { currency: selectedCurrency, usd: balanceRechargeMultiplier.toFixed(2) }) }}
++                  {{ t('payment.rechargeRatePreview', { currency: selectedCurrency, usd: formatBalanceRechargeMultiplier(balanceRechargeMultiplier) }) }}
+                 </p>
+               </div>
+             </div>
+@@ -295,7 +295,7 @@ import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiErro
+ import { isMobileDevice } from '@/utils/device'
+ import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel, type PeakRateFields } from '@/utils/peak-rate'
+ import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
+-import { formatRechargeBonusNumber, normalizeRechargeBonusMode, normalizeRechargeBonusTiers, quoteRechargeBonus } from '@/utils/rechargeBonus'
++import { formatBalanceRechargeMultiplier, formatRechargeBonusNumber, normalizeRechargeBonusMode, normalizeRechargeBonusTiers, quoteRechargeBonus } from '@/utils/rechargeBonus'
+ import AppLayout from '@/components/layout/AppLayout.vue'
+ import AmountInput from '@/components/payment/AmountInput.vue'
+ import PaymentMethodSelector from '@/components/payment/PaymentMethodSelector.vue'

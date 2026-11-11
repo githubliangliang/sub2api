@@ -1,0 +1,447 @@
+diff --git a/backend/internal/config/config.go b/backend/internal/config/config.go
+index ac7b9c10d..baf3260dc 100644
+--- a/backend/internal/config/config.go
++++ b/backend/internal/config/config.go
+@@ -16,6 +16,7 @@ import (
+ 	"sync/atomic"
+ 	"time"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/sysutil"
+ 	"github.com/spf13/viper"
+ 	"golang.org/x/net/http/httpguts"
+ )
+@@ -565,6 +566,24 @@ func shouldApplyLegacyWeChatEnv(configKey, envKey string) bool {
+ 	return !hasNewEnv
+ }
+ 
++// detectMemoryLimitBytes is replaced in tests so defaults do not depend on the host.
++var detectMemoryLimitBytes = sysutil.MemoryLimitBytes
++
++const (
++	defaultRequestBodyMemoryBudgetBytes = int64(1 << 30)
++	// requestBodyMemoryBudgetDivisor leaves the rest of memory for conversion
++	// state, SSE buffers, caches and GC headroom.
++	requestBodyMemoryBudgetDivisor = 4
++)
++
++// autoRequestBodyMemoryBudget sizes the unconfigured ingress budget to a
++// quarter of the process memory limit. It never goes below the historical
++// 1 GiB default, so small instances keep their previous behavior.
++func autoRequestBodyMemoryBudget(memoryLimitBytes uint64) int64 {
++	// uint64 / 4 always fits in int64.
++	return max(int64(memoryLimitBytes/requestBodyMemoryBudgetDivisor), defaultRequestBodyMemoryBudgetBytes)
++}
++
+ func hasExplicitConfigOrEnv(configKey, envKey string) bool {
+ 	if viper.InConfig(configKey) {
+ 		return true
+@@ -1051,6 +1070,7 @@ type GatewayConfig struct {
+ 	// 请求体最大字节数，用于网关请求体大小限制
+ 	MaxBodySize int64 `mapstructure:"max_body_size"`
+ 	// RequestBodyMemoryBudgetBytes bounds buffered ingress allocations per instance; 0 disables it.
++	// When unset in config and env it defaults to 1/4 of the memory limit (at least 1 GiB).
+ 	RequestBodyMemoryBudgetBytes int64 `mapstructure:"request_body_memory_budget_bytes"`
+ 	// RequestBodyReadTimeoutSeconds bounds each socket read during upload; 0 disables it.
+ 	RequestBodyReadTimeoutSeconds int `mapstructure:"request_body_read_timeout_seconds"`
+@@ -1935,6 +1955,15 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
+ 		cfg.Security.ForwardedClientIPHeaders = normalizeStringSlice(strings.Split(forwardedClientIPHeadersEnv, ","))
+ 	}
+ 	cfg.Server.TrustedProxiesConfigured = trustedProxiesConfigured
++	// Mirror viper's own precedence: an empty environment variable is ignored by
++	// viper, so it must not pin the static default either (e.g. Compose ${VAR:-}).
++	if !viper.InConfig("gateway.request_body_memory_budget_bytes") && os.Getenv("GATEWAY_REQUEST_BODY_MEMORY_BUDGET_BYTES") == "" {
++		memoryLimit := detectMemoryLimitBytes()
++		cfg.Gateway.RequestBodyMemoryBudgetBytes = autoRequestBodyMemoryBudget(memoryLimit)
++		slog.Info("gateway.request_body_memory_budget_bytes auto-sized from memory limit",
++			"budget_bytes", cfg.Gateway.RequestBodyMemoryBudgetBytes,
++			"memory_limit_bytes", memoryLimit)
++	}
+ 	if cfg.Gateway.OpenAIScheduler.StickyEscapeTTFTMs == 0 {
+ 		cfg.Gateway.OpenAIScheduler.StickyEscapeTTFTMs = 15000
+ 	}
+@@ -2595,7 +2624,9 @@ func setDefaults() {
+ 	viper.SetDefault("gateway.antigravity_fallback_cooldown_minutes", 1)
+ 	viper.SetDefault("gateway.antigravity_extra_retries", 10)
+ 	viper.SetDefault("gateway.max_body_size", int64(256*1024*1024))
+-	viper.SetDefault("gateway.request_body_memory_budget_bytes", int64(1024*1024*1024))
++	// Without explicit config or env, load() replaces this with a size derived
++	// from the memory limit (see autoRequestBodyMemoryBudget).
++	viper.SetDefault("gateway.request_body_memory_budget_bytes", defaultRequestBodyMemoryBudgetBytes)
+ 	viper.SetDefault("gateway.request_body_read_timeout_seconds", 120)
+ 	viper.SetDefault("gateway.downstream_write_timeout_seconds", 120)
+ 	viper.SetDefault("gateway.text_max_body_size", int64(32*1024*1024))
+diff --git a/backend/internal/config/config_test.go b/backend/internal/config/config_test.go
+index bc579aecf..33a8f13d8 100644
+--- a/backend/internal/config/config_test.go
++++ b/backend/internal/config/config_test.go
+@@ -22,6 +22,92 @@ func resetViperWithJWTSecret(t *testing.T) {
+ 	t.Setenv("CONFIG_FILE", "")
+ 	t.Setenv("DATA_DIR", "")
+ 	t.Setenv("JWT_SECRET", strings.Repeat("x", 32))
++	stubMemoryLimit(t, 0)
++}
++
++func stubMemoryLimit(t *testing.T, limit uint64) {
++	t.Helper()
++	original := detectMemoryLimitBytes
++	detectMemoryLimitBytes = func() uint64 { return limit }
++	t.Cleanup(func() { detectMemoryLimitBytes = original })
++}
++
++func TestAutoRequestBodyMemoryBudget(t *testing.T) {
++	require.Equal(t, int64(1<<30), autoRequestBodyMemoryBudget(0))
++	require.Equal(t, int64(1<<30), autoRequestBodyMemoryBudget(2<<30))
++	require.Equal(t, int64(2<<30), autoRequestBodyMemoryBudget(8<<30))
++	require.Equal(t, int64(32<<30), autoRequestBodyMemoryBudget(128<<30))
++	require.Equal(t, int64(math.MaxUint64/4), autoRequestBodyMemoryBudget(math.MaxUint64))
++}
++
++func TestLoadRequestBodyMemoryBudget(t *testing.T) {
++	t.Run("auto-sized from memory limit when unset", func(t *testing.T) {
++		resetViperWithJWTSecret(t)
++		stubMemoryLimit(t, 128<<30)
++		cfg, err := Load()
++		require.NoError(t, err)
++		require.Equal(t, int64(32<<30), cfg.Gateway.RequestBodyMemoryBudgetBytes)
++	})
++
++	t.Run("explicit environment value wins, including 0", func(t *testing.T) {
++		resetViperWithJWTSecret(t)
++		stubMemoryLimit(t, 128<<30)
++		t.Setenv("GATEWAY_REQUEST_BODY_MEMORY_BUDGET_BYTES", "0")
++		cfg, err := Load()
++		require.NoError(t, err)
++		require.Zero(t, cfg.Gateway.RequestBodyMemoryBudgetBytes)
++	})
++
++	t.Run("empty environment value is ignored like viper does", func(t *testing.T) {
++		resetViperWithJWTSecret(t)
++		stubMemoryLimit(t, 128<<30)
++		t.Setenv("GATEWAY_REQUEST_BODY_MEMORY_BUDGET_BYTES", "")
++		cfg, err := Load()
++		require.NoError(t, err)
++		require.Equal(t, int64(32<<30), cfg.Gateway.RequestBodyMemoryBudgetBytes)
++	})
++
++	t.Run("explicit environment value wins over auto-sizing", func(t *testing.T) {
++		resetViperWithJWTSecret(t)
++		stubMemoryLimit(t, 128<<30)
++		t.Setenv("GATEWAY_REQUEST_BODY_MEMORY_BUDGET_BYTES", "2147483648")
++		cfg, err := Load()
++		require.NoError(t, err)
++		require.Equal(t, int64(2<<30), cfg.Gateway.RequestBodyMemoryBudgetBytes)
++	})
++
++	t.Run("explicit config file 0 disables the budget", func(t *testing.T) {
++		resetViperWithJWTSecret(t)
++		stubMemoryLimit(t, 128<<30)
++		configFile := filepath.Join(t.TempDir(), "config.yaml")
++		require.NoError(t, os.WriteFile(configFile, []byte("gateway:\n  request_body_memory_budget_bytes: 0\n"), 0o600))
++		t.Setenv("CONFIG_FILE", configFile)
++		cfg, err := Load()
++		require.NoError(t, err)
++		require.Zero(t, cfg.Gateway.RequestBodyMemoryBudgetBytes)
++	})
++
++	t.Run("config file without the key is auto-sized", func(t *testing.T) {
++		resetViperWithJWTSecret(t)
++		stubMemoryLimit(t, 128<<30)
++		configFile := filepath.Join(t.TempDir(), "config.yaml")
++		require.NoError(t, os.WriteFile(configFile, []byte("gateway:\n  max_body_size: 268435456\n"), 0o600))
++		t.Setenv("CONFIG_FILE", configFile)
++		cfg, err := Load()
++		require.NoError(t, err)
++		require.Equal(t, int64(32<<30), cfg.Gateway.RequestBodyMemoryBudgetBytes)
++	})
++
++	t.Run("explicit config file value wins", func(t *testing.T) {
++		resetViperWithJWTSecret(t)
++		stubMemoryLimit(t, 128<<30)
++		configFile := filepath.Join(t.TempDir(), "config.yaml")
++		require.NoError(t, os.WriteFile(configFile, []byte("gateway:\n  request_body_memory_budget_bytes: 1073741824\n"), 0o600))
++		t.Setenv("CONFIG_FILE", configFile)
++		cfg, err := Load()
++		require.NoError(t, err)
++		require.Equal(t, int64(1<<30), cfg.Gateway.RequestBodyMemoryBudgetBytes)
++	})
+ }
+ 
+ func TestLoadDefaultModelsListReadMaxBytes(t *testing.T) {
+diff --git a/backend/internal/pkg/sysutil/memory.go b/backend/internal/pkg/sysutil/memory.go
+new file mode 100644
+index 000000000..fd6903340
+--- /dev/null
++++ b/backend/internal/pkg/sysutil/memory.go
+@@ -0,0 +1,104 @@
++package sysutil
++
++import (
++	"math"
++	"os"
++	"path"
++	"path/filepath"
++	"runtime/debug"
++	"slices"
++	"strconv"
++	"strings"
++
++	"github.com/shirou/gopsutil/v4/mem"
++)
++
++const cgroupRoot = "/sys/fs/cgroup"
++
++// MemoryLimitBytes returns the memory available to this process: the smallest
++// of physical memory, the cgroup (container/systemd) limit and GOMEMLIMIT.
++// It returns 0 when none of them can be determined.
++func MemoryLimitBytes() uint64 {
++	var physical uint64
++	if vm, err := mem.VirtualMemory(); err == nil {
++		physical = vm.Total
++	}
++	goLimit := debug.SetMemoryLimit(-1)
++	return minPositive(physical, cgroupMemoryLimit(cgroupRoot, "/proc/self/cgroup"), goMemoryLimit(goLimit))
++}
++
++// cgroupMemoryLimit returns the tightest memory limit on this process's cgroup
++// path, or 0 when unlimited or unavailable. A parent's limit applies to its
++// children (e.g. a systemd slice), so every level up to the mount root is
++// checked, for both the v2 unified hierarchy and the v1 memory controller.
++func cgroupMemoryLimit(root, selfCgroupFile string) uint64 {
++	var limit uint64
++	if raw, err := os.ReadFile(selfCgroupFile); err == nil {
++		// Each line is "hierarchy-ID:controller-list:cgroup-path".
++		for _, line := range strings.Split(string(raw), "\n") {
++			fields := strings.SplitN(strings.TrimSpace(line), ":", 3)
++			if len(fields) != 3 {
++				continue
++			}
++			switch {
++			case fields[1] == "":
++				limit = minPositive(limit, cgroupPathMemoryLimit(root, fields[2], "memory.max"))
++			case slices.Contains(strings.Split(fields[1], ","), "memory"):
++				limit = minPositive(limit, cgroupPathMemoryLimit(filepath.Join(root, "memory"), fields[2], "memory.limit_in_bytes"))
++			}
++		}
++	}
++	// Mount roots cover an unreadable /proc/self/cgroup.
++	limit = minPositive(limit, cgroupPathMemoryLimit(root, "/", "memory.max"))
++	return minPositive(limit, cgroupPathMemoryLimit(filepath.Join(root, "memory"), "/", "memory.limit_in_bytes"))
++}
++
++// cgroupPathMemoryLimit walks from the cgroup up to the mount root. Levels not
++// visible in this mount (e.g. a host path inside a container) are skipped.
++// Reads go through os.Root, so a cgroup path from /proc/self/cgroup can never
++// resolve outside the mount.
++func cgroupPathMemoryLimit(mount, cgroupPath, limitFile string) uint64 {
++	mountRoot, err := os.OpenRoot(mount)
++	if err != nil {
++		return 0
++	}
++	defer func() { _ = mountRoot.Close() }()
++	var limit uint64
++	for dir := path.Clean("/" + cgroupPath); ; dir = path.Dir(dir) {
++		name := filepath.Join(filepath.FromSlash(strings.TrimPrefix(dir, "/")), limitFile)
++		limit = minPositive(limit, readCgroupLimitFile(mountRoot, name))
++		if dir == "/" {
++			return limit
++		}
++	}
++}
++
++func readCgroupLimitFile(mountRoot *os.Root, name string) uint64 {
++	raw, err := mountRoot.ReadFile(name)
++	if err != nil {
++		return 0
++	}
++	v, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
++	// v2 reports "max" when unlimited; v1 reports a page-rounded huge value.
++	if err != nil || v >= 1<<60 {
++		return 0
++	}
++	return v
++}
++
++func goMemoryLimit(limit int64) uint64 {
++	if limit <= 0 || limit == math.MaxInt64 {
++		return 0
++	}
++	return uint64(limit)
++}
++
++func minPositive(values ...uint64) uint64 {
++	var out uint64
++	for _, v := range values {
++		if v > 0 && (out == 0 || v < out) {
++			out = v
++		}
++	}
++	return out
++}
+diff --git a/backend/internal/pkg/sysutil/memory_test.go b/backend/internal/pkg/sysutil/memory_test.go
+new file mode 100644
+index 000000000..eea937030
+--- /dev/null
++++ b/backend/internal/pkg/sysutil/memory_test.go
+@@ -0,0 +1,109 @@
++package sysutil
++
++import (
++	"math"
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func writeFile(t *testing.T, file, content string) {
++	t.Helper()
++	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o755))
++	require.NoError(t, os.WriteFile(file, []byte(content), 0o600))
++}
++
++func TestCgroupMemoryLimit(t *testing.T) {
++	t.Run("v2 namespaced root", func(t *testing.T) {
++		root := t.TempDir()
++		self := filepath.Join(t.TempDir(), "cgroup")
++		writeFile(t, self, "0::/\n")
++		writeFile(t, filepath.Join(root, "memory.max"), "4294967296\n")
++		require.Equal(t, uint64(4<<30), cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("v2 tightest limit along the path", func(t *testing.T) {
++		root := t.TempDir()
++		self := filepath.Join(t.TempDir(), "cgroup")
++		writeFile(t, self, "0::/system.slice/sub2api.service\n")
++		writeFile(t, filepath.Join(root, "memory.max"), "max\n")
++		writeFile(t, filepath.Join(root, "system.slice", "memory.max"), "8589934592\n")
++		writeFile(t, filepath.Join(root, "system.slice", "sub2api.service", "memory.max"), "max\n")
++		require.Equal(t, uint64(8<<30), cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("v2 unlimited", func(t *testing.T) {
++		root := t.TempDir()
++		self := filepath.Join(t.TempDir(), "cgroup")
++		writeFile(t, self, "0::/\n")
++		writeFile(t, filepath.Join(root, "memory.max"), "max\n")
++		require.Zero(t, cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("v1 limit and unlimited sentinel", func(t *testing.T) {
++		root := t.TempDir()
++		self := filepath.Join(t.TempDir(), "missing")
++		writeFile(t, filepath.Join(root, "memory", "memory.limit_in_bytes"), "2147483648\n")
++		require.Equal(t, uint64(2<<30), cgroupMemoryLimit(root, self))
++
++		writeFile(t, filepath.Join(root, "memory", "memory.limit_in_bytes"), "9223372036854771712\n")
++		require.Zero(t, cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("v1 tightest limit along the memory controller path", func(t *testing.T) {
++		root := t.TempDir()
++		self := filepath.Join(t.TempDir(), "cgroup")
++		writeFile(t, self, "12:pids:/system.slice/sub2api.service\n9:memory:/system.slice/sub2api.service\n1:name=systemd:/system.slice/sub2api.service\n0::/system.slice/sub2api.service\n")
++		writeFile(t, filepath.Join(root, "memory", "memory.limit_in_bytes"), "9223372036854771712\n")
++		writeFile(t, filepath.Join(root, "memory", "system.slice", "memory.limit_in_bytes"), "9223372036854771712\n")
++		writeFile(t, filepath.Join(root, "memory", "system.slice", "sub2api.service", "memory.limit_in_bytes"), "4294967296\n")
++		require.Equal(t, uint64(4<<30), cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("v1 combined controller list", func(t *testing.T) {
++		root := t.TempDir()
++		self := filepath.Join(t.TempDir(), "cgroup")
++		writeFile(t, self, "5:cpuset,memory:/app\n")
++		writeFile(t, filepath.Join(root, "memory", "app", "memory.limit_in_bytes"), "3221225472\n")
++		require.Equal(t, uint64(3<<30), cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("host path not visible in container mount falls back to root", func(t *testing.T) {
++		root := t.TempDir()
++		self := filepath.Join(t.TempDir(), "cgroup")
++		writeFile(t, self, "9:memory:/docker/abc\n")
++		writeFile(t, filepath.Join(root, "memory", "memory.limit_in_bytes"), "2147483648\n")
++		require.Equal(t, uint64(2<<30), cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("cgroup path cannot escape the mount", func(t *testing.T) {
++		parent := t.TempDir()
++		root := filepath.Join(parent, "cgroup")
++		self := filepath.Join(t.TempDir(), "cgroup")
++		writeFile(t, filepath.Join(parent, "outside", "memory.max"), "1073741824\n")
++		writeFile(t, filepath.Join(root, "memory.max"), "max\n")
++		require.NoError(t, os.Symlink(filepath.Join(parent, "outside"), filepath.Join(root, "link")))
++
++		writeFile(t, self, "0::/../outside\n")
++		require.Zero(t, cgroupMemoryLimit(root, self))
++
++		writeFile(t, self, "0::/link\n")
++		require.Zero(t, cgroupMemoryLimit(root, self))
++	})
++
++	t.Run("unavailable", func(t *testing.T) {
++		require.Zero(t, cgroupMemoryLimit(t.TempDir(), filepath.Join(t.TempDir(), "missing")))
++	})
++}
++
++func TestGoMemoryLimit(t *testing.T) {
++	require.Zero(t, goMemoryLimit(math.MaxInt64))
++	require.Equal(t, uint64(1<<30), goMemoryLimit(1<<30))
++}
++
++func TestMinPositive(t *testing.T) {
++	require.Zero(t, minPositive(0, 0))
++	require.Equal(t, uint64(3), minPositive(0, 5, 3, 0))
++}
+diff --git a/deploy/EDGE_SECURITY.md b/deploy/EDGE_SECURITY.md
+index 0d4581eca..b8cf774a2 100644
+--- a/deploy/EDGE_SECURITY.md
++++ b/deploy/EDGE_SECURITY.md
+@@ -15,8 +15,12 @@ response. Healthy generations can remain open while an upstream is thinking.
+   image, video, and batch-image endpoints.
+ - `gateway.text_max_body_size: 33554432` limits the known pure-text
+   `/embeddings` and `/alpha/search` endpoints to 32 MiB.
+-- `gateway.request_body_memory_budget_bytes: 1073741824` shares a 1 GiB
+-  buffering budget across gateway routes and aliases. Chunk allocations, the
++- `gateway.request_body_memory_budget_bytes` shares one buffering budget
++  across gateway routes and aliases. When it is set in neither the config file
++  nor `GATEWAY_REQUEST_BODY_MEMORY_BUDGET_BYTES`, startup sizes it to a quarter
++  of the process memory limit (the smallest of physical memory, the cgroup
++  limit and `GOMEMLIMIT`), never below 1 GiB, and logs the chosen value. Any
++  explicit value is used as-is (`0` disables the budget). Chunk allocations, the
+   contiguous body copy, decompressed output, JSON normalization, and a Zstd
+   decoder reservation are charged before allocation. Each phase releases the
+   intermediate allocations it no longer references: chunks after assembly,
+@@ -104,10 +108,12 @@ to reclaim that unreachable memory immediately.
+ 
+ For example, 200 long-lived streams retaining 4 MiB each account for about
+ 800 MiB before new uploads and decoding. Another 32 concurrent Zstd decoders
+-can reserve 256 MiB of window space alone, exceeding the default 1 GiB budget
+-before their input/output buffers are counted. Increase the budget for such a
+-workload only with sufficient instance memory, or reduce concurrency/request
+-sizes. Leave separate memory headroom for SSE frames (which may be larger than
++can reserve 256 MiB of window space alone, exceeding a 1 GiB budget (the
++auto-sized value on instances with 4 GiB or less) before their input/output
++buffers are counted. Increase the budget for such a workload only with
++sufficient instance memory, or reduce concurrency/request sizes. Deployments
++that copied the old example config pin `request_body_memory_budget_bytes:
++1073741824`; remove that line to use auto-sizing. Leave separate memory headroom for SSE frames (which may be larger than
+ the queue budget), conversion state, caches, connections and GC. Setting the
+ budget to `0` disables ingress memory admission rather than limiting RSS.
+ 
+diff --git a/deploy/config.example.yaml b/deploy/config.example.yaml
+index 557ca32b5..2c6859ec0 100644
+--- a/deploy/config.example.yaml
++++ b/deploy/config.example.yaml
+@@ -263,8 +263,10 @@ gateway:
+   # Per-instance ingress allocation budget. Unreferenced intermediates are released after each phase.
+   # Final bodies (and still-referenced preread buffers) remain charged until the handler returns.
+   # Include all concurrent long-lived requests and upload/decode workspace; see EDGE_SECURITY.md.
+-  # 实例级请求体分配预算；超出返回 503 + Retry-After，0 禁用。按容器内存预留业务/GC空间。
+-  request_body_memory_budget_bytes: 1073741824
++  # Unset (default): 1/4 of the memory limit (min of RAM, cgroup limit, GOMEMLIMIT), at least 1 GiB.
++  # 实例级请求体分配预算；超出返回 503 + Retry-After，0 禁用。
++  # 不配置时自动取内存上限（物理内存/cgroup 限额/GOMEMLIMIT 的最小值）的 1/4，最低 1GiB；显式配置后不再自适应。
++  # request_body_memory_budget_bytes: 1073741824
+   # Individual socket read/write idle deadlines, not the entire SSE lifetime; 0 disables.
+   # 上传单次读取、下游单次写入/flush 超时（秒），不会限制正常长流的总时长；0 禁用。
+   request_body_read_timeout_seconds: 120

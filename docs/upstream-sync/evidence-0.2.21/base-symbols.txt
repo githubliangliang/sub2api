@@ -1,0 +1,109 @@
+backend/internal/handler/openai_gateway_handler.go:1513:func mayContainCodexCallOutputCandidate(body []byte, toolNames ...string) bool {
+backend/internal/handler/openai_gateway_handler.go:1611:func hasUniqueJSONMembers(body []byte) bool {
+backend/internal/handler/payment_webhook_handler.go:42:func (h *PaymentWebhookHandler) EasyPayNotify(c *gin.Context) {
+backend/internal/handler/payment_webhook_handler.go:48:func (h *PaymentWebhookHandler) AlipayNotify(c *gin.Context) {
+backend/internal/handler/payment_webhook_handler.go:54:func (h *PaymentWebhookHandler) WxpayNotify(c *gin.Context) {
+backend/internal/handler/payment_webhook_handler.go:71:func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string) {
+backend/internal/repository/tls_fingerprint_profile_cache.go:93:func (c *tlsFingerprintProfileCache) NotifyUpdate(ctx context.Context) error {
+backend/internal/handler/ops_error_logger.go:421:func opsErrorLogConfig() (workerCount int, queueSize int) {
+backend/internal/handler/ops_error_logger.go:621:func (w *opsCaptureWriter) CloseNotify() <-chan bool {
+backend/internal/handler/composite_platform.go:92:func bindOpenAIReasoningEffortPolicyForMessagesRequest(c *gin.Context, apiKey *service.APIKey, body []byte) {
+backend/internal/service/usage_cleanup_service.go:412:func (s *UsageCleanupService) workerInterval() time.Duration {
+backend/internal/handler/dto/notify_email_entry.go:14:func NotifyEmailEntriesFromService(entries []service.NotifyEmailEntry) []NotifyEmailEntry {
+backend/internal/handler/dto/notify_email_entry.go:30:func NotifyEmailEntriesToService(entries []NotifyEmailEntry) []service.NotifyEmailEntry {
+backend/internal/repository/auth_cache_invalidation_outbox_repo.go:22:func (r *authCacheInvalidationOutboxRepository) Claim(ctx context.Context, workerID string, limit int, lease time.Duration) ([]service.AuthCacheInvalidationEvent, error) {
+backend/internal/repository/auth_cache_invalidation_outbox_repo.go:64:func (r *authCacheInvalidationOutboxRepository) ScheduleSecondPass(ctx context.Context, id int64, workerID string, availableAt time.Time) error {
+backend/internal/repository/auth_cache_invalidation_outbox_repo.go:87:func (r *authCacheInvalidationOutboxRepository) DeleteClaimed(ctx context.Context, id int64, workerID string) error {
+backend/internal/repository/auth_cache_invalidation_outbox_repo.go:105:func (r *authCacheInvalidationOutboxRepository) RetryClaimed(ctx context.Context, id int64, workerID string, availableAt time.Time, lastError string) error {
+backend/internal/handler/user_handler.go:384:func (h *UserHandler) SendNotifyEmailCode(c *gin.Context) {
+backend/internal/handler/user_handler.go:414:func (h *UserHandler) VerifyNotifyEmail(c *gin.Context) {
+backend/internal/handler/user_handler.go:456:func (h *UserHandler) RemoveNotifyEmail(c *gin.Context) {
+backend/internal/handler/user_handler.go:499:func (h *UserHandler) ToggleNotifyEmail(c *gin.Context) {
+backend/internal/service/user_service.go:1217:func (s *UserService) SendNotifyEmailCode(ctx context.Context, userID int64, email string, emailService *EmailService, cache EmailCache, locale ...string) error {
+backend/internal/service/user_service.go:1246:func checkNotifyCodeRateLimit(ctx context.Context, cache EmailCache, userID int64, email string) error {
+backend/internal/service/user_service.go:1261:func saveNotifyVerifyCode(ctx context.Context, cache EmailCache, email, code string) error {
+backend/internal/service/user_service.go:1275:func (s *UserService) sendNotifyVerifyEmail(ctx context.Context, emailService *EmailService, userID int64, email, code, locale string) error {
+backend/internal/service/user_service.go:1308:func (s *UserService) VerifyAndAddNotifyEmail(ctx context.Context, userID int64, email, code string, cache EmailCache) error {
+backend/internal/service/user_service.go:1317:func verifyNotifyCode(ctx context.Context, cache EmailCache, email, code string) error {
+backend/internal/service/user_service.go:1325:func (s *UserService) addOrVerifyNotifyEmail(ctx context.Context, userID int64, email string) error {
+backend/internal/service/user_service.go:1351:func (s *UserService) RemoveNotifyEmail(ctx context.Context, userID int64, email string) error {
+backend/internal/service/user_service.go:1374:func (s *UserService) ToggleNotifyEmail(ctx context.Context, userID int64, email string, disabled bool) error {
+backend/internal/service/user_service.go:1437:func buildNotifyVerifyEmailBody(code, siteName string) string {
+backend/internal/service/error_passthrough_service.go:287:func (s *ErrorPassthroughService) invalidateAndNotify(ctx context.Context) {
+backend/internal/handler/admin/grok_import_probe.go:93:func (s *grokImportProbeScheduler) worker() {
+backend/internal/service/batch_image_worker_runtime.go:20:func NewBatchImageWorkerRuntime(worker *BatchImageWorker, cfg *config.Config) *BatchImageWorkerRuntime {
+backend/internal/repository/email_cache.go:213:func (c *emailCache) GetNotifyVerifyCode(ctx context.Context, email string) (*service.VerificationCodeData, error) {
+backend/internal/repository/email_cache.go:217:func (c *emailCache) SetNotifyVerifyCode(ctx context.Context, email string, data *service.VerificationCodeData, ttl time.Duration) error {
+backend/internal/repository/email_cache.go:221:func (c *emailCache) IncrNotifyVerifyCodeAttempts(ctx context.Context, email string) (int, error) {
+backend/internal/repository/email_cache.go:225:func (c *emailCache) DeleteNotifyVerifyCode(ctx context.Context, email string) error {
+backend/internal/repository/email_cache.go:235:func (c *emailCache) IncrNotifyCodeUserRate(ctx context.Context, userID int64, window time.Duration) (int64, error) {
+backend/internal/repository/email_cache.go:248:func (c *emailCache) GetNotifyCodeUserRate(ctx context.Context, userID int64) (int64, error) {
+backend/internal/handler/admin/setting_handler_audit.go:783:func equalNotifyEmailEntries(a, b []service.NotifyEmailEntry) bool {
+backend/internal/service/content_moderation.go:1237:func (s *ContentModerationService) worker(id int) {
+backend/internal/repository/error_passthrough_cache.go:99:func (c *errorPassthroughCache) NotifyUpdate(ctx context.Context) error {
+backend/internal/repository/usage_log_repo_stats.go:552:func (r *usageLogRepository) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*BatchAPIKeyUsageStats, error) {
+backend/internal/service/notify_email_entry.go:22:func ParseNotifyEmails(raw string) []NotifyEmailEntry {
+backend/internal/service/notify_email_entry.go:72:func MarshalNotifyEmails(entries []NotifyEmailEntry) string {
+backend/internal/pkg/httputil/write_timeout.go:111:func (w *writeTimeoutWriter) CloseNotify() <-chan bool {
+backend/internal/pkg/httputil/read_timeout.go:151:func (w *bodyDrainTimeoutWriter) CloseNotify() <-chan bool {
+backend/internal/repository/user_repo.go:1565:func marshalExtraEmails(entries []service.NotifyEmailEntry) string {
+backend/internal/pkg/antigravity/request_transformer.go:498:func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDummyThought, multimodalToolResults bool) ([]GeminiPart, bool, error) {
+backend/internal/service/openai_compact_sse_keepalive.go:264:func (w *openAICompactKeepaliveWriter) CloseNotify() <-chan bool {
+backend/internal/service/openai_account_runtime_block_fastpath.go:50:func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, canonicalModel ...string) bool {
+backend/internal/service/gateway_scheduling.go:1696:func (s *GatewayService) newSelectionResult(ctx context.Context, sessionID string, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
+backend/internal/service/openai_oauth_web_search_history.go:40:func openAIToolsContainWebSearch(rawTools any) bool {
+backend/internal/service/openai_oauth_web_search_history.go:246:func gjsonToolsContainWebSearch(tools gjson.Result) bool {
+backend/internal/service/gemini_messages_compat_service.go:2882:func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel string, rawData []byte, includeInlineData bool) (map[string]any, *ClaudeUsage) {
+backend/internal/securityaudit/prompt_worker.go:86:func (r *Runner) worker(ctx context.Context, workerID int) {
+backend/internal/securityaudit/prompt_worker.go:117:func (r *Runner) processSafely(ctx context.Context, workerID int, cfg ActiveConfig, job *Job) {
+backend/internal/securityaudit/prompt_worker.go:136:func (r *Runner) processJob(ctx context.Context, workerID int, cfg ActiveConfig, job *Job) error {
+backend/internal/service/subscription_maintenance_queue.go:19:func NewSubscriptionMaintenanceQueue(workerCount, queueSize int) *SubscriptionMaintenanceQueue {
+backend/internal/service/pricing_service.go:588:func (s *PricingService) downloadPricingData() error {
+backend/internal/service/announcement_service.go:408:func isValidAnnouncementNotifyMode(mode string) bool {
+backend/internal/service/balance_notify_service.go:49:func NewBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountQuotaReader) *BalanceNotifyService {
+backend/internal/service/balance_notify_service.go:57:func (s *BalanceNotifyService) SetNotificationEmailService(notificationEmailService *NotificationEmailService) {
+backend/internal/service/balance_notify_service.go:72:func (s *BalanceNotifyService) CheckBalanceAfterDeduction(ctx context.Context, user *User, oldBalance, cost float64) {
+backend/internal/service/balance_notify_service.go:88:func (s *BalanceNotifyService) canNotifyBalance(user *User) bool {
+backend/internal/service/balance_notify_service.go:97:func (s *BalanceNotifyService) resolveUserEffectiveThreshold(ctx context.Context, user *User) (effectiveThreshold float64, rechargeURL string, ok bool) {
+backend/internal/service/balance_notify_service.go:122:func (s *BalanceNotifyService) dispatchBalanceLowEmail(ctx context.Context, user *User, newBalance, threshold float64, rechargeURL string) {
+backend/internal/service/balance_notify_service.go:183:func (s *BalanceNotifyService) CheckAccountQuotaAfterIncrement(ctx context.Context, account *Account, cost float64, quotaState *AccountQuotaState) {
+backend/internal/service/balance_notify_service.go:208:func (s *BalanceNotifyService) fetchFreshAccount(ctx context.Context, snapshot *Account) *Account {
+backend/internal/service/balance_notify_service.go:223:func (s *BalanceNotifyService) checkQuotaDimCrossings(account *Account, dims []quotaDim, cost float64, adminEmails []string, siteName string) {
+backend/internal/service/balance_notify_service.go:241:func (s *BalanceNotifyService) asyncSendQuotaAlert(adminEmails []string, accountID int64, accountName, platform string, dim quotaDim, newUsed, effectiveThreshold float64, siteName string) {
+backend/internal/service/balance_notify_service.go:253:func (s *BalanceNotifyService) getBalanceNotifyConfig(ctx context.Context) (enabled bool, threshold float64, rechargeURL string) {
+backend/internal/service/balance_notify_service.go:270:func (s *BalanceNotifyService) isAccountQuotaNotifyEnabled(ctx context.Context) bool {
+backend/internal/service/balance_notify_service.go:280:func (s *BalanceNotifyService) getAccountQuotaNotifyEmails(ctx context.Context) []string {
+backend/internal/service/balance_notify_service.go:295:func (s *BalanceNotifyService) getSiteName(ctx context.Context) string {
+backend/internal/service/balance_notify_service.go:304:func filterVerifiedEmails(entries []NotifyEmailEntry) []string {
+backend/internal/service/balance_notify_service.go:327:func (s *BalanceNotifyService) collectBalanceNotifyRecipients(user *User) []string {
+backend/internal/service/balance_notify_service.go:332:func (s *BalanceNotifyService) sendEmails(recipients []string, subject, body string, logAttrs ...any) {
+backend/internal/service/balance_notify_service.go:350:func (s *BalanceNotifyService) sendBalanceLowEmails(recipients []string, userID int64, userName, userEmail string, balance, threshold float64, siteName, rechargeURL string) {
+backend/internal/service/balance_notify_service.go:394:func (s *BalanceNotifyService) sendQuotaAlertEmails(adminEmails []string, accountID int64, accountName, platform string, dim quotaDim, used float64, siteName string) {
+backend/internal/service/balance_notify_service.go:540:func (s *BalanceNotifyService) buildBalanceLowEmailBody(userName string, balance, threshold float64, siteName, rechargeURL string) string {
+backend/internal/service/balance_notify_service.go:549:func (s *BalanceNotifyService) buildQuotaAlertEmailBody(accountID int64, accountName, platform, dimLabel string, used, limit, remaining float64, thresholdDisplay, siteName string) string {
+backend/internal/service/wire.go:893:func ProvideBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountRepository, notificationEmailService *NotificationEmailService) *BalanceNotifyService {
+backend/internal/service/usage_service.go:430:func (s *UsageService) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*usagestats.BatchAPIKeyUsageStats, error) {
+backend/internal/service/auth_service.go:1724:func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string) (*TokenPairWithUser, error) {
+backend/internal/service/email_queue_service.go:37:func NewEmailQueueService(emailService *EmailService, workers int) *EmailQueueService {
+backend/internal/service/email_queue_service.go:65:func (s *EmailQueueService) worker(id int) {
+backend/internal/service/email_queue_service.go:80:func (s *EmailQueueService) processTask(workerID int, task EmailTask) {
+backend/internal/service/openai_gateway_passthrough.go:1057:func openAIStreamDataStartsTTFT(data, eventType string, forceOutput bool, mode string) bool {
+backend/internal/service/openai_gateway_passthrough.go:1416:func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
+backend/internal/service/openai_gateway_scheduling.go:1611:func (s *OpenAIGatewayService) newSelectionResult(ctx context.Context, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
+backend/internal/service/tls_fingerprint_profile_service.go:240:func (s *TLSFingerprintProfileService) invalidateAndNotify(ctx context.Context) {
+backend/internal/service/openai_content_session_seed.go:25:func deriveOpenAIContentSessionSeed(body []byte) string {
+backend/internal/service/account.go:2428:func (a *Account) QuotaNotifyConfig(dim string) (enabled bool, threshold float64, thresholdType string) {
+backend/internal/service/account.go:2435:func (a *Account) GetQuotaNotifyDailyEnabled() bool {
+backend/internal/service/account.go:2440:func (a *Account) GetQuotaNotifyDailyThreshold() float64 {
+backend/internal/service/account.go:2445:func (a *Account) GetQuotaNotifyDailyThresholdType() string {
+backend/internal/service/account.go:2450:func (a *Account) GetQuotaNotifyWeeklyEnabled() bool {
+backend/internal/service/account.go:2455:func (a *Account) GetQuotaNotifyWeeklyThreshold() float64 {
+backend/internal/service/account.go:2460:func (a *Account) GetQuotaNotifyWeeklyThresholdType() string {
+backend/internal/service/account.go:2465:func (a *Account) GetQuotaNotifyTotalEnabled() bool {
+backend/internal/service/account.go:2470:func (a *Account) GetQuotaNotifyTotalThreshold() float64 {
+backend/internal/service/account.go:2475:func (a *Account) GetQuotaNotifyTotalThresholdType() string {
+backend/internal/service/dashboard_service.go:427:func (s *DashboardService) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs []int64, startTime, endTime time.Time) (map[int64]*usagestats.BatchAPIKeyUsageStats, error) {
+backend/internal/service/openai_images_json_keepalive.go:35:func StartOpenAIImagesJSONKeepalive(c *gin.Context, interval time.Duration) func() {
+backend/internal/service/openai_images_json_keepalive.go:233:func (w *openAIImagesJSONKeepaliveWriter) CloseNotify() <-chan bool {
+backend/internal/service/api_key_service.go:197:func NotifyAuthCacheSubscriptionReady(ctx context.Context) {
+backend/internal/service/openai_ws_http_bridge.go:261:func (c *openAIWSToolCallReplayCollector) AllItems() []json.RawMessage {

@@ -1,0 +1,84 @@
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index 81e4ff5b7..f70bce78b 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -15,6 +15,7 @@ import (
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
++	"unicode/utf8"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/domain"
+@@ -437,6 +438,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+ 		return
+ 	}
+ 
++	// Reject invalid UTF-8 before JSON transformation so malformed bytes do not
++	// become retryable upstream errors.
++	if !utf8.Valid(body) {
++		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Request body must be valid UTF-8 JSON. Send UTF-8 encoded bytes.")
++		return
++	}
++
+ 	setOpsRequestContext(c, "", false)
+ 	sessionHashBody := body
+ 	body, ok = h.normalizeOpenAIResponsesCompactRequest(c, reqLog, body)
+diff --git a/backend/internal/handler/openai_responses_utf8_test.go b/backend/internal/handler/openai_responses_utf8_test.go
+new file mode 100644
+index 000000000..06e89ebe8
+--- /dev/null
++++ b/backend/internal/handler/openai_responses_utf8_test.go
+@@ -0,0 +1,52 @@
++package handler
++
++import (
++	"bytes"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestOpenAIResponses_RejectsInvalidUTF8BeforeRouting(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, suffix := range []string{"", `,"stream":false`, `,"stream":true`} {
++		for _, invalid := range [][]byte{{0xbb, 0xd8, 0xb8, 0xb4}, {0xe4, 0xbd}, {0xff}} {
++			t.Run(fmt.Sprintf("%s/%x", suffix, invalid), func(t *testing.T) {
++				body := append([]byte(`{"input":"`), invalid...)
++				body = append(body, []byte(`"`+suffix+`}`)...)
++				w := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(w)
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
++				groupID := int64(2)
++				c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 101, GroupID: &groupID, User: &service.User{ID: 1}})
++				c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
++				h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
++				h.Responses(c)
++				require.Equal(t, http.StatusBadRequest, w.Code)
++				require.Contains(t, w.Body.String(), "valid UTF-8 JSON")
++				require.Contains(t, w.Body.String(), "invalid_request_error")
++			})
++		}
++	}
++}
++
++func TestOpenAIResponses_ValidUnicodeReachesFieldValidation(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	w := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(w)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"input":"回复 ok 🌍"}`))
++	groupID := int64(2)
++	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 101, GroupID: &groupID, User: &service.User{ID: 1}})
++	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
++	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
++	h.Responses(c)
++	require.Equal(t, http.StatusBadRequest, w.Code)
++	require.Contains(t, w.Body.String(), "model is required")
++	require.NotContains(t, w.Body.String(), "UTF-8")
++}

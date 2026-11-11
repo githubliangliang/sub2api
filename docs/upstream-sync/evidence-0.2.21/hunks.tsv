@@ -1,0 +1,482 @@
+candidate	path	hunk
+6b4b37db4	backend/cmd/server/VERSION	@@ -1 +1 @@
+PR8610	backend/internal/config/config.go	@@ -16,6 +16,7 @@ import (
+PR8610	backend/internal/config/config.go	@@ -565,6 +566,24 @@ func shouldApplyLegacyWeChatEnv(configKey, envKey string) bool {
+PR8610	backend/internal/config/config.go	@@ -1051,6 +1070,7 @@ type GatewayConfig struct {
+PR8610	backend/internal/config/config.go	@@ -1935,6 +1955,15 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
+PR8610	backend/internal/config/config.go	@@ -2595,7 +2624,9 @@ func setDefaults() {
+PR8610	backend/internal/config/config_test.go	@@ -22,6 +22,92 @@ func resetViperWithJWTSecret(t *testing.T) {
+PR8610	backend/internal/pkg/sysutil/memory.go	@@ -0,0 +1,104 @@
+PR8610	backend/internal/pkg/sysutil/memory_test.go	@@ -0,0 +1,109 @@
+PR8610	deploy/EDGE_SECURITY.md	@@ -15,8 +15,12 @@ response. Healthy generations can remain open while an upstream is thinking.
+PR8610	deploy/EDGE_SECURITY.md	@@ -104,10 +108,12 @@ to reclaim that unreachable memory immediately.
+PR8610	deploy/config.example.yaml	@@ -263,8 +263,10 @@ gateway:
+PR8607	README.md	@@ -756,6 +756,16 @@ Simple Mode is designed for individual developers or internal teams who want qui
+PR8607	README_CN.md	@@ -753,6 +753,10 @@ OAuth / Setup Token 的 1.5、2、2.5 和 2.6 图片请求使用 Codex 原生 Im
+PR8603	backend/internal/service/openai_responses_orphan_precheck_test.go	@@ -1,8 +1,13 @@
+PR8603	backend/internal/service/openai_responses_orphan_precheck_test.go	@@ -126,6 +131,21 @@ func TestOpenAIResponsesOrphanPrecheckCompatibilityErrors(t *testing.T) {
+PR8590	backend/internal/service/account_usage_antigravity_force_test.go	@@ -0,0 +1,39 @@
+PR8590	backend/internal/service/account_usage_service.go	@@ -396,7 +396,7 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+PR8590	backend/internal/service/account_usage_service.go	@@ -1091,41 +1091,45 @@ func (s *AccountUsageService) getGeminiUsage(ctx context.Context, account *Accou
+PR8590	frontend/src/components/account/AccountUsageCell.vue	@@ -357,6 +357,37 @@
+PR8590	frontend/src/components/account/__tests__/AccountUsageCell.spec.ts	@@ -510,6 +510,47 @@ describe('AccountUsageCell', () => {
+PR8606	backend/ent/migrate/schema.go	@@ -1655,6 +1655,8 @@ var (
+PR8606	backend/ent/migrate/schema.go	@@ -1695,31 +1697,31 @@ var (
+PR8606	backend/ent/migrate/schema.go	@@ -1728,32 +1730,32 @@ var (
+PR8606	backend/ent/migrate/schema.go	@@ -1773,17 +1775,17 @@ var (
+PR8606	backend/ent/mutation.go	@@ -44748,6 +44748,10 @@ type UsageLogMutation struct {
+PR8606	backend/ent/mutation.go	@@ -45929,6 +45933,118 @@ func (m *UsageLogMutation) ResetCacheCreation1hTokens() {
+PR8606	backend/ent/mutation.go	@@ -47474,7 +47590,7 @@ func (m *UsageLogMutation) Type() string {
+PR8606	backend/ent/mutation.go	@@ -47538,6 +47654,12 @@ func (m *UsageLogMutation) Fields() []string {
+PR8606	backend/ent/mutation.go	@@ -47666,6 +47788,10 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
+PR8606	backend/ent/mutation.go	@@ -47769,6 +47895,10 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
+PR8606	backend/ent/mutation.go	@@ -47977,6 +48107,20 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
+PR8606	backend/ent/mutation.go	@@ -48188,6 +48332,12 @@ func (m *UsageLogMutation) AddedFields() []string {
+PR8606	backend/ent/mutation.go	@@ -48252,6 +48402,10 @@ func (m *UsageLogMutation) AddedField(name string) (ent.Value, bool) {
+PR8606	backend/ent/mutation.go	@@ -48338,6 +48492,20 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
+PR8606	backend/ent/mutation.go	@@ -48661,6 +48829,12 @@ func (m *UsageLogMutation) ResetField(name string) error {
+PR8606	backend/ent/runtime/runtime.go	@@ -2078,88 +2078,96 @@ func init() {
+PR8606	backend/ent/schema/usage_log.go	@@ -88,6 +88,10 @@ func (UsageLog) Fields() []ent.Field {
+PR8606	backend/ent/usagelog.go	@@ -65,6 +65,10 @@ type UsageLog struct {
+PR8606	backend/ent/usagelog.go	@@ -206,7 +210,7 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
+PR8606	backend/ent/usagelog.go	@@ -369,6 +373,18 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
+PR8606	backend/ent/usagelog.go	@@ -682,6 +698,12 @@ func (_m *UsageLog) String() string {
+PR8606	backend/ent/usagelog/usagelog.go	@@ -56,6 +56,10 @@ const (
+PR8606	backend/ent/usagelog/usagelog.go	@@ -181,6 +185,8 @@ var Columns = []string{
+PR8606	backend/ent/usagelog/usagelog.go	@@ -248,6 +254,10 @@ var (
+PR8606	backend/ent/usagelog/usagelog.go	@@ -405,6 +415,16 @@ func ByCacheCreation1hTokens(opts ...sql.OrderTermOption) OrderOption {
+PR8606	backend/ent/usagelog/where.go	@@ -160,6 +160,16 @@ func CacheCreation1hTokens(v int) predicate.UsageLog {
+PR8606	backend/ent/usagelog/where.go	@@ -1295,6 +1305,86 @@ func CacheCreation1hTokensLTE(v int) predicate.UsageLog {
+PR8606	backend/ent/usagelog_create.go	@@ -281,6 +281,34 @@ func (_c *UsageLogCreate) SetNillableCacheCreation1hTokens(v *int) *UsageLogCrea
+PR8606	backend/ent/usagelog_create.go	@@ -721,6 +749,14 @@ func (_c *UsageLogCreate) defaults() {
+PR8606	backend/ent/usagelog_create.go	@@ -854,6 +890,12 @@ func (_c *UsageLogCreate) check() error {
+PR8606	backend/ent/usagelog_create.go	@@ -1031,6 +1073,14 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
+PR8606	backend/ent/usagelog_create.go	@@ -1626,6 +1676,42 @@ func (u *UsageLogUpsert) AddCacheCreation1hTokens(v int) *UsageLogUpsert {
+PR8606	backend/ent/usagelog_create.go	@@ -2540,6 +2626,48 @@ func (u *UsageLogUpsertOne) UpdateCacheCreation1hTokens() *UsageLogUpsertOne {
+PR8606	backend/ent/usagelog_create.go	@@ -3696,6 +3824,48 @@ func (u *UsageLogUpsertBulk) UpdateCacheCreation1hTokens() *UsageLogUpsertBulk {
+PR8606	backend/ent/usagelog_update.go	@@ -435,6 +435,48 @@ func (_u *UsageLogUpdate) AddCacheCreation1hTokens(v int) *UsageLogUpdate {
+PR8606	backend/ent/usagelog_update.go	@@ -1228,6 +1270,18 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+PR8606	backend/ent/usagelog_update.go	@@ -1949,6 +2003,48 @@ func (_u *UsageLogUpdateOne) AddCacheCreation1hTokens(v int) *UsageLogUpdateOne
+PR8606	backend/ent/usagelog_update.go	@@ -2772,6 +2868,18 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err
+PR8606	backend/go.sum	@@ -329,6 +329,8 @@ github.com/mattn/go-isatty v0.0.14/go.mod h1:7GGIvUiUoEMVVmxf/4nioHXj79iQHKdU27k
+PR8606	backend/go.sum	@@ -369,6 +371,8 @@ github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJm
+PR8606	backend/go.sum	@@ -403,6 +407,8 @@ github.com/refraction-networking/utls v1.8.2 h1:j4Q1gJj0xngdeH+Ox/qND11aEfhpgoEv
+PR8606	backend/go.sum	@@ -442,6 +448,8 @@ github.com/spf13/afero v1.11.0 h1:WJQKhtpdm3v2IzqG8VMqrr6Rf3UYpEF239Jy9wNepM8=
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -65,6 +65,7 @@ type channelModelPricingRequest struct {
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -96,6 +97,7 @@ type pricingIntervalRequest struct {
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -139,6 +141,7 @@ type channelModelPricingResponse struct {
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -171,6 +174,7 @@ type pricingIntervalResponse struct {
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -269,6 +273,7 @@ func pricingToResponse(p *service.ChannelModelPricing) channelModelPricingRespon
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -310,6 +315,7 @@ func intervalToResponse(iv service.PricingInterval) pricingIntervalResponse {
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -345,6 +351,7 @@ func pricingRequestToService(reqs []channelModelPricingRequest, allowChannelMult
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -367,6 +374,7 @@ func pricingRequestToService(reqs []channelModelPricingRequest, allowChannelMult
+PR8606	backend/internal/handler/admin/channel_handler.go	@@ -625,6 +633,7 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
+PR8606	backend/internal/handler/admin/channel_handler_test.go	@@ -320,16 +320,17 @@ func TestPricingRequestToService_Defaults(t *testing.T) {
+PR8606	backend/internal/handler/admin/channel_handler_test.go	@@ -343,6 +344,7 @@ func TestPricingRequestToService_WithAllFields(t *testing.T) {
+PR8606	backend/internal/handler/admin/channel_handler_test.go	@@ -355,16 +357,17 @@ func TestPricingRequestToService_WithIntervals(t *testing.T) {
+PR8606	backend/internal/handler/admin/channel_handler_test.go	@@ -388,6 +391,7 @@ func TestPricingRequestToService_WithIntervals(t *testing.T) {
+PR8606	backend/internal/handler/available_channel_handler.go	@@ -74,6 +74,7 @@ type userSupportedModelPricing struct {
+PR8606	backend/internal/handler/available_channel_handler.go	@@ -91,6 +92,7 @@ type userPricingIntervalDTO struct {
+PR8606	backend/internal/handler/available_channel_handler.go	@@ -319,6 +321,7 @@ func toUserPricingIntervals(src []service.PricingInterval) []userPricingInterval
+PR8606	backend/internal/handler/available_channel_handler.go	@@ -350,6 +353,7 @@ func toUserPricing(p *service.ChannelModelPricing) *userSupportedModelPricing {
+PR8606	backend/internal/handler/dto/mappers.go	@@ -709,6 +709,8 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
+PR8606	backend/internal/handler/dto/types.go	@@ -620,8 +620,10 @@ type UsageLog struct {
+PR8606	backend/internal/handler/model_plaza_handler.go	@@ -38,11 +38,12 @@ func NewModelPlazaHandler(
+PR8606	backend/internal/handler/model_plaza_handler.go	@@ -257,11 +258,12 @@ func toModelPlazaOfficialPricing(p *service.PlazaOfficialPricing) *modelPlazaOff
+PR8606	backend/internal/repository/channel_repo_account_stats_pricing.go	@@ -67,7 +67,7 @@ func (r *channelRepository) batchLoadAccountStatsModelPricing(ctx context.Contex
+PR8606	backend/internal/repository/channel_repo_account_stats_pricing.go	@@ -84,7 +84,7 @@ func (r *channelRepository) batchLoadAccountStatsModelPricing(ctx context.Contex
+PR8606	backend/internal/repository/channel_repo_account_stats_pricing.go	@@ -188,10 +188,10 @@ func createAccountStatsModelPricingTx(ctx context.Context, tx *sql.Tx, ruleID in
+PR8606	backend/internal/repository/channel_repo_account_stats_pricing.go	@@ -212,10 +212,10 @@ func createAccountStatsModelPricingTx(ctx context.Context, tx *sql.Tx, ruleID in
+PR8606	backend/internal/repository/channel_repo_account_stats_pricing.go	@@ -227,7 +227,7 @@ func (r *channelRepository) batchLoadAccountStatsIntervals(ctx context.Context,
+PR8606	backend/internal/repository/channel_repo_account_stats_pricing.go	@@ -243,7 +243,7 @@ func (r *channelRepository) batchLoadAccountStatsIntervals(ctx context.Context,
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -16,7 +16,7 @@ import (
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -65,9 +65,9 @@ func (r *channelRepository) UpdateModelPricing(ctx context.Context, pricing *ser
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -100,7 +100,7 @@ func (r *channelRepository) ReplaceModelPricing(ctx context.Context, channelID i
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -140,7 +140,7 @@ func (r *channelRepository) batchLoadModelPricing(ctx context.Context, channelID
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -157,7 +157,7 @@ func (r *channelRepository) batchLoadIntervals(ctx context.Context, pricingIDs [
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -184,7 +184,7 @@ func scanModelPricingRows(rows *sql.Rows) ([]service.ChannelModelPricing, []int6
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -261,10 +261,10 @@ func createModelPricingExec(ctx context.Context, exec dbExec, pricing *service.C
+PR8606	backend/internal/repository/channel_repo_pricing.go	@@ -332,10 +332,10 @@ func unmarshalChannelTimePricing(data []byte) (*service.ChannelTimePricing, erro
+PR8606	backend/internal/repository/channel_repo_pricing_reasoning_test.go	@@ -30,7 +30,7 @@ func (c *capturedReasoningMultipliersJSON) Match(value driver.Value) bool {
+PR8606	backend/internal/repository/channel_repo_pricing_reasoning_test.go	@@ -56,9 +56,9 @@ func TestChannelReasoningEffortMultipliersRoundTrip(t *testing.T) {
+PR8606	backend/internal/repository/channel_repo_pricing_reasoning_test.go	@@ -69,7 +69,7 @@ func TestChannelReasoningEffortMultipliersRoundTrip(t *testing.T) {
+PR8606	backend/internal/repository/channel_repo_pricing_reasoning_test.go	@@ -148,7 +148,7 @@ func TestAccountStatsReasoningEffortMultipliersRoundTrip(t *testing.T) {
+PR8606	backend/internal/repository/channel_repo_pricing_reasoning_test.go	@@ -157,13 +157,13 @@ func TestAccountStatsReasoningEffortMultipliersRoundTrip(t *testing.T) {
+PR8606	backend/internal/repository/channel_repo_pricing_time_test.go	@@ -16,7 +16,7 @@ import (
+PR8606	backend/internal/repository/channel_repo_pricing_time_test.go	@@ -33,7 +33,7 @@ func newChannelModelPricingTimePricingRepo(t *testing.T) (*channelRepository, sq
+PR8606	backend/internal/repository/channel_repo_pricing_time_test.go	@@ -105,10 +105,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateRoundTrip(t *testing.T) {
+PR8606	backend/internal/repository/channel_repo_pricing_time_test.go	@@ -118,10 +118,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateRoundTrip(t *testing.T) {
+PR8606	backend/internal/repository/channel_repo_pricing_time_test.go	@@ -153,10 +153,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateWriteNullWhenDisabled(t *t
+PR8606	backend/internal/repository/channel_repo_pricing_time_test.go	@@ -166,10 +166,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateWriteNullWhenDisabled(t *t
+PR8606	backend/internal/repository/openai_cache_write_ttl_integration_test.go	@@ -0,0 +1,117 @@
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -85,6 +85,8 @@ var usageLogInsertArgTypes = [...]string{
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -286,6 +288,8 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -293,7 +297,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -746,6 +750,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -841,6 +847,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -905,6 +913,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -1009,6 +1019,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -1099,6 +1111,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -1163,6 +1177,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -1235,6 +1251,8 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -1242,7 +1260,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared
+PR8606	backend/internal/repository/usage_log_repo_insert.go	@@ -1366,6 +1384,8 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
+PR8606	backend/internal/repository/usage_log_repo_insert_shape_unit_test.go	@@ -129,7 +129,7 @@ func TestPrepareUsageLogInsert_UpstreamRequestIDArgWiring(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_repo_query.go	@@ -19,7 +19,7 @@ import (
+PR8606	backend/internal/repository/usage_log_repo_query.go	@@ -502,6 +502,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
+PR8606	backend/internal/repository/usage_log_repo_query.go	@@ -568,6 +570,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
+PR8606	backend/internal/repository/usage_log_repo_query.go	@@ -601,6 +605,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
+PR8606	backend/internal/repository/usage_log_repo_request_type_test.go	@@ -102,6 +102,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_repo_request_type_test.go	@@ -197,6 +199,8 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_repo_request_type_test.go	@@ -278,8 +282,8 @@ func TestPrepareUsageLogInsert_PersistsNativeCompactionV2WithoutChangingRequestT
+PR8606	backend/internal/repository/usage_log_repo_request_type_test.go	@@ -960,6 +964,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_repo_request_type_test.go	@@ -1040,6 +1046,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_repo_request_type_test.go	@@ -1103,6 +1111,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_repo_request_type_test.go	@@ -1167,6 +1177,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_session_id_unit_test.go	@@ -39,15 +39,15 @@ func TestPrepareUsageLogInsert_SessionIDArgWiring(t *testing.T) {
+PR8606	backend/internal/repository/usage_log_session_id_unit_test.go	@@ -55,14 +55,14 @@ func TestPrepareUsageLogInsert_SessionIDArgWiring(t *testing.T) {
+PR8606	backend/internal/server/api_contract_test.go	@@ -602,6 +602,8 @@ func TestAPIContracts(t *testing.T) {
+PR8606	backend/internal/service/account_stats_pricing.go	@@ -226,12 +226,13 @@ func calculateTokenStatsCost(pricing *ChannelModelPricing, tokens UsageTokens) *
+PR8606	backend/internal/service/account_stats_pricing.go	@@ -249,6 +250,9 @@ func calculateTokenStatsCost(pricing *ChannelModelPricing, tokens UsageTokens) *
+PR8606	backend/internal/service/billing_context_schedule.go	"@@ -21,14 +21,15 @@ const ContextPricingBasisWholeRequest ContextPricingBasis = ""whole_request"""
+PR8606	backend/internal/service/billing_context_schedule.go	@@ -303,12 +304,18 @@ func probeContextTier(seg contextSegment, resolved *ResolvedPricing, probe func(
+PR8606	backend/internal/service/billing_context_schedule.go	@@ -352,7 +359,7 @@ func roundContextPrice(v float64) float64 {
+PR8606	backend/internal/service/billing_context_schedule.go	@@ -367,12 +374,14 @@ func explicitContextPricingFields(resolved *ResolvedPricing, contextTokens int)
+PR8606	backend/internal/service/billing_context_schedule.go	@@ -406,7 +415,8 @@ func mergeEqualContextTiers(tiers []ContextPricingTier) []ContextPricingTier {
+PR8606	backend/internal/service/billing_service.go	@@ -121,6 +121,7 @@ type ModelPricing struct {
+PR8606	backend/internal/service/billing_service.go	@@ -186,15 +187,17 @@ func pricingWithPriorityMultiplier(base *ModelPricing, multiplier float64) *Mode
+PR8606	backend/internal/service/billing_service.go	@@ -1532,6 +1535,12 @@ func applyChannelTokenPriceOverrides(pricing *ModelPricing, channelPricing *Chan
+PR8606	backend/internal/service/billing_service.go	@@ -1685,6 +1694,7 @@ func (s *BillingService) computeTokenBreakdown(
+PR8606	backend/internal/service/billing_service.go	@@ -1701,6 +1711,19 @@ func (s *BillingService) computeTokenBreakdown(
+PR8606	backend/internal/service/billing_service.go	@@ -1762,7 +1785,7 @@ func (s *BillingService) computeTokenBreakdown(
+PR8606	backend/internal/service/billing_service.go	@@ -1786,9 +1809,12 @@ func (s *BillingService) computeTokenBreakdown(
+PR8606	backend/internal/service/billing_service.go	@@ -1801,6 +1827,21 @@ func (s *BillingService) computeCacheCreationCost(pricing *ModelPricing, tokens
+PR8606	backend/internal/service/billing_service.go	@@ -1952,7 +1993,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+PR8606	backend/internal/service/billing_service.go	@@ -1976,6 +2017,10 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+PR8606	backend/internal/service/channel.go	@@ -97,6 +97,7 @@ type ChannelModelPricing struct {
+PR8606	backend/internal/service/channel.go	@@ -135,6 +136,7 @@ type PricingInterval struct {
+PR8606	backend/internal/service/channel.go	@@ -383,6 +385,7 @@ func validateIntervalPrices(iv *PricingInterval, idx int) error {
+PR8606	backend/internal/service/channel_available.go	@@ -139,13 +139,13 @@ func pricingNeedsFallback(p *ChannelModelPricing) bool {
+PR8606	backend/internal/service/channel_service.go	@@ -787,6 +787,7 @@ func checkPricesNotNegative(p ChannelModelPricing) error {
+PR8606	backend/internal/service/channel_service.go	@@ -814,7 +815,7 @@ func checkPricesNotNegative(p ChannelModelPricing) error {
+PR8606	backend/internal/service/model_plaza_service.go	@@ -10,11 +10,12 @@ import (
+PR8606	backend/internal/service/model_plaza_service.go	@@ -272,6 +273,7 @@ func plazaPricingFromSchedule(raw *ChannelModelPricing, sched *ContextPricingSch
+PR8606	backend/internal/service/model_plaza_service.go	@@ -283,15 +285,16 @@ func plazaIntervalsFromTiers(tiers []ContextPricingTier) []PricingInterval {
+PR8606	backend/internal/service/model_plaza_service.go	@@ -366,6 +369,7 @@ func (s *ModelPlazaService) lookupOfficialPricing(ctx context.Context, modelName
+PR8606	backend/internal/service/model_plaza_service.go	@@ -373,7 +377,7 @@ func (s *ModelPlazaService) lookupOfficialPricing(ctx context.Context, modelName
+PR8606	backend/internal/service/model_pricing_resolver.go	@@ -290,7 +290,7 @@ func filterValidIntervals(intervals []PricingInterval) []PricingInterval {
+PR8606	backend/internal/service/model_pricing_resolver.go	@@ -358,6 +358,15 @@ func intervalToModelPricing(iv *PricingInterval, base *ModelPricing, chPricing *
+PR8606	backend/internal/service/openai_cache_write_ttl_test.go	@@ -0,0 +1,201 @@
+PR8606	backend/internal/service/openai_gateway_response_handling.go	@@ -1290,6 +1290,8 @@ func mergeOpenAIUsageNonZero(dst *OpenAIUsage, src OpenAIUsage) {
+PR8606	backend/internal/service/openai_gateway_response_handling.go	@@ -1563,6 +1565,7 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
+PR8606	backend/internal/service/openai_gateway_response_handling.go	@@ -1575,12 +1578,14 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
+PR8606	backend/internal/service/openai_gateway_response_handling.go	@@ -1622,6 +1627,28 @@ func openAICacheCreationTokensFromUsage(value gjson.Result) int {
+PR8606	backend/internal/service/openai_gateway_service.go	@@ -222,13 +222,15 @@ func (s *OpenAICodexUsageSnapshot) Normalize() *NormalizedCodexLimits {
+PR8606	backend/internal/service/openai_gateway_usage.go	@@ -186,13 +186,15 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
+PR8606	backend/internal/service/openai_gateway_usage.go	@@ -400,6 +402,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
+PR8606	backend/internal/service/usage_log.go	@@ -152,8 +152,10 @@ type UsageLog struct {
+PR8606	backend/migrations/250_openai_cache_write_ttl.sql	@@ -0,0 +1,25 @@
+PR8606	frontend/src/api/admin/channels.ts	@@ -17,6 +17,7 @@ export interface PricingInterval {
+PR8606	frontend/src/api/admin/channels.ts	@@ -47,6 +48,7 @@ export interface ChannelModelPricing {
+PR8606	frontend/src/api/admin/channels.ts	@@ -177,6 +179,7 @@ export interface ModelDefaultPricing {
+PR8606	frontend/src/api/channels.ts	@@ -30,6 +30,7 @@ export interface UserPricingInterval {
+PR8606	frontend/src/api/channels.ts	@@ -44,6 +45,7 @@ export interface UserSupportedModelPricing {
+PR8606	frontend/src/api/modelPlaza.ts	@@ -15,6 +15,7 @@ export interface PlazaOfficialPricing {
+PR8606	frontend/src/components/admin/channel/IntervalRow.vue	@@ -25,15 +25,20 @@
+PR8606	frontend/src/components/admin/channel/IntervalRow.vue	@@ -108,6 +113,7 @@ const { t } = useI18n()
+PR8606	frontend/src/components/admin/channel/IntervalRow.vue	@@ -123,6 +129,7 @@ const isEmpty = computed(() => {
+PR8606	frontend/src/components/admin/channel/PricingEntryCard.vue	@@ -118,15 +118,20 @@
+PR8606	frontend/src/components/admin/channel/PricingEntryCard.vue	@@ -173,6 +178,7 @@
+PR8606	frontend/src/components/admin/channel/PricingEntryCard.vue	@@ -370,6 +376,7 @@ function addInterval() {
+PR8606	frontend/src/components/admin/channel/PricingEntryCard.vue	@@ -387,6 +394,7 @@ function addMediaTier() {
+PR8606	frontend/src/components/admin/channel/PricingEntryCard.vue	@@ -420,7 +428,7 @@ async function onModelsUpdate(newModels: string[]) {
+PR8606	frontend/src/components/admin/channel/PricingEntryCard.vue	@@ -434,6 +442,7 @@ async function onModelsUpdate(newModels: string[]) {
+PR8606	frontend/src/components/admin/channel/__tests__/types.spec.ts	@@ -42,6 +42,14 @@ describe('reasoning effort multipliers', () => {
+PR8606	frontend/src/components/admin/channel/types.ts	@@ -11,6 +11,7 @@ export interface IntervalFormEntry {
+PR8606	frontend/src/components/admin/channel/types.ts	@@ -27,6 +28,7 @@ export interface PricingFormEntry {
+PR8606	frontend/src/components/admin/channel/types.ts	@@ -229,6 +231,7 @@ export function apiIntervalsToForm(intervals: PricingInterval[]): IntervalFormEn
+PR8606	frontend/src/components/admin/channel/types.ts	@@ -248,6 +251,7 @@ export function formIntervalsToAPI(intervals: IntervalFormEntry[]): PricingInter
+PR8606	frontend/src/components/admin/channel/types.ts	@@ -373,6 +377,7 @@ function validateIntervalPrices(iv: IntervalFormEntry, idx: number, t: Translate
+PR8606	frontend/src/components/admin/usage/UsageTable.vue	@@ -176,6 +176,7 @@
+PR8606	frontend/src/components/admin/usage/UsageTable.vue	@@ -351,8 +352,8 @@
+PR8606	frontend/src/components/admin/usage/UsageTable.vue	@@ -367,6 +368,15 @@
+PR8606	frontend/src/components/admin/usage/__tests__/UsageTable.spec.ts	@@ -145,6 +145,26 @@ const baseImageRow = {
+PR8606	frontend/src/components/channels/SupportedModelChip.vue	@@ -91,6 +91,13 @@
+PR8606	frontend/src/components/modelPlaza/PlazaModelPricingTable.vue	@@ -147,12 +147,15 @@
+PR8606	frontend/src/components/modelPlaza/PlazaModelPricingTable.vue	@@ -170,6 +173,9 @@
+PR8606	frontend/src/components/modelPlaza/PlazaModelPricingTable.vue	@@ -245,12 +251,15 @@
+PR8606	frontend/src/components/modelPlaza/PlazaModelPricingTable.vue	@@ -268,6 +277,9 @@
+PR8606	frontend/src/components/modelPlaza/PlazaModelPricingTable.vue	@@ -465,11 +477,11 @@ function perUnitSuffix(m: PlazaModel): string {
+PR8606	frontend/src/components/modelPlaza/PlazaModelPricingTable.vue	@@ -519,7 +531,7 @@ function officialIntervals(m: PlazaModel): UserPricingInterval[] {
+PR8606	frontend/src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts	@@ -58,6 +58,26 @@ function mountTable(
+PR8606	frontend/src/i18n/locales/en/admin/channels.ts	@@ -33,7 +33,10 @@ export default {
+PR8606	frontend/src/i18n/locales/en/admin/channels.ts	@@ -84,6 +87,7 @@ export default {
+PR8606	frontend/src/i18n/locales/en/admin/channels.ts	@@ -130,11 +134,15 @@ export default {
+PR8606	frontend/src/i18n/locales/en/dashboard.ts	@@ -639,6 +639,7 @@ export default {
+PR8606	frontend/src/i18n/locales/zh/admin/channels.ts	@@ -33,7 +33,10 @@ export default {
+PR8606	frontend/src/i18n/locales/zh/admin/channels.ts	@@ -84,6 +87,7 @@ export default {
+PR8606	frontend/src/i18n/locales/zh/admin/channels.ts	@@ -130,11 +134,15 @@ export default {
+PR8606	frontend/src/i18n/locales/zh/dashboard.ts	@@ -644,6 +644,7 @@ export default {
+PR8606	frontend/src/types/index.ts	@@ -1839,6 +1839,8 @@ export interface UsageLog {
+PR8606	frontend/src/utils/__tests__/intervalPrices.spec.ts	@@ -7,6 +7,7 @@ const interval = { min_tokens: 272000, max_tokens: null, input_price: null, outp
+PR8606	frontend/src/utils/__tests__/intervalPrices.spec.ts	@@ -17,4 +18,13 @@ describe('resolveIntervalPrices', () => {
+PR8606	frontend/src/utils/pricing.ts	@@ -25,7 +25,7 @@ export function formatScaled(value: number | null, scale: number, minFractionDig
+PR8606	frontend/src/utils/pricing.ts	@@ -37,6 +37,7 @@ export function resolveIntervalPrices(iv: UserPricingInterval, base: TokenPrices
+PR8606	frontend/src/views/admin/ChannelsView.vue	@@ -879,6 +879,7 @@ function addPricingEntry(sectionIdx: number) {
+PR8606	frontend/src/views/admin/ChannelsView.vue	@@ -918,6 +919,7 @@ async function syncLatestModels(sectionIdx: number) {
+PR8606	frontend/src/views/admin/ChannelsView.vue	@@ -988,6 +990,7 @@ function addRulePricingEntry(sectionIdx: number, ruleIndex: number) {
+PR8606	frontend/src/views/admin/ChannelsView.vue	@@ -1106,6 +1109,7 @@ function accountStatsRulesToAPI(): AccountStatsPricingRule[] {
+PR8606	frontend/src/views/admin/ChannelsView.vue	@@ -1150,6 +1154,7 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
+PR8606	frontend/src/views/admin/ChannelsView.vue	@@ -1251,6 +1256,7 @@ function apiToForm(channel: Channel): PlatformSection[] {
+PR8606	frontend/src/views/admin/ChannelsView.vue	@@ -1445,6 +1451,7 @@ function distributeRulesToPlatforms(apiRules: AccountStatsPricingRule[]) {
+PR8606	frontend/src/views/admin/GroupsView.vue	@@ -4419,6 +4419,7 @@ const emptyGroupPricing = (): PricingFormEntry => ({
+PR8606	frontend/src/views/admin/GroupsView.vue	@@ -4441,6 +4442,7 @@ const groupPricingFromAPI = (
+PR8606	frontend/src/views/admin/GroupsView.vue	@@ -4466,6 +4468,7 @@ const groupPricingToAPI = (
+PR8381	backend/internal/service/billing_service.go	@@ -426,7 +426,7 @@ func (s *BillingService) initFallbackPricing() {
+PR8381	backend/internal/service/billing_service_test.go	@@ -2104,7 +2104,8 @@ func TestNewModelPricingCatalogFallbackAndContext(t *testing.T) {
+PR8381	backend/internal/service/pricing_service.go	@@ -153,7 +153,7 @@ var (
+PR8381	backend/resources/model-pricing/model_prices_and_context_window.json	@@ -1015,7 +1015,7 @@
+PR8384	backend/internal/service/pricing_service.go	@@ -647,10 +647,10 @@ func (s *PricingService) downloadPricingData() error {
+PR8384	backend/internal/service/pricing_service_hot_reload_test.go	@@ -2,6 +2,8 @@ package service
+PR8384	backend/internal/service/pricing_service_hot_reload_test.go	@@ -160,21 +162,64 @@ func TestPricingHotReload_DeletedFileDropsItsLayer(t *testing.T) {
+PR8634	backend/internal/pkg/claude/effort_catalog.go	@@ -57,6 +57,16 @@ func IsHaiku55(model string) bool {
+PR8634	backend/internal/service/billing_service.go	@@ -445,7 +445,19 @@ func (s *BillingService) initFallbackPricing() {
+PR8634	backend/internal/service/billing_service.go	@@ -1065,6 +1077,12 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+PR8634	backend/internal/service/claude52_pricing_test.go	@@ -0,0 +1,114 @@
+PR8634	backend/internal/service/pricing_service.go	@@ -142,6 +142,14 @@ var (
+PR8634	backend/internal/service/pricing_service.go	@@ -1451,6 +1459,19 @@ func (s *PricingService) extractBaseName(model string) string {
+PR8634	backend/resources/model-pricing/model_prices_and_context_window.json	@@ -229,6 +229,26 @@
+PR8564	backend/internal/handler/openai_gateway_handler_test.go	@@ -2472,23 +2472,76 @@ func TestOpenAIResponses_APIKeyPassthroughSSERateLimitUsesConfiguredPoolRetry(t
+PR8564	backend/internal/handler/openai_gateway_handler_test.go	@@ -2498,6 +2551,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
+PR8564	backend/internal/handler/openai_gateway_handler_test.go	@@ -2535,7 +2589,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
+PR8564	backend/internal/handler/openai_gateway_handler_test.go	@@ -2553,7 +2607,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
+PR8564	backend/internal/handler/openai_gateway_handler_test.go	@@ -2575,6 +2629,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
+PR8564	backend/internal/handler/openai_gateway_handler_test.go	@@ -2628,7 +2683,11 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
+PR8564	backend/internal/handler/openai_gateway_handler_test.go	@@ -2647,22 +2706,52 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
+PR8564	backend/internal/service/openai_ws_forwarder_ingress.go	@@ -1337,6 +1337,15 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+PR8358	backend/internal/service/openai_ws_forwarder_ingress.go	@@ -1255,7 +1255,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+PR8358	backend/internal/service/openai_ws_forwarder_ingress.go	@@ -1356,6 +1361,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+PR8358	backend/internal/service/openai_ws_forwarder_ingress.go	@@ -1571,6 +1577,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+PR8358	backend/internal/service/openai_ws_forwarder_ingress.go	@@ -1687,6 +1695,28 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+PR8358	backend/internal/service/openai_ws_forwarder_ingress.go	@@ -1866,6 +1896,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+PR8358	backend/internal/service/openai_ws_pool.go	@@ -292,6 +292,9 @@ type openAIWSConn struct {
+PR8358	backend/internal/service/openai_ws_pool.go	@@ -600,6 +603,9 @@ func (c *openAIWSConn) writeJSON(value any, writeCtx context.Context) error {
+PR8358	backend/internal/service/openai_ws_search_activation.go	@@ -0,0 +1,60 @@
+PR8358	backend/internal/service/openai_ws_search_activation_test.go	@@ -0,0 +1,202 @@
+PR8565	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -87,7 +87,10 @@ type RelayOptions struct {
+PR8565	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -116,6 +119,7 @@ type relayState struct {
+PR8565	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -181,7 +185,7 @@ func Relay(
+PR8565	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -768,7 +772,7 @@ func observeUpstreamMessage(
+PR8565	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -788,7 +792,7 @@ func observeUpstreamMessage(
+PR8565	backend/internal/service/openai_ws_v2/passthrough_relay.go	@@ -1326,6 +1330,13 @@ func shouldParseUsage(eventType string) bool {
+PR8565	backend/internal/service/openai_ws_v2/passthrough_relay_test.go	@@ -1558,3 +1558,82 @@ func TestRelay_OnTurnComplete_FirstTokenMsRecordedForEveryTurn(t *testing.T) {
+PR8565	backend/internal/service/openai_ws_v2_passthrough_adapter.go	@@ -1175,6 +1175,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
+PR8565	backend/internal/service/openai_ws_v2_passthrough_adapter.go	@@ -1572,6 +1573,18 @@ func relayErrorText(err error) string {
+PR8565	backend/internal/service/openai_ws_v2_passthrough_ttft_mode_test.go	@@ -0,0 +1,174 @@
+PR8576	backend/internal/service/openai_codex_metadata_events_test.go	@@ -0,0 +1,51 @@
+PR8576	backend/internal/service/openai_gateway_passthrough.go	@@ -1052,7 +1052,8 @@ func openAIStreamEventIsMetadata(eventType string) bool {
+PR8579	backend/internal/service/openai_account_runtime_block_fastpath.go	@@ -104,6 +104,18 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
+PR8579	backend/internal/service/openai_capacity_shed_model_rule_test.go	@@ -0,0 +1,217 @@
+PR8579	backend/internal/service/openai_gateway_passthrough.go	@@ -1455,6 +1455,36 @@ func openAIStream403AccountFailure(payload []byte, message string) bool {
+PR8579	backend/internal/service/openai_gateway_passthrough.go	@@ -1615,13 +1645,16 @@ func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffects(
+PR8579	backend/internal/service/openai_gateway_upstream_errors.go	@@ -455,6 +455,10 @@ func (s *OpenAIGatewayService) newOpenAIAccountFailoverErrorWithClassificationHe
+PR8585	backend/internal/pkg/apicompat/responses_to_chatcompletions.go	@@ -498,10 +498,12 @@ func generateChatCmplID() string {
+PR8585	backend/internal/pkg/apicompat/responses_to_chatcompletions.go	@@ -540,9 +542,11 @@ func (a *BufferedResponseAccumulator) ProcessEvent(event *ResponsesStreamEvent)
+PR8585	backend/internal/pkg/apicompat/responses_to_chatcompletions.go	@@ -607,10 +611,12 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
+PR8585	backend/internal/pkg/apicompat/types.go	@@ -417,6 +417,9 @@ type ResponsesOutput struct {
+PR8585	backend/internal/service/openai_responses_sealed_call_test.go	@@ -0,0 +1,106 @@
+PR8386	backend/internal/pkg/apicompat/anthropic_responses_test.go	@@ -1,6 +1,7 @@
+PR8386	backend/internal/pkg/apicompat/anthropic_responses_test.go	@@ -197,6 +198,50 @@ func TestAnthropicToResponses_ThinkingSignatureBecomesReasoning(t *testing.T) {
+PR8386	backend/internal/pkg/apicompat/anthropic_to_responses.go	@@ -302,6 +302,11 @@ func anthropicAssistantToResponses(raw json.RawMessage) ([]ResponsesInputItem, e
+PR8589	backend/internal/service/openai_content_session_seed.go	"@@ -19,8 +19,7 @@ const contentStablePrefixSessionSeedPrefix = ""compat_csp_"""
+PR8589	backend/internal/service/openai_content_session_seed.go	@@ -148,15 +147,19 @@ scanRoot:
+PR8589	backend/internal/service/openai_content_session_seed.go	@@ -164,6 +167,10 @@ scanRoot:
+PR8589	backend/internal/service/openai_content_session_seed_responses_test.go	@@ -0,0 +1,118 @@
+PR8385	backend/internal/service/gateway_compat_error_policy_test.go	@@ -0,0 +1,124 @@
+PR8385	backend/internal/service/gateway_forward_as_chat_completions.go	@@ -155,7 +155,12 @@ func (s *GatewayService) ForwardAsChatCompletions(
+PR8385	backend/internal/service/gateway_forward_as_chat_completions.go	@@ -167,10 +172,6 @@ func (s *GatewayService) ForwardAsChatCompletions(
+PR8385	backend/internal/service/gateway_forward_as_responses.go	@@ -166,7 +166,12 @@ func (s *GatewayService) ForwardAsResponses(
+PR8385	backend/internal/service/gateway_forward_as_responses.go	@@ -178,10 +183,6 @@ func (s *GatewayService) ForwardAsResponses(
+PR8584	backend/internal/service/gemini_chat_completions_compat_service_test.go	@@ -161,3 +161,65 @@ func TestGeminiResponseToChatCompletionsRetainsTextAndToolBehavior(t *testing.T)
+PR8584	backend/internal/service/gemini_messages_compat_service.go	@@ -3027,7 +3027,8 @@ func convertGeminiToClaudeMessage(geminiResp map[string]any, originalModel strin
+PR8621	backend/internal/pkg/antigravity/request_transformer.go	@@ -504,6 +504,7 @@ func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDu
+PR8621	backend/internal/pkg/antigravity/request_transformer.go	@@ -591,14 +592,15 @@ func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDu
+PR8621	backend/internal/pkg/antigravity/request_transformer_test.go	@@ -743,13 +743,13 @@ func TestTransformClaudeToGemini_ToolResultImagesReachUpstream(t *testing.T) {
+PR8621	backend/internal/pkg/antigravity/tool_result_images_test.go	@@ -101,3 +101,45 @@ func TestToolResultMediaPlacement(t *testing.T) {
+PR8621	backend/internal/service/antigravity_tool_result_images_test.go	@@ -62,3 +62,26 @@ func toolImageCompatWire(t *testing.T, raw []byte, model string) []byte {
+PR8568	backend/internal/repository/scheduler_cache_test.go	@@ -1,8 +1,10 @@
+PR8568	backend/internal/repository/scheduler_cache_test.go	@@ -54,6 +56,34 @@ func TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity(t *testing.T) {
+PR8568	backend/internal/service/antigravity_gateway_retry.go	@@ -882,7 +882,7 @@ func (s *AntigravityGatewayService) setAntigravityModelRateLimits(ctx context.Co
+PR8568	backend/internal/service/antigravity_pro_quota_rate_limit_test.go	@@ -0,0 +1,104 @@
+PR8568	backend/internal/service/model_rate_limit.go	@@ -6,12 +6,14 @@ import (
+PR8568	backend/internal/service/model_rate_limit.go	@@ -80,9 +82,7 @@ func (a *Account) modelRateLimitKeysForRequest(ctx context.Context, requestedMod
+PR8568	backend/internal/service/model_rate_limit.go	@@ -159,14 +159,23 @@ func isAntigravityGeminiModel(model string) bool {
+PR8566	backend/internal/payment/provider/easypay.go	@@ -50,7 +50,8 @@ type easyPayCustomMethod struct {
+PR8566	backend/internal/payment/provider/easypay.go	@@ -61,6 +62,9 @@ func NewEasyPay(instanceID string, config map[string]string) (*EasyPay, error) {
+PR8566	backend/internal/payment/provider/easypay.go	@@ -371,7 +375,7 @@ func (e *EasyPay) queryOrder(ctx context.Context, outTradeNo string) (*easyPayQu
+PR8566	backend/internal/payment/provider/easypay.go	@@ -506,6 +510,12 @@ func (e *EasyPay) VerifyNotification(_ context.Context, rawBody string, _ map[st
+PR8566	backend/internal/payment/provider/easypay.go	@@ -516,7 +526,7 @@ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payme
+PR8566	backend/internal/payment/provider/easypay.go	@@ -573,7 +583,7 @@ func isEasyPayRefundOrderNotFound(err error) bool {
+PR8566	backend/internal/payment/provider/easypay.go	@@ -597,7 +607,7 @@ func parseEasyPayRefundResponse(status int, body []byte) error {
+PR8566	backend/internal/payment/provider/easypay.go	@@ -607,13 +617,13 @@ func parseEasyPayRefundResponse(status int, body []byte) error {
+PR8566	backend/internal/payment/provider/easypay_refund_test.go	@@ -180,6 +180,60 @@ func TestEasyPayRefundResponseErrors(t *testing.T) {
+PR8566	backend/internal/service/payment_refund_test.go	@@ -6,7 +6,10 @@ import (
+PR8566	backend/internal/service/payment_refund_test.go	@@ -208,6 +211,115 @@ func TestExecuteRefundUsesActualAvailableBalanceDeduction(t *testing.T) {
+PR8566	frontend/src/components/payment/__tests__/PaymentProviderDialog.spec.ts	@@ -84,6 +84,7 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
+PR8566	frontend/src/components/payment/__tests__/PaymentProviderDialog.spec.ts	@@ -121,6 +122,34 @@ describe('PaymentProviderDialog callback URLs', () => {
+PR8566	frontend/src/components/payment/providerConfig.ts	@@ -129,6 +129,11 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
+PR8566	frontend/src/i18n/locales/en/admin/settings.ts	@@ -893,6 +893,8 @@ export default {
+PR8566	frontend/src/i18n/locales/zh/admin/settings.ts	@@ -888,6 +888,8 @@ export default {
+PR8631	backend/internal/service/gateway_scheduling.go	@@ -1587,6 +1587,11 @@ func (s *GatewayService) hydrateSelectedAccount(ctx context.Context, account *Ac
+PR8631	backend/internal/service/gateway_scheduling_slot_release_test.go	@@ -0,0 +1,50 @@
+PR8637	backend/internal/handler/auth_oauth_pending_flow_test.go	@@ -2881,6 +2881,10 @@ func (s *oauthPendingFlowRefreshTokenCacheStub) DeleteTokenFamily(context.Contex
+PR8637	backend/internal/handler/auth_wechat_oauth_test.go	@@ -1478,6 +1478,10 @@ func (s *wechatOAuthRefreshTokenCacheStub) DeleteTokenFamily(context.Context, st
+PR8637	backend/internal/handler/user_handler_test.go	@@ -440,6 +440,10 @@ func (s *userHandlerRefreshTokenCacheStub) DeleteTokenFamily(context.Context, st
+PR8637	backend/internal/repository/refresh_token_cache.go	@@ -3,6 +3,7 @@ package repository
+PR8637	backend/internal/repository/refresh_token_cache.go	@@ -10,6 +11,18 @@ import (
+PR8637	backend/internal/repository/refresh_token_cache.go	@@ -70,6 +83,21 @@ func (c *refreshTokenCache) DeleteRefreshToken(ctx context.Context, tokenHash st
+PR8637	backend/internal/repository/refresh_token_cache_test.go	@@ -0,0 +1,75 @@
+PR8637	backend/internal/service/auth_service.go	@@ -1869,10 +1869,15 @@ func (s *AuthService) RefreshTokenPair(ctx context.Context, refreshToken string)
+PR8637	backend/internal/service/auth_service_email_bind_test.go	@@ -919,6 +919,24 @@ func (s *emailBindRefreshTokenCacheStub) DeleteRefreshToken(_ context.Context, t
+PR8637	backend/internal/service/auth_service_refresh_race_test.go	@@ -0,0 +1,104 @@
+PR8637	backend/internal/service/auth_service_register_test.go	@@ -149,6 +149,10 @@ func (s *refreshTokenCacheStub) DeleteTokenFamily(context.Context, string) error
+PR8637	backend/internal/service/refresh_token_cache.go	@@ -44,6 +44,11 @@ type RefreshTokenCache interface {
+PR8161	backend/internal/handler/composite_platform.go	@@ -163,16 +163,20 @@ func bindOpenAIReasoningEffortPolicyForMessagesRequest(c *gin.Context, apiKey *s
+PR8161	backend/internal/handler/composite_platform_test.go	@@ -133,14 +133,34 @@ func TestOpenAIReasoningEffortPolicyForCompositeTarget(t *testing.T) {
+PR8161	backend/internal/handler/messages_effort_policy_test.go	@@ -0,0 +1,106 @@
+PR8161	backend/internal/pkg/apicompat/anthropic_effort_validation_test.go	@@ -0,0 +1,35 @@
+PR8161	backend/internal/pkg/apicompat/anthropic_to_responses.go	@@ -19,8 +19,22 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
+PR8161	backend/internal/pkg/apicompat/anthropic_to_responses.go	@@ -56,8 +70,8 @@ func AnthropicToResponsesWithMinOutputTokens(req *AnthropicRequest, minOutputTok
+PR8161	backend/internal/service/apicompat_config.go	@@ -16,10 +16,6 @@ func chatCompletionsToResponses(cfg *config.Config, req *apicompat.ChatCompletio
+PR8161	backend/internal/service/openai_gateway_converted_reasoning_pricing_test.go	@@ -82,31 +82,48 @@ func TestOpenAIMessagesGLMReasoningPricingUsesForwardedEffort(t *testing.T) {
+PR8161	backend/internal/service/openai_gateway_count_tokens.go	@@ -406,7 +406,9 @@ func prepareOpenAIInputTokensCountRequest(
+PR8161	backend/internal/service/openai_gateway_count_tokens_test.go	@@ -29,6 +29,28 @@ type countTokensRuntimeStateRepo struct {
+PR8161	backend/internal/service/openai_gateway_messages.go	@@ -98,7 +98,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+PR8161	backend/internal/service/openai_gateway_messages.go	@@ -154,7 +154,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+PR8161	backend/internal/service/openai_gateway_messages.go	@@ -315,6 +318,11 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+PR8161	backend/internal/service/openai_gateway_messages_chat_fallback.go	@@ -63,7 +63,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
+PR8161	backend/internal/service/openai_gateway_messages_chat_fallback.go	@@ -73,6 +73,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
+PR8161	backend/internal/service/openai_gateway_messages_chat_fallback.go	@@ -101,6 +105,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
+PR8161	backend/internal/service/openai_gateway_request_body.go	@@ -2748,9 +2748,19 @@ func supportsOpenAIReasoningEffortMax(model string) bool {
+PR8161	backend/internal/service/openai_gateway_request_body.go	@@ -2759,10 +2769,7 @@ func validateGPT61CompatRequest(body []byte, model string) error {
+PR8161	backend/internal/service/openai_messages_effort_policy_test.go	@@ -0,0 +1,271 @@
+PR8161	backend/internal/service/openai_reasoning_effort_policy.go	@@ -445,6 +445,25 @@ func WithOpenAIReasoningEffortPolicy(ctx context.Context, maxEffort string, mapp
+PR8161	backend/internal/service/openai_reasoning_effort_policy_test.go	@@ -2,6 +2,7 @@ package service
+PR8161	backend/internal/service/openai_reasoning_effort_policy_test.go	@@ -9,6 +10,29 @@ import (
+PR8161	backend/internal/service/openai_responses_tool_schema_test.go	@@ -2,6 +2,8 @@ package service
+PR8161	backend/internal/service/openai_responses_tool_schema_test.go	@@ -587,6 +589,17 @@ func buildToolSchemaNullTypeBody(t *testing.T, hits int) []byte {
+PR8161	backend/internal/service/openai_responses_tool_schema_test.go	@@ -598,8 +611,6 @@ func TestSanitizeOpenAIResponsesToolParameterTypes_RewriteCountIndependentOfHits
+PR8161	backend/internal/service/token_refresh_pool_health_test.go	@@ -105,17 +105,18 @@ func (r *poolHealthAccountRepo) snapshot() ([]OAuthRefreshPageOptions, []int64,
+PR8161	backend/internal/service/token_refresh_pool_health_test.go	@@ -306,6 +307,9 @@ func (r *poolHealthRefresher) Refresh(ctx context.Context, _ *Account) (map[stri
+PR8161	backend/internal/service/token_refresh_pool_health_test.go	@@ -936,8 +940,7 @@ func TestTokenRefreshService_ParentCancellationStopsRetryWithoutAccountMutation(
+PR8346	backend/internal/repository/migrations_runner.go	"@@ -64,6 +64,8 @@ const usageLogsEffectiveRequestedModelIndex = ""idx_usage_logs_effective_requeste"
+PR8346	backend/internal/repository/migrations_runner.go	@@ -309,6 +311,8 @@ func prepareNonTransactionalMigration(ctx context.Context, db migrationConnectio
+PR8346	backend/internal/repository/migrations_runner_api_key_cost_index_test.go	@@ -0,0 +1,49 @@
+PR8346	backend/migrations/249_add_usage_logs_api_key_cost_index_notx.sql	@@ -0,0 +1,5 @@
+PR8346	backend/migrations/usage_log_api_key_cost_index_test.go	@@ -0,0 +1,18 @@
+PR8346	frontend/src/views/user/KeysView.vue	@@ -212,13 +212,22 @@
+PR8346	frontend/src/views/user/KeysView.vue	@@ -1378,6 +1387,7 @@ const submitting = ref(false)
+PR8346	frontend/src/views/user/KeysView.vue	@@ -1589,6 +1599,7 @@ const loadApiKeys = async () => {
+PR8346	frontend/src/views/user/KeysView.vue	@@ -1613,18 +1624,10 @@ const loadApiKeys = async () => {
+PR8346	frontend/src/views/user/KeysView.vue	@@ -1638,6 +1641,22 @@ const loadApiKeys = async () => {
+PR8346	frontend/src/views/user/__tests__/KeysView.spec.ts	@@ -156,7 +156,7 @@ const TablePageLayoutStub = {
+PR8346	frontend/src/views/user/__tests__/KeysView.spec.ts	@@ -177,6 +177,9 @@ const DataTableStub = {
+PR8346	frontend/src/views/user/__tests__/KeysView.spec.ts	@@ -654,4 +657,34 @@ describe('user KeysView column settings', () => {
+PR8581	frontend/src/components/account/AccountUsageCell.vue	@@ -1,5 +1,5 @@
+PR8581	frontend/src/components/account/AccountUsageCell.vue	@@ -8,7 +8,7 @@
+PR8581	frontend/src/components/account/AccountUsageCell.vue	@@ -99,12 +99,12 @@
+PR8581	frontend/src/components/account/AccountUsageCell.vue	@@ -154,12 +154,12 @@
+PR8581	frontend/src/components/account/__tests__/AccountUsageCell.spec.ts	@@ -130,6 +130,26 @@ describe('AccountUsageCell', () => {
+PR8581	frontend/src/views/admin/AccountsView.vue	@@ -191,12 +191,12 @@
+PR8581	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -62,13 +62,13 @@ vi.mock('vue-i18n', async () => {
+PR8581	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -101,7 +101,7 @@ function mountView(stubActionMenu = true) {
+PR8581	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -189,6 +189,35 @@ describe('admin AccountsView lite account list', () => {
+PR8642	backend/internal/service/payment_config_service.go	@@ -337,9 +337,15 @@ func (s *PaymentConfigService) getStripePublishableKey(ctx context.Context) stri
+PR8642	backend/internal/service/payment_config_service.go	@@ -392,7 +398,7 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
+PR8642	backend/internal/service/payment_config_service.go	@@ -474,6 +480,21 @@ func formatPositiveFloat(v *float64) string {
+PR8642	backend/internal/service/payment_config_service_test.go	@@ -554,3 +554,49 @@ func TestUpdatePaymentConfig_PersistsExplicitEmptyAndFalseValues(t *testing.T) {
+PR8642	frontend/src/i18n/locales/en/admin/settings.ts	@@ -775,7 +775,7 @@ export default {
+PR8642	frontend/src/i18n/locales/zh/admin/settings.ts	@@ -770,7 +770,7 @@ export default {
+PR8642	frontend/src/utils/__tests__/rechargeBonus.spec.ts	@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
+PR8642	frontend/src/utils/__tests__/rechargeBonus.spec.ts	@@ -138,4 +139,13 @@ describe('rechargeBonus helpers', () => {
+PR8642	frontend/src/utils/rechargeBonus.ts	@@ -205,3 +205,13 @@ export function formatRechargeBonusNumber(value: number): string {
+PR8642	frontend/src/views/admin/SettingsView.vue	@@ -8038,8 +8038,8 @@
+PR8642	frontend/src/views/admin/SettingsView.vue	@@ -8054,10 +8054,10 @@
+PR8642	frontend/src/views/admin/SettingsView.vue	"@@ -9016,6 +9016,7 @@ import AdminAccessKeysSettings from ""@/components/admin/settings/AdminAccessKeys"
+PR8642	frontend/src/views/user/PaymentView.vue	@@ -103,7 +103,7 @@
+PR8642	frontend/src/views/user/PaymentView.vue	@@ -295,7 +295,7 @@ import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiErro
+PR8367	frontend/src/views/admin/SettingsView.vue	@@ -8864,8 +8864,8 @@
+PR8367	frontend/src/views/admin/SettingsView.vue	@@ -13373,6 +13373,14 @@ watch(
+PR8367	frontend/src/views/admin/SettingsView.vue	@@ -13396,4 +13404,12 @@ watch(
+PR8622	backend/internal/handler/openai_gateway_handler.go	@@ -481,6 +481,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8622	backend/internal/handler/openai_page_context.go	@@ -0,0 +1,123 @@
+PR8622	backend/internal/handler/openai_page_context_test.go	@@ -0,0 +1,135 @@
+PR8379	.gitignore	@@ -141,6 +141,7 @@ docs/*
+PR8379	backend/internal/handler/openai_images_native_route_test.go	@@ -0,0 +1,203 @@
+PR8379	backend/internal/service/openai_images_json_keepalive.go	@@ -32,10 +32,17 @@ type openAIImagesJSONKeepalive struct {
+PR8379	backend/internal/service/openai_images_json_keepalive_test.go	@@ -76,6 +76,35 @@ func TestOpenAIImagesJSONKeepalive_FastErrorPreservesStatus(t *testing.T) {
+PR8379	docs/OPENAI_IMAGES_CODEX.md	@@ -0,0 +1,39 @@
+PR8575	backend/internal/handler/openai_gateway_handler.go	@@ -15,6 +15,7 @@ import (
+PR8575	backend/internal/handler/openai_gateway_handler.go	@@ -437,6 +438,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+PR8575	backend/internal/handler/openai_responses_utf8_test.go	@@ -0,0 +1,52 @@
+PR8357	backend/internal/securityaudit/prompt_enqueue.go	@@ -10,6 +10,7 @@ type Enqueuer struct {
+PR8357	backend/internal/securityaudit/prompt_enqueue.go	@@ -82,6 +83,9 @@ func (e *Enqueuer) Enqueue(ctx context.Context, req Request) error {
+PR8357	backend/internal/securityaudit/prompt_service.go	@@ -42,6 +42,7 @@ func NewPromptService(
+PR8357	backend/internal/securityaudit/prompt_worker.go	@@ -8,6 +8,10 @@ import (
+PR8357	backend/internal/securityaudit/prompt_worker.go	@@ -27,6 +31,7 @@ type Runner struct {
+PR8357	backend/internal/securityaudit/prompt_worker.go	@@ -34,7 +39,27 @@ type Runner struct {
+PR8357	backend/internal/securityaudit/prompt_worker.go	@@ -85,31 +110,36 @@ func (r *Runner) Shutdown(ctx context.Context) error {
+PR8357	backend/internal/securityaudit/prompt_worker.go	@@ -273,6 +303,7 @@ func (r *Runner) reclaimer(ctx context.Context) {
+PR8357	backend/internal/securityaudit/prompt_worker_test.go	@@ -84,6 +84,7 @@ type fakeJobRepository struct {
+PR8357	backend/internal/securityaudit/prompt_worker_test.go	@@ -126,6 +127,7 @@ func (r *fakeJobRepository) MarkStagingFailed(_ context.Context, _ int64, code,
+PR8357	backend/internal/securityaudit/prompt_worker_wake_test.go	@@ -0,0 +1,81 @@
+PR8639	backend/internal/domain/constants.go	@@ -197,8 +197,10 @@ var DefaultAntigravityModelMapping = map[string]string{
+PR8639	backend/internal/domain/constants_test.go	@@ -131,6 +131,8 @@ func TestDefaultBedrockModelMapping_ContainsNewClaudeModels(t *testing.T) {
+PR8639	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -53,7 +53,7 @@ func AnthropicToResponsesResponse(resp *AnthropicResponse) *ResponsesResponse {
+PR8639	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -72,7 +72,7 @@ func AnthropicToResponsesResponse(resp *AnthropicResponse) *ResponsesResponse {
+PR8639	backend/internal/pkg/apicompat/anthropic_to_responses_response.go	@@ -289,7 +289,7 @@ func ResponsesEventToSSE(evt ResponsesStreamEvent) (string, error) {
+PR8639	backend/internal/pkg/apicompat/fable_mythos_responses_test.go	@@ -0,0 +1,144 @@
+PR8639	backend/internal/pkg/apicompat/responses_to_anthropic_request.go	@@ -17,7 +17,9 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+PR8639	backend/internal/pkg/apicompat/responses_to_anthropic_request.go	@@ -57,13 +59,14 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+PR8639	backend/internal/pkg/apicompat/responses_to_anthropic_request.go	@@ -76,8 +79,10 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+PR8639	backend/internal/pkg/apicompat/responses_to_anthropic_request.go	@@ -85,15 +90,15 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+PR8639	backend/internal/pkg/claude/cli_version_test.go	@@ -9,7 +9,7 @@ func TestIsSupportedCLIVersion(t *testing.T) {
+PR8639	backend/internal/pkg/claude/cli_version_test.go	@@ -41,8 +41,8 @@ func TestResolveCLIVersion(t *testing.T) {
+PR8639	backend/internal/pkg/claude/constants.go	"@@ -87,7 +87,7 @@ const DefaultCacheControlTTL = ""5m"""
+PR8639	backend/internal/pkg/claude/constants.go	@@ -145,6 +145,18 @@ type Model struct {
+PR8639	backend/internal/pkg/claude/models_52_test.go	@@ -0,0 +1,38 @@
+PR8639	backend/internal/service/claude_52_pricing_test.go	@@ -0,0 +1,74 @@
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -3,13 +3,25 @@ package service
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -115,19 +127,19 @@ func newClaudeCodeVersionSyncService(
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -135,21 +147,21 @@ func TestLatestClaudeCodeStableReleaseVersion(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -160,7 +172,7 @@ func TestClaudeCodeVersionSyncSkippedWhenDisabled(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -188,33 +200,33 @@ func TestClaudeCodeVersionSyncEnabledByDefaultOrOnError(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -228,23 +240,23 @@ func TestClaudeCodeVersionSyncKeepsValueOnFetchError(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -255,9 +267,9 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -270,9 +282,9 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -280,7 +292,7 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -290,15 +302,15 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -314,10 +326,10 @@ func TestClaudeCodeVersionSyncStartRequiresDependencies(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -328,27 +340,27 @@ func TestClaudeCodeVersionSyncInitialSkipsWhenRecentlySynced(t *testing.T) {
+PR8639	backend/internal/service/claude_code_version_sync_service_test.go	@@ -357,13 +369,13 @@ func TestClaudeCodeVersionSyncInitialRunsWhenStaleOrMissing(t *testing.T) {
+PR8639	backend/internal/service/gateway_claude_oauth_body.go	@@ -266,7 +266,7 @@ func normalizeClaudeOAuthRequestBody(body []byte, modelID string, opts claudeOAu
+PR8639	backend/internal/service/gateway_forward.go	@@ -872,7 +872,7 @@ func anthropicSpeedModel(parsed *ParsedRequest, result *ForwardResult) string {
+PR8639	backend/internal/service/gateway_forward.go	@@ -890,8 +890,11 @@ func anthropicSpeedServiceTier(account *Account, speed, model string) *string {
+PR8639	backend/internal/service/gateway_request.go	@@ -636,10 +636,10 @@ func StripEmptyTextBlocks(body []byte) []byte {
+PR8639	backend/internal/service/gateway_request.go	@@ -650,6 +650,7 @@ func validateClaude55Request(body []byte, model string) error {
+PR8639	backend/internal/service/gateway_request.go	@@ -668,13 +669,13 @@ func validateClaude55Request(body []byte, model string) error {
+PR8639	backend/internal/service/gateway_request.go	@@ -686,7 +687,7 @@ func validateClaude55Request(body []byte, model string) error {
+PR8639	backend/internal/service/gateway_request.go	@@ -704,19 +705,19 @@ func validateClaude55Request(body []byte, model string) error {
+PR8639	backend/internal/service/openai_codex_models_service.go	@@ -481,7 +481,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
+PR8639	backend/internal/service/openai_codex_models_service.go	@@ -490,7 +490,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
+PR8639	backend/internal/service/setting_claude_code_version_test.go	@@ -18,10 +18,12 @@ func TestGetClaudeCodeClientVersionPriority(t *testing.T) {
+PR8639	backend/internal/service/setting_claude_code_version_test.go	@@ -39,26 +41,26 @@ func TestGetClaudeCodeClientVersionPriority(t *testing.T) {
+PR8639	frontend/src/components/account/AccountStatusIndicator.vue	@@ -224,6 +224,8 @@ const activeModelStatuses = computed<AccountModelStatusItem[]>(() => {
+PR8639	frontend/src/components/account/__tests__/AccountStatusIndicator.spec.ts	@@ -86,6 +86,30 @@ describe('AccountStatusIndicator', () => {
+PR8639	frontend/src/components/keys/UseKeyModal.vue	@@ -2002,7 +2002,34 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
+PR8639	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -772,6 +772,32 @@ describe('UseKeyModal', () => {
+PR8639	frontend/src/components/keys/__tests__/UseKeyModal.spec.ts	@@ -806,6 +832,8 @@ describe('UseKeyModal', () => {
+PR8639	frontend/src/composables/__tests__/useModelWhitelist.spec.ts	@@ -95,6 +95,25 @@ describe('useModelWhitelist', () => {
+PR8639	frontend/src/composables/useModelWhitelist.ts	@@ -43,6 +43,9 @@ export const claudeModels = [
+PR8639	frontend/src/composables/useModelWhitelist.ts	@@ -323,6 +326,8 @@ export const allModels = allModelsList.map(m => ({ value: m, label: m }))
+PR8639	frontend/src/composables/useModelWhitelist.ts	@@ -452,6 +457,9 @@ const antigravityPresetMappings = [

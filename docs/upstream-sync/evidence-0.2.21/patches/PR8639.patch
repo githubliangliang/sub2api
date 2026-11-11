@@ -1,0 +1,1116 @@
+diff --git a/backend/internal/domain/constants.go b/backend/internal/domain/constants.go
+index 463a1839a..4a6bbb5a9 100644
+--- a/backend/internal/domain/constants.go
++++ b/backend/internal/domain/constants.go
+@@ -197,8 +197,10 @@ var DefaultAntigravityModelMapping = map[string]string{
+ // aws_region 自动调整为匹配的区域前缀（如 eu.、apac.、jp. 等）
+ var DefaultBedrockModelMapping = map[string]string{
+ 	// Claude Fable
+-	"claude-fable-5-1": "anthropic.claude-fable-5-1",
+-	"claude-fable-5":   "anthropic.claude-fable-5",
++	"claude-fable-5-2":  "anthropic.claude-fable-5-2",
++	"claude-mythos-5-2": "anthropic.claude-mythos-5-2",
++	"claude-fable-5-1":  "anthropic.claude-fable-5-1",
++	"claude-fable-5":    "anthropic.claude-fable-5",
+ 	// Claude Opus
+ 	"claude-opus-5":            "us.anthropic.claude-opus-5-v1",
+ 	"claude-opus-4-8":          "us.anthropic.claude-opus-4-8-v1",
+diff --git a/backend/internal/domain/constants_test.go b/backend/internal/domain/constants_test.go
+index 430d4802e..93343c89d 100644
+--- a/backend/internal/domain/constants_test.go
++++ b/backend/internal/domain/constants_test.go
+@@ -131,6 +131,8 @@ func TestDefaultBedrockModelMapping_ContainsNewClaudeModels(t *testing.T) {
+ 	t.Parallel()
+ 
+ 	cases := map[string]string{
++		"claude-fable-5-2":  "anthropic.claude-fable-5-2",
++		"claude-mythos-5-2": "anthropic.claude-mythos-5-2",
+ 		"claude-fable-5-1":  "anthropic.claude-fable-5-1",
+ 		"claude-fable-5":    "anthropic.claude-fable-5",
+ 		"claude-opus-4-8":   "us.anthropic.claude-opus-4-8-v1",
+diff --git a/backend/internal/pkg/apicompat/anthropic_to_responses_response.go b/backend/internal/pkg/apicompat/anthropic_to_responses_response.go
+index e29bcdeaf..558763af6 100644
+--- a/backend/internal/pkg/apicompat/anthropic_to_responses_response.go
++++ b/backend/internal/pkg/apicompat/anthropic_to_responses_response.go
+@@ -53,7 +53,7 @@ func AnthropicToResponsesResponse(resp *AnthropicResponse) *ResponsesResponse {
+ 	for _, block := range resp.Content {
+ 		switch block.Type {
+ 		case "thinking", "redacted_thinking":
+-			if (claude.IsOpus55(resp.Model) || claude.IsSonnet55(resp.Model) || claude.IsHaiku55(resp.Model)) && (block.Signature != "" || block.Data != "") {
++			if (claude.IsOpus55(resp.Model) || claude.IsSonnet55(resp.Model) || claude.IsHaiku55(resp.Model) || claude.IsFable52(resp.Model) || claude.IsMythos52(resp.Model)) && (block.Signature != "" || block.Data != "") {
+ 				item := ResponsesOutput{Type: "reasoning", ID: generateItemID(), EncryptedContent: encodeAnthropicThinking(block)}
+ 				if block.Thinking != "" {
+ 					item.Summary = []ResponsesSummary{{Type: "summary_text", Text: block.Thinking}}
+@@ -72,7 +72,7 @@ func AnthropicToResponsesResponse(resp *AnthropicResponse) *ResponsesResponse {
+ 				})
+ 			}
+ 		case "text":
+-			if (claude.IsOpus55(resp.Model) || claude.IsSonnet55(resp.Model) || claude.IsHaiku55(resp.Model)) && block.Text != "" {
++			if (claude.IsOpus55(resp.Model) || claude.IsSonnet55(resp.Model) || claude.IsHaiku55(resp.Model) || claude.IsFable52(resp.Model) || claude.IsMythos52(resp.Model)) && block.Text != "" {
+ 				outputs = append(outputs, ResponsesOutput{Type: "message", ID: generateItemID(), Role: "assistant", Status: "completed", Content: []ResponsesContentPart{{Type: "output_text", Text: block.Text}}})
+ 				continue
+ 			}
+@@ -289,7 +289,7 @@ func ResponsesEventToSSE(evt ResponsesStreamEvent) (string, error) {
+ func anthToResHandleMessageStart(evt *AnthropicStreamEvent, state *AnthropicEventToResponsesState) []ResponsesStreamEvent {
+ 	if evt.Message != nil {
+ 		state.ResponseID = evt.Message.ID
+-		state.PreserveThinkingSignatures = state.PreserveThinkingSignatures || claude.IsOpus55(evt.Message.Model) || claude.IsSonnet55(evt.Message.Model) || claude.IsHaiku55(evt.Message.Model)
++		state.PreserveThinkingSignatures = state.PreserveThinkingSignatures || claude.IsOpus55(evt.Message.Model) || claude.IsSonnet55(evt.Message.Model) || claude.IsHaiku55(evt.Message.Model) || claude.IsFable52(evt.Message.Model) || claude.IsMythos52(evt.Message.Model)
+ 		if state.Model == "" {
+ 			state.Model = evt.Message.Model
+ 		}
+diff --git a/backend/internal/pkg/apicompat/fable_mythos_responses_test.go b/backend/internal/pkg/apicompat/fable_mythos_responses_test.go
+new file mode 100644
+index 000000000..62773517f
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/fable_mythos_responses_test.go
+@@ -0,0 +1,144 @@
++package apicompat
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestFableMythos52ResponsesAdaptiveThinking(t *testing.T) {
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		t.Run(model, func(t *testing.T) {
++			for _, effort := range []string{"", "low", "medium", "high", "xhigh", "max", "none", "minimal", "invalid"} {
++				t.Run("effort="+effort, func(t *testing.T) {
++					out, err := ResponsesToAnthropicRequest(&ResponsesRequest{Model: model, Input: json.RawMessage(`"hello"`), Reasoning: &ResponsesReasoning{Effort: effort}})
++					if effort == "none" || effort == "minimal" || effort == "invalid" {
++						require.ErrorContains(t, err, "reasoning effort")
++						return
++					}
++					require.NoError(t, err)
++					require.NotNil(t, out.Thinking)
++					require.Equal(t, "adaptive", out.Thinking.Type)
++					require.Zero(t, out.Thinking.BudgetTokens)
++					want := effort
++					if want == "" {
++						want = "high"
++					}
++					require.Equal(t, want, out.OutputConfig.Effort)
++				})
++			}
++			out, err := ResponsesToAnthropicRequest(&ResponsesRequest{Model: model, Input: json.RawMessage(`"hello"`)})
++			require.NoError(t, err)
++			require.Equal(t, "adaptive", out.Thinking.Type)
++			require.Equal(t, "high", out.OutputConfig.Effort)
++			for _, choice := range []string{`"required"`, `{"type":"function","name":"lookup"}`, `"auto"`, `"none"`} {
++				_, err := ResponsesToAnthropicRequest(&ResponsesRequest{Model: model, Input: json.RawMessage(`"hello"`), ToolChoice: json.RawMessage(choice)})
++				if choice == `"auto"` || choice == `"none"` {
++					require.NoError(t, err)
++				} else {
++					require.ErrorContains(t, err, "forced tool_choice")
++				}
++			}
++		})
++	}
++}
++
++func TestFableMythos52SignedThinkingResponsesRoundTrip(t *testing.T) {
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		for _, block := range []AnthropicContentBlock{
++			{Type: "thinking", Thinking: "", Signature: "upstream-signed-block"},
++			{Type: "redacted_thinking", Data: "upstream-redacted-block"},
++		} {
++			t.Run(model+"/"+block.Type, func(t *testing.T) {
++				response := AnthropicToResponsesResponse(&AnthropicResponse{Model: model, Content: []AnthropicContentBlock{block, {Type: "text", Text: "progress"}, {Type: "tool_use", ID: "toolu_1", Name: "lookup", Input: json.RawMessage(`{}`)}}})
++				require.Len(t, response.Output, 3)
++				raw, err := json.Marshal(response.Output)
++				require.NoError(t, err)
++				var items []ResponsesInputItem
++				require.NoError(t, json.Unmarshal(raw, &items))
++				items = append(items, ResponsesInputItem{Type: "function_call_output", CallID: response.Output[2].CallID, Output: "ok"})
++				raw, err = json.Marshal(items)
++				require.NoError(t, err)
++				converted, err := ResponsesToAnthropicRequest(&ResponsesRequest{Model: model, Input: raw})
++				require.NoError(t, err)
++				require.Len(t, converted.Messages, 2)
++				var blocks []AnthropicContentBlock
++				require.NoError(t, json.Unmarshal(converted.Messages[0].Content, &blocks))
++				require.Len(t, blocks, 3)
++				require.Equal(t, block, blocks[0])
++				require.Equal(t, "text", blocks[1].Type)
++				require.Equal(t, "tool_use", blocks[2].Type)
++			})
++		}
++	}
++}
++
++func TestFableMythos52ChatAdapter(t *testing.T) {
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		t.Run(model, func(t *testing.T) {
++			for _, effort := range []string{"", "xhigh", "max", "none"} {
++				responses, err := ChatCompletionsToResponses(&ChatCompletionsRequest{Model: model, ReasoningEffort: effort, Messages: []ChatMessage{{Role: "user", Content: json.RawMessage(`"hello"`)}}})
++				require.NoError(t, err)
++				out, err := ResponsesToAnthropicRequest(responses)
++				if effort == "none" {
++					require.ErrorContains(t, err, "reasoning effort")
++					continue
++				}
++				require.NoError(t, err)
++				require.Equal(t, "adaptive", out.Thinking.Type)
++				want := effort
++				if want == "" {
++					want = "high"
++				}
++				require.Equal(t, want, out.OutputConfig.Effort)
++			}
++			for _, choice := range []string{`"required"`, `{"type":"function","function":{"name":"lookup"}}`} {
++				responses, err := ChatCompletionsToResponses(&ChatCompletionsRequest{Model: model, ToolChoice: json.RawMessage(choice), Messages: []ChatMessage{{Role: "user", Content: json.RawMessage(`"hello"`)}}})
++				require.NoError(t, err)
++				_, err = ResponsesToAnthropicRequest(responses)
++				require.ErrorContains(t, err, "forced tool_choice")
++			}
++		})
++	}
++}
++
++func TestFableMythos52DoesNotChangeOlderModelConversion(t *testing.T) {
++	for _, model := range []string{"claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"} {
++		out, err := ResponsesToAnthropicRequest(&ResponsesRequest{Model: model, Input: json.RawMessage(`"hello"`), Reasoning: &ResponsesReasoning{Effort: "xhigh"}, ToolChoice: json.RawMessage(`"required"`)})
++		require.NoError(t, err)
++		require.Equal(t, "max", out.OutputConfig.Effort)
++		require.Equal(t, "enabled", out.Thinking.Type)
++		require.Positive(t, out.Thinking.BudgetTokens)
++	}
++}
++
++func TestFableMythos52StreamPreservesThinking(t *testing.T) {
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		state := NewAnthropicEventToResponsesState()
++		AnthropicEventToResponsesEvents(&AnthropicStreamEvent{Type: "message_start", Message: &AnthropicResponse{Model: model}}, state)
++		require.True(t, state.PreserveThinkingSignatures)
++		index := 0
++		AnthropicEventToResponsesEvents(&AnthropicStreamEvent{Type: "content_block_start", Index: &index, ContentBlock: &AnthropicContentBlock{Type: "thinking"}}, state)
++		AnthropicEventToResponsesEvents(&AnthropicStreamEvent{Type: "content_block_delta", Index: &index, Delta: &AnthropicDelta{Type: "signature_delta", Signature: "signed-stream"}}, state)
++		events := AnthropicEventToResponsesEvents(&AnthropicStreamEvent{Type: "content_block_stop", Index: &index}, state)
++		found := false
++		for _, event := range events {
++			if event.Type == "response.output_item.done" && event.Item != nil {
++				require.Contains(t, event.Item.EncryptedContent, anthropicThinkingEnvelopePrefix)
++				found = true
++			}
++		}
++		require.True(t, found)
++	}
++}
++
++func TestFableMythos52SamplingValidation(t *testing.T) {
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		temperature, topP := 0.5, 1.0
++		_, err := ResponsesToAnthropicRequest(&ResponsesRequest{Model: model, Input: json.RawMessage(`"hi"`), Temperature: &temperature})
++		require.ErrorContains(t, err, "temperature")
++		_, err = ResponsesToAnthropicRequest(&ResponsesRequest{Model: model, Input: json.RawMessage(`"hi"`), TopP: &topP})
++		require.ErrorContains(t, err, "top_p")
++	}
++}
+diff --git a/backend/internal/pkg/apicompat/responses_to_anthropic_request.go b/backend/internal/pkg/apicompat/responses_to_anthropic_request.go
+index 3ba7f638f..5f8c5664f 100644
+--- a/backend/internal/pkg/apicompat/responses_to_anthropic_request.go
++++ b/backend/internal/pkg/apicompat/responses_to_anthropic_request.go
+@@ -17,7 +17,9 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+ 	isOpus55 := claude.IsOpus55(req.Model)
+ 	isSonnet55 := claude.IsSonnet55(req.Model)
+ 	isHaiku55 := claude.IsHaiku55(req.Model)
+-	system, messages, err := convertResponsesInputToAnthropic(req.Instructions, req.Input, isOpus55 || isSonnet55 || isHaiku55)
++	isFableOrMythos52 := claude.IsFable52(req.Model) || claude.IsMythos52(req.Model)
++	isAdaptiveModel := isOpus55 || isSonnet55 || isHaiku55 || isFableOrMythos52
++	system, messages, err := convertResponsesInputToAnthropic(req.Instructions, req.Input, isAdaptiveModel)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -57,13 +59,14 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+ 		out.ToolChoice = tc
+ 	}
+ 
+-	// The 5.5 models reject manual thinking. Opus/Sonnet 5.5 additionally reject
++	// The 5.5 models and Fable/Mythos 5.2 reject manual thinking.
++	// Fable/Mythos 5.2 and Opus/Sonnet 5.5 additionally reject
+ 	// forced tool use; Haiku 5.5 accepts it (starts with the tool call, no thinking
+ 	// block). Sonnet 5.5 supports between_tools to disable up-front thinking;
+ 	// Haiku 5.5 uses disabled (at high effort or below) instead.
+ 	// Resolve the upstream model before conversion: client aliases need not
+ 	// identify a Claude model.
+-	if isOpus55 || isSonnet55 || isHaiku55 {
++	if isAdaptiveModel {
+ 		var choice struct {
+ 			Type string `json:"type"`
+ 		}
+@@ -76,8 +79,10 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+ 			return nil, fmt.Errorf("%s does not support forced tool_choice; use auto or none", req.Model)
+ 		}
+ 		effort := "medium"
+-		if isSonnet55 {
++		if isSonnet55 || isFableOrMythos52 {
+ 			effort = "high"
++		}
++		if isSonnet55 {
+ 			if req.Temperature != nil && *req.Temperature != 1 {
+ 				return nil, fmt.Errorf("claude-sonnet-5-5 does not support non-default temperature")
+ 			}
+@@ -85,15 +90,15 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
+ 				return nil, fmt.Errorf("claude-sonnet-5-5 does not support non-default top_p")
+ 			}
+ 		}
+-		if isHaiku55 {
++		if isHaiku55 || isFableOrMythos52 {
+ 			if req.Temperature != nil && *req.Temperature != 1 {
+-				return nil, fmt.Errorf("claude-haiku-5-5 does not support non-default temperature")
++				return nil, fmt.Errorf("%s does not support non-default temperature", req.Model)
+ 			}
+ 			if req.TopP != nil && *req.TopP != 0.99 {
+-				return nil, fmt.Errorf("claude-haiku-5-5 does not support non-default top_p")
++				return nil, fmt.Errorf("%s does not support non-default top_p", req.Model)
+ 			}
+ 			if req.Temperature != nil && req.TopP != nil {
+-				return nil, fmt.Errorf("claude-haiku-5-5 does not allow temperature and top_p together; omit both")
++				return nil, fmt.Errorf("%s does not allow temperature and top_p together; omit both", req.Model)
+ 			}
+ 		}
+ 		if req.Reasoning != nil && req.Reasoning.Effort != "" {
+diff --git a/backend/internal/pkg/claude/cli_version_test.go b/backend/internal/pkg/claude/cli_version_test.go
+index 72ec94cfd..22817c6b8 100644
+--- a/backend/internal/pkg/claude/cli_version_test.go
++++ b/backend/internal/pkg/claude/cli_version_test.go
+@@ -9,7 +9,7 @@ func TestIsSupportedCLIVersion(t *testing.T) {
+ 		want    bool
+ 	}{
+ 		{"内置基线本身", CLICurrentVersion, true},
+-		{"高于基线的补丁位", "2.1.259", true},
++		{"高于基线的补丁位", "2.1.322", true},
+ 		{"高于基线的次版本", "2.2.0", true},
+ 		{"高于基线的主版本", "3.0.0", true},
+ 		{"低于基线", "2.1.219", false},
+@@ -41,8 +41,8 @@ func TestResolveCLIVersion(t *testing.T) {
+ 	}{
+ 		{"未配置时用内置基线", "", CLICurrentVersion},
+ 		{"只有空白等同未配置", "   ", CLICurrentVersion},
+-		{"合法覆盖生效", "2.1.259", "2.1.259"},
+-		{"两侧空白被裁掉", "  2.1.259  ", "2.1.259"},
++		{"合法覆盖生效", "2.1.322", "2.1.322"},
++		{"两侧空白被裁掉", "  2.1.322  ", "2.1.322"},
+ 		{"非法值回落基线", "not-a-version", CLICurrentVersion},
+ 		{"向下覆盖被拒", "2.0.0", CLICurrentVersion},
+ 		{"预发布后缀被拒（会毒化账号指纹）", "2.2.0-local", CLICurrentVersion},
+diff --git a/backend/internal/pkg/claude/constants.go b/backend/internal/pkg/claude/constants.go
+index 1d0d6d3a3..17c864328 100644
+--- a/backend/internal/pkg/claude/constants.go
++++ b/backend/internal/pkg/claude/constants.go
+@@ -87,7 +87,7 @@ const DefaultCacheControlTTL = "5m"
+ //
+ // ⚠️ 读取实际生效的版本号请用 CLIVersion()，它会叠加 SUB2API_CLAUDE_CLI_VERSION 覆盖。
+ // 直接引用本常量只在"表达内置基线"时才正确（例如覆盖值的下限校验）。
+-const CLICurrentVersion = "2.1.258"
++const CLICurrentVersion = "2.1.321"
+ 
+ // FullClaudeCodeMimicryBetas 返回最"像"真实 Claude Code CLI 的完整 beta 列表，
+ // 用于 OAuth 账号伪装成 Claude Code 时使用。
+@@ -145,6 +145,18 @@ type Model struct {
+ 
+ // DefaultModels Claude Code 客户端支持的默认模型列表
+ var DefaultModels = []Model{
++	{
++		ID:          "claude-fable-5-2",
++		Type:        "model",
++		DisplayName: "Claude Fable 5.2",
++		CreatedAt:   "2026-11-09T00:00:00Z",
++	},
++	{
++		ID:          "claude-mythos-5-2",
++		Type:        "model",
++		DisplayName: "Claude Mythos 5.2",
++		CreatedAt:   "2026-11-09T00:00:00Z",
++	},
+ 	{
+ 		ID:          "claude-fable-5-1",
+ 		Type:        "model",
+diff --git a/backend/internal/pkg/claude/models_52_test.go b/backend/internal/pkg/claude/models_52_test.go
+new file mode 100644
+index 000000000..1aa9ad196
+--- /dev/null
++++ b/backend/internal/pkg/claude/models_52_test.go
+@@ -0,0 +1,38 @@
++package claude
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestClaude52CatalogAndCapabilities(t *testing.T) {
++	for _, family := range []string{"fable", "mythos"} {
++		id := "claude-" + family + "-5-2"
++		t.Run(id, func(t *testing.T) {
++			count := 0
++			for _, model := range DefaultModels {
++				if model.ID == id {
++					count++
++					require.Equal(t, "model", model.Type)
++					require.Equal(t, "2026-11-09T00:00:00Z", model.CreatedAt)
++				}
++			}
++			require.Equal(t, 1, count)
++			for _, variant := range []string{id, "anthropic/" + id, "global.anthropic." + id, id + "-thinking", id + "-20261109"} {
++				require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, EffortLevelsForModel(variant))
++				require.Equal(t, family == "fable", IsFable52(variant))
++				require.Equal(t, family == "mythos", IsMythos52(variant))
++			}
++		})
++	}
++	for _, model := range []string{"claude-fable-5-1", "claude-fable-5-20", "claude-fable-5-2-preview", "claude-mythos-5-20", "claude-mythos-5-2-preview"} {
++		require.False(t, IsFable52(model))
++		require.False(t, IsMythos52(model))
++	}
++}
++
++func TestCLICurrentVersionSatisfiesFable52Gate(t *testing.T) {
++	// https://code.claude.com/docs/en/model-config
++	require.GreaterOrEqual(t, compareSemver(t, CLICurrentVersion, "2.1.321"), 0)
++}
+diff --git a/backend/internal/service/claude_52_pricing_test.go b/backend/internal/service/claude_52_pricing_test.go
+new file mode 100644
+index 000000000..ccced4914
+--- /dev/null
++++ b/backend/internal/service/claude_52_pricing_test.go
+@@ -0,0 +1,74 @@
++//go:build unit
++
++package service
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestClaude52FallbackPricing(t *testing.T) {
++	svc := newTestBillingService()
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2", "anthropic/claude-fable-5-2", "CLAUDE-MYTHOS-5-2", "claude-fable-5-2-20261109"} {
++		t.Run(model, func(t *testing.T) {
++			p, err := svc.GetModelPricing(model)
++			require.NoError(t, err)
++			require.InDelta(t, 8e-6, p.InputPricePerToken, 1e-12)
++			require.InDelta(t, 40e-6, p.OutputPricePerToken, 1e-12)
++			require.InDelta(t, 10e-6, p.CacheCreationPricePerToken, 1e-12)
++			require.InDelta(t, 10e-6, p.CacheCreation5mPrice, 1e-12)
++			require.InDelta(t, 16e-6, p.CacheCreation1hPrice, 1e-12)
++			require.InDelta(t, .2e-6, p.CacheReadPricePerToken, 1e-12)
++			require.True(t, p.SupportsCacheBreakdown)
++			require.Zero(t, p.LongContextInputThreshold)
++			require.Empty(t, p.ReasoningEffortMultipliers)
++			for _, tier := range []string{"", "fast"} {
++				cost, err := svc.CalculateCostWithServiceTier(model, UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000, CacheCreationTokens: 2_000_000, CacheCreation5mTokens: 1_000_000, CacheCreation1hTokens: 1_000_000}, 1, tier)
++				require.NoError(t, err)
++				multiplier := 1.0
++				if tier == "fast" {
++					multiplier = 2
++				}
++				require.InDelta(t, 8*multiplier, cost.InputCost, 1e-10)
++				require.InDelta(t, 40*multiplier, cost.OutputCost, 1e-10)
++				require.InDelta(t, 26*multiplier, cost.CacheCreationCost, 1e-10)
++				require.InDelta(t, .2*multiplier, cost.CacheReadCost, 1e-10)
++			}
++		})
++	}
++	// The older versions keep their own rates rather than inheriting 5.2 pricing.
++	for _, model := range []string{"claude-fable-5", "claude-fable-5-1"} {
++		p, err := svc.GetModelPricing(model)
++		require.NoError(t, err)
++		require.InDelta(t, 10e-6, p.InputPricePerToken, 1e-12)
++	}
++}
++
++func TestClaude52FastTierEligibility(t *testing.T) {
++	native := &Account{Platform: PlatformAnthropic}
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		require.NotNil(t, anthropicSpeedServiceTier(native, "fast", model))
++		require.Nil(t, anthropicSpeedServiceTier(native, "standard", model))
++		require.Nil(t, anthropicSpeedServiceTier(&Account{Platform: PlatformAnthropic, Type: AccountTypeBedrock}, "fast", model))
++		require.Nil(t, anthropicSpeedServiceTier(&Account{Platform: PlatformAntigravity}, "fast", model))
++	}
++	for _, model := range []string{"claude-fable-5", "claude-fable-5-1", "claude-fable-5-20", "claude-mythos-5-20"} {
++		require.Nil(t, anthropicSpeedServiceTier(native, "fast", model))
++	}
++}
++
++func TestClaude52RequestValidationAndCatalog(t *testing.T) {
++	for _, model := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
++		require.True(t, isClaude55SignedThinkingModel(model))
++		for _, body := range []string{`{}`, `{"thinking":{"type":"adaptive"}}`, `{"temperature":1}`, `{"top_p":0.99}`} {
++			require.NoError(t, validateClaude55Request([]byte(body), model))
++		}
++		for _, body := range []string{`{"thinking":{"type":"enabled","budget_tokens":1024}}`, `{"thinking":{"type":"disabled"}}`, `{"thinking":{"type":"between_tools"}}`, `{"tool_choice":{"type":"any"}}`, `{"temperature":0.5}`, `{"top_p":1}`, `{"top_k":40}`, `{"temperature":1,"top_p":0.99}`} {
++			require.Error(t, validateClaude55Request([]byte(body), model), body)
++		}
++		descriptor := newConfiguredCodexModelDescriptor(model)
++		require.Equal(t, int64(1_000_000), descriptor.ContextWindow)
++		require.Equal(t, "high", *descriptor.DefaultReasoningLevel)
++	}
++}
+diff --git a/backend/internal/service/claude_code_version_sync_service_test.go b/backend/internal/service/claude_code_version_sync_service_test.go
+index b4c4bb331..5867e2e5b 100644
+--- a/backend/internal/service/claude_code_version_sync_service_test.go
++++ b/backend/internal/service/claude_code_version_sync_service_test.go
+@@ -3,13 +3,25 @@ package service
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"sync"
+ 	"testing"
+ 	"time"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
++// Keep supported fixtures relative to the built-in floor so future CLI upgrades
++// do not turn version-selection tests into unsupported-version tests.
++func claudeCodeTestVersion(patchOffset int) string {
++	var major, minor, patch int
++	if n, err := fmt.Sscanf(claude.CLICurrentVersion, "%d.%d.%d", &major, &minor, &patch); err != nil || n != 3 {
++		panic("invalid built-in Claude Code version")
++	}
++	return fmt.Sprintf("%d.%d.%d", major, minor, patch+patchOffset)
++}
++
+ // --- mock: 只实现同步任务用到的读写，其余方法不应被调用 ---
+ 
+ type claudeCodeVersionSyncSettingRepoStub struct {
+@@ -115,19 +127,19 @@ func newClaudeCodeVersionSyncService(
+ // 否则会把无关 tag 的版本号当成客户端版本同步出去。
+ func TestLatestClaudeCodeStableReleaseVersion(t *testing.T) {
+ 	releases := []*GitHubRelease{
+-		{TagName: "v2.1.281-beta.1", Prerelease: true},
+-		{TagName: "v2.1.280"},
+-		{TagName: "v2.1.279"},
+-		{TagName: "v2.999.0", Draft: true},
++		{TagName: "v" + claudeCodeTestVersion(2) + "-beta.1", Prerelease: true},
++		{TagName: "v" + claudeCodeTestVersion(1)},
++		{TagName: "v" + claudeCodeTestVersion(0)},
++		{TagName: "v" + claudeCodeTestVersion(3), Draft: true},
+ 		{TagName: "not-a-tag"},
+ 		nil,
+ 	}
+ 
+-	require.Equal(t, "2.1.280", latestClaudeCodeStableReleaseVersion(releases))
++	require.Equal(t, claudeCodeTestVersion(1), latestClaudeCodeStableReleaseVersion(releases))
+ 	require.Empty(t, latestClaudeCodeStableReleaseVersion(nil))
+ 	require.Empty(t, latestClaudeCodeStableReleaseVersion([]*GitHubRelease{{TagName: "not-a-tag"}}))
+ 	// 预发布 tag 即使漏标 Prerelease 也要被版本号后缀挡住。
+-	require.Empty(t, latestClaudeCodeStableReleaseVersion([]*GitHubRelease{{TagName: "v2.1.281-beta.1"}}))
++	require.Empty(t, latestClaudeCodeStableReleaseVersion([]*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(2) + "-beta.1"}}))
+ 	// 低于内置基线的版本号即使形态合法也不得采信。
+ 	require.Empty(t, latestClaudeCodeStableReleaseVersion([]*GitHubRelease{{TagName: "v2.1.9"}}))
+ }
+@@ -135,21 +147,21 @@ func TestLatestClaudeCodeStableReleaseVersion(t *testing.T) {
+ func TestClaudeCodeVersionSyncWritesLatestStableVersion(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(nil)
+ 	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{
+-		{TagName: "v2.1.279"},
+-		{TagName: "v2.1.280"},
++		{TagName: "v" + claudeCodeTestVersion(0)},
++		{TagName: "v" + claudeCodeTestVersion(1)},
+ 	}}
+ 
+ 	newClaudeCodeVersionSyncService(repo, github).runOnce()
+ 
+-	require.Equal(t, []string{"2.1.280"}, repo.syncedWrites())
++	require.Equal(t, []string{claudeCodeTestVersion(1)}, repo.syncedWrites())
+ }
+ 
+ // 只向前推进：上游偶发返回旧数据或重新发布历史 tag 时不把已同步版本降级。
+ func TestClaudeCodeVersionSyncNeverMovesBackwards(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(map[string]string{
+-		SettingKeyClaudeCodeClientVersionSynced: "2.1.280",
++		SettingKeyClaudeCodeClientVersionSynced: claudeCodeTestVersion(1),
+ 	})
+-	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v2.1.279"}}}
++	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(0)}}}
+ 
+ 	newClaudeCodeVersionSyncService(repo, github).runOnce()
+ 
+@@ -160,7 +172,7 @@ func TestClaudeCodeVersionSyncSkippedWhenDisabled(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(map[string]string{
+ 		SettingKeyClaudeCodeVersionAutoSyncEnabled: "false",
+ 	})
+-	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v2.1.280"}}}
++	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(1)}}}
+ 
+ 	newClaudeCodeVersionSyncService(repo, github).runOnce()
+ 
+@@ -188,33 +200,33 @@ func TestClaudeCodeVersionSyncEnabledByDefaultOrOnError(t *testing.T) {
+ 			})
+ 			repo.getErr = tt.getErr
+ 			repo.getErrKey = SettingKeyClaudeCodeVersionAutoSyncEnabled
+-			github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v2.1.280"}}}
++			github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(1)}}}
+ 
+ 			newClaudeCodeVersionSyncService(repo, github).runOnce()
+ 
+-			require.Equal(t, []string{"2.1.280"}, repo.syncedWrites())
++			require.Equal(t, []string{claudeCodeTestVersion(1)}, repo.syncedWrites())
+ 		})
+ 	}
+ }
+ 
+ func TestClaudeCodeVersionSyncKeepsValueOnCurrentVersionReadError(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(map[string]string{
+-		SettingKeyClaudeCodeClientVersionSynced: "2.1.281",
++		SettingKeyClaudeCodeClientVersionSynced: claudeCodeTestVersion(2),
+ 	})
+ 	repo.getErr = errors.New("读取已有版本失败")
+ 	repo.getErrKey = SettingKeyClaudeCodeClientVersionSynced
+-	github := &claudeCodeVersionSyncGitHubStub{latest: &GitHubRelease{TagName: "v2.1.280"}}
++	github := &claudeCodeVersionSyncGitHubStub{latest: &GitHubRelease{TagName: "v" + claudeCodeTestVersion(1)}}
+ 
+ 	newClaudeCodeVersionSyncService(repo, github).runOnce()
+ 
+ 	require.Empty(t, repo.syncedWrites(), "无法确认已有版本时不得覆盖同步值")
+-	require.Equal(t, "2.1.281", repo.values[SettingKeyClaudeCodeClientVersionSynced])
++	require.Equal(t, claudeCodeTestVersion(2), repo.values[SettingKeyClaudeCodeClientVersionSynced])
+ }
+ 
+ // 抓取失败保持既有值，不清空、不降级。两条取数路径都失败才算真正拿不到。
+ func TestClaudeCodeVersionSyncKeepsValueOnFetchError(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(map[string]string{
+-		SettingKeyClaudeCodeClientVersionSynced: "2.1.280",
++		SettingKeyClaudeCodeClientVersionSynced: claudeCodeTestVersion(1),
+ 	})
+ 	github := &claudeCodeVersionSyncGitHubStub{
+ 		latestErr: errors.New("network down"),
+@@ -228,23 +240,23 @@ func TestClaudeCodeVersionSyncKeepsValueOnFetchError(t *testing.T) {
+ 	require.Empty(t, repo.syncedWrites())
+ 	value, err := repo.GetValue(context.Background(), SettingKeyClaudeCodeClientVersionSynced)
+ 	require.NoError(t, err)
+-	require.Equal(t, "2.1.280", value)
++	require.Equal(t, claudeCodeTestVersion(1), value)
+ }
+ 
+ // 主路径 /releases/latest：该端点已排除 draft / prerelease，直接给出最新正式发布。
+ func TestClaudeCodeVersionSyncUsesLatestReleaseEndpoint(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(nil)
+ 	github := &claudeCodeVersionSyncGitHubStub{
+-		latest: &GitHubRelease{TagName: "v2.1.280"},
++		latest: &GitHubRelease{TagName: "v" + claudeCodeTestVersion(1)},
+ 		// 列表若被调用会给出不同答案，用于证明取值确实来自主路径。
+-		releases: []*GitHubRelease{{TagName: "v2.1.279"}},
++		releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(0)}},
+ 	}
+ 
+ 	newClaudeCodeVersionSyncService(repo, github).runOnce()
+ 
+ 	require.Equal(t, 1, github.latestCalls)
+ 	require.Zero(t, github.calls, "主路径可用时不应再拉列表页")
+-	require.Equal(t, []string{"2.1.280"}, repo.syncedWrites())
++	require.Equal(t, []string{claudeCodeTestVersion(1)}, repo.syncedWrites())
+ }
+ 
+ // 回退列表扫描：主路径拿不到可用稳定版时必须继续扫一页 release，
+@@ -255,9 +267,9 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+ 		latest    *GitHubRelease
+ 		latestErr error
+ 	}{
+-		{name: "latest 前缀不符", latest: &GitHubRelease{TagName: "cli-2.1.280"}},
+-		{name: "latest 是预发布", latest: &GitHubRelease{TagName: "v2.1.281-beta.1", Prerelease: true}},
+-		{name: "latest 是草稿", latest: &GitHubRelease{TagName: "v2.1.281", Draft: true}},
++		{name: "latest 前缀不符", latest: &GitHubRelease{TagName: "cli-" + claudeCodeTestVersion(1)}},
++		{name: "latest 是预发布", latest: &GitHubRelease{TagName: "v" + claudeCodeTestVersion(2) + "-beta.1", Prerelease: true}},
++		{name: "latest 是草稿", latest: &GitHubRelease{TagName: "v" + claudeCodeTestVersion(2), Draft: true}},
+ 		{name: "latest 抓取失败", latestErr: errors.New("network down")},
+ 		// 上游返回空对象：不得因此 panic，按拿不到处理。
+ 		{name: "latest 为空", latest: nil},
+@@ -270,9 +282,9 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+ 				latest:    tt.latest,
+ 				latestErr: tt.latestErr,
+ 				releases: []*GitHubRelease{
+-					{TagName: "v2.1.281-beta.1", Prerelease: true},
+-					{TagName: "v2.1.280"},
+-					{TagName: "v2.1.279"},
++					{TagName: "v" + claudeCodeTestVersion(2) + "-beta.1", Prerelease: true},
++					{TagName: "v" + claudeCodeTestVersion(1)},
++					{TagName: "v" + claudeCodeTestVersion(0)},
+ 				},
+ 			}
+ 
+@@ -280,7 +292,7 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+ 
+ 			require.Equal(t, 1, github.latestCalls)
+ 			require.Equal(t, 1, github.calls)
+-			require.Equal(t, []string{"2.1.280"}, repo.syncedWrites())
++			require.Equal(t, []string{claudeCodeTestVersion(1)}, repo.syncedWrites())
+ 		})
+ 	}
+ }
+@@ -290,15 +302,15 @@ func TestClaudeCodeVersionSyncFallsBackToReleaseList(t *testing.T) {
+ func TestClaudeCodeVersionSyncLatestSharesFiltering(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(nil)
+ 	github := &claudeCodeVersionSyncGitHubStub{
+-		// 剥掉 v 前缀后不满足基线校验（2.1.9 低于内置基线 2.1.258）的 latest
++		// 剥掉 v 前缀后不满足基线校验（2.1.9 低于内置基线）的 latest
+ 		// 必须被拒绝而不是直接采信。
+ 		latest:   &GitHubRelease{TagName: "v2.1.9"},
+-		releases: []*GitHubRelease{{TagName: "v2.1.280"}},
++		releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(1)}},
+ 	}
+ 
+ 	newClaudeCodeVersionSyncService(repo, github).runOnce()
+ 
+-	require.Equal(t, []string{"2.1.280"}, repo.syncedWrites())
++	require.Equal(t, []string{claudeCodeTestVersion(1)}, repo.syncedWrites())
+ }
+ 
+ // 依赖缺失时 Start 必须直接返回，不能起一个空转的 goroutine。
+@@ -314,10 +326,10 @@ func TestClaudeCodeVersionSyncStartRequiresDependencies(t *testing.T) {
+ // 放大成对 GitHub 的连续请求。
+ func TestClaudeCodeVersionSyncInitialSkipsWhenRecentlySynced(t *testing.T) {
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(map[string]string{
+-		SettingKeyClaudeCodeClientVersionSynced: "2.1.280",
++		SettingKeyClaudeCodeClientVersionSynced: claudeCodeTestVersion(1),
+ 	})
+ 	repo.updatedAt = time.Now().Add(-time.Minute)
+-	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v2.1.281"}}}
++	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(2)}}}
+ 
+ 	newClaudeCodeVersionSyncService(repo, github).runInitial()
+ 
+@@ -328,27 +340,27 @@ func TestClaudeCodeVersionSyncInitialSkipsWhenRecentlySynced(t *testing.T) {
+ func TestClaudeCodeVersionSyncInitialRunsWhenStaleOrMissing(t *testing.T) {
+ 	t.Run("同步值已过期", func(t *testing.T) {
+ 		repo := newClaudeCodeVersionSyncSettingRepoStub(map[string]string{
+-			SettingKeyClaudeCodeClientVersionSynced: "2.1.280",
++			SettingKeyClaudeCodeClientVersionSynced: claudeCodeTestVersion(1),
+ 		})
+ 		repo.updatedAt = time.Now().Add(-2 * time.Hour)
+-		github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v2.1.281"}}}
++		github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(2)}}}
+ 
+ 		newClaudeCodeVersionSyncService(repo, github).runInitial()
+ 
+ 		require.Equal(t, 1, github.calls)
+-		require.Equal(t, []string{"2.1.281"}, repo.syncedWrites())
++		require.Equal(t, []string{claudeCodeTestVersion(2)}, repo.syncedWrites())
+ 	})
+ 
+ 	// 首次部署尚无同步值：必须立刻同步，不能被防抖挡住。
+ 	t.Run("尚无同步值", func(t *testing.T) {
+ 		repo := newClaudeCodeVersionSyncSettingRepoStub(nil)
+ 		repo.updatedAt = time.Now()
+-		github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v2.1.280"}}}
++		github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v" + claudeCodeTestVersion(1)}}}
+ 
+ 		newClaudeCodeVersionSyncService(repo, github).runInitial()
+ 
+ 		require.Equal(t, 1, github.calls)
+-		require.Equal(t, []string{"2.1.280"}, repo.syncedWrites())
++		require.Equal(t, []string{claudeCodeTestVersion(1)}, repo.syncedWrites())
+ 	})
+ }
+ 
+@@ -357,13 +369,13 @@ func TestClaudeCodeVersionSyncInitialRunsWhenStaleOrMissing(t *testing.T) {
+ func TestClaudeCodeVersionComparisonIsNumericNotLexical(t *testing.T) {
+ 	require.Greater(t, CompareVersions("2.1.280", "2.1.9"), 0)
+ 
+-	require.Equal(t, "2.1.280", latestClaudeCodeStableReleaseVersion([]*GitHubRelease{
++	require.Equal(t, claudeCodeTestVersion(1), latestClaudeCodeStableReleaseVersion([]*GitHubRelease{
+ 		{TagName: "v2.1.9"},
+-		{TagName: "v2.1.280"},
++		{TagName: "v" + claudeCodeTestVersion(1)},
+ 	}))
+ 
+ 	repo := newClaudeCodeVersionSyncSettingRepoStub(map[string]string{
+-		SettingKeyClaudeCodeClientVersionSynced: "2.1.280",
++		SettingKeyClaudeCodeClientVersionSynced: claudeCodeTestVersion(1),
+ 	})
+ 	github := &claudeCodeVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "v2.1.258"}}}
+ 
+diff --git a/backend/internal/service/gateway_claude_oauth_body.go b/backend/internal/service/gateway_claude_oauth_body.go
+index 355be46b7..44e9aaaac 100644
+--- a/backend/internal/service/gateway_claude_oauth_body.go
++++ b/backend/internal/service/gateway_claude_oauth_body.go
+@@ -266,7 +266,7 @@ func normalizeClaudeOAuthRequestBody(body []byte, modelID string, opts claudeOAu
+ 	// 例外：采样锁定的模型（sonnet-5-5/haiku-5-5）上 temperature+top_p 共存即 400，
+ 	// 客户端只传 top_p 时不得再补 temperature，否则网关自己制造 400（issue #7919）。
+ 	samplingLocked := claude.IsSonnet55(modelID) || claude.IsHaiku55(modelID)
+-	if !gjson.GetBytes(out, "temperature").Exists() && !claude.IsOpus55(modelID) &&
++	if !gjson.GetBytes(out, "temperature").Exists() && !claude.IsOpus55(modelID) && !claude.IsFable52(modelID) && !claude.IsMythos52(modelID) &&
+ 		(!samplingLocked || !gjson.GetBytes(out, "top_p").Exists()) {
+ 		if next, ok := setJSONValueBytes(out, "temperature", 1); ok {
+ 			out = next
+diff --git a/backend/internal/service/gateway_forward.go b/backend/internal/service/gateway_forward.go
+index b0d59656a..c74472ce1 100644
+--- a/backend/internal/service/gateway_forward.go
++++ b/backend/internal/service/gateway_forward.go
+@@ -872,7 +872,7 @@ func anthropicSpeedModel(parsed *ParsedRequest, result *ForwardResult) string {
+ 
+ // anthropicSpeedServiceTier 把 Anthropic 的 speed=fast 归一成可计费的 "fast" tier。
+ //
+-// Fast mode 目前只在 Claude Opus 5 / Opus 4.8 上存在，且不支持 Bedrock 等第三方
++// Fast mode 支持 Claude Fable/Mythos 5.2、Opus 5 / Opus 4.8，且不支持 Bedrock 等第三方
+ // 承载（Opus 4.7 的 fast mode 已被移除，传 speed=fast 会直接报错）。这里按模型和
+ // 平台收紧，避免上游根本没跑 fast 时仍然按 2x 计费——宁可漏收也不能多收。
+ //
+@@ -890,8 +890,11 @@ func anthropicSpeedServiceTier(account *Account, speed, model string) *string {
+ 	return &tier
+ }
+ 
+-// modelSupportsAnthropicFastMode 判断模型是否属于支持 fast mode 的 Opus 5 / Opus 4.8。
++// modelSupportsAnthropicFastMode 判断模型是否支持 Anthropic fast mode。
+ func modelSupportsAnthropicFastMode(model string) bool {
++	if claude.IsFable52(model) || claude.IsMythos52(model) {
++		return true
++	}
+ 	modelLower := strings.ToLower(strings.TrimSpace(model))
+ 	if !strings.Contains(modelLower, "opus") {
+ 		return false
+diff --git a/backend/internal/service/gateway_request.go b/backend/internal/service/gateway_request.go
+index f68d87a5a..95dfb069a 100644
+--- a/backend/internal/service/gateway_request.go
++++ b/backend/internal/service/gateway_request.go
+@@ -636,10 +636,10 @@ func StripEmptyTextBlocks(body []byte) []byte {
+ 	return out
+ }
+ 
+-// isClaude55SignedThinkingModel identifies models whose default thinking mode
++// isClaude55SignedThinkingModel identifies models (including Fable/Mythos 5.2) whose default thinking mode
+ // requires signed history to survive protocol conversion and request filtering.
+ func isClaude55SignedThinkingModel(model string) bool {
+-	return claude.IsOpus55(model) || claude.IsSonnet55(model) || claude.IsHaiku55(model)
++	return claude.IsOpus55(model) || claude.IsSonnet55(model) || claude.IsHaiku55(model) || claude.IsFable52(model) || claude.IsMythos52(model)
+ }
+ 
+ // validateClaude55Request rejects settings that the upstream cannot honor.
+@@ -650,6 +650,7 @@ func validateClaude55Request(body []byte, model string) error {
+ 	}
+ 	isSonnet55 := claude.IsSonnet55(model)
+ 	isHaiku55 := claude.IsHaiku55(model)
++	isClaude52 := claude.IsFable52(model) || claude.IsMythos52(model)
+ 	thinkingType := gjson.GetBytes(body, "thinking.type").String()
+ 	switch thinkingType {
+ 	case "disabled", "enabled":
+@@ -668,13 +669,13 @@ func validateClaude55Request(body []byte, model string) error {
+ 		if isSonnet55 {
+ 			return fmt.Errorf("claude-sonnet-5-5 requires adaptive thinking or thinking.type=between_tools; omit thinking or use one of those modes")
+ 		}
+-		return fmt.Errorf("claude-opus-5-5 requires adaptive thinking; omit thinking or use thinking.type=adaptive and output_config.effort")
++		return fmt.Errorf("%s requires adaptive thinking; omit thinking or use thinking.type=adaptive and output_config.effort", model)
+ 	case "between_tools":
+ 		if !isSonnet55 {
+ 			if isHaiku55 {
+ 				return fmt.Errorf("claude-haiku-5-5 requires adaptive thinking; thinking.type=between_tools is unsupported (use thinking.type=disabled at high effort or below)")
+ 			}
+-			return fmt.Errorf("claude-opus-5-5 requires adaptive thinking; thinking.type=between_tools is unsupported")
++			return fmt.Errorf("%s requires adaptive thinking; thinking.type=between_tools is unsupported", model)
+ 		}
+ 		effort := gjson.GetBytes(body, "output_config.effort").String()
+ 		if effort == "xhigh" || effort == "max" {
+@@ -686,7 +687,7 @@ func validateClaude55Request(body []byte, model string) error {
+ 			}
+ 		}
+ 	}
+-	modelName := "claude-opus-5-5"
++	modelName := model
+ 	if isSonnet55 {
+ 		modelName = "claude-sonnet-5-5"
+ 	}
+@@ -704,19 +705,19 @@ func validateClaude55Request(body []byte, model string) error {
+ 			return fmt.Errorf("%s does not support forced tool_choice; use auto or none", modelName)
+ 		}
+ 	}
+-	if isSonnet55 || isHaiku55 {
++	if isSonnet55 || isHaiku55 || isClaude52 {
+ 		if temperature := gjson.GetBytes(body, "temperature"); temperature.Exists() && (temperature.Type != gjson.Number || temperature.Float() != 1) {
+ 			return fmt.Errorf("%s does not support non-default temperature", modelName)
+ 		}
+ 		// Haiku 5.5 只接受显式 top_p=0.99；保留 Sonnet 5.5 既有的区间策略。
+ 		if topP := gjson.GetBytes(body, "top_p"); topP.Exists() && (topP.Type != gjson.Number ||
+-			(isHaiku55 && topP.Float() != 0.99) || (isSonnet55 && (topP.Float() < 0.99 || topP.Float() > 1))) {
++			((isHaiku55 || isClaude52) && topP.Float() != 0.99) || (isSonnet55 && (topP.Float() < 0.99 || topP.Float() > 1))) {
+ 			return fmt.Errorf("%s does not support non-default top_p", modelName)
+ 		}
+ 		if gjson.GetBytes(body, "top_k").Exists() {
+ 			return fmt.Errorf("%s does not support top_k", modelName)
+ 		}
+-		if isHaiku55 && gjson.GetBytes(body, "temperature").Exists() && gjson.GetBytes(body, "top_p").Exists() {
++		if (isHaiku55 || isClaude52) && gjson.GetBytes(body, "temperature").Exists() && gjson.GetBytes(body, "top_p").Exists() {
+ 			return fmt.Errorf("%s does not allow temperature and top_p together; omit both", modelName)
+ 		}
+ 	}
+diff --git a/backend/internal/service/openai_codex_models_service.go b/backend/internal/service/openai_codex_models_service.go
+index 518ce7175..dca69be55 100644
+--- a/backend/internal/service/openai_codex_models_service.go
++++ b/backend/internal/service/openai_codex_models_service.go
+@@ -481,7 +481,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
+ 	}
+ 
+ 	if isClaudeCodexModel(modelID) {
+-		if claude.IsOpus55(modelID) || claude.IsSonnet55(modelID) || claude.IsHaiku55(modelID) {
++		if claude.IsOpus55(modelID) || claude.IsSonnet55(modelID) || claude.IsHaiku55(modelID) || claude.IsFable52(modelID) || claude.IsMythos52(modelID) {
+ 			descriptor.ContextWindow = 1_000_000
+ 			descriptor.MaxContextWindow = 1_000_000
+ 		}
+@@ -490,7 +490,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
+ 		descriptor.SupportsParallelToolCalls = true
+ 		if levels := configuredCodexClaudeReasoningLevels(modelID); len(levels) > 0 {
+ 			defaultReasoningLevel := claudeCodexDefaultReasoningLevel(levels)
+-			if claude.IsSonnet55(modelID) {
++			if claude.IsSonnet55(modelID) || claude.IsFable52(modelID) || claude.IsMythos52(modelID) {
+ 				defaultReasoningLevel = "high"
+ 			}
+ 			descriptor.DefaultReasoningLevel = &defaultReasoningLevel
+diff --git a/backend/internal/service/setting_claude_code_version_test.go b/backend/internal/service/setting_claude_code_version_test.go
+index 73d8ca901..052e4d20c 100644
+--- a/backend/internal/service/setting_claude_code_version_test.go
++++ b/backend/internal/service/setting_claude_code_version_test.go
+@@ -18,10 +18,12 @@ func TestGetClaudeCodeClientVersionPriority(t *testing.T) {
+ 		synced string
+ 		want   string
+ 	}{
+-		{name: "手动值优先", manual: "2.1.280", synced: "2.1.281", want: "2.1.280"},
+-		{name: "归一化手动值", manual: " v2.1.280 ", synced: "2.1.281", want: "2.1.280"},
+-		{name: "跟随同步值", synced: "2.1.281", want: "2.1.281"},
+-		{name: "无效手动值回退", manual: "invalid", synced: "2.1.281", want: "2.1.281"},
++		{name: "手动值优先", manual: claudeCodeTestVersion(1), synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(1)},
++		{name: "归一化手动值", manual: " v" + claudeCodeTestVersion(1) + " ", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(1)},
++		{name: "跟随同步值", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(2)},
++		{name: "无效手动值回退", manual: "invalid", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(2)},
++		{name: "旧手动值回退同步值", manual: "2.1.280", synced: claudeCodeTestVersion(2), want: claudeCodeTestVersion(2)},
++		{name: "旧同步值回退基线", synced: "2.1.280", want: claude.CLIVersion()},
+ 		{name: "无效同步值回退", synced: "2.1.9", want: claude.CLIVersion()},
+ 		{name: "未配置时回退", want: claude.CLIVersion()},
+ 	} {
+@@ -39,26 +41,26 @@ func TestGetClaudeCodeClientVersionPriority(t *testing.T) {
+ func TestUpdateSettingsClaudeCodeVersionTakesEffectImmediately(t *testing.T) {
+ 	ctx := context.Background()
+ 	repo := &authSourceDefaultsRepoStub{values: map[string]string{
+-		SettingKeyClaudeCodeClientVersionSynced: "2.1.281",
++		SettingKeyClaudeCodeClientVersionSynced: claudeCodeTestVersion(2),
+ 	}}
+ 	svc := NewSettingService(repo, &config.Config{})
+ 	resetGatewayForwardingSettingsCacheForTest(t)
+ 	defer svc.refreshCachedSettings(&SystemSettings{})
+-	require.Equal(t, "2.1.281", svc.GetClaudeCodeClientVersion(ctx))
++	require.Equal(t, claudeCodeTestVersion(2), svc.GetClaudeCodeClientVersion(ctx))
+ 
+ 	settings := &SystemSettings{
+-		ClaudeCodeClientVersion:          "2.1.280",
++		ClaudeCodeClientVersion:          claudeCodeTestVersion(1),
+ 		ClaudeCodeVersionAutoSyncEnabled: true,
+ 	}
+ 	require.NoError(t, svc.UpdateSettings(ctx, settings))
+-	require.Equal(t, "2.1.280", svc.GetClaudeCodeClientVersion(ctx), "保存手动版本后应立即生效")
++	require.Equal(t, claudeCodeTestVersion(1), svc.GetClaudeCodeClientVersion(ctx), "保存手动版本后应立即生效")
+ 	require.NotContains(t, repo.updates, SettingKeyClaudeCodeClientVersionSynced)
+-	require.Equal(t, "2.1.281", repo.values[SettingKeyClaudeCodeClientVersionSynced])
++	require.Equal(t, claudeCodeTestVersion(2), repo.values[SettingKeyClaudeCodeClientVersionSynced])
+ 
+ 	// 清空手动值并关闭后续同步时，仍保留并使用已有同步值。
+ 	settings.ClaudeCodeClientVersion = ""
+ 	settings.ClaudeCodeVersionAutoSyncEnabled = false
+ 	require.NoError(t, svc.UpdateSettings(ctx, settings))
+-	require.Equal(t, "2.1.281", svc.GetClaudeCodeClientVersion(ctx))
++	require.Equal(t, claudeCodeTestVersion(2), svc.GetClaudeCodeClientVersion(ctx))
+ 	require.Equal(t, "false", repo.values[SettingKeyClaudeCodeVersionAutoSyncEnabled])
+ }
+diff --git a/frontend/src/components/account/AccountStatusIndicator.vue b/frontend/src/components/account/AccountStatusIndicator.vue
+index 44602d43e..612d18132 100644
+--- a/frontend/src/components/account/AccountStatusIndicator.vue
++++ b/frontend/src/components/account/AccountStatusIndicator.vue
+@@ -224,6 +224,8 @@ const activeModelStatuses = computed<AccountModelStatusItem[]>(() => {
+ const formatScopeName = (scope: string): string => {
+   const aliases: Record<string, string> = {
+     // Claude 系列
++    'claude-fable-5-2': 'CFable52',
++    'claude-mythos-5-2': 'CMythos52',
+     'claude-fable-5-1': 'CFable51',
+     'claude-fable-5': 'CFable5',
+     'claude-opus-4-6': 'COpus46',
+diff --git a/frontend/src/components/account/__tests__/AccountStatusIndicator.spec.ts b/frontend/src/components/account/__tests__/AccountStatusIndicator.spec.ts
+index 31d192080..bf8406de5 100644
+--- a/frontend/src/components/account/__tests__/AccountStatusIndicator.spec.ts
++++ b/frontend/src/components/account/__tests__/AccountStatusIndicator.spec.ts
+@@ -86,6 +86,30 @@ describe('AccountStatusIndicator', () => {
+     expect(wrapper.text()).not.toContain('claude-sonnet-5')
+   })
+ 
++  it.each([
++    ['claude-fable-5-2', 'CFable52'],
++    ['claude-mythos-5-2', 'CMythos52']
++  ])('shows a short rate-limit badge for %s', (model, alias) => {
++    const wrapper = mount(AccountStatusIndicator, {
++      props: {
++        account: makeAccount({
++          platform: 'anthropic',
++          extra: {
++            model_rate_limits: {
++              [model]: {
++                rate_limited_at: '2026-11-10T00:00:00Z',
++                rate_limit_reset_at: '2099-11-10T00:00:00Z'
++              }
++            }
++          }
++        })
++      },
++      global: { stubs: { Icon: true } }
++    })
++    expect(wrapper.text()).toContain(alias)
++    expect(wrapper.text()).not.toContain(model)
++  })
++
+   it('Grok 账号额度限流时显示自动恢复时间而非临时不可调度', () => {
+     const wrapper = mount(AccountStatusIndicator, {
+       props: {
+diff --git a/frontend/src/components/keys/UseKeyModal.vue b/frontend/src/components/keys/UseKeyModal.vue
+index 459ae082a..e0aea84e0 100644
+--- a/frontend/src/components/keys/UseKeyModal.vue
++++ b/frontend/src/components/keys/UseKeyModal.vue
+@@ -2002,7 +2002,34 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
+     provider[platform].models = geminiModels
+   } else if (platform === 'anthropic') {
+     provider[platform].npm = '@ai-sdk/anthropic'
++    // Mythos requires an eligible Anthropic account; configuration does not grant access.
+     provider[platform].models = {
++      'claude-fable-5-2': {
++        name: 'Claude Fable 5.2',
++        limit: { context: 1000000, output: 128000 },
++        modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
++        options: { thinking: { type: 'adaptive' }, effort: 'high' },
++        variants: {
++          low: { effort: 'low' },
++          medium: { effort: 'medium' },
++          high: { effort: 'high' },
++          xhigh: { effort: 'xhigh' },
++          max: { effort: 'max' }
++        }
++      },
++      'claude-mythos-5-2': {
++        name: 'Claude Mythos 5.2',
++        limit: { context: 1000000, output: 128000 },
++        modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
++        options: { thinking: { type: 'adaptive' }, effort: 'high' },
++        variants: {
++          low: { effort: 'low' },
++          medium: { effort: 'medium' },
++          high: { effort: 'high' },
++          xhigh: { effort: 'xhigh' },
++          max: { effort: 'max' }
++        }
++      },
+       'claude-opus-5-5': {
+         name: 'Claude Opus 5.5',
+         limit: { context: 1000000, output: 128000 },
+diff --git a/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts b/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
+index a1602020d..64d9c9bed 100644
+--- a/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
++++ b/frontend/src/components/keys/__tests__/UseKeyModal.spec.ts
+@@ -772,6 +772,32 @@ describe('UseKeyModal', () => {
+     expect(models['claude-sonnet-5-5'].variants).not.toHaveProperty('none')
+   })
+ 
++  it.each([
++    ['claude-fable-5-2', 'Claude Fable 5.2'],
++    ['claude-mythos-5-2', 'Claude Mythos 5.2']
++  ])('exports %s on Anthropic with adaptive thinking and all supported effort levels', async (model, name) => {
++    const wrapper = mount(UseKeyModal, {
++      props: { show: true, apiKey: 'sk-test', baseUrl: 'https://example.com/v1', platform: 'anthropic' },
++      global: { stubs: { BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' }, Icon: { template: '<span />' } } }
++    })
++    const tab = wrapper.findAll('button').find(button => button.text().includes('keys.useKeyModal.cliTabs.opencode'))
++    expect(tab).toBeDefined()
++    await tab!.trigger('click')
++    await nextTick()
++    const config = JSON.parse(wrapper.find('pre code').text()).provider.anthropic.models[model]
++    expect(config.name).toBe(name)
++    expect(config.limit).toEqual({ context: 1000000, output: 128000 })
++    expect(config.modalities).toEqual({ input: ['text', 'image', 'pdf'], output: ['text'] })
++    expect(config.options).toEqual({ thinking: { type: 'adaptive' }, effort: 'high' })
++    expect(config.variants).toEqual({
++      low: { effort: 'low' },
++      medium: { effort: 'medium' },
++      high: { effort: 'high' },
++      xhigh: { effort: 'xhigh' },
++      max: { effort: 'max' }
++    })
++  })
++
+   it('renders Claude Fable 5 OpenCode config with adaptive thinking', async () => {
+     const wrapper = mount(UseKeyModal, {
+       props: {
+@@ -806,6 +832,8 @@ describe('UseKeyModal', () => {
+ 
+     expect(claudeConfig).toBeDefined()
+     const parsed = JSON.parse(claudeConfig!)
++    expect(parsed.provider['antigravity-claude'].models).not.toHaveProperty('claude-fable-5-2')
++    expect(parsed.provider['antigravity-claude'].models).not.toHaveProperty('claude-mythos-5-2')
+     const fable51 = parsed.provider['antigravity-claude'].models['claude-fable-5-1']
+     const fable = parsed.provider['antigravity-claude'].models['claude-fable-5']
+ 
+diff --git a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+index 05461070e..2dbd1a894 100644
+--- a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
++++ b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+@@ -95,6 +95,25 @@ describe('useModelWhitelist', () => {
+     expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
+   })
+ 
++  it.each([
++    ['claude-fable-5-2', 'Fable 5.2'],
++    ['claude-mythos-5-2', 'Mythos 5.2']
++  ])('preserves %s in Anthropic whitelists and presets without inventing provider mappings', (model, label) => {
++    for (const platform of ['claude', 'anthropic']) {
++      const models = getModelsByPlatform(platform)
++      expect(models).toContain(model)
++      expect(buildModelMappingObject('whitelist', models, [])?.[model]).toBe(model)
++      expect(getPresetMappingsByPlatform(platform)).toEqual(expect.arrayContaining([
++        expect.objectContaining({ label, from: model, to: model })
++      ]))
++    }
++    expect(getPresetMappingsByPlatform('bedrock')).toEqual(expect.arrayContaining([
++      expect.objectContaining({ label, from: model, to: `anthropic.${model}` })
++    ]))
++    expect(getModelsByPlatform('antigravity')).not.toContain(model)
++    expect(getPresetMappingsByPlatform('antigravity').some(mapping => mapping.from === model)).toBe(false)
++  })
++
+   it('Claude Sonnet 5.5 预设使用各平台的官方模型 ID', () => {
+     expect(getPresetMappingsByPlatform('claude')).toEqual(expect.arrayContaining([
+       expect.objectContaining({ label: 'Sonnet 5.5', from: 'claude-sonnet-5-5', to: 'claude-sonnet-5-5' })
+diff --git a/frontend/src/composables/useModelWhitelist.ts b/frontend/src/composables/useModelWhitelist.ts
+index 5702773c9..47399f411 100644
+--- a/frontend/src/composables/useModelWhitelist.ts
++++ b/frontend/src/composables/useModelWhitelist.ts
+@@ -43,6 +43,9 @@ export const claudeModels = [
+   'claude-haiku-5-5',
+   'claude-sonnet-5',
+   'claude-sonnet-4-6',
++  'claude-fable-5-2',
++  // Mythos API access requires eligibility from Anthropic.
++  'claude-mythos-5-2',
+   'claude-fable-5-1',
+   'claude-fable-5'
+ ]
+@@ -323,6 +326,8 @@ export const allModels = allModelsList.map(m => ({ value: m, label: m }))
+ // =====================
+ 
+ const anthropicPresetMappings = [
++  { label: 'Fable 5.2', from: 'claude-fable-5-2', to: 'claude-fable-5-2', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
++  { label: 'Mythos 5.2', from: 'claude-mythos-5-2', to: 'claude-mythos-5-2', color: 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-400' },
+   { label: 'Fable 5.1', from: 'claude-fable-5-1', to: 'claude-fable-5-1', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
+   { label: 'Fable 5', from: 'claude-fable-5', to: 'claude-fable-5', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
+   { label: 'Sonnet 5.5', from: 'claude-sonnet-5-5', to: 'claude-sonnet-5-5', color: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400' },
+@@ -452,6 +457,9 @@ const antigravityPresetMappings = [
+ 
+ // Bedrock 预设映射（与后端 DefaultBedrockModelMapping 保持一致）
+ const bedrockPresetMappings = [
++  { label: 'Fable 5.2', from: 'claude-fable-5-2', to: 'anthropic.claude-fable-5-2', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
++  { label: 'Mythos 5.2', from: 'claude-mythos-5-2', to: 'anthropic.claude-mythos-5-2', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
++
+   { label: 'Fable 5.1', from: 'claude-fable-5-1', to: 'anthropic.claude-fable-5-1', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
+   { label: 'Fable 5', from: 'claude-fable-5', to: 'anthropic.claude-fable-5', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
+   { label: 'Opus 4.6', from: 'claude-opus-4-6', to: 'us.anthropic.claude-opus-4-6-v1', color: 'bg-pink-100 text-pink-700 hover:bg-pink-200 dark:bg-pink-900/30 dark:text-pink-400' },

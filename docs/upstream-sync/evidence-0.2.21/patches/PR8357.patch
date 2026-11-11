@@ -1,0 +1,255 @@
+diff --git a/backend/internal/securityaudit/prompt_enqueue.go b/backend/internal/securityaudit/prompt_enqueue.go
+index 625636c90..6336b477d 100644
+--- a/backend/internal/securityaudit/prompt_enqueue.go
++++ b/backend/internal/securityaudit/prompt_enqueue.go
+@@ -10,6 +10,7 @@ type Enqueuer struct {
+ 	repo    JobRepository
+ 	payload PayloadStore
+ 	metrics Metrics
++	notify  func()
+ }
+ 
+ func NewEnqueuer(config ConfigStore, repo JobRepository, payload PayloadStore, metrics ...Metrics) *Enqueuer {
+@@ -82,6 +83,9 @@ func (e *Enqueuer) Enqueue(ctx context.Context, req Request) error {
+ 		e.recordDropped()
+ 		return err
+ 	}
++	if e.notify != nil {
++		e.notify()
++	}
+ 	LogInfo(EventJobEnqueued, mergeLogFields(baseFields, map[string]any{
+ 		"job_id":         job.ID,
+ 		"queue_capacity": cfg.QueueCapacity, "status": "queued",
+diff --git a/backend/internal/securityaudit/prompt_service.go b/backend/internal/securityaudit/prompt_service.go
+index a8cefcd64..322d3c75e 100644
+--- a/backend/internal/securityaudit/prompt_service.go
++++ b/backend/internal/securityaudit/prompt_service.go
+@@ -42,6 +42,7 @@ func NewPromptService(
+ 	enqueuer := NewEnqueuer(config, repo, payload, metrics)
+ 	evaluator := NewGuardEvaluator(scanner, repo, metrics)
+ 	runner := NewRunner(config, repo, payload, scanner, metrics)
++	enqueuer.notify = runner.Notify
+ 	return &PromptService{
+ 		config: config, repo: repo, payload: payload, scanner: scanner, metrics: metrics,
+ 		enqueuer: enqueuer, evaluator: evaluator, runner: runner, clock: realClock{},
+diff --git a/backend/internal/securityaudit/prompt_worker.go b/backend/internal/securityaudit/prompt_worker.go
+index 05ae828f0..89824299f 100644
+--- a/backend/internal/securityaudit/prompt_worker.go
++++ b/backend/internal/securityaudit/prompt_worker.go
+@@ -8,6 +8,10 @@ import (
+ 	"time"
+ )
+ 
++// workerIdlePoll is the fallback claim interval. Local enqueues also wake workers
++// directly; polling still picks up retries that come due and jobs enqueued by other replicas.
++const workerIdlePoll = 500 * time.Millisecond
++
+ type WorkerRuntime struct {
+ 	active           atomic.Int64
+ 	processed        atomic.Int64
+@@ -27,6 +31,7 @@ type Runner struct {
+ 	metrics Metrics
+ 	clock   Clock
+ 	runtime WorkerRuntime
++	wake    []chan struct{}
+ 
+ 	mu     sync.Mutex
+ 	cancel context.CancelFunc
+@@ -34,7 +39,27 @@ type Runner struct {
+ }
+ 
+ func NewRunner(config ConfigStore, repo JobRepository, payload PayloadStore, scanner PromptScanner, metrics Metrics) *Runner {
+-	return &Runner{config: config, repo: repo, payload: payload, scanner: scanner, metrics: metrics, clock: realClock{}}
++	wake := make([]chan struct{}, MaxWorkerCount)
++	for i := range wake {
++		// Pre-filled so each worker drains jobs left over from a previous run at start.
++		wake[i] = make(chan struct{}, 1)
++		wake[i] <- struct{}{}
++	}
++	return &Runner{config: config, repo: repo, payload: payload, scanner: scanner, metrics: metrics, clock: realClock{}, wake: wake}
++}
++
++// Notify wakes every worker to claim queued jobs. It never blocks; a worker that
++// already has a pending wake-up keeps just one.
++func (r *Runner) Notify() {
++	if r == nil {
++		return
++	}
++	for _, ch := range r.wake {
++		select {
++		case ch <- struct{}{}:
++		default:
++		}
++	}
+ }
+ 
+ func (r *Runner) Start(ctx context.Context) error {
+@@ -85,31 +110,36 @@ func (r *Runner) Shutdown(ctx context.Context) error {
+ 
+ func (r *Runner) worker(ctx context.Context, workerID int) {
+ 	defer r.wg.Done()
+-	ticker := time.NewTicker(500 * time.Millisecond)
++	ticker := time.NewTicker(workerIdlePoll)
+ 	defer ticker.Stop()
++	var wake <-chan struct{}
++	if workerID < len(r.wake) {
++		wake = r.wake[workerID]
++	}
+ 	for {
+ 		select {
+ 		case <-ctx.Done():
+ 			return
+ 		case <-ticker.C:
+-			r.runtime.heartbeatNS.Store(r.clock.Now().UnixNano())
+-			cfg, ok := r.config.Active()
+-			if !ok || !cfg.RiskControlEnabled || !cfg.Enabled || workerID >= cfg.WorkerCount {
+-				continue
++		case <-wake:
++		}
++		r.runtime.heartbeatNS.Store(r.clock.Now().UnixNano())
++		cfg, ok := r.config.Active()
++		if !ok || !cfg.RiskControlEnabled || !cfg.Enabled || workerID >= cfg.WorkerCount {
++			continue
++		}
++		for {
++			job, claimed, err := r.repo.ClaimNextJob(ctx, r.clock.Now())
++			if err != nil {
++				r.setLastError("claim_job_failed", err.Error())
++				break
+ 			}
+-			for {
+-				job, claimed, err := r.repo.ClaimNextJob(ctx, r.clock.Now())
+-				if err != nil {
+-					r.setLastError("claim_job_failed", err.Error())
+-					break
+-				}
+-				if !claimed {
+-					break
+-				}
+-				r.runtime.active.Add(1)
+-				r.processSafely(ctx, workerID, cfg, job)
+-				r.runtime.active.Add(-1)
++			if !claimed {
++				break
+ 			}
++			r.runtime.active.Add(1)
++			r.processSafely(ctx, workerID, cfg, job)
++			r.runtime.active.Add(-1)
+ 		}
+ 	}
+ }
+@@ -273,6 +303,7 @@ func (r *Runner) reclaimer(ctx context.Context) {
+ 				continue
+ 			}
+ 			if count > 0 {
++				r.Notify()
+ 				LogWarn(EventProcessingReclaimed, map[string]any{"reclaimed_total": count, "status": "reclaimed"})
+ 			}
+ 		}
+diff --git a/backend/internal/securityaudit/prompt_worker_test.go b/backend/internal/securityaudit/prompt_worker_test.go
+index a91569c2c..a8de8833e 100644
+--- a/backend/internal/securityaudit/prompt_worker_test.go
++++ b/backend/internal/securityaudit/prompt_worker_test.go
+@@ -84,6 +84,7 @@ type fakeJobRepository struct {
+ 	refreshes       int
+ 
+ 	claimQueue []*Job
++	claims     int
+ 
+ 	recordBlockingCalls    int
+ 	recordBlockingSnapshot PromptSnapshot
+@@ -126,6 +127,7 @@ func (r *fakeJobRepository) MarkStagingFailed(_ context.Context, _ int64, code,
+ func (r *fakeJobRepository) ClaimNextJob(context.Context, time.Time) (*Job, bool, error) {
+ 	r.mu.Lock()
+ 	defer r.mu.Unlock()
++	r.claims++
+ 	if len(r.claimQueue) == 0 {
+ 		return nil, false, nil
+ 	}
+diff --git a/backend/internal/securityaudit/prompt_worker_wake_test.go b/backend/internal/securityaudit/prompt_worker_wake_test.go
+new file mode 100644
+index 000000000..715aa43aa
+--- /dev/null
++++ b/backend/internal/securityaudit/prompt_worker_wake_test.go
+@@ -0,0 +1,81 @@
++package securityaudit
++
++import (
++	"context"
++	"errors"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestEnqueuerNotifiesOnlyAfterPublish(t *testing.T) {
++	cases := []struct {
++		name       string
++		publishErr error
++		want       int
++	}{
++		{name: "published", want: 1},
++		{name: "publish failed", publishErr: errors.New("db down"), want: 0},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			repo := &fakeJobRepository{createJob: &Job{ID: 41}, publishErr: tc.publishErr}
++			enqueuer := NewEnqueuer(&fakeConfigStore{cfg: asyncConfig(), active: true}, repo, &fakePayloadStore{values: map[int64]string{}})
++			notified := 0
++			enqueuer.notify = func() { notified++ }
++			_ = enqueuer.Enqueue(context.Background(), asyncRequest())
++			require.Equal(t, tc.want, notified)
++		})
++	}
++}
++
++// Both cases must finish before the first fallback tick (workerIdlePoll), so they
++// exercise the start-up drain and the wake path rather than polling.
++func TestWorkerClaimsWithoutWaitingForIdlePoll(t *testing.T) {
++	newRunner := func(repo *fakeJobRepository) *Runner {
++		payload := &fakePayloadStore{values: map[int64]string{51: "abc"}}
++		return NewRunner(&fakeConfigStore{cfg: asyncConfig(), active: true}, repo, payload, PromptScannerFunc(func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
++			return integrationResult(EventPass), nil
++		}), NewAtomicMetrics())
++	}
++	completed := func(repo *fakeJobRepository) func() bool {
++		return func() bool { repo.mu.Lock(); defer repo.mu.Unlock(); return repo.completeCount == 1 }
++	}
++	stop := func(t *testing.T, runner *Runner) {
++		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
++		defer cancel()
++		require.NoError(t, runner.Shutdown(ctx))
++	}
++
++	t.Run("jobs left from a previous run are drained at start", func(t *testing.T) {
++		repo := &fakeJobRepository{claimQueue: []*Job{workerJob(1, 3)}}
++		runner := newRunner(repo)
++		require.NoError(t, runner.Start(context.Background()))
++		defer stop(t, runner)
++		require.Eventually(t, completed(repo), workerIdlePoll/2, 5*time.Millisecond)
++	})
++
++	t.Run("notify wakes an idle worker", func(t *testing.T) {
++		repo := &fakeJobRepository{}
++		runner := newRunner(repo)
++		require.NoError(t, runner.Start(context.Background()))
++		defer stop(t, runner)
++		// wait for the start-up drain to find an empty queue
++		require.Eventually(t, func() bool { repo.mu.Lock(); defer repo.mu.Unlock(); return repo.claims > 0 }, workerIdlePoll/2, time.Millisecond)
++		repo.mu.Lock()
++		repo.claimQueue = append(repo.claimQueue, workerJob(1, 3))
++		repo.mu.Unlock()
++		runner.Notify()
++		require.Eventually(t, completed(repo), workerIdlePoll/2, 5*time.Millisecond)
++	})
++
++	t.Run("notify never blocks", func(t *testing.T) {
++		runner := newRunner(&fakeJobRepository{})
++		for i := 0; i < 3; i++ {
++			runner.Notify()
++		}
++		var nilRunner *Runner
++		nilRunner.Notify()
++	})
++}

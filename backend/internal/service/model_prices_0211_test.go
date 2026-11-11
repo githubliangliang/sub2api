@@ -15,14 +15,14 @@ func TestSonnet55AndGPT61PricingSourcesAndOverrides(t *testing.T) {
 	catalog := &PricingService{}
 	catalog.pricingData, err = catalog.parsePricingData(data)
 	require.NoError(t, err)
-	for source, svc := range map[string]*BillingService{"fallback": newTestBillingService(), "catalog": NewBillingService(&config.Config{}, catalog)} {
+	for source, svc := range map[string]*BillingService{"fallback": newTestBillingService(), "catalog": NewBillingService(&config.Config{}, catalog), "remote-missing": NewBillingService(&config.Config{}, &PricingService{pricingData: map[string]*LiteLLMModelPricing{}})} {
 		for _, model := range []string{"claude-sonnet-5-5", "anthropic/claude-sonnet-5.5", "us.anthropic.claude-sonnet-5-5"} {
 			t.Run(source+"/"+model, func(t *testing.T) {
 				cost, err := svc.CalculateCost(model, UsageTokens{InputTokens: 100000, OutputTokens: 500, CacheReadTokens: 1000, CacheCreationTokens: 1000, CacheCreation5mTokens: 400, CacheCreation1hTokens: 600}, 1)
 				require.NoError(t, err)
 				require.InDelta(t, 0.2, cost.InputCost, 1e-10)
 				require.InDelta(t, 0.0034, cost.CacheCreationCost, 1e-10)
-				require.InDelta(t, 0.0002, cost.CacheReadCost, 1e-10)
+				require.InDelta(t, 0.0001, cost.CacheReadCost, 1e-10)
 				require.InDelta(t, 0.005, cost.OutputCost, 1e-10)
 			})
 		}
