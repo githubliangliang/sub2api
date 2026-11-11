@@ -331,11 +331,14 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// Read request body
 	body, err := readLenientJSONRequestBodyWithPrealloc(c.Request, h.cfg)
 	if err != nil {
+		if handleRequestBodyReadError(c, err) {
+			return
+		}
 		if maxErr, ok := extractMaxBytesError(err); ok {
 			h.errorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))
 			return
 		}
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to read request body")
+		h.errorResponse(c, requestBodyReadStatus(c, err), "invalid_request_error", requestBodyReadMessage(c, err))
 		return
 	}
 
@@ -711,6 +714,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					zap.Error(err),
 				)
 			} else {
+				if handleRequestBodyMemoryOverload(c, err) {
+					return
+				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
 					if failoverClientGone(c) {
@@ -1022,11 +1028,14 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 
 	body, err := readLenientJSONRequestBodyWithPrealloc(c.Request, h.cfg)
 	if err != nil {
+		if handleRequestBodyReadError(c, err) {
+			return
+		}
 		if maxErr, ok := extractMaxBytesError(err); ok {
 			h.anthropicErrorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))
 			return
 		}
-		h.anthropicErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to read request body")
+		h.anthropicErrorResponse(c, requestBodyReadStatus(c, err), "invalid_request_error", requestBodyReadMessage(c, err))
 		return
 	}
 	if len(body) == 0 {
@@ -1271,6 +1280,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					zap.Error(err),
 				)
 			} else {
+				if handleRequestBodyMemoryOverload(c, err) {
+					return
+				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
 					if failoverClientGone(c) {
@@ -1478,6 +1490,9 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
 }
 
 func normalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
+	if !mayContainCodexCallOutputCandidate(body, "create_thread", "send_message_to_thread") {
+		return body, false
+	}
 	// 已有任务通过 send_message_to_thread 唤醒时会携带 previous_response_id；
 	// 完整历史回放还会带有已配对的调用项。delegation 仍是客户端注入的用户输入，
 	// 不属于这些历史调用的结果，因此允许它与可明确配对的历史上下文共存。
@@ -1485,7 +1500,29 @@ func normalizeCodexDelegationBootstrap(body []byte) ([]byte, bool) {
 }
 
 func normalizeCodexAutomationBootstrap(body []byte) ([]byte, bool) {
+	if !mayContainCodexCallOutputCandidate(body, "automation_update") {
+		return body, false
+	}
 	return normalizeCodexCallOutputBootstrap(body, isCodexAutomationCandidate, false)
+}
+
+// mayContainCodexCallOutputCandidate is a necessary condition for a bootstrap
+// candidate, checked before the full uniqueness scan and decode. Its type and
+// tool name are JSON strings, which appear literally unless a \u escape spells
+// their letters; without either, normalization cannot change the body.
+func mayContainCodexCallOutputCandidate(body []byte, toolNames ...string) bool {
+	if bytes.Contains(body, []byte(`\u`)) {
+		return true
+	}
+	if !bytes.Contains(body, []byte("function_call_output")) {
+		return false
+	}
+	for _, name := range toolNames {
+		if bytes.Contains(body, []byte(name)) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCodexCallOutputBootstrap(body []byte, isCandidate func(map[string]any) bool, allowHistoricalContext bool) ([]byte, bool) {
@@ -2615,6 +2652,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			if ctx.Err() != nil {
 				return
 			}
+			if handleRequestBodyMemoryOverload(c, err) {
+				return
+			}
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				if handleWSFailover(account, failoverErr) {
@@ -2873,6 +2913,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		requestPayloadHash = service.HashUsageRequestPayload(wsFirstMessage)
 
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
+			if handleRequestBodyMemoryOverload(c, err) {
+				return
+			}
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				retryPayload, retryCurrentTurn := service.OpenAIWSCurrentTurnRetryPayload(err)

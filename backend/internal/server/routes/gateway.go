@@ -33,8 +33,9 @@ func RegisterGatewayRoutes(
 	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 ) {
-	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize)
-	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize)
+	bodyBudget := pkghttputil.NewBodyMemoryBudget(cfg.Gateway.RequestBodyMemoryBudgetBytes)
+	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize, bodyBudget)
+	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize, bodyBudget)
 	clientRequestID := middleware.ClientRequestID()
 	opsErrorLogger := handler.OpsErrorLoggerMiddleware(opsService)
 	endpointNorm := handler.InboundEndpointMiddleware()
@@ -541,8 +542,13 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 
 		body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
 		if err != nil {
-			status := http.StatusBadRequest
-			message := "Failed to read request body"
+			failure := pkghttputil.DescribeRequestBodyReadFailure(c.Request, err)
+			status, message := failure.Status, failure.Message
+			if errors.Is(err, pkghttputil.ErrRequestBodyMemoryBudget) {
+				status = http.StatusServiceUnavailable
+				message = "Request body buffering capacity is exhausted; retry later"
+				c.Header("Retry-After", "1")
+			}
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
 				status = http.StatusRequestEntityTooLarge
@@ -703,7 +709,7 @@ func compositeGeminiModelFromParams(c *gin.Context) string {
 }
 
 func resetRequestBody(c *gin.Context, body []byte) {
-	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+	c.Request.Body = pkghttputil.NewPrereadBody(body)
 	c.Request.ContentLength = int64(len(body))
 	c.Request.Header.Set("Content-Length", strconv.Itoa(len(body)))
 }

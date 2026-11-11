@@ -208,6 +208,15 @@ security:
 # 网关配置
 # =============================================================================
 gateway:
+  # Instance-wide buffered request allocations; 0 disables. Not a total heap cap.
+  # 64 MiB was tested with concurrent uploads in a 1 GiB / one-CPU container.
+  request_body_memory_budget_bytes: 67108864
+  # Per-read / per-write idle deadlines, not the lifetime of a healthy SSE stream.
+  request_body_read_timeout_seconds: 120
+  downstream_write_timeout_seconds: 120
+  sse_queue_max_bytes: 8388608
+  sse_event_max_bytes: 0 # inherits max_line_size
+  sse_event_max_lines: 4096
   # 协议转换时输出上限的下限，最小16，默认128；不保证实际输出长度。
   min_output_tokens: 128
   # Timeout for waiting upstream response headers (seconds)

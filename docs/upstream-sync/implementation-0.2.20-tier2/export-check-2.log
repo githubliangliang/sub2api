@@ -1,0 +1,162 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 11 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/views/user/__tests__/UsageView.spec.ts (9 tests | 2 failed) 129ms
+   × user UsageView > exports csv with current filters and without admin-only fields 13ms
+     → expected "spy" to be called with arguments: [ ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   ObjectContaining {
+-     "page_size": 100,
++   Object {
++     "billing_mode": null,
++     "billing_type": null,
++     "end_date": "2026-11-10",
++     "page": 1,
++     "page_size": 20,
++     "request_type": undefined,
+      "sort_by": "created_at",
+      "sort_order": "desc",
++     "start_date": "2026-11-09",
++     "stream": undefined,
++   },
++   Object {
++     "signal": AbortSignal {},
+    },
+  ]
+
+  2nd spy call:
+
+  Array [
+-   ObjectContaining {
+-     "page_size": 100,
++   Object {
++     "billing_mode": null,
++     "billing_type": null,
++     "end_date": "2026-11-10",
++     "page": 1,
++     "page_size": 1000,
++     "request_type": undefined,
+      "sort_by": "created_at",
+      "sort_order": "desc",
++     "start_date": "2026-11-09",
++     "stream": undefined,
++   },
++   Object {
++     "signal": AbortSignal {},
+    },
+  ]
+
+
+Number of calls: 2
+
+   × user UsageView > keeps the initial filters, sort, and filename while exporting multiple pages 9ms
+     → expected { page: 1, page_size: 1000, …(8) } to match object { page: 1, page_size: 100, …(4) }
+(4 matching properties omitted from actual)
+ ✓ src/api/__tests__/client.spec.ts (30 tests) 1338ms
+   ✓ API Client > 401 Token 刷新 > 刷新期间换号时旧请求不会清除新会话 1062ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > exports csv with current filters and without admin-only fields
+AssertionError: expected "spy" to be called with arguments: [ ObjectContaining{…} ]
+
+Received: 
+
+  1st spy call:
+
+  Array [
+-   ObjectContaining {
+-     "page_size": 100,
++   Object {
++     "billing_mode": null,
++     "billing_type": null,
++     "end_date": "2026-11-10",
++     "page": 1,
++     "page_size": 20,
++     "request_type": undefined,
+      "sort_by": "created_at",
+      "sort_order": "desc",
++     "start_date": "2026-11-09",
++     "stream": undefined,
++   },
++   Object {
++     "signal": AbortSignal {},
+    },
+  ]
+
+  2nd spy call:
+
+  Array [
+-   ObjectContaining {
+-     "page_size": 100,
++   Object {
++     "billing_mode": null,
++     "billing_type": null,
++     "end_date": "2026-11-10",
++     "page": 1,
++     "page_size": 1000,
++     "request_type": undefined,
+      "sort_by": "created_at",
+      "sort_order": "desc",
++     "start_date": "2026-11-09",
++     "stream": undefined,
++   },
++   Object {
++     "signal": AbortSignal {},
+    },
+  ]
+
+
+Number of calls: 2
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:347:19
+    345| 
+    346|     expect(exportedBlob).not.toBeNull()
+    347|     expect(query).toHaveBeenCalledWith(expect.objectContaining({
+       |                   ^
+    348|       page_size: 100,
+    349|       sort_by: 'created_at',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps the initial filters, sort, and filename while exporting multiple pages
+AssertionError: expected { page: 1, page_size: 1000, …(8) } to match object { page: 1, page_size: 100, …(4) }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  Object {
+    "end_date": "2026-03-08",
+    "page": 1,
+-   "page_size": 100,
++   "page_size": 1000,
+    "sort_by": "created_at",
+    "sort_order": "desc",
+    "start_date": "2026-03-01",
+  }
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:401:29
+    399|       await wrapper.findAll('button').find((button) => button.text() =…
+    400|       const initialParams = { ...query.mock.calls[0][0] }
+    401|       expect(initialParams).toMatchObject({
+       |                             ^
+    402|         page: 1, page_size: 100, start_date: '2026-03-01', end_date: '…
+    403|         sort_by: 'created_at', sort_order: 'desc',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 37 passed (39)
+   Start at  22:35:26
+   Duration  2.11s (transform 1.13s, setup 116ms, collect 1.37s, tests 1.47s, environment 461ms, prepare 87ms)
+

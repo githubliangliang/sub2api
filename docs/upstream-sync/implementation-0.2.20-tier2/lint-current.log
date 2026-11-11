@@ -1,0 +1,40 @@
+internal/service/antigravity_test_prompt_test.go:22:12: Error return value is not checked (errcheck)
+		inner := v1Req["request"].(map[string]any)
+		         ^
+internal/service/antigravity_test_prompt_test.go:23:12: Error return value is not checked (errcheck)
+		parts := inner["contents"].([]any)[0].(map[string]any)["parts"].([]any)
+		         ^
+internal/service/antigravity_test_prompt_test.go:24:29: Error return value is not checked (errcheck)
+		require.Equal(t, tc.want, parts[0].(map[string]any)["text"], "prompt %q", tc.prompt)
+		                          ^
+internal/service/openai_gateway_grok.go:1889:19: Error return value of `(*bytes.Buffer).WriteByte` is not checked (errcheck)
+	encoded.WriteByte('[')
+	                 ^
+internal/service/openai_gateway_grok.go:1892:21: Error return value of `(*bytes.Buffer).WriteByte` is not checked (errcheck)
+			encoded.WriteByte(',')
+			                 ^
+internal/service/openai_gateway_grok.go:1894:16: Error return value of `(*bytes.Buffer).Write` is not checked (errcheck)
+		encoded.Write(item)
+		             ^
+internal/service/openai_gateway_grok.go:1896:19: Error return value of `(*bytes.Buffer).WriteByte` is not checked (errcheck)
+	encoded.WriteByte(']')
+	                 ^
+internal/service/openai_images.go:974:17: Error return value of `(*bytes.Buffer).Write` is not checked (errcheck)
+		rawEvent.Write(line)
+		              ^
+internal/service/openai_gateway_grok_sse_filter.go:52:1: File is not properly formatted (gofmt)
+ var cfg *config.Config;if len(configs)>0 {cfg=configs[0]}
+^
+internal/service/openai_gateway_grok_tool_protocol.go:105:1: File is not properly formatted (gofmt)
+ configs ...*config.Config,
+^
+internal/service/antigravity_gateway_service.go:460:37: func (*AntigravityGatewayService).buildGeminiTestRequest is unused (unused)
+func (s *AntigravityGatewayService) buildGeminiTestRequest(projectID, model string) ([]byte, error) {
+                                    ^
+internal/service/openai_images.go:1681:32: func (*OpenAIGatewayService).openAIImageDrainTimeout is unused (unused)
+func (s *OpenAIGatewayService) openAIImageDrainTimeout() time.Duration { return 180 * time.Second }
+                               ^
+12 issues:
+* errcheck: 8
+* gofmt: 2
+* unused: 2

@@ -59,3 +59,11 @@ func TestAPIKeyService_RejectsV15AuthSnapshotWithoutReasoningEffortPolicy(t *tes
 		t.Fatalf("expected no API key from stale snapshot, got %#v", apiKey)
 	}
 }
+
+func TestAPIKeyServiceRejectsV20WithoutRPMGroupMarker(t *testing.T) {
+	svc := &APIKeyService{}
+	key, used, err := svc.applyAuthCacheEntry("synthetic", &APIKeyAuthCacheEntry{Snapshot: &APIKeyAuthSnapshot{Version: 20}})
+	if err != nil || used || key != nil {
+		t.Fatalf("stale v20 snapshot accepted: used=%v err=%v", used, err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"net/http"
 	"strings"
@@ -714,21 +715,38 @@ func (v openAIRequestView) HasPatches() bool {
 	return !v.patchesDisabled && len(v.patches) > 0
 }
 
-func (v openAIRequestView) ApplyPatches() ([]byte, error) {
+func (v openAIRequestView) ApplyPatches(contexts ...context.Context) ([]byte, error) {
 	if v.patchesDisabled || len(v.patches) == 0 {
 		return nil, errors.New("openai request patches disabled")
 	}
+	ctx := context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
+	var charged int64
 	body := v.body
 	for _, patch := range v.patches {
 		var err error
+		extra, err := json.Marshal(patch.value)
+		if err != nil {
+			return nil, err
+		}
+		reserve := int64(len(body) + len(extra) + len(patch.path) + 64)
+		if err = pkghttputil.ReserveRequestBodyMemory(ctx, reserve); err != nil {
+			return nil, err
+		}
+		previous := charged
+		charged = reserve
 		if patch.delete {
 			body, err = sjson.DeleteBytes(body, patch.path)
 		} else {
 			body, err = sjson.SetBytes(body, patch.path, patch.value)
 		}
 		if err != nil {
+			pkghttputil.ReleaseRequestBodyMemory(ctx, charged)
 			return nil, err
 		}
+		pkghttputil.ReleaseRequestBodyMemory(ctx, previous)
 	}
 	return body, nil
 }
@@ -875,24 +893,6 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 	}
 
 	return normalized, changed, nil
-}
-
-func detectOpenAIPassthroughInstructionsRejectReason(reqModel string, body []byte) string {
-	if !isOpenAICodexModel(reqModel) {
-		return ""
-	}
-
-	instructions := gjson.GetBytes(body, "instructions")
-	if !instructions.Exists() {
-		return ""
-	}
-	if instructions.Type != gjson.String {
-		return "instructions_not_string"
-	}
-	if strings.TrimSpace(instructions.String()) == "" {
-		return "instructions_empty"
-	}
-	return ""
 }
 
 func isOpenAICodexModel(model string) bool {
@@ -1647,22 +1647,22 @@ func normalizeGPT6ResponsesSampling(body []byte, model string) ([]byte, bool, er
 }
 
 // Validate after model mapping, before compatibility conversion loses explicit settings.
-func validateGPT61SolCompatRequest(body []byte, model string) error {
-	if !openai.IsGPT61SolModelSpelling(model) {
+func validateGPT61CompatRequest(body []byte, model string) error {
+	if !openai.IsGPT61SolModelSpelling(model) && !openai.IsGPT61TerraModelSpelling(model) {
 		return nil
 	}
 	for _, path := range []string{"reasoning.effort", "reasoning_effort", "output_config.effort"} {
-		if err := openai.ValidateGPT61SolReasoningEffort(model, gjson.GetBytes(body, path).String()); err != nil {
+		if err := openai.ValidateGPT61ReasoningEffort(model, gjson.GetBytes(body, path).String()); err != nil {
 			return err
 		}
 	}
 	if gjson.GetBytes(body, "thinking.type").String() == "disabled" {
-		return openai.ValidateGPT61SolReasoningEffort(model, "none")
+		return openai.ValidateGPT61ReasoningEffort(model, "none")
 	}
 	requestedModel := gjson.GetBytes(body, "model").String()
 	for _, effort := range []string{"none", "minimal"} {
 		if strings.HasSuffix(strings.ToLower(requestedModel), "-"+effort) {
-			return openai.ValidateGPT61SolReasoningEffort(model, effort)
+			return openai.ValidateGPT61ReasoningEffort(model, effort)
 		}
 	}
 	return nil

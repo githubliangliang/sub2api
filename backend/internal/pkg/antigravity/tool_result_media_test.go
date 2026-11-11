@@ -13,7 +13,7 @@ func TestToolResultPreservesImagesAndDocumentsInOrder(t *testing.T) {
 		{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGVsbG8="}},
 		{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERg=="}},
 		{"type":"image","source":{"type":"url","url":"https://images.example.test/remote.png"}}
-	]}]`), map[string]string{"tool_1": "read_file"}, false)
+	]}]`), map[string]string{"tool_1": "read_file"}, false, false)
 	require.NoError(t, err)
 	require.Len(t, parts, 3, "functionResponse must be followed by inline image/document data; remote media is never fetched")
 	require.NotNil(t, parts[0].FunctionResponse)

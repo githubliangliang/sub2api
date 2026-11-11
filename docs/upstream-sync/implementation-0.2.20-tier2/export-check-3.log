@@ -1,0 +1,68 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 11 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/views/user/__tests__/UsageView.spec.ts (9 tests | 1 failed) 117ms
+   × user UsageView > keeps the initial filters, sort, and filename while exporting multiple pages 16ms
+     → expected [] to deeply equal [ [ { page: 1, …(9) } ], …(1) ]
+ ✓ src/api/__tests__/client.spec.ts (30 tests) 1362ms
+   ✓ API Client > 401 Token 刷新 > 刷新期间换号时旧请求不会清除新会话 1082ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/user/__tests__/UsageView.spec.ts > user UsageView > keeps the initial filters, sort, and filename while exporting multiple pages
+AssertionError: expected [] to deeply equal [ [ { page: 1, …(9) } ], …(1) ]
+
+- Expected
++ Received
+
+- Array [
+-   Array [
+-     Object {
+-       "billing_mode": null,
+-       "billing_type": null,
+-       "end_date": "2026-03-08",
+-       "page": 1,
+-       "page_size": 1000,
+-       "request_type": undefined,
+-       "sort_by": "created_at",
+-       "sort_order": "desc",
+-       "start_date": "2026-03-01",
+-       "stream": undefined,
+-     },
+-   ],
+-   Array [
+-     Object {
+-       "billing_mode": null,
+-       "billing_type": null,
+-       "end_date": "2026-03-08",
+-       "page": 2,
+-       "page_size": 1000,
+-       "request_type": undefined,
+-       "sort_by": "created_at",
+-       "sort_order": "desc",
+-       "start_date": "2026-03-01",
+-       "stream": undefined,
+-     },
+-   ],
+- ]
++ Array []
+
+ ❯ src/views/user/__tests__/UsageView.spec.ts:423:32
+    421| 
+    422|       const exportCalls = query.mock.calls.filter((call) => call.lengt…
+    423|       expect.soft(exportCalls).toEqual([[initialParams], [{ ...initial…
+       |                                ^
+    424|       expect.soft(filename).toBe('usage_2026-03-01_to_2026-03-08.csv')
+    425|       expect(showSuccess).toHaveBeenCalledWith('Export success')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 38 passed (39)
+   Start at  22:39:11
+   Duration  2.20s (transform 1.06s, setup 133ms, collect 1.23s, tests 1.48s, environment 465ms, prepare 112ms)
+

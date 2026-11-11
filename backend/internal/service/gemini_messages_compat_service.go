@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -603,7 +603,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		mappedModel = account.GetMappedModel(req.Model)
 	}
 
-	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(body)
+	geminiReq, err := convertClaudeMessagesToGeminiGenerateContent(body, mappedModel)
 	if err != nil {
 		return nil, s.writeClaudeError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 	}
@@ -841,7 +841,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 					stageName = "thinking+tools"
 					signatureRetryStage = 2
 				}
-				retryGeminiReq, txErr := convertClaudeMessagesToGeminiGenerateContent(strippedClaudeBody)
+				retryGeminiReq, txErr := convertClaudeMessagesToGeminiGenerateContent(strippedClaudeBody, mappedModel)
 				if txErr == nil {
 					logger.LegacyPrintf("service.gemini_messages_compat", "Gemini account %d: detected signature-related 400, retrying with downgraded Claude blocks (%s)", account.ID, stageName)
 					geminiReq = retryGeminiReq
@@ -1065,7 +1065,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 	} else {
 		if useUpstreamStream {
-			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
+			collected, usageObj, err := collectGeminiSSE(resp.Body, true, s.cfg)
 			if err != nil {
 				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
 			}
@@ -1612,7 +1612,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		}
 	} else {
 		if useUpstreamStream {
-			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
+			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth, s.cfg)
 			if err != nil {
 				return nil, s.writeGoogleError(c, http.StatusBadGateway, "Failed to read upstream stream")
 			}
@@ -2107,9 +2107,9 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	openToolName := ""
 	seenToolJSON := ""
 
-	reader := bufio.NewReader(resp.Body)
+	reader := newBoundedSSELineReader(resp.Body, s.cfg)
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadLineString()
 		if err != nil && !errors.Is(err, io.EOF) {
 			if geminiStreamAbortedWithBillableOutput(c, err, &usage) {
 				return streamResult()
@@ -2403,8 +2403,12 @@ func unwrapIfNeeded(isOAuth bool, raw []byte) []byte {
 	return inner
 }
 
-func collectGeminiSSE(body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsage, error) {
-	reader := bufio.NewReader(body)
+func collectGeminiSSE(body io.Reader, isOAuth bool, configs ...*config.Config) (map[string]any, *ClaudeUsage, error) {
+	var cfg *config.Config
+	if len(configs) > 0 {
+		cfg = configs[0]
+	}
+	reader := newBoundedSSELineReader(body, cfg)
 
 	var last map[string]any
 	var lastWithParts map[string]any
@@ -2412,7 +2416,7 @@ func collectGeminiSSE(body io.Reader, isOAuth bool) (map[string]any, *ClaudeUsag
 	usage := &ClaudeUsage{}
 
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadLineString()
 		if len(line) > 0 {
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {
@@ -2700,7 +2704,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	}
 
 	writer := &geminiStreamClientWriter{c: c}
-	reader := bufio.NewReader(resp.Body)
+	reader := newBoundedSSELineReader(resp.Body, s.cfg)
 	usage := &ClaudeUsage{}
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
@@ -2717,7 +2721,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	}
 
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadLineString()
 		if err != nil && !errors.Is(err, io.EOF) {
 			if geminiStreamAbortedWithBillableOutput(c, err, usage) {
 				return streamResult()
@@ -3268,7 +3272,7 @@ func mapGeminiFinishReasonToClaudeStopReason(finishReason string) string {
 	}
 }
 
-func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
+func convertClaudeMessagesToGeminiGenerateContent(body []byte, model string) ([]byte, error) {
 	var req map[string]any
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, err
@@ -3277,7 +3281,7 @@ func convertClaudeMessagesToGeminiGenerateContent(body []byte) ([]byte, error) {
 	toolUseIDToName := make(map[string]string)
 
 	systemText := extractClaudeSystemText(req["system"])
-	contents, err := convertClaudeMessagesToGeminiContents(req["messages"], toolUseIDToName)
+	contents, err := convertClaudeMessagesToGeminiContents(req["messages"], toolUseIDToName, gemini.SupportsMultimodalFunctionResponses(model))
 	if err != nil {
 		return nil, err
 	}
@@ -3357,7 +3361,7 @@ func extractClaudeSystemText(system any) string {
 	}
 }
 
-func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[string]string) ([]any, error) {
+func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[string]string, multimodalToolResults bool) ([]any, error) {
 	arr, ok := messages.([]any)
 	if !ok {
 		return nil, errors.New("messages must be an array")
@@ -3427,18 +3431,19 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 					}
 					text := extractClaudeContentText(bm["content"])
 					images := extractClaudeToolResultImageParts(bm["content"])
-					if text == "" && len(images) > 0 {
+					if text == "" && len(images) > 0 && !multimodalToolResults {
 						text = "[image attached below]"
 					}
-					parts = append(parts, map[string]any{
-						"functionResponse": map[string]any{
-							"name": name,
-							"response": map[string]any{
-								"content": text,
-							},
-						},
-					})
-					toolImageParts = append(toolImageParts, images...)
+					response := map[string]any{
+						"name":     name,
+						"response": map[string]any{"content": text},
+					}
+					if multimodalToolResults && len(images) > 0 {
+						response["parts"] = images
+					} else {
+						toolImageParts = append(toolImageParts, images...)
+					}
+					parts = append(parts, map[string]any{"functionResponse": response})
 				case "image":
 					if src, ok := bm["source"].(map[string]any); ok {
 						if srcType, _ := src["type"].(string); srcType == "base64" {

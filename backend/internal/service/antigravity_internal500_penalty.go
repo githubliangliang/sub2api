@@ -95,3 +95,14 @@ func (s *AntigravityGatewayService) resetInternal500Counter(
 			"prefix", prefix, "account_id", accountID, "error", err)
 	}
 }
+
+func (s *AntigravityGatewayService) handleInternal500ForModel(ctx context.Context, prefix string, account *Account, modelKey string) {
+	if account != nil && isAntigravityGeminiImageModel(modelKey) {
+		until := time.Now().Add(2 * time.Minute)
+		if setModelRateLimitByModelName(ctx, s.accountRepo, account.ID, modelKey, prefix, http.StatusInternalServerError, until, false) {
+			s.updateAccountModelRateLimitInCache(ctx, account, modelKey, until)
+		}
+		return
+	}
+	s.handleInternal500RetryExhausted(ctx, prefix, account)
+}

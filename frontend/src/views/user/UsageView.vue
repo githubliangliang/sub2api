@@ -214,6 +214,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { keysAPI, usageAPI, userGroupsAPI } from '@/api'
@@ -616,7 +617,34 @@ const escapeCSVValue = (value: unknown): string => {
   return str
 }
 
+let exportController: AbortController | null = null
+const exportAuth = useAuthStore()
+watch(() => exportAuth.user?.id, () => exportController?.abort())
+const waitForExportRetry = (seconds: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
+  const abort = () => { clearTimeout(timer); reject(new DOMException('Export cancelled', 'AbortError')) }
+  const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve() }, seconds * 1000)
+  if (signal.aborted) abort()
+  else signal.addEventListener('abort', abort, { once: true })
+})
+const queryExportPage = async (params: UsageQueryParams, signal: AbortSignal) => {
+  for (let attempt = 0; ; attempt++) {
+    signal.throwIfAborted()
+    try { return await usageAPI.query(params, { signal }) }
+    catch (error: any) {
+      signal.throwIfAborted()
+      if (error?.status !== 429 || attempt >= 3) throw error
+      const raw = error.retry_after_seconds
+      const seconds = Number.isFinite(raw) ? Math.min(Math.max(raw, 1), 60) : 60
+      appStore.showInfo(t('usage.exportRateLimited', { seconds }))
+      await waitForExportRetry(seconds, signal)
+    }
+  }
+}
+
 const exportToCSV = async () => {
+  if (exporting.value) return
+  const controller = new AbortController()
+  exportController = controller
   if (pagination.total === 0) {
     appStore.showWarning(t('usage.noDataToExport'))
     return
@@ -625,11 +653,12 @@ const exportToCSV = async () => {
   appStore.showInfo(t('usage.preparingExport'))
   try {
     const allLogs: UsageLog[] = []
-    const pageSize = 100
+    const pageSize = 1000
     const exportParams = buildUsageListParams(1, pageSize)
     const totalPages = Math.ceil(pagination.total / pageSize)
     for (let page = 1; page <= totalPages; page++) {
-      const response = await usageAPI.query({ ...exportParams, page })
+      const response = await queryExportPage({ ...exportParams, page }, controller.signal)
+      controller.signal.throwIfAborted()
       allLogs.push(...response.items)
     }
     if (allLogs.length === 0) {
@@ -687,10 +716,11 @@ const exportToCSV = async () => {
     window.URL.revokeObjectURL(url)
     appStore.showSuccess(t('usage.exportSuccess'))
   } catch (error) {
+    if (controller.signal.aborted) return
     console.error('CSV Export failed:', error)
     appStore.showError(t('usage.exportFailed'))
   } finally {
-    exporting.value = false
+    if (exportController === controller) { exportController = null; exporting.value = false }
   }
 }
 
@@ -891,6 +921,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  exportController?.abort()
   abortController?.abort()
   document.removeEventListener('click', handleColumnClickOutside)
 })

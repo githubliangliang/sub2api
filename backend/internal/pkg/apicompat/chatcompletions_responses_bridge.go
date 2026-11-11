@@ -538,7 +538,7 @@ func buildChatMessagesFromItems(messages []ChatMessage, rawItems []json.RawMessa
 			// Codex multi_agent_v2 uses agent_message to pass tasks and replies
 			// between parent and child agents. Chat Completions has no equivalent
 			// item, so preserve the ordered text as one user message.
-			text := agentMessageText(item["content"])
+			text := AgentMessageText(item["content"])
 			if text == "" {
 				pendingReasoning = ""
 				continue
@@ -646,10 +646,10 @@ func buildChatMessagesFromItems(messages []ChatMessage, rawItems []json.RawMessa
 	return messages, mediaByCallID, nil
 }
 
-// agentMessageText concatenates input_text and provider-visible
+// AgentMessageText concatenates input_text and provider-visible
 // encrypted_content parts in their original order. The custom provider sends
 // encrypted_content as plaintext, so no decryption belongs in this bridge.
-func agentMessageText(raw json.RawMessage) string {
+func AgentMessageText(raw json.RawMessage) string {
 	raw = bytesTrimSpace(raw)
 	if len(raw) == 0 || string(raw) == "null" {
 		return ""

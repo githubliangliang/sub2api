@@ -1,0 +1,467 @@
+{
+  "acceptance-unit": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./...",
+      "-count=1",
+      "-timeout=240s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:43:36.032938+00:00",
+    "duration_seconds": 255.67,
+    "exit_code": 0,
+    "log": "acceptance-unit.log"
+  },
+  "acceptance-build": {
+    "command": [
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-o",
+      "/tmp/sub2api-020-tier2-server",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:39:47.093894+00:00",
+    "duration_seconds": 26.732,
+    "exit_code": 0,
+    "log": "acceptance-build.log"
+  },
+  "acceptance-lint": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:40:24.921911+00:00",
+    "duration_seconds": 64.553,
+    "exit_code": 0,
+    "log": "acceptance-lint.log"
+  },
+  "backend-race": {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/pkg/httputil",
+      "./internal/pkg/antigravity",
+      "./internal/pkg/apicompat",
+      "./internal/server",
+      "./internal/server/middleware",
+      "./internal/server/routes",
+      "-run",
+      "Test.*(GrokAgent|GrokResponseModelAuditAsyncSQLite|GPT61Terra|FastTierAsyncUsageSQLite|InstructionsEcho|OAuth.*Stream|SessionMemory|SessionCaches|DigestSession|SSEQueue|BoundedSSE|SSETransport|ImageStreamLimit|AnthropicCompatTransport|GatewayStreamingUndelimited|BodyMemory|RequestBody|BodyBudget|BodyRead|WriteTimeout|Upstream.*Drain|RPM|Attribution|SystemIdentity|ToolResult|Multimodal|Internal500On|Antigravity.*(Test|Prompt)|FilterThinking|ThinkingBlocksNeed|DelegationBootstrap|OpenAIRequestPatches_Forward|APIKeyServiceRejectsV20)",
+      "-count=1",
+      "-timeout=300s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:24:23.388101+00:00",
+    "duration_seconds": 241.157,
+    "exit_code": 0,
+    "log": "backend-race.log"
+  },
+  "final-additions-race": {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "-run",
+      "Test.*(PostUsageQuota|RPMSnapshot|RequestBodyOverloadHTTP|AsyncImageBodyBudget|GrokAgentMessagePreserves|APIKeyServiceRejectsV20|BillingCacheService_CheckRPM_Positive|AntigravityAccountTestPrompt|OpenAIRequestPatches_Forward|DelegationPrecheck)",
+      "-count=1",
+      "-timeout=120s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:30:11.042895+00:00",
+    "duration_seconds": 142.976,
+    "exit_code": 0,
+    "log": "final-additions-race.log"
+  },
+  "cache-final-race": {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "Test.*(SessionMemory|SessionCaches|DigestSession|SweepOpenAICodexTurnState)",
+      "-count=1",
+      "-timeout=60s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:30:45.563354+00:00",
+    "duration_seconds": 60.243,
+    "exit_code": 0,
+    "log": "cache-final-race.log"
+  },
+  "last-terminal-final": {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "Test.*(OAuthNonstreamLastTerminal|NonStreaming.*Fail|OAuth.*Stream|InstructionsEcho)",
+      "-count=1",
+      "-timeout=90s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:38:12.811593+00:00",
+    "duration_seconds": 59.446,
+    "exit_code": 0,
+    "log": "last-terminal-final.log"
+  },
+  "sqlite-protection": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/repository",
+      "./internal/service",
+      "-run",
+      "Test.*(ProductionSQLUsesSQLiteDialect|Migration|PlatformQuota|FixedQuota|UsageBilling.*SQLite|FastTiersSQLite|RPMSnapshot)",
+      "-count=1",
+      "-timeout=120s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:33:08.722759+00:00",
+    "duration_seconds": 29.882,
+    "exit_code": 0,
+    "log": "sqlite-protection.log"
+  },
+  "settlement-current": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/handler",
+      "./internal/service",
+      "-run",
+      "Test.*(GPT61TerraLongContextBoundary|GrokResponseModelAuditAsyncSQLite|FastTierAsyncUsageSQLite|NativeFirstOutputStageOverflow|GatewayStreamingUndelimited|AnthropicCompatTransport|ImageStreamLimit)",
+      "-count=1",
+      "-timeout=180s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:02:13.937062+00:00",
+    "duration_seconds": 14.622,
+    "exit_code": 0,
+    "log": "settlement-current.log"
+  },
+  "final-boundaries": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "-run",
+      "Test(RPMSnapshot|RequestBodyOverloadHTTP|AsyncImageBodyBudget|GrokAgentMessagePreserves|APIKeyServiceRejectsV20|BillingCacheService_CheckRPM_Positive|AntigravityAccountTestPrompt|OpenAIRequestPatches_Forward)",
+      "-count=1",
+      "-timeout=90s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:19:25.399550+00:00",
+    "duration_seconds": 36.06,
+    "exit_code": 0,
+    "log": "final-boundaries.log"
+  },
+  "prompt-http": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "^TestAntigravityAccountTestPromptReachesHTTP$",
+      "-count=1",
+      "-v",
+      "-timeout=45s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:13:16.270883+00:00",
+    "duration_seconds": 19.376,
+    "exit_code": 0,
+    "log": "prompt-http.log"
+  },
+  "patch-budget-check": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "^TestOpenAIRequestPatches_Forward",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:09:49.552576+00:00",
+    "duration_seconds": 18.587,
+    "exit_code": 0,
+    "log": "patch-budget-check.log"
+  },
+  "quota-worker": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "Test.*(Usage.*Quota|PostUsagePlatformQuota|Persist.*Quota)",
+      "-count=1",
+      "-timeout=90s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:24:34.902264+00:00",
+    "duration_seconds": 24.543,
+    "exit_code": 0,
+    "log": "quota-worker.log"
+  },
+  "server-cleanup-final": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./cmd/server",
+      "./internal/service",
+      "-run",
+      "Test.*(Cleanup|SessionMemory|DigestSession|PostUsageQuota|SweepOpenAICodex)",
+      "-count=1",
+      "-timeout=90s"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:31:41.271984+00:00",
+    "duration_seconds": 40.097,
+    "exit_code": 0,
+    "log": "server-cleanup-final.log"
+  },
+  "frontend-typecheck": {
+    "command": [
+      "pnpm",
+      "run",
+      "typecheck"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-10T14:42:26.878360+00:00",
+    "duration_seconds": 18.036,
+    "exit_code": 0,
+    "log": "frontend-typecheck.log"
+  },
+  "frontend-lint-final": {
+    "command": [
+      "pnpm",
+      "run",
+      "lint:check"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-10T15:20:42.584613+00:00",
+    "duration_seconds": 20.354,
+    "exit_code": 0,
+    "log": "frontend-lint-final.log"
+  },
+  "frontend-full-final": {
+    "command": [
+      "pnpm",
+      "run",
+      "test:run"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-10T15:27:28.421752+00:00",
+    "duration_seconds": 25.366,
+    "exit_code": 0,
+    "log": "frontend-full-final.log"
+  },
+  "frontend-critical": {
+    "command": [
+      "make",
+      "test-frontend-critical"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-10T15:18:57.939210+00:00",
+    "duration_seconds": 8.602,
+    "exit_code": 0,
+    "log": "frontend-critical.log"
+  },
+  "frontend-build": {
+    "command": [
+      "pnpm",
+      "run",
+      "build"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-10T15:00:33.856092+00:00",
+    "duration_seconds": 55.268,
+    "exit_code": 0,
+    "log": "frontend-build.log"
+  },
+  "browser-acceptance": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.20-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-10T15:06:35.474110+00:00",
+    "duration_seconds": 6.978,
+    "exit_code": 0,
+    "log": "browser-acceptance.log"
+  },
+  "memory-1g-stress": {
+    "command": [
+      "docker",
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp",
+      "--memory",
+      "1g",
+      "--memory-swap",
+      "1g",
+      "--cpus",
+      "1",
+      "--pids-limit",
+      "64",
+      "-e",
+      "SUB2API_RESOURCE_STRESS=1",
+      "-v",
+      "/tmp/sub2api-020-httputil.test:/test:ro",
+      "python:3.13-slim",
+      "/test",
+      "-test.run",
+      "^TestRequestBodyBudgetOneGiBStress$",
+      "-test.v"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-10T14:49:34.111496+00:00",
+    "duration_seconds": 0.934,
+    "exit_code": 0,
+    "log": "memory-1g-stress.log"
+  },
+  "wire-generate-final": {
+    "command": [
+      "go",
+      "generate",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:23:26.988119+00:00",
+    "duration_seconds": 6.054,
+    "exit_code": 0,
+    "log": "wire-generate-final.log"
+  },
+  "thinking-benchmark": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "^TestThinkingBlocksNeedFilteringMatchesDecodingPath$",
+      "-bench",
+      "^BenchmarkFilterThinkingBlocksSignedHistory$",
+      "-benchmem",
+      "-count=3"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T14:45:03.539769+00:00",
+    "duration_seconds": 34.095,
+    "exit_code": 0,
+    "log": "thinking-benchmark.log"
+  },
+  "delegation-benchmark": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/handler",
+      "-run",
+      "^TestDelegationPrecheckMatchesExistingNormalizer$",
+      "-bench",
+      "^BenchmarkDelegationPrecheck$",
+      "-benchmem",
+      "-count=3"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:25:43.768159+00:00",
+    "duration_seconds": 35.145,
+    "exit_code": 0,
+    "log": "delegation-benchmark.log"
+  },
+  "thinking-fuzz": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "^$",
+      "-fuzz",
+      "^FuzzThinkingBlocksNeedFiltering$",
+      "-fuzztime=5s",
+      "-parallel=2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-10T15:27:39.215821+00:00",
+    "duration_seconds": 150.596,
+    "exit_code": 0,
+    "log": "thinking-fuzz.log"
+  },
+  "export-cancel-check": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/views/user/__tests__/UsageView.spec.ts"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-10T15:03:48.688813+00:00",
+    "duration_seconds": 4.371,
+    "exit_code": 0,
+    "log": "export-cancel-check.log"
+  },
+  "openspec-tier2": {
+    "command": [
+      "pnpm",
+      "dlx",
+      "@fission-ai/openspec",
+      "validate",
+      "port-upstream-0.2.20-tier2",
+      "--strict"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-10T15:43:31.650387+00:00",
+    "duration_seconds": 2.302,
+    "exit_code": 0,
+    "log": "openspec-tier2.log"
+  }
+}

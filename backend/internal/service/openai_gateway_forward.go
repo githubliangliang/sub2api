@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"io"
 	"net/http"
 	"strings"
@@ -51,6 +52,9 @@ func partialOpenAIStreamResult(c *gin.Context, resp *http.Response, account *Acc
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+	ctx, releaseBodyScope := pkghttputil.WithRequestBodyMemoryScope(ctx)
+	defer releaseBodyScope()
+	rememberOpenAIResponsesClientInstructions(c, body)
 	beginUpstreamResponseModelObservation(c)
 	filteredBody, filterErr := filterOpenAIResponsesNoneReasoningEffortForAccount(account, body)
 	if filterErr != nil {
@@ -261,7 +265,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	var reqBody map[string]any
 	ensureReqBody := func() (map[string]any, error) {
 		if requestView.HasPatches() {
-			patchedBody, patchErr := requestView.ApplyPatches()
+			patchedBody, patchErr := requestView.ApplyPatches(ctx)
 			if patchErr != nil {
 				return nil, patchErr
 			}
@@ -618,11 +622,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 	if bodyModified {
 		if requestView.HasPatches() {
-			if patchedBody, patchErr := requestView.ApplyPatches(); patchErr == nil {
+			if patchedBody, patchErr := requestView.ApplyPatches(ctx); patchErr == nil {
 				body = patchedBody
 				requestView = newOpenAIRequestView(body)
 				reqBody = nil
 				bodyModified = false
+			} else if errors.Is(patchErr, pkghttputil.ErrRequestBodyMemoryBudget) {
+				return nil, patchErr
 			}
 		}
 		if bodyModified {
@@ -947,6 +953,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				upstreamCtx, releaseUpstreamCtx, startTime.Add(firstOutputTimeout),
 			)
 		}
+		syncOpenAIResponsesInstructionsEcho(c, body)
 		upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, body, token, reqStream, promptCacheKey, isCodexCLI)
 		if headerGuard == nil {
 			releaseUpstreamCtx()

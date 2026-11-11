@@ -77,11 +77,14 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 
 	body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
 	if err != nil {
+		if handleRequestBodyReadError(c, err) {
+			return
+		}
 		if maxErr, ok := extractMaxBytesError(err); ok {
 			imageTaskJSONError(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))
 			return
 		}
-		imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "Failed to read request body")
+		imageTaskJSONError(c, requestBodyReadStatus(c, err), "invalid_request_error", requestBodyReadMessage(c, err))
 		return
 	}
 	if len(body) == 0 {
@@ -100,7 +103,11 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		return
 	}
 
-	taskCtx, recorder, cancel := newAsyncImageContext(c, body, h.tasks.ExecutionTimeout())
+	taskCtx, recorder, cancel, err := newAsyncImageContext(c, body, h.tasks.ExecutionTimeout())
+	if err != nil {
+		imageTaskJSONError(c, requestBodyReadStatus(c, err), "server_error", requestBodyReadMessage(c, err))
+		return
+	}
 	task, err := h.tasks.Create(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID})
 	if err != nil {
 		cancel()
@@ -258,11 +265,15 @@ func (h *AsyncImageHandler) failTask(taskID string, statusCode int, taskErr json
 	}
 }
 
-func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Duration) (*gin.Context, *httptest.ResponseRecorder, context.CancelFunc) {
-	base := context.WithoutCancel(c.Request.Context())
+func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Duration) (*gin.Context, *httptest.ResponseRecorder, context.CancelFunc, error) {
+	owned, release, err := pkghttputil.DetachRequestBodyMemory(c.Request.Context(), int64(cap(body)))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	base := context.WithoutCancel(owned)
 	executionCtx, cancel := context.WithTimeout(base, timeoutDuration)
 	request := c.Request.Clone(executionCtx)
-	request.Body = io.NopCloser(bytes.NewReader(body))
+	request.Body = pkghttputil.NewPrereadBody(body)
 	request.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(body)), nil
 	}
@@ -274,7 +285,7 @@ func newAsyncImageContext(c *gin.Context, body []byte, timeoutDuration time.Dura
 	recorderCtx, _ := gin.CreateTestContext(recorder)
 	taskCtx.Writer = recorderCtx.Writer
 	taskCtx.Request = request
-	return taskCtx, recorder, cancel
+	return taskCtx, recorder, func() { cancel(); release() }, nil
 }
 
 func asyncImageRequestStreams(contentType string, body []byte) bool {

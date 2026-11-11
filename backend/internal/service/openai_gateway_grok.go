@@ -197,9 +197,9 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
 			maxLineSize = s.cfg.Gateway.MaxLineSize
 		}
-		resp.Body = newGrokResponsesBillingPingFilterBody(resp.Body, account, maxLineSize)
+		resp.Body = newGrokResponsesBillingPingFilterBody(resp.Body, account, maxLineSize, s.cfg)
 		if hasGrokResponsesClientToolMapping(clientToolMapping) {
-			resp.Body = newGrokResponsesClientToolStreamBody(resp.Body, clientToolMapping, maxLineSize)
+			resp.Body = newGrokResponsesClientToolStreamBody(resp.Body, clientToolMapping, maxLineSize, s.cfg)
 		}
 		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
 		if err != nil {
@@ -713,6 +713,12 @@ func deleteJSONFields(value any, fields map[string]struct{}) bool {
 // the top level. Preserve top-level order, append newly discovered tools in
 // carrier order, then let sanitizeGrokResponsesTools filter unsupported types.
 func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
+	var err error
+	body, err = normalizeGrokAgentMessages(body)
+	if err != nil {
+		return nil, err
+	}
+
 	if !bytes.Contains(body, []byte(`"additional_tools"`)) {
 		return body, nil
 	}
@@ -1848,4 +1854,45 @@ func (s *OpenAIGatewayService) tempUnscheduleGrok(ctx context.Context, account *
 		defer cancel()
 		_ = s.accountRepo.SetTempUnschedulable(stateCtx, account.ID, until, reason)
 	}
+}
+
+// Change only delegation items; the existing sanitizer still owns additional_tools.
+func normalizeGrokAgentMessages(body []byte) ([]byte, error) {
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return body, nil
+	}
+	items := input.Array()
+	var result []json.RawMessage
+	changed := false
+	for _, item := range items {
+		if item.Get("type").String() != "agent_message" {
+			result = append(result, json.RawMessage(item.Raw))
+			continue
+		}
+		changed = true
+		text := apicompat.AgentMessageText(json.RawMessage(item.Get("content").Raw))
+		if text == "" {
+			continue
+		}
+		raw, err := json.Marshal(map[string]any{"type": "message", "role": "user", "content": text})
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, raw)
+	}
+	if !changed {
+		return body, nil
+	}
+	// Concatenate RawMessage directly: preserve the exact bytes of non-delegation items.
+	var encoded bytes.Buffer
+	_ = encoded.WriteByte('[')
+	for i, item := range result {
+		if i > 0 {
+			_ = encoded.WriteByte(',')
+		}
+		_, _ = encoded.Write(item)
+	}
+	_ = encoded.WriteByte(']')
+	return sjson.SetRawBytes(body, "input", encoded.Bytes())
 }

@@ -490,6 +490,7 @@ func TestOpenAINativeFirstOutputStageOverflowFailsOverWithoutAttemptBytes(t *tes
 	cfg := &config.Config{Gateway: config.GatewayConfig{
 		OpenAIFirstOutputTimeoutSeconds: 30,
 		MaxLineSize:                     2 * 1024 * 1024,
+		SSEEventMaxBytes:                16 << 20, // Isolate the existing staging guard from the new event guard.
 	}}
 	svc := &OpenAIGatewayService{cfg: cfg, responseHeaderFilter: compileResponseHeaderFilter(cfg)}
 	const lineSize = 1024*1024 - 256

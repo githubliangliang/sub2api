@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -78,6 +79,12 @@ func TestGrokResponseModelAuditAsyncSQLiteBillingBoundary(t *testing.T) {
 			const response = `{"id":"resp_audit","model":"grok-4.7","status":"completed","output":[{"id":"msg_audit","type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":2,"output_tokens":1}}`
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, "/v1/responses", r.URL.Path)
+				if strings.HasPrefix(protocol, "native") {
+					payload, e := io.ReadAll(r.Body)
+					require.NoError(t, e)
+					require.NotContains(t, string(payload), `"type":"agent_message"`)
+					require.Contains(t, string(payload), "inspect repository")
+				}
 				w.Header().Set("X-Request-Id", "grok-audit-"+protocol)
 				if protocol == "native-json" {
 					w.Header().Set("Content-Type", "application/json")
@@ -112,9 +119,9 @@ func TestGrokResponseModelAuditAsyncSQLiteBillingBoundary(t *testing.T) {
 				_, _, tokenErr := svc.GetAccessToken(context.Background(), account)
 				require.NoError(t, tokenErr)
 			}
-			body := `{"model":"grok-4.6","input":"hi","stream":false}`
+			body := `{"model":"grok-4.6","input":[{"type":"agent_message","content":[{"type":"input_text","text":"task:"},{"type":"encrypted_content","encrypted_content":"inspect repository"}]}],"stream":false}`
 			if protocol == "native-sse" {
-				body = `{"model":"grok-4.6","input":"hi","stream":true}`
+				body = `{"model":"grok-4.6","input":[{"type":"agent_message","content":[{"type":"input_text","text":"task:"},{"type":"encrypted_content","encrypted_content":"inspect repository"}]}],"stream":true}`
 			}
 			if strings.Contains(protocol, "buffered") {
 				body = `{"model":"grok-4.6","messages":[{"role":"user","content":"hi"}],"max_tokens":128,"stream":false}`

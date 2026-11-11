@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
 	"github.com/google/uuid"
 )
 
@@ -111,7 +112,7 @@ func TransformClaudeToGeminiWithOptions(claudeReq *ClaudeRequest, projectID, map
 	allowDummyThought := strings.HasPrefix(targetModel, "gemini-")
 
 	// 1. 构建 contents
-	contents, messageSystemParts, strippedThinking, err := buildContents(claudeReq.Messages, toolIDToName, isThinkingEnabled, allowDummyThought)
+	contents, messageSystemParts, strippedThinking, err := buildContents(claudeReq.Messages, toolIDToName, isThinkingEnabled, allowDummyThought, gemini.SupportsMultimodalFunctionResponses(targetModel))
 	if err != nil {
 		return nil, fmt.Errorf("build contents: %w", err)
 	}
@@ -306,17 +307,26 @@ func filterOpenCodePrompt(text string) string {
 //
 // The patterns are anchored at the start of a system block on purpose, so user
 // instructions that merely mention Claude or Anthropic are left untouched.
-var claudeIdentityOpeners = []*regexp.Regexp{
+var systemIdentityOpeners = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)^[ \t\r\n]*You are a Claude agent, built on Anthropic'?s Claude Agent SDK\.?`),
 	regexp.MustCompile(`(?i)^[ \t\r\n]*You are Claude Code, Anthropic'?s official CLI for Claude\.?`),
+	regexp.MustCompile(`(?i)^[ \t\r\n]*You are Codex,? (?:a coding agent |an agent )?based on GPT-[0-9]+(?:\.[0-9]+)*(?:-[a-z0-9]+)*\.?`),
+	regexp.MustCompile(`(?i)^[ \t\r\n]*You are GPT-[0-9]+(?:\.[0-9]+)*(?:-[a-z0-9]+)* running in the Codex CLI\.?`),
 }
 
-// neutralizeClaudeIdentity rewrites a leading vendor identity sentence into a
-// vendor-neutral one. It keeps the rest of the block, including any user
-// instructions that follow.
-func neutralizeClaudeIdentity(text string) string {
-	for _, re := range claudeIdentityOpeners {
+// NeutralizeSystemIdentity removes leading client attribution and rewrites a
+// leading vendor identity sentence, preserving the rest of the system block.
+// Only Antigravity forwarding should use this; native Anthropic may require attribution.
+func NeutralizeSystemIdentity(text string) string {
+	text = stripClaudeAttribution(text)
+	for _, re := range systemIdentityOpeners {
 		if loc := re.FindStringIndex(text); loc != nil {
+			if strings.HasPrefix(text[loc[1]:], ",") {
+				return "You are an AI agent" + text[loc[1]:]
+			}
+			if loc[1] < len(text) && !strings.ContainsAny(text[loc[1]:loc[1]+1], " \t\r\n") {
+				continue
+			}
 			return "You are an AI agent." + text[loc[1]:]
 		}
 	}
@@ -351,7 +361,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
 		// 尝试解析为字符串
 		var sysStr string
 		if err := json.Unmarshal(system, &sysStr); err == nil {
-			sysStr = neutralizeClaudeIdentity(stripClaudeAttribution(sysStr))
+			sysStr = NeutralizeSystemIdentity(sysStr)
 			if strings.TrimSpace(sysStr) != "" {
 				if strings.Contains(sysStr, "You are Antigravity") {
 					userHasAntigravityIdentity = true
@@ -367,7 +377,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
 			var sysBlocks []SystemBlock
 			if err := json.Unmarshal(system, &sysBlocks); err == nil {
 				for _, block := range sysBlocks {
-					block.Text = neutralizeClaudeIdentity(stripClaudeAttribution(block.Text))
+					block.Text = NeutralizeSystemIdentity(block.Text)
 					if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
 						if strings.Contains(block.Text, "You are Antigravity") {
 							userHasAntigravityIdentity = true
@@ -420,7 +430,7 @@ func buildSystemInstruction(system json.RawMessage, modelName string, opts Trans
 }
 
 // buildContents 构建 contents
-func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isThinkingEnabled, allowDummyThought bool) ([]GeminiContent, []GeminiPart, bool, error) {
+func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isThinkingEnabled, allowDummyThought, multimodalToolResults bool) ([]GeminiContent, []GeminiPart, bool, error) {
 	var contents []GeminiContent
 	var systemParts []GeminiPart
 	strippedThinking := false
@@ -431,7 +441,7 @@ func buildContents(messages []ClaudeMessage, toolIDToName map[string]string, isT
 			role = "model"
 		}
 
-		parts, strippedThisMsg, err := buildParts(msg.Content, toolIDToName, allowDummyThought)
+		parts, strippedThisMsg, err := buildParts(msg.Content, toolIDToName, allowDummyThought, multimodalToolResults)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("build parts for message %d: %w", i, err)
 		}
@@ -485,7 +495,7 @@ const DummyThoughtSignature = "skip_thought_signature_validator"
 
 // buildParts 构建消息的 parts
 // allowDummyThought: 只有 Gemini 模型支持 dummy thought signature
-func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDummyThought bool) ([]GeminiPart, bool, error) {
+func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDummyThought, multimodalToolResults bool) ([]GeminiPart, bool, error) {
 	var parts []GeminiPart
 	strippedThinking := false
 
@@ -581,16 +591,21 @@ func buildParts(content json.RawMessage, toolIDToName map[string]string, allowDu
 			// 解析 content
 			resultContent := parseToolResultContent(block.Content, block.IsError)
 
-			parts = append(parts, GeminiPart{
-				FunctionResponse: &GeminiFunctionResponse{
-					Name: funcName,
-					Response: map[string]any{
-						"result": resultContent,
-					},
-					ID: block.ToolUseID,
-				},
-			})
-			parts = append(parts, extractToolResultInlineParts(block.Content)...)
+			response := &GeminiFunctionResponse{
+				Name:     funcName,
+				Response: map[string]any{"result": resultContent},
+				ID:       block.ToolUseID,
+			}
+			media := extractToolResultInlineParts(block.Content)
+			if multimodalToolResults {
+				for _, part := range media {
+					response.Parts = append(response.Parts, GeminiFunctionResponsePart{InlineData: part.InlineData})
+				}
+			}
+			parts = append(parts, GeminiPart{FunctionResponse: response})
+			if !multimodalToolResults {
+				parts = append(parts, media...)
+			}
 		}
 	}
 

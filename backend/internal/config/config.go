@@ -926,6 +926,13 @@ const (
 
 // GatewayConfig API网关相关配置
 type GatewayConfig struct {
+	RequestBodyMemoryBudgetBytes  int64 `mapstructure:"request_body_memory_budget_bytes"`
+	RequestBodyReadTimeoutSeconds int   `mapstructure:"request_body_read_timeout_seconds"`
+	DownstreamWriteTimeoutSeconds int   `mapstructure:"downstream_write_timeout_seconds"`
+	SSEQueueMaxBytes              int64 `mapstructure:"sse_queue_max_bytes"`
+	SSEEventMaxBytes              int64 `mapstructure:"sse_event_max_bytes"`
+	SSEEventMaxLines              int   `mapstructure:"sse_event_max_lines"`
+
 	// MinOutputTokens is the output limit floor used by protocol conversions.
 	MinOutputTokens int `mapstructure:"min_output_tokens"`
 	// 等待上游响应头的超时时间（秒），0表示无超时
@@ -2023,6 +2030,13 @@ func configureConfigSource(setConfigFile, addConfigPath func(string)) {
 }
 
 func setDefaults() {
+	viper.SetDefault("gateway.request_body_memory_budget_bytes", int64(64<<20))
+	viper.SetDefault("gateway.request_body_read_timeout_seconds", 120)
+	viper.SetDefault("gateway.downstream_write_timeout_seconds", 120)
+	viper.SetDefault("gateway.sse_queue_max_bytes", int64(8<<20))
+	viper.SetDefault("gateway.sse_event_max_bytes", int64(0))
+	viper.SetDefault("gateway.sse_event_max_lines", 4096)
+
 	viper.SetDefault("run_mode", RunModeStandard)
 	viper.SetDefault("gateway.min_output_tokens", 128)
 
@@ -2510,7 +2524,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.image_stream_data_interval_timeout", 900)
 	viper.SetDefault("gateway.image_stream_keepalive_interval", 10)
 	viper.SetDefault("gateway.image_nonstream_keepalive_interval", 0)
-	viper.SetDefault("gateway.max_line_size", 500*1024*1024)
+	viper.SetDefault("gateway.max_line_size", 40*1024*1024)
 	viper.SetDefault("gateway.scheduling.sticky_session_max_waiting", 3)
 	viper.SetDefault("gateway.scheduling.sticky_session_wait_timeout", 120*time.Second)
 	viper.SetDefault("gateway.scheduling.fallback_wait_timeout", 30*time.Second)
@@ -2672,6 +2686,10 @@ func setEnvReachableDefaults() {
 }
 
 func (c *Config) Validate() error {
+	if c.Gateway.RequestBodyMemoryBudgetBytes < 0 || c.Gateway.RequestBodyReadTimeoutSeconds < 0 || c.Gateway.RequestBodyReadTimeoutSeconds > 3600 || c.Gateway.DownstreamWriteTimeoutSeconds < 0 || c.Gateway.DownstreamWriteTimeoutSeconds > 3600 || c.Gateway.SSEQueueMaxBytes < 0 || c.Gateway.SSEEventMaxBytes < 0 || c.Gateway.SSEEventMaxLines < 0 {
+		return fmt.Errorf("gateway resource limits are out of range")
+	}
+
 	// A programmatically constructed zero-value configuration keeps the
 	// compatibility floor; explicit configuration is checked by load above.
 	if c.Gateway.MinOutputTokens != 0 && c.Gateway.MinOutputTokens < 16 {

@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"log"
 	"log/slog"
 	"net/http"
@@ -161,6 +162,8 @@ func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
 		}
 	}
 
+	httpHandler = pkghttputil.WithBodyReadTimeout(httpHandler, time.Duration(cfg.Gateway.RequestBodyReadTimeoutSeconds)*time.Second)
+	httpHandler = pkghttputil.WithWriteTimeout(httpHandler, time.Duration(cfg.Gateway.DownstreamWriteTimeoutSeconds)*time.Second)
 	server.Handler = httpHandler
 	return server
 }

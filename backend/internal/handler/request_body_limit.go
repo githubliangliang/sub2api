@@ -3,6 +3,8 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/gin-gonic/gin"
 	"net/http"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -38,4 +40,49 @@ func gatewayMaxBodySize(cfg *config.Config) int64 {
 		return 0
 	}
 	return cfg.Gateway.MaxBodySize
+}
+
+func requestBodyReadStatus(c *gin.Context, err error) int {
+	if errors.Is(err, pkghttputil.ErrRequestBodyMemoryBudget) {
+		c.Header("Retry-After", "1")
+		return http.StatusServiceUnavailable
+	}
+	failure := pkghttputil.DescribeRequestBodyReadFailure(c.Request, err)
+	logger.FromContext(c.Request.Context()).Warn("read request body failed", failure.LogFields()...)
+	return failure.Status
+}
+func requestBodyReadMessage(c *gin.Context, err error) string {
+	if errors.Is(err, pkghttputil.ErrRequestBodyMemoryBudget) {
+		return "Request body buffering capacity is exhausted; retry later"
+	}
+	return pkghttputil.DescribeRequestBodyReadFailure(c.Request, err).Message
+}
+
+func handleRequestBodyReadError(c *gin.Context, err error) bool {
+	if handleRequestBodyMemoryOverload(c, err) {
+		return true
+	}
+	failure := pkghttputil.DescribeRequestBodyReadFailure(c.Request, err)
+	if failure.Status == 499 {
+		logger.FromContext(c.Request.Context()).Warn("read request body failed", failure.LogFields()...)
+		if !c.Writer.Written() {
+			c.Status(499)
+		}
+		c.Abort()
+		return true
+	}
+	return false
+}
+
+func handleRequestBodyMemoryOverload(c *gin.Context, err error) bool {
+	if !errors.Is(err, pkghttputil.ErrRequestBodyMemoryBudget) {
+		return false
+	}
+	c.Header("Retry-After", "1")
+	if !c.Writer.Written() {
+		c.AbortWithStatusJSON(503, gin.H{"error": gin.H{"type": "server_error", "message": "Request body buffering capacity is exhausted; retry later"}})
+	} else {
+		c.Abort()
+	}
+	return true
 }

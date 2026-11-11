@@ -151,15 +151,10 @@ func (s *OpenAIGatewayService) guardOpenAICodexTurnStateEcho(c *gin.Context, acc
 // sweepOpenAICodexTurnStateOrigins 机会式清扫过期溯源记录：每 256 次写入
 // 全量遍历一轮，防止仅靠读侧惰性删除导致的慢泄漏（会话键无上界）。
 func (s *OpenAIGatewayService) sweepOpenAICodexTurnStateOrigins() {
-	if s.openaiCodexTurnStateWrites.Add(1)%256 != 0 {
-		return
+	if s.openaiCodexTurnStateWrites.Add(1)%256 == 0 {
+		s.openaiCodexTurnStateOrigins.pruneExpired()
 	}
-	now := time.Now()
-	s.openaiCodexTurnStateOrigins.Range(func(key, value any) bool {
-		origin, ok := value.(openAICodexTurnStateOrigin)
-		if !ok || (!origin.expiresAt.IsZero() && now.After(origin.expiresAt)) {
-			s.openaiCodexTurnStateOrigins.Delete(key)
-		}
-		return true
-	})
 }
+func (b openAICodexTurnStateOrigin) sessionExpiresAt() time.Time           { return b.expiresAt }
+func (b openAICodexTurnStateOrigin) sessionCost() int                      { return 8 }
+func (b openAICodexTurnStateOrigin) cloneSessionValue() sessionMemoryValue { return b }

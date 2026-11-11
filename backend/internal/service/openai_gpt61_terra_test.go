@@ -60,7 +60,7 @@ func TestGPT61TerraIdentityAndEffort(t *testing.T) {
 			require.Equal(t, "gpt-6.1-terra", NormalizeOpenAICompatRequestedModel(model))
 		})
 	}
-	for _, suffix := range []string{"pro", "ultra", "minimal", "preview", "compact"} {
+	for _, suffix := range []string{"pro", "ultra", "preview", "compact"} {
 		t.Run("unsupported-"+suffix, func(t *testing.T) {
 			model := "gpt-6.1-terra-" + suffix
 			require.Empty(t, normalizeKnownOpenAICodexModel(model))
@@ -95,24 +95,24 @@ func TestGPT61TerraReasoningOverridesAndSolRejection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "medium", defaultReq.Reasoning.Effort)
 	for _, effort := range []string{"none", "minimal"} {
-		require.Error(t, validateGPT61SolCompatRequest([]byte(`{"reasoning":{"effort":"`+effort+`"}}`), "gpt-6.1-sol"))
-		require.NoError(t, validateGPT61SolCompatRequest([]byte(`{"reasoning":{"effort":"none"}}`), "gpt-6.1-terra"))
+		require.Error(t, validateGPT61CompatRequest([]byte(`{"reasoning":{"effort":"`+effort+`"}}`), "gpt-6.1-sol"))
+		require.NoError(t, validateGPT61CompatRequest([]byte(`{"reasoning":{"effort":"none"}}`), "gpt-6.1-terra"))
 	}
 }
 
 func TestGPT61TerraConfiguredManifestDefaultsAndMetadata(t *testing.T) {
 	t.Run("default descriptor", func(t *testing.T) {
 		descriptor := newConfiguredCodexModelDescriptor("gpt-6.1-terra")
-		require.Equal(t, "medium", *descriptor.DefaultReasoningLevel)
+		require.Equal(t, "low", *descriptor.DefaultReasoningLevel)
 		var efforts []string
 		for _, level := range descriptor.SupportedReasoningLevels {
 			efforts = append(efforts, level.Effort)
 		}
-		require.Equal(t, []string{"none", "low", "medium", "high", "xhigh", "max"}, efforts)
-		require.EqualValues(t, 1_050_000, descriptor.ContextWindow)
-		require.EqualValues(t, 1_050_000, descriptor.MaxContextWindow)
-		require.Empty(t, descriptor.officialMetadata)
-		require.Nil(t, descriptor.MultiAgentReasoningEffort)
+		require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, efforts)
+		require.EqualValues(t, 500_000, descriptor.ContextWindow)
+		require.EqualValues(t, 872_000, descriptor.MaxContextWindow)
+		require.NotEmpty(t, descriptor.officialMetadata)
+		require.NotNil(t, descriptor.MultiAgentReasoningEffort)
 	})
 	for _, baseURL := range []string{"https://api.openai.com/v1", "https://models.example/v1"} {
 		t.Run(baseURL, func(t *testing.T) {

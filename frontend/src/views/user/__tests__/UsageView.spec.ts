@@ -1,7 +1,9 @@
+vi.mock('@/stores/auth', async () => { const { reactive } = await import('vue'); const store = reactive({ user: { id: 1 } }); return { useAuthStore: () => store } })
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import UsageView from '../UsageView.vue'
+import { useAuthStore } from '@/stores/auth'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
@@ -68,6 +70,7 @@ const messages: Record<string, string> = {
   'usage.preparingExport': 'Preparing export',
   'usage.exportSuccess': 'Export success',
   'usage.exportFailed': 'Export failed',
+  'usage.exportRateLimited': 'Rate limited',
   'common.refresh': 'Refresh',
   'common.reset': 'Reset',
 }
@@ -203,7 +206,7 @@ describe('user UsageView', () => {
       groups: [],
     })
     listMyErrorRequests.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
-    list.mockResolvedValue({ items: [{ id: 1, name: 'demo-key' }], total: 1, page: 1, page_size: 100, pages: 1 })
+    list.mockResolvedValue({ items: [{ id: 1, name: 'demo-key' }], total: 1, page: 1, page_size: 1000, pages: 1 })
     getAvailable.mockResolvedValue([{ id: 1, name: 'default' }])
   })
 
@@ -240,8 +243,8 @@ describe('user UsageView', () => {
     }))
     const laterKey = { id: 101, name: 'key-from-second-page' }
     list
-      .mockResolvedValueOnce({ items: firstPageKeys, total: 101, page: 1, page_size: 100, pages: 2 })
-      .mockResolvedValueOnce({ items: [laterKey], total: 101, page: 2, page_size: 100, pages: 2 })
+      .mockResolvedValueOnce({ items: firstPageKeys, total: 1001, page: 1, page_size: 1000, pages: 2 })
+      .mockResolvedValueOnce({ items: [laterKey], total: 1001, page: 2, page_size: 1000, pages: 2 })
 
     const wrapper = mountUsageView()
     await flushPromises()
@@ -285,7 +288,7 @@ describe('user UsageView', () => {
   })
 
   it('does not request another API key page when the user has no keys', async () => {
-    list.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100, pages: 0 })
+    list.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1000, pages: 0 })
 
     const wrapper = mountUsageView()
     await flushPromises()
@@ -305,8 +308,8 @@ describe('user UsageView', () => {
       name: `key-${index + 1}`,
     }))
     list
-      .mockResolvedValueOnce({ items: firstPageKeys, total: 201, page: 1, page_size: 100, pages: 3 })
-      .mockResolvedValueOnce({ items: [], total: 201, page: 2, page_size: 100, pages: 3 })
+      .mockResolvedValueOnce({ items: firstPageKeys, total: 201, page: 1, page_size: 1000, pages: 3 })
+      .mockResolvedValueOnce({ items: [], total: 201, page: 2, page_size: 1000, pages: 3 })
 
     const wrapper = mountUsageView()
     await flushPromises()
@@ -344,10 +347,10 @@ describe('user UsageView', () => {
 
     expect(exportedBlob).not.toBeNull()
     expect(query).toHaveBeenCalledWith(expect.objectContaining({
-      page_size: 100,
+      page_size: 1000,
       sort_by: 'created_at',
       sort_order: 'desc',
-    }))
+    }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
     expect(clickSpy).toHaveBeenCalled()
     expect(showSuccess).toHaveBeenCalled()
     expect(csvContent.startsWith('\uFEFF')).toBe(true)
@@ -370,7 +373,7 @@ describe('user UsageView', () => {
   })
 
   it('keeps the initial filters, sort, and filename while exporting multiple pages', async () => {
-    const pageResponse = { items: [usageLog], total: 101, pages: 2 }
+    const pageResponse = { items: [usageLog], total: 1001, pages: 2 }
     query.mockResolvedValue(pageResponse)
     const wrapper = mountUsageView()
     await flushPromises()
@@ -382,8 +385,8 @@ describe('user UsageView', () => {
     let resolveFirstPage!: (value: typeof pageResponse) => void
     const firstPage = new Promise<typeof pageResponse>((resolve) => { resolveFirstPage = resolve })
     query.mockClear()
-    query.mockImplementation((params, options) =>
-      !options && params.page === 1 ? firstPage : Promise.resolve(pageResponse)
+    query.mockImplementation((params) =>
+      params.page === 1 && params.page_size === 1000 ? firstPage : Promise.resolve(pageResponse)
     )
     const originalCreateObjectURL = window.URL.createObjectURL
     const originalRevokeObjectURL = window.URL.revokeObjectURL
@@ -398,7 +401,7 @@ describe('user UsageView', () => {
       await wrapper.findAll('button').find((button) => button.text() === 'Export CSV')!.trigger('click')
       const initialParams = { ...query.mock.calls[0][0] }
       expect(initialParams).toMatchObject({
-        page: 1, page_size: 100, start_date: '2026-03-01', end_date: '2026-03-08',
+        page: 1, page_size: 1000, start_date: '2026-03-01', end_date: '2026-03-08',
         sort_by: 'created_at', sort_order: 'desc',
       })
 
@@ -418,7 +421,7 @@ describe('user UsageView', () => {
       resolveFirstPage(pageResponse)
       await flushPromises()
 
-      const exportCalls = query.mock.calls.filter((call) => call.length === 1)
+      const exportCalls = query.mock.calls.filter((call) => call[0].page_size === 1000).map((call) => [call[0]])
       expect.soft(exportCalls).toEqual([[initialParams], [{ ...initialParams, page: 2 }]])
       expect.soft(filename).toBe('usage_2026-03-01_to_2026-03-08.csv')
       expect(showSuccess).toHaveBeenCalledWith('Export success')
@@ -429,6 +432,88 @@ describe('user UsageView', () => {
       clickSpy.mockRestore()
       wrapper.unmount()
     }
+  })
+
+  it('waits for Retry-After and retries the same page when export is rate limited', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    query.mockClear()
+    query.mockRejectedValueOnce({ status: 429, code: 'RATE_LIMITED', retry_after_seconds: 2 })
+    const originalCreateObjectURL = window.URL.createObjectURL
+    const originalRevokeObjectURL = window.URL.revokeObjectURL
+    window.URL.createObjectURL = vi.fn(() => 'blob:usage-export') as typeof window.URL.createObjectURL
+    window.URL.revokeObjectURL = vi.fn(() => {}) as typeof window.URL.revokeObjectURL
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    vi.useFakeTimers()
+
+    try {
+      const exporting = (wrapper.vm as any).exportToCSV()
+      await vi.advanceTimersByTimeAsync(1999)
+      expect(query).toHaveBeenCalledTimes(1)
+      expect(showInfo).toHaveBeenCalledWith('Rate limited')
+
+      await vi.advanceTimersByTimeAsync(1)
+      await exporting
+      expect(query).toHaveBeenCalledTimes(2)
+      expect(query.mock.calls[1]).toEqual(query.mock.calls[0])
+      expect(clickSpy).toHaveBeenCalled()
+      expect(showSuccess).toHaveBeenCalledWith('Export success')
+      expect(showError).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      window.URL.createObjectURL = originalCreateObjectURL
+      window.URL.revokeObjectURL = originalRevokeObjectURL
+      clickSpy.mockRestore()
+      wrapper.unmount()
+    }
+  })
+
+  it('fails the export after repeated rate limiting', async () => {
+    const wrapper = mountUsageView()
+    await flushPromises()
+    query.mockClear()
+    query.mockRejectedValue({ status: 429, code: 'RATE_LIMITED', retry_after_seconds: 1 })
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.useFakeTimers()
+
+    try {
+      const exporting = (wrapper.vm as any).exportToCSV()
+      await vi.advanceTimersByTimeAsync(3000)
+      await exporting
+      expect(query).toHaveBeenCalledTimes(4)
+      expect(clickSpy).not.toHaveBeenCalled()
+      expect(showError).toHaveBeenCalledWith('Export failed')
+      expect((wrapper.vm as any).exporting).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      vi.mocked(console.error).mockRestore()
+      clickSpy.mockRestore()
+      wrapper.unmount()
+    }
+  })
+
+  it.each(['unmount', 'account switch'])('cancels a rate limited export on %s without downloading partial results', async (kind) => {
+    query.mockResolvedValue({ items: [usageLog], total: 1, pages: 1 })
+    const wrapper = mountUsageView()
+    await flushPromises()
+    query.mockClear()
+    query.mockRejectedValue({ status: 429, retry_after_seconds: 17 })
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    vi.useFakeTimers()
+    try {
+      const exporting = (wrapper.vm as any).exportToCSV()
+      await flushPromises()
+      expect(query).toHaveBeenCalledTimes(1)
+      if (kind === 'unmount') wrapper.unmount()
+      else { (useAuthStore().user as any).id++; await flushPromises() }
+      await exporting
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(query).toHaveBeenCalledTimes(1)
+      expect(clickSpy).not.toHaveBeenCalled()
+      expect(showError).not.toHaveBeenCalledWith('Export failed')
+      expect(vi.getTimerCount()).toBe(0)
+    } finally { vi.useRealTimers(); clickSpy.mockRestore(); if (kind !== 'unmount') wrapper.unmount() }
   })
 
   it('exports historical image rows with image billing mode derived from image_count', async () => {

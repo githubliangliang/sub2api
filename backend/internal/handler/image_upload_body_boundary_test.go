@@ -44,8 +44,8 @@ func TestImageHandlersPreserveTotalBodyAndCancellationBoundaries(t *testing.T) {
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 			if canceled {
-				require.Equal(t, http.StatusBadRequest, rec.Code)
-				require.Contains(t, rec.Body.String(), "Failed to read request body")
+				require.Equal(t, 499, rec.Code)
+				require.Empty(t, rec.Body.String())
 			} else {
 				require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 			}

@@ -1,5 +1,9 @@
 # 上游合并指南
 
+v0.2.20第二档已完成（2026-11-10）：S01–S11，38/38任务；[实际验收](../../openspec/changes/port-upstream-0.2.20-tier2/verification.md) / [实施证据](./implementation-0.2.20-tier2/README.md)。基于第一档`29681fdf5`，后端全量unit/embed build/lint0、定向race及真实HTTP/SQLite/miniredis通过；frontend2186/2既有跳过、critical179/2、typecheck/lint/build和实际浏览器导出/429/耗尽/离页取消/移动端通过。64MiB请求体预算经1GiB/1CPU隔离压力验证；默认SSE行40MiB，读写停滞120秒。VERSION1.1.23/Go1.27.3/SQLite228、依赖/Ent不变；auth snapshot21，Wire重新生成共享缓存清理。实现于2026-11-11随本次提交保存，等待归档，无发布或业务部署；历史评估与来源保持冻结。
+
+本轮实施经验：来源的后台图片入口判断要在实际起点复查；缓存过期与手动清扫不能重复创建timer；最后终态必须优先于先前completed；资源层压力不应宣传成完整实例总堆保证；导出重试必须保留取消和换号边界。
+
 v0.2.20第一档已完成（2026-11-10）：F01–F13，44/44任务；[验收](../../openspec/changes/port-upstream-0.2.20-tier1/verification.md) / [实施证据](./implementation-0.2.20-tier1/README.md)。基于Fast已完成`326513cdc`，54包unit、embed build、lint0、六包race、实际HTTP/SQLite结算去重与周用量通过。VERSION1.1.23/Go1.27.3/SQLite228、依赖/前端/生成代码不变；实现随本次提交保存、等待归档，第二档仍未实施，无发布或业务部署。下方评估段落保留实施前历史状态。
 
 最新评估（2026-11-10）：[PORTING-0.2.20.md](./PORTING-0.2.20.md)，v0.2.19→v0.2.20，基线Fast已完成提交`326513cdc` / VERSION1.1.23 / Go1.27.3 / SQLite228。72非merge、35PR+7直接提交，562候选文件态A3/C330/X157/N72。建议[第一档13簇](../../openspec/changes/port-upstream-0.2.20-tier1/README.md)、[第二档11簇](../../openspec/changes/port-upstream-0.2.20-tier2/README.md)，**两提案未实施**。优先Claude/Codex/Grok及Bedrock边界、资源治理；10包定向基线、77前端测试通过，14个顶层缺陷探针按新行为预期失败，负对照通过。[完整证据](./evidence-0.2.20/MANIFEST.md)。产品与历史证据未修改，无发布/推送/部署；main发布后#8610/#8606另列观察。

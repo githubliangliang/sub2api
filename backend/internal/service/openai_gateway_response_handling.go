@@ -179,8 +179,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	scanner := bufio.NewScanner(resp.Body)
 	scanBuf := getSSEScannerBuf64K()
 	scanner.Buffer(scanBuf[:0], maxLineSize)
+	scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, nil))
 	if stageFirstOutput {
-		scanner.Split(openAIFirstOutputDynamicScanLines(&firstOutputScanGuard))
+		scanner.Split(newBoundedSSESplit(s.cfg, maxLineSize, openAIFirstOutputDynamicScanLines(&firstOutputScanGuard)))
 	}
 	documentScanner := newOpenAISSEJSONDocumentScanner(scanner)
 
@@ -446,6 +447,15 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			failoverErr.SafeToFailoverAfterWrite = true
 			return resultWithUsage(), failoverErr, true
 		}
+		if errors.Is(scanErr, errSSETransportLimit) && stageFirstOutput && !firstOutputProgressObserved {
+			logger.LegacyPrintf("service.openai_gateway", "SSE event exceeded transport limit before first output: account=%d error=%v", account.ID, scanErr)
+			failoverErr := s.newOpenAIStreamFailoverError(
+				c, account, false, upstreamRequestID, nil,
+				"OpenAI SSE event exceeds first-output transport limit: "+scanErr.Error(),
+			)
+			failoverErr.SafeToFailoverAfterWrite = true
+			return resultWithUsage(), failoverErr, true
+		}
 		if errors.Is(scanErr, bufio.ErrTooLong) && stageFirstOutput && !firstOutputProgressObserved {
 			logger.LegacyPrintf("service.openai_gateway", "SSE line too long before first output: account=%d max_size=%d error=%v", account.ID, maxLineSize, scanErr)
 			failoverErr := s.newOpenAIStreamFailoverError(
@@ -634,6 +644,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				streamEarlyErr = fmt.Errorf("restore OpenAI namespace response: %w", restoreErr)
 				return
 			}
+			restoredData = restoreOpenAIResponsesInstructionsEchoInEvent(c, restoredData)
 			if !bytes.Equal(restoredData, dataBytes) {
 				dataBytes = restoredData
 				data = string(restoredData)
@@ -786,13 +797,18 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	// the timeout-disabled path preserves the legacy depth of 16.
 	events := make(chan scanEvent, openAIFirstOutputEventQueueSize(guardFirstOutput))
 	done := make(chan struct{})
+	queueBudget := newSSEQueueBudget(s.cfg)
 	sendEvent := func(ev scanEvent) bool {
+		if !queueBudget.acquire(len(ev.line), done) {
+			return false
+		}
 		if firstOutputScanGuard.Load() {
 			ev.processed = make(chan struct{})
 		}
 		select {
 		case events <- ev:
 		case <-done:
+			queueBudget.release(len(ev.line))
 			return false
 		}
 		if ev.processed == nil {
@@ -830,6 +846,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 	for {
 		select {
 		case ev, ok := <-events:
+			if ok {
+				queueBudget.release(len(ev.line))
+			}
 			if !ok {
 				if stageFirstOutput && eventInProgress {
 					// EOF dispatches the final SSE event even without a trailing blank
@@ -1475,6 +1494,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if err != nil {
 		return nil, fmt.Errorf("restore OpenAI namespace response: %w", err)
 	}
+	body = restoreOpenAIResponsesInstructionsEchoInResponse(c, body)
 	body = ensureOpenAIResponseObjectCreatedAt(body)
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	// Codex 协议要求 /responses/compact JSON 响应携带 x-codex-turn-state
@@ -1526,7 +1546,21 @@ func bodyHasSSEFraming(body []byte) bool {
 
 func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Context, account *Account, body []byte, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {
 	bodyText := string(body)
-	finalResponse, ok := extractCodexFinalResponse(bodyText)
+	terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
+	if terminalOK && (terminalType == "response.failed" || terminalType == "error") {
+		msg := extractOpenAISSEErrorMessage(terminalPayload)
+		if msg == "" {
+			msg = "Upstream compact response failed"
+		}
+		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, false, terminalType, terminalPayload, msg); failoverErr != nil {
+			return nil, failoverErr
+		}
+		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, msg)
+	}
+	finalResponse, ok := extractOpenAINonCompletedTerminalResponse(terminalType, terminalPayload)
+	if !ok {
+		finalResponse, ok = extractCodexFinalResponse(bodyText)
+	}
 
 	usage := &OpenAIUsage{}
 	if ok {
@@ -1562,29 +1596,14 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		forEachOpenAISSEFrame(bodyText, func(eventType string, data []byte) {
 			stamper.Observe(data, eventType)
 		})
-		body = stamper.ensureResponseObjectCreatedAt(restoredBody)
+		body = stamper.ensureResponseObjectCreatedAt(restoreOpenAIResponsesInstructionsEchoInResponse(c, restoredBody))
 	} else {
-		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
-		// 裸 `error` 帧与 `response.failed` 同属终止失败事件，都不该按 200 收尾
-		// （上游 81ac8ccd6 的完整范围；extractOpenAISSETerminalEvent 换成 frame 识别后
-		// 这个分支才真正能被裸 error 帧命中）。
-		if terminalOK && (terminalType == "response.failed" || terminalType == "error") {
-			msg := extractOpenAISSEErrorMessage(terminalPayload)
-			if msg == "" {
-				msg = "Upstream compact response failed"
-			}
-			// 与流式读取器同一套判定：可换号的终止失败事件走 failover，而不是把上游
-			// 原文按固定 502 抛给客户端（上游 81ac8ccd6）。
-			if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, false, terminalType, terminalPayload, msg); failoverErr != nil {
-				return nil, failoverErr
-			}
-			return nil, s.writeOpenAINonStreamingProtocolError(resp, c, msg)
-		}
 		usage = s.parseSSEUsageFromBody(bodyText)
 		if originalModel != mappedModel {
 			bodyText = s.replaceModelInSSEBody(bodyText, mappedModel, originalModel)
 		}
 		body = []byte(bodyText)
+		body = []byte(restoreOpenAIResponsesInstructionsEchoInSSEBody(c, string(body)))
 	}
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -1600,6 +1619,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		}
 	}
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
+		// 上游的 Content-Type（text/event-stream）已复制到响应头，而 c.Data
+		// 不会覆盖已存在的 Content-Type，这里需显式设置为聚合后的类型。
+		c.Writer.Header().Set("Content-Type", contentType)
 		c.Data(resp.StatusCode, contentType, body)
 	}
 
@@ -1736,6 +1758,18 @@ func (s *OpenAIGatewayService) writeOpenAINonStreamingProtocolError(resp *http.R
 		},
 	})
 	return fmt.Errorf("non-streaming openai protocol error: %s", message)
+}
+
+func extractOpenAINonCompletedTerminalResponse(terminalType string, payload []byte) ([]byte, bool) {
+	switch terminalType {
+	case "response.incomplete", "response.cancelled", "response.canceled":
+	default:
+		return nil, false
+	}
+	if response := gjson.GetBytes(payload, "response"); response.Exists() && response.IsObject() {
+		return []byte(response.Raw), true
+	}
+	return nil, false
 }
 
 func extractCodexFinalResponse(body string) ([]byte, bool) {

@@ -106,6 +106,7 @@ func provideCleanup(
 	antigravityOAuth *service.AntigravityOAuthService,
 	grokOAuth *service.GrokOAuthService,
 	openAIGateway *service.OpenAIGatewayService,
+	digestStore *service.DigestSessionStore,
 	scheduledTestRunner *service.ScheduledTestRunnerService,
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
@@ -293,6 +294,12 @@ func provideCleanup(
 			{"GrokOAuthService", func() error {
 				if grokOAuth != nil {
 					grokOAuth.Stop()
+				}
+				return nil
+			}},
+			{"DigestSessionStore", func() error {
+				if digestStore != nil {
+					digestStore.Close()
 				}
 				return nil
 			}},

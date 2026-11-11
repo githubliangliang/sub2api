@@ -251,3 +251,37 @@ func openAIRecordUsageAPIKeyWithGroup(svc *OpenAIGatewayService, id int64, enabl
 	svc.resolver = NewModelPricingResolver(nil, svc.billingService)
 	return &APIKey{ID: id, Group: &Group{ID: 1, LongContextPricingEnabled: enabled}}
 }
+
+func TestOpenAIGatewayServiceRecordUsage_GPT61TerraLongContextBoundary(t *testing.T) {
+	for _, totalInput := range []int{271999, 272000, 272001} {
+		for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken, AccountTypeAPIKey} {
+			for _, tier := range []string{"", "priority"} {
+				t.Run(fmt.Sprintf("%s/%d/%s", accountType, totalInput, tier), func(t *testing.T) {
+					usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+					svc := newOpenAIRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+					err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+						Result: &OpenAIForwardResult{RequestID: "terra-boundary", Model: "gpt-6.1-terra", ServiceTier: &tier, Duration: time.Second,
+							Usage: OpenAIUsage{InputTokens: totalInput, OutputTokens: 1000}},
+						APIKey: openAIRecordUsageAPIKeyWithGroup(svc, 1, true), User: &User{ID: 2},
+						Account: &Account{ID: 3, Platform: PlatformOpenAI, Type: accountType,
+							Extra: map[string]any{openAILongContextBillingEnabledKey: true}},
+					})
+					require.NoError(t, err)
+					wantLong := accountType == AccountTypeAPIKey && totalInput > 272000
+					wantInput, wantOutput := float64(totalInput)*1e-6, 1000*5e-6
+					if wantLong {
+						wantInput *= 2
+						wantOutput *= 1.5
+					}
+					if tier == "priority" {
+						wantInput *= 2
+						wantOutput *= 2
+					}
+					require.Equal(t, wantLong, usageRepo.lastLog.LongContextBillingApplied)
+					require.InDelta(t, wantInput, usageRepo.lastLog.InputCost, 1e-12)
+					require.InDelta(t, wantOutput, usageRepo.lastLog.OutputCost, 1e-12)
+				})
+			}
+		}
+	}
+}
