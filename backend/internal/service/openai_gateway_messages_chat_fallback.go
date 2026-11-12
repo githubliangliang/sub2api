@@ -62,7 +62,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 
 	billingModel := resolveOpenAIForwardModel(account, anthropicReq.Model, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
-	if err := validateGPT61CompatRequest(body, upstreamModel); err != nil {
+	if err := validateGPT61RawEffort(body, upstreamModel); err != nil {
 		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return nil, err
 	}
@@ -107,6 +107,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 				reasoningEffort = &effectiveEffort
 			}
 		}
+	}
+	if err := validateGPT61CompatRequest(chatBody, upstreamModel); err != nil {
+		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return nil, err
 	}
 	chatBody, err = s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, chatBody)
 	if err != nil {

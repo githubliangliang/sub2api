@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "-c",
+    "import json,subprocess; from pathlib import Path; print(json.dumps({\"head\":subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"],text=True).strip(),\"go\":subprocess.check_output([\"go\",\"version\"],text=True).strip(),\"lint\":subprocess.check_output([\"golangci-lint\",\"version\"],text=True).strip(),\"version\":Path(\"backend/cmd/server/VERSION\").read_text().strip(),\"max_migration\":max(p.name for p in Path(\"backend/migrations\").glob(\"[0-9]*.sql\"))},indent=2))"
+  ],
+  "cwd": ".",
+  "finished_at_utc": "2026-11-11T16:52:12.664024+00:00",
+  "duration_seconds": 0.144,
+  "exit_code": 0,
+  "log": "environment.log"
+}

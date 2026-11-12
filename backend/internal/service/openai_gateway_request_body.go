@@ -1646,8 +1646,19 @@ func normalizeGPT6ResponsesSampling(body []byte, model string) ([]byte, bool, er
 	return out, changed, nil
 }
 
-// Validate after model mapping, before compatibility conversion loses explicit settings.
+// Validate the final converted request after applying the effort policy.
 func validateGPT61CompatRequest(body []byte, model string) error {
+	if err := validateGPT61RawEffort(body, model); err != nil {
+		return err
+	}
+	if gjson.GetBytes(body, "thinking.type").String() == "disabled" {
+		return openai.ValidateGPT61ReasoningEffort(model, "none")
+	}
+	return nil
+}
+
+// Validate explicit client selections before conversion can discard them.
+func validateGPT61RawEffort(body []byte, model string) error {
 	if !openai.IsGPT61SolModelSpelling(model) && !openai.IsGPT61TerraModelSpelling(model) {
 		return nil
 	}
@@ -1655,9 +1666,6 @@ func validateGPT61CompatRequest(body []byte, model string) error {
 		if err := openai.ValidateGPT61ReasoningEffort(model, gjson.GetBytes(body, path).String()); err != nil {
 			return err
 		}
-	}
-	if gjson.GetBytes(body, "thinking.type").String() == "disabled" {
-		return openai.ValidateGPT61ReasoningEffort(model, "none")
 	}
 	requestedModel := gjson.GetBytes(body, "model").String()
 	for _, effort := range []string{"none", "minimal"} {

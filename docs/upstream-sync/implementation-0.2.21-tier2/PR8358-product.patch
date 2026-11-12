@@ -1,0 +1,162 @@
+diff --git a/backend/internal/service/openai_ws_forwarder_ingress.go b/backend/internal/service/openai_ws_forwarder_ingress.go
+index 212bc25fe..5d8fffa62 100644
+--- a/backend/internal/service/openai_ws_forwarder_ingress.go
++++ b/backend/internal/service/openai_ws_forwarder_ingress.go
+@@ -1255,7 +1255,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 					Duration:                      time.Since(turnStart),
+ 					FirstTokenMs:                  firstTokenMs,
+ 				}
+-				if replayInput := replayCollector.Items(); len(replayInput) > 0 {
++				replayInput := replayCollector.Items()
++				if account.IsOpenAIOAuthLike() && lease.initializedWithoutWebSearch() {
++					// Keep complete output while search activation can require a new socket.
++					replayInput = replayCollector.AllItems()
++				}
++				if len(replayInput) > 0 {
+ 					result.wsReplayInput = replayInput
+ 					result.wsReplayInputExists = true
+ 				}
+@@ -1356,6 +1361,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 	var lastTurnStrictState *openAIWSIngressPreviousTurnStrictState
+ 	lastTurnReplayInput := []json.RawMessage(nil)
+ 	lastTurnReplayInputExists := false
++	lastTurnReplayInputComplete := false
+ 	currentTurnReplayInput := []json.RawMessage(nil)
+ 	currentTurnReplayInputExists := false
+ 	skipBeforeTurn := false
+@@ -1571,6 +1577,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 			currentPayload,
+ 			currentPreviousResponseID != "",
+ 		)
++		currentTurnReplayInputComplete := replayInputErr == nil && (currentPreviousResponseID == "" ||
++			(lastTurnReplayInputComplete && currentPreviousResponseID == lastTurnResponseID))
+ 		if replayInputErr != nil {
+ 			logOpenAIWSModeInfo(
+ 				"ingress_ws_replay_input_skip account_id=%d turn=%d conn_id=%s reason=build_error cause=%s",
+@@ -1687,6 +1695,28 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 				unpinSessionConn(sessionConnID)
+ 			}
+ 		}
++		if account.IsOpenAIOAuthLike() && sessionLease.initializedWithoutWebSearch() && openAIWSWebSearchDeclared(currentPayload) {
++			fullPayload, safe, err := buildOpenAIWSCurrentTurnRetryPayload(currentPayload, currentTurnReplayInput, currentTurnReplayInputExists, "")
++			if err != nil {
++				return fmt.Errorf("rebuild websocket input for web search activation: %w", err)
++			}
++			if !safe || !currentTurnReplayInputComplete {
++				return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "web search activation requires complete input history; please reconnect with full input", nil)
++			}
++			logOpenAIWSModeInfo("ingress_ws_web_search_activation account_id=%d turn=%d action=reconnect", account.ID, turn)
++			resetSessionLease(true)
++			acquiredLease, acquireErr := acquireTurnLease(turn, "", false, true)
++			if acquireErr != nil {
++				return fmt.Errorf("acquire upstream websocket for web search activation: %w", acquireErr)
++			}
++			sessionLease = acquiredLease
++			sessionConnID = strings.TrimSpace(sessionLease.ConnID())
++			pinSessionConn(sessionConnID)
++			currentPayload = fullPayload
++			currentPayloadBytes = len(fullPayload)
++			currentPreviousResponseID = ""
++			forcePreferredConn = false
++		}
+ 		shouldPreflightPing := turn > 1 && sessionLease != nil && sessionLease.SupportsIdlePingWithoutReader() && turnRetry == 0
+ 		if shouldPreflightPing && openAIWSIngressPreflightPingIdle > 0 && !lastTurnFinishedAt.IsZero() {
+ 			if time.Since(lastTurnFinishedAt) < openAIWSIngressPreflightPingIdle {
+@@ -1866,6 +1896,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 		// collector 增量经 combine 合并（新头数组）。
+ 		lastTurnReplayInput = currentTurnReplayInput
+ 		lastTurnReplayInputExists = currentTurnReplayInputExists
++		lastTurnReplayInputComplete = currentTurnReplayInputComplete
+ 		if result.wsReplayInputExists {
+ 			lastTurnReplayInput = combineOpenAIWSReplayItems(lastTurnReplayInput, result.wsReplayInput)
+ 			lastTurnReplayInputExists = true
+diff --git a/backend/internal/service/openai_ws_pool.go b/backend/internal/service/openai_ws_pool.go
+index b632bba52..ae4e3fe2c 100644
+--- a/backend/internal/service/openai_ws_pool.go
++++ b/backend/internal/service/openai_ws_pool.go
+@@ -292,6 +292,9 @@ type openAIWSConn struct {
+ 
+ 	readMu  sync.Mutex
+ 	writeMu sync.Mutex
++	// The subscription backend fixes hosted-search support on the first create.
++	responseCreateSent bool // guarded by writeMu
++	initialWebSearch   bool // guarded by writeMu
+ 
+ 	// readerLoopResults 非 nil 表示池为该连接常驻了读循环：coder/websocket 只在
+ 	// 阻塞读期间应答上游 ping，空闲连接没有读循环会被上游按保活超时关闭。
+@@ -600,6 +603,9 @@ func (c *openAIWSConn) writeJSON(value any, writeCtx context.Context) error {
+ 	if err := c.ws.WriteJSON(writeCtx, value); err != nil {
+ 		return err
+ 	}
++	if !c.responseCreateSent {
++		c.recordInitialWebSearch(value)
++	}
+ 	c.touch()
+ 	return nil
+ }
+diff --git a/backend/internal/service/openai_ws_search_activation.go b/backend/internal/service/openai_ws_search_activation.go
+new file mode 100644
+index 000000000..6d1e640c1
+--- /dev/null
++++ b/backend/internal/service/openai_ws_search_activation.go
+@@ -0,0 +1,60 @@
++package service
++
++import (
++	"encoding/json"
++
++	"github.com/tidwall/gjson"
++)
++
++func openAIWSWebSearchDeclared(payload []byte) bool {
++	fields := gjson.GetMany(openAIWSPayloadStringView(payload), "tools", "input")
++	if gjsonToolsContainWebSearch(fields[0]) {
++		return true
++	}
++	for _, item := range fields[1].Array() {
++		if item.Get("type").String() == openAIAdditionalToolsItemType && gjsonToolsContainWebSearch(item.Get("tools")) {
++			return true
++		}
++	}
++	return false
++}
++
++// Called under writeMu, only after the first response.create was written.
++func (c *openAIWSConn) recordInitialWebSearch(value any) {
++	var body []byte
++	switch payload := value.(type) {
++	case json.RawMessage:
++		body = payload
++	case []byte:
++		body = payload
++	case map[string]any:
++		if payload["type"] != "response.create" {
++			return
++		}
++		c.responseCreateSent = true
++		c.initialWebSearch = openAIToolsContainWebSearch(payload["tools"])
++		input, _ := payload["input"].([]any)
++		for _, raw := range input {
++			if item, ok := raw.(map[string]any); ok && item["type"] == openAIAdditionalToolsItemType && openAIToolsContainWebSearch(item["tools"]) {
++				c.initialWebSearch = true
++			}
++		}
++		return
++	default:
++		return
++	}
++	if gjson.GetBytes(body, "type").String() == "response.create" {
++		c.responseCreateSent = true
++		c.initialWebSearch = openAIWSWebSearchDeclared(body)
++	}
++}
++
++func (l *openAIWSConnLease) initializedWithoutWebSearch() bool {
++	c, err := l.activeConn()
++	if err != nil {
++		return false
++	}
++	c.writeMu.Lock()
++	defer c.writeMu.Unlock()
++	return c.responseCreateSent && !c.initialWebSearch
++}

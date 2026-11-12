@@ -339,6 +339,7 @@ func newOpenAIUpstreamFailoverError(
 	responseBody []byte,
 	upstreamMsg string,
 	retryableOnSameAccount bool,
+	stopSameAccountRetry ...bool,
 ) *UpstreamFailoverError {
 	requestScopedCapacity := isOpenAIRequestScopedCapacityShed(upstreamMsg, responseBody)
 	failoverErr := &UpstreamFailoverError{
@@ -347,6 +348,9 @@ func newOpenAIUpstreamFailoverError(
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount || requestScopedCapacity,
 		RequestScopedTransient: requestScopedCapacity,
+	}
+	if requestScopedCapacity && len(stopSameAccountRetry) > 0 && stopSameAccountRetry[0] {
+		failoverErr.RetryableOnSameAccount = false
 	}
 	if requestScopedCapacity {
 		failoverErr.SameAccountRetryDelay = openAIRequestScopedRetryDelay(responseHeaders, responseBody)

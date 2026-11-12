@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" v-if="showUsageWindows">
+  <div ref="rootRef" v-if="showUsageWindows" :aria-busy="loading || activeQueryLoading">
     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
     <template
       v-if="
@@ -8,7 +8,7 @@
       "
     >
       <!-- Loading state -->
-      <div v-if="loading" class="space-y-1.5">
+      <div v-if="loading && !usageInfo" class="space-y-1.5">
         <!-- OAuth: 3 rows, Setup Token: 1 row -->
         <div class="flex items-center gap-1">
           <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
@@ -30,7 +30,7 @@
       </div>
 
       <!-- Error state -->
-      <div v-else-if="error" class="text-xs text-red-500">
+      <div v-else-if="error && !usageInfo" class="text-xs text-red-500">
         {{ error }}
       </div>
 
@@ -88,12 +88,12 @@
           <button
             type="button"
             class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors"
-            :disabled="activeQueryLoading"
+            :disabled="activeQueryLoading || loading"
             @click="loadActiveUsage"
           >
             <svg
               class="h-2.5 w-2.5"
-              :class="{ 'animate-spin': activeQueryLoading }"
+              :class="{ 'animate-spin': activeQueryLoading || loading }"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -147,12 +147,12 @@
             <button
               type="button"
               class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-              :disabled="activeQueryLoading"
+              :disabled="activeQueryLoading || loading"
               @click="loadActiveUsage"
             >
               <svg
                 class="h-2.5 w-2.5"
-                :class="{ 'animate-spin': activeQueryLoading }"
+                :class="{ 'animate-spin': activeQueryLoading || loading }"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -283,7 +283,7 @@
       </div>
 
       <!-- Error state -->
-      <div v-else-if="error" class="text-xs text-red-500">
+      <div v-else-if="error && !usageInfo" class="text-xs text-red-500">
         {{ error }}
       </div>
 
@@ -337,14 +337,14 @@
 
     <!-- Grok OAuth accounts: passive xAI quota headers + local Sub2API usage -->
     <template v-else-if="account.platform === 'grok' && account.type === 'oauth'">
-      <div v-if="loading" class="space-y-1.5">
+      <div v-if="loading && !usageInfo" class="space-y-1.5">
         <div class="flex items-center gap-1">
           <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
           <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
           <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
         </div>
       </div>
-      <div v-else-if="error" class="text-xs text-red-500">
+      <div v-else-if="error && !usageInfo" class="text-xs text-red-500">
         {{ error }}
       </div>
       <div v-else-if="needsReauth" class="space-y-1">
@@ -500,14 +500,14 @@
           <div class="h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
           <div class="h-3 w-12 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
         </div>
-        <div v-if="loading" class="space-y-1">
+        <div v-if="loading && !usageInfo" class="space-y-1">
           <div class="flex items-center gap-1">
             <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
             <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
             <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
           </div>
         </div>
-        <div v-else-if="error" class="text-xs text-red-500">
+        <div v-else-if="error && !usageInfo" class="text-xs text-red-500">
           {{ error }}
         </div>
         <!-- Gemini: show daily usage bars when available -->
@@ -670,6 +670,10 @@ const loading = ref(false)
 const activeQueryLoading = ref(false)
 const error = ref<string | null>(null)
 const usageInfo = ref<AccountUsageInfo | null>(null)
+let usageAccountKey = `${props.account.id}:${props.account.platform}:${props.account.type}`
+let usageRequest = 0
+let previousAccountBatchedUsage: AccountUsageInfo | null = null
+const currentUsageAccountKey = () => `${props.account.id}:${props.account.platform}:${props.account.type}`
 watch(usageInfo, (usage) => {
   if (usage) emit('usage-loaded', usage)
 })
@@ -1293,7 +1297,12 @@ const requestParentBatchUsage = (options?: { force?: boolean }) => {
 
 const syncManagedUsageState = () => {
   if (!isBatchManaged.value) return
-  usageInfo.value = props.batchedUsage ?? null
+  if (usageAccountKey !== currentUsageAccountKey()) {
+    previousAccountBatchedUsage = usageInfo.value
+    usageAccountKey = currentUsageAccountKey()
+    usageInfo.value = null
+  }
+  if (props.batchedUsage && props.batchedUsage !== previousAccountBatchedUsage) usageInfo.value = props.batchedUsage
   error.value = props.batchedUsageError ?? null
   loading.value = props.batchedUsageLoading === true
 }
@@ -1315,25 +1324,29 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
     }
   }
 
+  const account = props.account
+  const accountKey = currentUsageAccountKey()
+  const request = ++usageRequest
+  const isCurrent = () => !unmounted.value && request === usageRequest && accountKey === currentUsageAccountKey()
   loading.value = true
   error.value = null
 
   try {
 		const fetchFn = () => options?.source
-			? adminAPI.accounts.getUsage(props.account.id, options.source, options.bypassCache === true)
-			: adminAPI.accounts.getUsage(props.account.id)
-    const result = await enqueueUsageRequest(props.account, fetchFn)
-    if (!unmounted.value) {
+			? adminAPI.accounts.getUsage(account.id, options.source, options.bypassCache === true)
+			: adminAPI.accounts.getUsage(account.id)
+    const result = await enqueueUsageRequest(account, fetchFn)
+    if (isCurrent()) {
       usageInfo.value = result
-      _usageCache.set(props.account.id, { data: result, ts: Date.now() })
+      _usageCache.set(account.id, { data: result, ts: Date.now() })
     }
   } catch (e: any) {
-    if (!unmounted.value) {
+    if (isCurrent()) {
       error.value = t('common.error')
       console.error('Failed to load usage:', e)
     }
   } finally {
-    if (!unmounted.value) loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
 
@@ -1388,13 +1401,19 @@ const attachVisibilityObserver = () => {
 }
 
 const loadActiveUsage = async () => {
+  if (activeQueryLoading.value || loading.value) return
+  const accountID = props.account.id
+  const accountKey = currentUsageAccountKey()
+  const request = ++usageRequest
+  const isCurrent = () => !unmounted.value && request === usageRequest && accountKey === currentUsageAccountKey()
   activeQueryLoading.value = true
   try {
-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    const result = await adminAPI.accounts.getUsage(accountID, 'active', true)
+    if (isCurrent()) usageInfo.value = result
   } catch (e: any) {
-    console.error('Failed to load active usage:', e)
+    if (isCurrent()) console.error('Failed to load active usage:', e)
   } finally {
-    activeQueryLoading.value = false
+    if (isCurrent()) activeQueryLoading.value = false
   }
 }
 
@@ -1550,11 +1569,24 @@ watch(
     ) {
       return
     }
-    if (!managed || !shouldFetchUsage.value) return
-    syncManagedUsageState()
-    requestParentBatchUsage()
+    ++usageRequest
+    if (accountID === previousAccountID) _usageCache.delete(accountID)
+    if (usageAccountKey !== currentUsageAccountKey()) previousAccountBatchedUsage = usageInfo.value
+    usageAccountKey = currentUsageAccountKey()
+    usageInfo.value = null
+    error.value = null
+    loading.value = false
+    activeQueryLoading.value = false
+    pendingAutoLoad.value = false
+    if (!shouldFetchUsage.value) return
+    if (managed) {
+      syncManagedUsageState()
+      requestParentBatchUsage()
+    } else if (shouldAutoLoadUsageOnMount.value) {
+      requestAutoLoad(isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined)
+    }
   },
-  { flush: 'post' }
+  { flush: 'pre' }
 )
 
 watch(openAIUsageRefreshKey, (nextKey, prevKey) => {

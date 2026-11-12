@@ -155,7 +155,7 @@ const TablePageLayoutStub = {
 
 const DataTableStub = {
   name: 'DataTable',
-  props: ['columns', 'data'],
+  props: ['columns', 'data', 'loading'],
   emits: ['sort'],
   template: `
     <div>
@@ -173,6 +173,7 @@ const DataTableStub = {
         </div>
         <slot name="cell-name" :value="row.name" :row="row" />
         <slot name="cell-actions" :row="row" />
+        <div data-test="usage"><slot name="cell-usage" :row="row" /></div>
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
@@ -491,4 +492,64 @@ describe('user KeysView column settings', () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
   })
+  describe('usage stats loading', () => {
+    it('renders the key list without waiting for slow usage stats', async () => {
+      let resolveUsage!: (value: { stats: Record<string, unknown> }) => void
+      getDashboardApiKeysUsage.mockReturnValue(new Promise((resolve) => { resolveUsage = resolve }))
+      const wrapper = await mountView()
+
+      const table = wrapper.findComponent({ name: 'DataTable' })
+      expect(table.props('loading')).toBe(false)
+      expect(table.props('data')).toHaveLength(1)
+      expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(true)
+
+      resolveUsage({
+        stats: { 1: { api_key_id: 1, today_actual_cost: 0.5, total_actual_cost: 12.25 } },
+      })
+      await flushPromises()
+      expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(false)
+      expect(wrapper.get('[data-test="usage"]').text()).toContain('$12.2500')
+    })
+
+    it('stops showing usage placeholders when the usage request fails', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      getDashboardApiKeysUsage.mockRejectedValue(new Error('timeout'))
+      const wrapper = await mountView()
+
+      expect(wrapper.find('[data-test="usage-pending"]').exists()).toBe(false)
+      expect(wrapper.get('[data-test="usage"]').text()).toContain('$0.0000')
+      consoleError.mockRestore()
+    })
+  })
+  it('ignores old usage after pagination even when the old transport resolves', async () => {
+    let finishOld!: (value: unknown) => void
+    getDashboardApiKeysUsage.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const wrapper = await mountView()
+    const oldSignal = getDashboardApiKeysUsage.mock.calls[0][1].signal as AbortSignal
+    listKeys.mockResolvedValueOnce({ items: [{ ...createApiKey(), id: 2 }], total: 2, pages: 2 })
+    getDashboardApiKeysUsage.mockResolvedValueOnce({ stats: { 2: { today_actual_cost: 2, total_actual_cost: 4 } } })
+    await wrapper.get('[data-test="page-2"]').trigger('click')
+    await flushPromises()
+    expect(oldSignal.aborted).toBe(true)
+    expect(wrapper.get('[data-test="usage"]').text()).toContain('$4.0000')
+    finishOld({ stats: { 1: { today_actual_cost: 90, total_actual_cost: 99 } } })
+    await flushPromises()
+    expect(wrapper.get('[data-test="usage"]').text()).toContain('$4.0000')
+    wrapper.unmount()
+  })
+
+  it('aborts pending usage on unmount and skips usage for an empty list', async () => {
+    getDashboardApiKeysUsage.mockReturnValueOnce(new Promise(() => {}))
+    const wrapper = await mountView()
+    const signal = getDashboardApiKeysUsage.mock.calls[0][1].signal as AbortSignal
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    getDashboardApiKeysUsage.mockClear()
+    listKeys.mockResolvedValueOnce({ items: [], total: 0, pages: 0 })
+    const empty = await mountView()
+    expect(getDashboardApiKeysUsage).not.toHaveBeenCalled()
+    expect(empty.findComponent({ name: 'DataTable' }).props('loading')).toBe(false)
+    empty.unmount()
+  })
+
 })

@@ -248,4 +248,18 @@ describe('useTableLoader', () => {
       await load()
     })
   })
+  it('ignores an aborted page result when a transport resolves after cancellation', async () => {
+    let finishFirst!: (value: unknown) => void
+    const fetchFn = vi.fn()
+      .mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve }))
+      .mockResolvedValueOnce({ items: [{ id: 2 }], total: 1, pages: 1 })
+    const { load, items, loading } = useTableLoader({ fetchFn })
+    const first = load()
+    await load()
+    finishFirst({ items: [{ id: 1 }], total: 99, pages: 99 })
+    await first
+    expect(items.value).toEqual([{ id: 2 }])
+    expect(loading.value).toBe(false)
+  })
+
 })

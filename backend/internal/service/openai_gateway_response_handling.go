@@ -529,6 +529,10 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				responseID = extractOpenAIResponseIDFromJSONBytes(dataBytes)
 			}
 			forceFlushFailedEvent := false
+			if (eventType == "error" || eventType == "response.failed") && openAIStreamClientOutputStarted(c, clientOutputStarted) &&
+				openAIStreamFailedEventSemanticStatus(dataBytes, extractOpenAISSEErrorMessage(dataBytes)) == http.StatusServiceUnavailable {
+				s.handleOpenAIExplicitModelCooldown(ctx, account, http.StatusServiceUnavailable, dataBytes, mappedModel)
+			}
 			if !capacityFailoverSuppressedLogged && account != nil && account.Platform == PlatformOpenAI &&
 				(eventType == "error" || eventType == "response.failed") &&
 				openAIStreamClientOutputStarted(c, clientOutputStarted) &&
@@ -554,7 +558,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 					return
 				}
 				if openAIStreamErrorEventShouldFailover(dataBytes, errorMessage) {
-					streamEarlyErr = s.newOpenAIStreamFailoverError(c, account, false, upstreamRequestID, dataBytes, errorMessage, resp.Header)
+					streamEarlyErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, upstreamRequestID, dataBytes, errorMessage, mappedModel, resp.Header)
 					return
 				}
 			}
@@ -596,7 +600,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 					}
 					if openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {
 						sawFailedEvent = true
-						streamEarlyErr = s.newOpenAIStreamFailoverError(c, account, false, upstreamRequestID, dataBytes, failedMessage, resp.Header)
+						streamEarlyErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, upstreamRequestID, dataBytes, failedMessage, mappedModel, resp.Header)
 						return
 					}
 				}
@@ -1552,7 +1556,7 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		if msg == "" {
 			msg = "Upstream compact response failed"
 		}
-		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, false, terminalType, terminalPayload, msg); failoverErr != nil {
+		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, false, terminalType, terminalPayload, msg, mappedModel); failoverErr != nil {
 			return nil, failoverErr
 		}
 		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, msg)

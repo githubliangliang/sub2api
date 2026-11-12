@@ -676,6 +676,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 		body,
 		upstreamMsg,
 		!shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+		shouldDisable && account.Platform == PlatformOpenAI,
 	)
 }
 
@@ -1164,7 +1165,7 @@ func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 	combined := strings.TrimSpace(errType + " " + code + " " + strings.ToLower(strings.TrimSpace(message)))
 	for _, path := range []string{"response.error.status_code", "response.error.status", "error.status_code", "error.status", "status_code", "status"} {
 		status := int(gjson.GetBytes(payload, path).Int())
-		if status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status == 529 {
+		if status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable || status == 529 {
 			return status
 		}
 	}
@@ -1194,6 +1195,34 @@ func openAIStreamFailureStatus(payload []byte, message string) int {
 		return status
 	}
 	return http.StatusBadGateway
+}
+
+func openAICapacityShedRuleBody(payload []byte) []byte {
+	if !gjson.ValidBytes(payload) {
+		return payload
+	}
+	errorFields := gjson.GetBytes(payload, "response.error")
+	if !errorFields.IsObject() {
+		errorFields = gjson.GetBytes(payload, "error")
+	}
+	var errorValue any
+	if errorFields.IsObject() {
+		errorValue = json.RawMessage(errorFields.Raw)
+	} else {
+		// Some compatible providers send flat errors instead of an error object.
+		flat := make(map[string]json.RawMessage)
+		for _, key := range []string{"code", "type", "message", "param", "headers"} {
+			if value := gjson.GetBytes(payload, key); value.Exists() {
+				flat[key] = json.RawMessage(value.Raw)
+			}
+		}
+		errorValue = flat
+	}
+	body, err := marshalOpenAIUpstreamJSON(gin.H{"error": errorValue})
+	if err != nil {
+		return nil
+	}
+	return body
 }
 
 func openAIStreamFailedEventPassthroughBody(payload []byte, failedMessage string) []byte {
@@ -1423,6 +1452,13 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 	message string,
 	responseHeaders ...http.Header,
 ) *UpstreamFailoverError {
+	return s.newOpenAIStreamFailoverErrorWithModel(c, account, passthrough, upstreamRequestID, payload, message, "", responseHeaders...)
+}
+
+func (s *OpenAIGatewayService) newOpenAIStreamFailoverErrorWithModel(
+	c *gin.Context, account *Account, passthrough bool, upstreamRequestID string,
+	payload []byte, message string, canonicalModel string, responseHeaders ...http.Header,
+) *UpstreamFailoverError {
 	message = sanitizeUpstreamErrorMessage(strings.TrimSpace(message))
 	if message == "" {
 		message = "OpenAI stream disconnected before completion"
@@ -1446,13 +1482,24 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 			"message": message,
 		},
 	})
-	return &UpstreamFailoverError{
+	failoverErr := &UpstreamFailoverError{
 		StatusCode:             statusCode,
 		ResponseBody:           body,
 		ResponseHeaders:        headers,
 		RetryableOnSameAccount: openAIStreamFailedEventRetryableOnSameAccount(account, payload, message),
 		RequestScopedTransient: isOpenAIUpstreamCapacityShedEvent(payload),
 	}
+	if semanticStatus := openAIStreamFailedEventSemanticStatus(payload, message); semanticStatus == http.StatusServiceUnavailable && account != nil && account.Platform == PlatformOpenAI {
+		failoverErr.ClientStatusCode = semanticStatus
+		ctx := context.Background()
+		if c != nil && c.Request != nil {
+			ctx = c.Request.Context()
+		}
+		if s.handleOpenAIExplicitModelCooldown(ctx, account, semanticStatus, payload, canonicalModel) {
+			failoverErr.RetryableOnSameAccount = false
+		}
+	}
+	return failoverErr
 }
 
 // nonStreamingTerminalFailureFailover 把**流式**路径对终止失败事件的判定，套用到
@@ -1489,6 +1536,7 @@ func (s *OpenAIGatewayService) nonStreamingTerminalFailureFailover(
 	terminalType string,
 	payload []byte,
 	message string,
+	canonicalModel ...string,
 ) *UpstreamFailoverError {
 	if account == nil || IsResponseCommitted(c) {
 		return nil
@@ -1506,7 +1554,7 @@ func (s *OpenAIGatewayService) nonStreamingTerminalFailureFailover(
 		headers = resp.Header
 		upstreamRequestID = strings.TrimSpace(resp.Header.Get("x-request-id"))
 	}
-	return s.newOpenAIStreamFailoverError(c, account, passthrough, upstreamRequestID, payload, message, headers)
+	return s.newOpenAIStreamFailoverErrorWithModel(c, account, passthrough, upstreamRequestID, payload, message, firstRequestedModel(canonicalModel), headers)
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
@@ -1652,6 +1700,10 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				}
 			}
 			eventType := strings.TrimSpace(gjson.Get(trimmedData, "type").String())
+			if (eventType == "error" || eventType == "response.failed") && openAIStreamClientOutputStarted(c, clientOutputStarted) &&
+				openAIStreamFailedEventSemanticStatus(dataBytes, extractOpenAISSEErrorMessage(dataBytes)) == http.StatusServiceUnavailable {
+				s.handleOpenAIExplicitModelCooldown(ctx, account, http.StatusServiceUnavailable, dataBytes, mappedModel)
+			}
 			if !capacityFailoverSuppressedLogged && account != nil && account.Platform == PlatformOpenAI &&
 				(eventType == "error" || eventType == "response.failed") &&
 				openAIStreamClientOutputStarted(c, clientOutputStarted) &&
@@ -1677,7 +1729,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				}
 				if openAIStreamErrorEventShouldFailover(dataBytes, errorMessage) {
 					return resultWithUsage(),
-						s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, dataBytes, errorMessage, resp.Header)
+						s.newOpenAIStreamFailoverErrorWithModel(c, account, true, upstreamRequestID, dataBytes, errorMessage, mappedModel, resp.Header)
 				}
 			}
 			if bareErrors.skipLine(line, clientDisconnected || openAIStreamClientOutputStarted(c, clientOutputStarted)) {
@@ -1716,7 +1768,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					}
 					if openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {
 						return resultWithUsage(),
-							s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, dataBytes, failedMessage, resp.Header)
+							s.newOpenAIStreamFailoverErrorWithModel(c, account, true, upstreamRequestID, dataBytes, failedMessage, mappedModel, resp.Header)
 					}
 				}
 				forceFlushFailedEvent = true
@@ -1949,7 +2001,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		if msg == "" {
 			msg = "Upstream compact response failed"
 		}
-		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, true, terminalType, terminalPayload, msg); failoverErr != nil {
+		if failoverErr := s.nonStreamingTerminalFailureFailover(c, resp, account, true, terminalType, terminalPayload, msg, mappedModel); failoverErr != nil {
 			return nil, failoverErr
 		}
 		return nil, s.writeOpenAINonStreamingProtocolError(resp, c, msg)

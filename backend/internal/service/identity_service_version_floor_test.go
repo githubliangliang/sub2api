@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,9 +66,9 @@ func TestGetOrCreateFingerprintFloorsStaleCachedUserAgent(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	require.Equal(t, "claude-cli/"+"2.1.258"+" (external, cli)", fp.UserAgent)
+	require.Equal(t, "claude-cli/"+claude.CLIVersion()+" (external, cli)", fp.UserAgent)
 	require.Equal(t, 1, cache.setCalls, "下限抬升必须持久化写回缓存")
-	require.Equal(t, "claude-cli/"+"2.1.258"+" (external, cli)", cache.lastSet.UserAgent)
+	require.Equal(t, "claude-cli/"+claude.CLIVersion()+" (external, cli)", cache.lastSet.UserAgent)
 	// X-Stainless-* 维持既有 merge 语义：客户端未携带时保留缓存中的真实值，不被下限逻辑覆盖。
 	require.Equal(t, "0.91.1", fp.StainlessPackageVersion)
 }
@@ -125,7 +126,7 @@ func TestGetOrCreateFingerprintFloorWinsOverStaleClientUpgrade(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	require.Equal(t, "claude-cli/"+"2.1.258"+" (external, cli)", fp.UserAgent)
+	require.Equal(t, "claude-cli/"+claude.CLIVersion()+" (external, cli)", fp.UserAgent)
 	require.Equal(t, 1, cache.setCalls)
 }
 
@@ -140,6 +141,6 @@ func TestCreateFingerprintFromHeadersFloorsOldClientUserAgent(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	require.Equal(t, "claude-cli/"+"2.1.258"+" (external, claude-desktop-3p)", fp.UserAgent)
+	require.Equal(t, "claude-cli/"+claude.CLIVersion()+" (external, claude-desktop-3p)", fp.UserAgent)
 	require.Equal(t, 1, cache.setCalls)
 }

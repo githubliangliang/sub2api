@@ -1,0 +1,19 @@
+diff --git a/frontend/src/views/admin/AccountsView.vue b/frontend/src/views/admin/AccountsView.vue
+index 6d71337fd..7384e4858 100644
+--- a/frontend/src/views/admin/AccountsView.vue
++++ b/frontend/src/views/admin/AccountsView.vue
+@@ -191,12 +191,12 @@
+           @select-all-results="handleSelectAllResults"
+           @toggle-schedulable="handleBulkToggleSchedulable"
+         />
+-        <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
++        <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden" :aria-busy="loading" :inert="loading && accounts.length > 0">
+         <DataTable
+           ref="dataTableRef"
+           :columns="cols"
+           :data="accounts"
+-          :loading="loading"
++          :loading="loading && accounts.length === 0"
+           row-key="id"
+           :server-side-sort="true"
+           @sort="handleSort"

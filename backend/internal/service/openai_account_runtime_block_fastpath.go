@@ -55,16 +55,10 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 	if s != nil {
 		scheduleOllamaCloudUsageActivity(s.deferredService, account)
 	}
-	// Capacity shedding describes this request, not account health. Keep the
-	// account schedulable while the request-local retry budget handles recovery.
-	//
-	// An explicit temp_unschedulable rule still wins: the operator configured
-	// that keyword deliberately, and this generic heuristic must not silently
-	// override it (upstream has no such feature, so it has no equivalent guard).
-	if account != nil && account.Platform == PlatformOpenAI &&
-		isOpenAIRequestScopedCapacityShed("", responseBody) &&
-		len(matchTempUnschedulableRules(account, statusCode, responseBody)) == 0 {
-		return false
+	// Capacity errors keep request-local retries unless an explicit model rule
+	// overrides them. Match only error fields, never generated output/metadata.
+	if account != nil && account.Platform == PlatformOpenAI && isOpenAIRequestScopedCapacityShed("", responseBody) {
+		return s.handleOpenAIExplicitModelCooldown(ctx, account, statusCode, responseBody, firstRequestedModel(canonicalModel))
 	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
@@ -463,4 +457,18 @@ func (s *OpenAIGatewayService) ShouldStopOpenAIOAuth429Failover(account *Account
 		return false
 	}
 	return s.isOpenAIOAuth429Storm()
+}
+
+func (s *OpenAIGatewayService) handleOpenAIExplicitModelCooldown(ctx context.Context, account *Account, statusCode int, payload []byte, canonicalModel string) bool {
+	if s == nil || s.rateLimitService == nil || account == nil || account.Platform != PlatformOpenAI ||
+		strings.TrimSpace(canonicalModel) == "" || !account.ShouldHandleErrorCode(statusCode) || !account.IsTempUnschedulableEnabled() {
+		return false
+	}
+	body := openAICapacityShedRuleBody(payload)
+	if !tempUnschedModelRuleMatches(account, statusCode, body, canonicalModel) {
+		return false
+	}
+	stateCtx, cancel := openAIAccountStateContext(ctx)
+	defer cancel()
+	return s.rateLimitService.HandleTempUnschedulable(stateCtx, account, statusCode, body, canonicalModel)
 }

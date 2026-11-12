@@ -1,0 +1,15 @@
+=== RUN   TestPromptWorkerWakeAndRetryRunOnSQLite
+    prompt_worker_wake_sqlite_test.go:74: SQLite due comparison raw=0 normalized=1
+2026/11/12 00:10:30 INFO prompt_audit.started model="" job_id=1 group_id=0 attempts=1 request_id=wake-fixture config_version=1 endpoint="" claim_version=1 provider="" status=processing protocol="" stage=http user_id=0 api_key_id=0 worker_id=0
+2026/11/12 00:10:30 INFO prompt_audit.scan_chunk_started config_version=1 request_id=wake-fixture model="" group_id=0 provider="" chunk_total=1 chunk_chars=5 input_chars=0 job_id=1 claim_version=1 protocol="" endpoint="" status=started worker_id=0 chunk_index=1 stage=http input_limit=1000 user_id=0 api_key_id=0
+2026/11/12 00:10:30 INFO prompt_audit.scan_chunk_completed action="" latency_ms=0 protocol="" user_id=0 job_id=1 guard_endpoint_id="" endpoint="" claim_version=1 worker_id=0 chunk_index=1 model="" config_version=1 status=completed chunk_total=1 group_id=0 provider="" stage=http request_id=wake-fixture api_key_id=0
+2026/11/12 00:10:30 INFO prompt_audit.scan_chunks_aggregated config_version=1 status=completed action=Allow protocol="" model="" claim_version=1 guard_endpoint_id="" worker_id=0 decision=pass endpoint="" api_key_id=0 job_id=1 risk_level=low chunk_total=1 stage=http request_id=wake-fixture user_id=0 group_id=0 latency_ms=0 provider=""
+2026/11/12 00:10:30 INFO prompt_audit.processed request_id=wake-fixture job_id=1 claim_version=1 decision=pass guard_endpoint_id="" latency_ms=0 worker_id=0 model="" endpoint="" action=Allow user_id=0 api_key_id=0 group_id=0 provider="" event_id=0 status=done config_version=1 protocol="" stage=http risk_level=low
+    prompt_worker_wake_sqlite_test.go:78: actual SQLite claim wake latency=996.931µs
+2026/11/12 00:10:31 INFO prompt_audit.started provider="" model="" claim_version=1 status=processing endpoint="" attempts=1 request_id=wake-fixture user_id=0 stage=http protocol="" group_id=0 worker_id=0 job_id=2 config_version=1 api_key_id=0
+2026/11/12 00:10:31 INFO prompt_audit.scan_chunk_started config_version=1 chunk_index=1 chunk_total=1 worker_id=0 api_key_id=0 claim_version=1 request_id=wake-fixture stage=http input_chars=0 input_limit=1000 status=started chunk_chars=5 provider="" endpoint="" model="" user_id=0 protocol="" job_id=2 group_id=0
+2026/11/12 00:10:31 INFO prompt_audit.scan_chunk_completed latency_ms=0 config_version=1 endpoint="" protocol="" chunk_total=1 worker_id=0 provider="" claim_version=1 chunk_index=1 status=completed model="" stage=http job_id=2 guard_endpoint_id="" api_key_id=0 group_id=0 request_id=wake-fixture user_id=0 action=""
+2026/11/12 00:10:31 INFO prompt_audit.scan_chunks_aggregated guard_endpoint_id="" decision=pass chunk_total=1 provider="" endpoint="" latency_ms=0 risk_level=low user_id=0 protocol="" stage=http config_version=1 api_key_id=0 group_id=0 job_id=2 model="" claim_version=1 status=completed worker_id=0 action=Allow request_id=wake-fixture
+--- PASS: TestPromptWorkerWakeAndRetryRunOnSQLite (1.18s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/repository	1.204s

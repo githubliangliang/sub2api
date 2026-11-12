@@ -136,8 +136,8 @@ func (r *PostgreSQLRepository) ClaimNextJob(ctx context.Context, now time.Time) 
 	defer func() { _ = tx.Rollback() }()
 	var candidateID int64
 	err = tx.QueryRowContext(ctx, `SELECT id FROM prompt_audit_jobs
-		WHERE status IN ('queued','retry') AND next_attempt_at <= $1
-		ORDER BY next_attempt_at, id LIMIT 1`, now.UTC()).Scan(&candidateID)
+		WHERE status IN ('queued','retry') AND julianday(next_attempt_at) <= julianday($1)
+		ORDER BY julianday(next_attempt_at), id LIMIT 1`, now.UTC()).Scan(&candidateID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}

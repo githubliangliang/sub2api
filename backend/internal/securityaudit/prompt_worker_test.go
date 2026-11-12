@@ -84,6 +84,7 @@ type fakeJobRepository struct {
 	refreshes       int
 
 	claimQueue []*Job
+	claims     int
 
 	recordBlockingCalls    int
 	recordBlockingSnapshot PromptSnapshot
@@ -126,6 +127,7 @@ func (r *fakeJobRepository) MarkStagingFailed(_ context.Context, _ int64, code, 
 func (r *fakeJobRepository) ClaimNextJob(context.Context, time.Time) (*Job, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.claims++
 	if len(r.claimQueue) == 0 {
 		return nil, false, nil
 	}
@@ -496,13 +498,15 @@ func TestWorkerPanicLeaseLossAndLifecycleAreContained(t *testing.T) {
 	})
 
 	t.Run("shutdown timeout is bounded", func(t *testing.T) {
-		runner := &Runner{}
+		entered := make(chan struct{})
 		release := make(chan struct{})
-		runner.wg.Add(1)
-		go func() {
-			defer runner.wg.Done()
+		runner := NewRunner(&fakeConfigStore{cfg: asyncConfig(), active: true}, &fakeJobRepository{claimQueue: []*Job{workerJob(1, 3)}}, &fakePayloadStore{values: map[int64]string{51: "abc"}}, PromptScannerFunc(func(context.Context, ActiveEndpoint, string, []string) (*NormalizedResult, error) {
+			close(entered)
 			<-release
-		}()
+			return integrationResult(EventPass), nil
+		}), NewAtomicMetrics())
+		require.NoError(t, runner.Start(context.Background()))
+		<-entered
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
 		require.ErrorIs(t, runner.Shutdown(ctx), context.DeadlineExceeded)

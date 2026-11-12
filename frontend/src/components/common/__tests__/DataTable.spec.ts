@@ -357,4 +357,13 @@ describe('DataTable', () => {
 
     expect(wrapper.emitted('update:selectedKeys')?.at(-1)?.[0]).toEqual([99, 1, 2])
   })
+  it('preserves a row element when a refresh replaces data for the same key', async () => {
+    const wrapper = mount(DataTable, { props: { columns: [{ key: 'name', label: 'Name' }], data: [{ id: 11, name: 'before' }], rowKey: 'id', serverSideSort: true } })
+    await wrapper.vm.$nextTick()
+    const row = wrapper.get('[data-row-id="11"]').element
+    await wrapper.setProps({ data: [{ id: 11, name: 'after' }] })
+    expect(wrapper.get('[data-row-id="11"]').element).toBe(row)
+    wrapper.unmount()
+  })
+
 })

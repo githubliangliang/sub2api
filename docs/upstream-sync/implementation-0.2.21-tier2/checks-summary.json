@@ -1,0 +1,1494 @@
+{
+  "audit-sqlite-runtime": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestPromptWorkerWakeAndRetryRunOnSQLite$",
+      "-count=1",
+      "-v",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:59:33.590286+00:00",
+    "duration_seconds": 5.6,
+    "exit_code": 1,
+    "log": "audit-sqlite-runtime.log"
+  },
+  "frontend-typecheck": {
+    "command": [
+      "pnpm",
+      "run",
+      "typecheck"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T14:50:19.023705+00:00",
+    "duration_seconds": 44.661,
+    "exit_code": 0,
+    "log": "frontend-typecheck.log"
+  },
+  "batch-account-reuse-before": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/components/account/__tests__/AccountUsageCell.spec.ts"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T17:00:39.537990+00:00",
+    "duration_seconds": 2.053,
+    "exit_code": 1,
+    "log": "batch-account-reuse-before.log"
+  },
+  "boundaries-core-recheck": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAIResponsesWebSocket_NativeLaterTurn|TestMessagesConvertedEffortPolicyAndFinalValidation|TestCountTokensDisabledThinking|TestRefreshTokenRotation|TestRunner|TestEnqueuer|TestRelay_IsFirstTokenEvent|TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode|TestAPIKeyCostCoveringIndexSQLite",
+      "-count=1",
+      "-v",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:09:24.001394+00:00",
+    "duration_seconds": 23.851,
+    "exit_code": 1,
+    "log": "boundaries-core-recheck.log"
+  },
+  "backend-unit-final": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:35:18.786640+00:00",
+    "duration_seconds": 250.216,
+    "exit_code": 1,
+    "log": "backend-unit-final.log"
+  },
+  "capacity-real-sqlite": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestCapacityModelCooldownHTTP",
+      "-count=1",
+      "-v",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:20:48.475159+00:00",
+    "duration_seconds": 0.595,
+    "exit_code": 1,
+    "log": "capacity-real-sqlite.log"
+  },
+  "browser-complete": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T16:48:29.758941+00:00",
+    "duration_seconds": 3.23,
+    "exit_code": 0,
+    "log": "browser-complete.log"
+  },
+  "frontend-build-acceptance": {
+    "command": [
+      "pnpm",
+      "run",
+      "build"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T16:34:26.678579+00:00",
+    "duration_seconds": 65.287,
+    "exit_code": 0,
+    "log": "frontend-build-acceptance.log"
+  },
+  "environment": {
+    "command": [
+      "python3",
+      "-c",
+      "import json,subprocess; from pathlib import Path; print(json.dumps({\"head\":subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"],text=True).strip(),\"go\":subprocess.check_output([\"go\",\"version\"],text=True).strip(),\"lint\":subprocess.check_output([\"golangci-lint\",\"version\"],text=True).strip(),\"version\":Path(\"backend/cmd/server/VERSION\").read_text().strip(),\"max_migration\":max(p.name for p in Path(\"backend/migrations\").glob(\"[0-9]*.sql\"))},indent=2))"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T16:52:12.664024+00:00",
+    "duration_seconds": 0.144,
+    "exit_code": 0,
+    "log": "environment.log"
+  },
+  "backend-race-capacity-last": {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "-run",
+      "TestOpenAICapacity.*|TestOpenAI.*Capacity|TestCapacityModelCooldownHTTP",
+      "-count=1",
+      "./internal/service",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:13:53.429118+00:00",
+    "duration_seconds": 100.758,
+    "exit_code": 0,
+    "log": "backend-race-capacity-last.log"
+  },
+  "browser-final": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T16:06:21.252294+00:00",
+    "duration_seconds": 1.995,
+    "exit_code": 1,
+    "log": "browser-final.log"
+  },
+  "scope-final": {
+    "command": [
+      "python3",
+      "docs/upstream-sync/implementation-0.2.21-tier2/check-scope.py"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T17:19:34.945320+00:00",
+    "duration_seconds": 0.233,
+    "exit_code": 0,
+    "log": "scope-final.log"
+  },
+  "backend-build-verified": {
+    "command": [
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-o",
+      "/tmp/sub2api-021-tier2-server",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:52:40.394425+00:00",
+    "duration_seconds": 27.886,
+    "exit_code": 0,
+    "log": "backend-build-verified.log"
+  },
+  "backend-unit-first": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:46:09.418824+00:00",
+    "duration_seconds": 254.979,
+    "exit_code": 1,
+    "log": "backend-unit-first.log"
+  },
+  "browser": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T15:28:42.108619+00:00",
+    "duration_seconds": 1.731,
+    "exit_code": 1,
+    "log": "browser.log"
+  },
+  "frontend-critical-acceptance": {
+    "command": [
+      "make",
+      "test-frontend-critical"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T16:40:09.159592+00:00",
+    "duration_seconds": 7.353,
+    "exit_code": 0,
+    "log": "frontend-critical-acceptance.log"
+  },
+  "baseline-frontend": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/views/user/__tests__/KeysView.spec.ts",
+      "src/views/admin/__tests__/AccountsView.lite.spec.ts",
+      "src/components/account/__tests__/AccountUsageCell.spec.ts"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T14:35:46.417835+00:00",
+    "duration_seconds": 5.738,
+    "exit_code": 1,
+    "log": "baseline-frontend.log"
+  },
+  "backend-unit-acceptance": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:55:32.953178+00:00",
+    "duration_seconds": 227.364,
+    "exit_code": 0,
+    "log": "backend-unit-acceptance.log"
+  },
+  "baseline-service": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-overlay=/home/liang/myself/work_space/idea/github/sub2api/docs/upstream-sync/implementation-0.2.21-tier2/before-overlay.json",
+      "-run",
+      "^TestIntake021",
+      "-count=1",
+      "-v",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:14:11.031324+00:00",
+    "duration_seconds": 42.096,
+    "exit_code": 1,
+    "log": "baseline-service.log"
+  },
+  "backend-lint-closed": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:00:02.001661+00:00",
+    "duration_seconds": 48.316,
+    "exit_code": 0,
+    "log": "backend-lint-closed.log"
+  },
+  "page-http": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestCodexPageContextRealHTTPFirstRequest|TestNormalizeCodexPageContext",
+      "-count=1",
+      "-v",
+      "./internal/handler"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:18:46.673192+00:00",
+    "duration_seconds": 22.808,
+    "exit_code": 0,
+    "log": "page-http.log"
+  },
+  "baseline-audit-cli": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestWorker|TestEnqueuer|TestCLIVersion|TestClaudeCode",
+      "-count=1",
+      "-v",
+      "./internal/securityaudit",
+      "./internal/pkg/claude",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:16:21.660900+00:00",
+    "duration_seconds": 4.021,
+    "exit_code": 0,
+    "log": "baseline-audit-cli.log"
+  },
+  "backend-build-owned-final": {
+    "command": [
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-o",
+      "/tmp/sub2api-021-tier2-server",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:05:59.152389+00:00",
+    "duration_seconds": 3.349,
+    "exit_code": 0,
+    "log": "backend-build-owned-final.log"
+  },
+  "frontend-lint": {
+    "command": [
+      "pnpm",
+      "run",
+      "lint:check"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T14:50:13.715049+00:00",
+    "duration_seconds": 38.208,
+    "exit_code": 0,
+    "log": "frontend-lint.log"
+  },
+  "frontend-build-final": {
+    "command": [
+      "pnpm",
+      "run",
+      "build"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T15:21:26.508275+00:00",
+    "duration_seconds": 36.817,
+    "exit_code": 0,
+    "log": "frontend-build-final.log"
+  },
+  "ttft-boundaries": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestOpenAIWSTTFTClassificationBoundaries$",
+      "-count=1",
+      "-v",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:40:25.630136+00:00",
+    "duration_seconds": 23.832,
+    "exit_code": 0,
+    "log": "ttft-boundaries.log"
+  },
+  "backend-unit-last": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:16:40.440676+00:00",
+    "duration_seconds": 267.78,
+    "exit_code": 0,
+    "log": "backend-unit-last.log"
+  },
+  "backend-unit-complete": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:37:48.419199+00:00",
+    "duration_seconds": 265.869,
+    "exit_code": 0,
+    "log": "backend-unit-complete.log"
+  },
+  "backend-race-last-guard": {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "-run",
+      "TestOpenAICapacity.*|TestOpenAIWSTTFTClassificationBoundaries|TestPromptWorkerWakeAndRetryRunOnSQLite|TestRunnerConcurrentLifecycle",
+      "-count=1",
+      "./internal/service",
+      "./internal/repository",
+      "./internal/securityaudit"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:54:03.424077+00:00",
+    "duration_seconds": 110.908,
+    "exit_code": 0,
+    "log": "backend-race-last-guard.log"
+  },
+  "baseline-handler": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-overlay=/home/liang/myself/work_space/idea/github/sub2api/docs/upstream-sync/implementation-0.2.21-tier2/before-overlay.json",
+      "-run",
+      "^TestIntake021",
+      "-count=1",
+      "-v",
+      "./internal/handler"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:13:43.101336+00:00",
+    "duration_seconds": 14.171,
+    "exit_code": 1,
+    "log": "baseline-handler.log"
+  },
+  "backend-unit-verified": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:56:18.918023+00:00",
+    "duration_seconds": 246.41,
+    "exit_code": 0,
+    "log": "backend-unit-verified.log"
+  },
+  "boundaries-core": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAIResponsesWebSocket_NativeLaterTurn|TestMessagesConvertedEffortPolicyAndFinalValidation|TestCountTokensDisabledThinking|TestRefreshTokenRotation|TestRunner|TestEnqueuer|TestRelay_IsFirstTokenEvent|TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode|TestAPIKeyCostCoveringIndexSQLite",
+      "-count=1",
+      "-v",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:06:47.764562+00:00",
+    "duration_seconds": 18.255,
+    "exit_code": 1,
+    "log": "boundaries-core.log"
+  },
+  "audit-sqlite-wake": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestPromptWorkerWakeAndRetryRunOnSQLite$",
+      "-count=1",
+      "-v",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:53:18.844878+00:00",
+    "duration_seconds": 9.875,
+    "exit_code": 1,
+    "log": "audit-sqlite-wake.log"
+  },
+  "baseline-ws": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAIResponsesWebSocket_(FailoverOnUpstreamUsageLimitEvent|NativeLaterTurnUsageLimitDoesNotReplayFirstMessage)|TestOpenAIWSIngress.*WebSearch",
+      "-count=1",
+      "-v",
+      "./internal/handler",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:15:33.032259+00:00",
+    "duration_seconds": 30.076,
+    "exit_code": 1,
+    "log": "baseline-ws.log"
+  },
+  "index-resource-build": {
+    "command": [
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "test",
+      "-c",
+      "-tags=unit",
+      "-o",
+      "/tmp/sub2api-021-tier2-repository.test",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:18:56.980117+00:00",
+    "duration_seconds": 31.955,
+    "exit_code": 0,
+    "log": "index-resource-build.log"
+  },
+  "audit-sqlite-acceptance": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestPromptWorkerWakeAndRetryRunOnSQLite$",
+      "-count=1",
+      "-v",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:10:31.440016+00:00",
+    "duration_seconds": 11.981,
+    "exit_code": 0,
+    "log": "audit-sqlite-acceptance.log"
+  },
+  "frontend-typecheck-final": {
+    "command": [
+      "pnpm",
+      "run",
+      "typecheck"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T17:02:25.608633+00:00",
+    "duration_seconds": 37.478,
+    "exit_code": 0,
+    "log": "frontend-typecheck-final.log"
+  },
+  "ws-model-final": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode|TestOpenAICapacityShedModelRule|TestCapacityModelCooldownHTTP",
+      "-count=1",
+      "-v",
+      "./internal/service",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:23:44.783438+00:00",
+    "duration_seconds": 34.221,
+    "exit_code": 0,
+    "log": "ws-model-final.log"
+  },
+  "sqlite-http-protection": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "Test.*(ProductionSQLUsesSQLiteDialect|Migration|PlatformQuota|FixedQuota|UsageBilling.*SQLite|FastTiersSQLite|FastTierAsyncUsageSQLite|HistoricalToolsStrictHTTPAndSQLite|TempUnschedScopeSQLiteWithEmbeddedRedis|RefreshTokenRotation|CapacityModelCooldownHTTP|APIKeyCostCovering|PromptWorkerWake)",
+      "-count=1",
+      "-timeout=240s",
+      "-v",
+      "./internal/repository",
+      "./internal/handler",
+      "./internal/securityaudit"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:34:09.442013+00:00",
+    "duration_seconds": 49.217,
+    "exit_code": 0,
+    "log": "sqlite-http-protection.log"
+  },
+  "openspec-tier2-final": {
+    "command": [
+      "node",
+      "/home/liang/.npm/_npx/abab5bd700860149/node_modules/@fission-ai/openspec/bin/openspec.js",
+      "validate",
+      "port-upstream-0.2.21-tier2",
+      "--strict"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T17:17:06.779989+00:00",
+    "duration_seconds": 1.086,
+    "exit_code": 0,
+    "log": "openspec-tier2-final.log"
+  },
+  "frontend-build-final-owned": {
+    "command": [
+      "pnpm",
+      "run",
+      "build"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T17:02:44.940434+00:00",
+    "duration_seconds": 56.811,
+    "exit_code": 0,
+    "log": "frontend-build-final-owned.log"
+  },
+  "audit-sqlite-diagnosis": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestPromptWorkerWakeAndRetryRunOnSQLite$",
+      "-count=1",
+      "-v",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:06:23.945433+00:00",
+    "duration_seconds": 5.851,
+    "exit_code": 1,
+    "log": "audit-sqlite-diagnosis.log"
+  },
+  "ws-ttft": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken|TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode",
+      "-count=1",
+      "-v",
+      "./internal/service",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:49:50.774937+00:00",
+    "duration_seconds": 12.875,
+    "exit_code": 1,
+    "log": "ws-ttft.log"
+  },
+  "later-overload-before": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestOpenAIResponsesWebSocket_NativeLaterTurnOverload",
+      "-count=1",
+      "-v",
+      "./internal/handler"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:00:47.286116+00:00",
+    "duration_seconds": 18.154,
+    "exit_code": 1,
+    "log": "later-overload-before.log"
+  },
+  "final-failure-fixes": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestWorkerPanicLeaseLossAndLifecycleAreContained|Test.*Fingerprint.*Floor|TestCapacityModelCooldownHTTP",
+      "-count=1",
+      "./internal/securityaudit",
+      "./internal/service",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:49:38.201916+00:00",
+    "duration_seconds": 29.607,
+    "exit_code": 1,
+    "log": "final-failure-fixes.log"
+  },
+  "capacity-boundaries": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAICapacityShedModelRule",
+      "-count=1",
+      "-v",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:14:42.073718+00:00",
+    "duration_seconds": 19.232,
+    "exit_code": 1,
+    "log": "capacity-boundaries.log"
+  },
+  "frontend-critical": {
+    "command": [
+      "make",
+      "test-frontend-critical"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T15:23:18.413369+00:00",
+    "duration_seconds": 6.698,
+    "exit_code": 0,
+    "log": "frontend-critical.log"
+  },
+  "backend-race": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "-run",
+      "Test.*(OpenAIResponsesWebSocket_|OpenAIWSIngressWebSearch|OpenAIWSConnWebSearch|OpenAIWSFailedWrite|Relay_IsFirstToken|OpenAIWSPassthroughFirstToken|CapacityShedModelRule|CapacityModelCooldownHTTP|MessagesConvertedEffort|MessagesEffortPolicyBinding|RefreshToken|Runner|Worker|Enqueuer|APIKeyCostCovering|NormalizeCodexPage|CodexPageContextRealHTTP|TempUnschedScopeSQLite)",
+      "-count=1",
+      "-timeout=240s",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:33:45.512951+00:00",
+    "duration_seconds": 154.59,
+    "exit_code": 1,
+    "log": "backend-race.log"
+  },
+  "frontend-lint-acceptance": {
+    "command": [
+      "pnpm",
+      "run",
+      "lint:check"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T16:24:48.056869+00:00",
+    "duration_seconds": 27.653,
+    "exit_code": 0,
+    "log": "frontend-lint-acceptance.log"
+  },
+  "core-targeted": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAIResponsesWebSocket_(FailoverOnUpstreamUsageLimitEvent|NativeLaterTurnUsageLimitDoesNotReplayFirstMessage)|TestOpenAIWSIngressWebSearchActivation|TestOpenAIWSConnWebSearchInitialization|TestNormalizeCodexPageContext|TestMessagesEffortPolicyBinding|TestAuthServiceRefreshTokenPairConsumesTokenOnce|TestRefreshTokenCacheConsumeIsAtomic|TestWorkerClaimsWithoutWaitingForIdlePoll|TestEnqueuerNotifiesOnlyAfterPublish|TestAnthropicCompatAccountErrorPolicy|TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode|TestOpenAICapacityShedModelRule|TestIsSupportedCLIVersion|TestResolveCLIVersion",
+      "-count=1",
+      "-v",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/pkg/claude"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:34:03.355860+00:00",
+    "duration_seconds": 39.85,
+    "exit_code": 0,
+    "log": "core-targeted.log"
+  },
+  "backend-lint": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:50:58.155730+00:00",
+    "duration_seconds": 81.47,
+    "exit_code": 1,
+    "log": "backend-lint.log"
+  },
+  "browser-confirmation": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T15:52:23.610209+00:00",
+    "duration_seconds": 34.35,
+    "exit_code": 1,
+    "log": "browser-confirmation.log"
+  },
+  "backend-unit-exact": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-tags=unit",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:17:13.244878+00:00",
+    "duration_seconds": 239.104,
+    "exit_code": 0,
+    "log": "backend-unit-exact.log"
+  },
+  "backend-lint-last": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:13:34.327228+00:00",
+    "duration_seconds": 81.665,
+    "exit_code": 0,
+    "log": "backend-lint-last.log"
+  },
+  "frontend-lint-final": {
+    "command": [
+      "pnpm",
+      "run",
+      "lint:check"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T17:02:19.131165+00:00",
+    "duration_seconds": 30.994,
+    "exit_code": 0,
+    "log": "frontend-lint-final.log"
+  },
+  "short-capacity-exact": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestOpenAICapacityShedModelRule",
+      "-count=1",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:13:39.165662+00:00",
+    "duration_seconds": 23.863,
+    "exit_code": 0,
+    "log": "short-capacity-exact.log"
+  },
+  "backend-race-exact": {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "-run",
+      "^TestOpenAICapacityShedModelRule|^TestOpenAICapacityModelRuleAfter",
+      "-count=1",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:14:45.271595+00:00",
+    "duration_seconds": 52.43,
+    "exit_code": 0,
+    "log": "backend-race-exact.log"
+  },
+  "short-capacity-final": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAICapacityShedModelRule|TestOpenAICapacityModelRuleAfter|TestOpenAIBare|TestOpenAI.*Capacity",
+      "-count=1",
+      "-v",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:12:57.032417+00:00",
+    "duration_seconds": 44.355,
+    "exit_code": 0,
+    "log": "short-capacity-final.log"
+  },
+  "frontend-build": {
+    "command": [
+      "pnpm",
+      "run",
+      "build"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T14:59:04.091065+00:00",
+    "duration_seconds": 77.602,
+    "exit_code": 0,
+    "log": "frontend-build.log"
+  },
+  "browser-viewport-stable": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T16:24:19.989743+00:00",
+    "duration_seconds": 3.334,
+    "exit_code": 0,
+    "log": "browser-viewport-stable.log"
+  },
+  "audit-sqlite-wake-fixed": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestPromptWorkerWakeAndRetryRunOnSQLite$",
+      "-count=1",
+      "-v",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:55:29.796905+00:00",
+    "duration_seconds": 7.242,
+    "exit_code": 1,
+    "log": "audit-sqlite-wake-fixed.log"
+  },
+  "frontend-targeted": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/views/user/__tests__/KeysView.spec.ts",
+      "src/views/admin/__tests__/AccountsView.lite.spec.ts",
+      "src/components/account/__tests__/AccountUsageCell.spec.ts",
+      "src/composables/__tests__/useTableLoader.spec.ts"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T14:38:15.179826+00:00",
+    "duration_seconds": 5.528,
+    "exit_code": 0,
+    "log": "frontend-targeted.log"
+  },
+  "index-1c1g": {
+    "command": [
+      "docker",
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp",
+      "--memory",
+      "1g",
+      "--memory-swap",
+      "1g",
+      "--cpus",
+      "1",
+      "--pids-limit",
+      "64",
+      "-v",
+      "/tmp/sub2api-021-tier2-repository.test:/test:ro",
+      "python:3.13-slim",
+      "/test",
+      "-test.run",
+      "^TestAPIKeyCostCoveringIndexSQLiteUpgradeAndCost$",
+      "-test.v"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T15:20:50.707613+00:00",
+    "duration_seconds": 2.166,
+    "exit_code": 0,
+    "log": "index-1c1g.log"
+  },
+  "final-platform-guard": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAICapacity.*|TestOpenAIWSTTFTClassificationBoundaries|TestOpenAIWS.*",
+      "-count=1",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:49:05.661257+00:00",
+    "duration_seconds": 39.133,
+    "exit_code": 0,
+    "log": "final-platform-guard.log"
+  },
+  "sqlite-index-candidate": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestAPIKeyCostCoveringIndexSQLiteUpgradeAndCost$",
+      "-count=1",
+      "-v",
+      "./internal/repository"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:45:30.646114+00:00",
+    "duration_seconds": 12.885,
+    "exit_code": 0,
+    "log": "sqlite-index-candidate.log"
+  },
+  "browser-acceptance": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T16:40:34.930929+00:00",
+    "duration_seconds": 33.124,
+    "exit_code": 1,
+    "log": "browser-acceptance.log"
+  },
+  "row-dom": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/components/common/__tests__/DataTable.spec.ts"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T15:49:08.987616+00:00",
+    "duration_seconds": 2.708,
+    "exit_code": 0,
+    "log": "row-dom.log"
+  },
+  "backend-lint-final": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:32:13.509433+00:00",
+    "duration_seconds": 63.767,
+    "exit_code": 1,
+    "log": "backend-lint-final.log"
+  },
+  "cooldown-committed-ws": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestOpenAICapacityModelRuleAfter",
+      "-count=1",
+      "-v",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:26:13.413005+00:00",
+    "duration_seconds": 19.068,
+    "exit_code": 0,
+    "log": "cooldown-committed-ws.log"
+  },
+  "frontend-full-final": {
+    "command": [
+      "pnpm",
+      "run",
+      "test:run"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T17:02:18.043780+00:00",
+    "duration_seconds": 29.918,
+    "exit_code": 0,
+    "log": "frontend-full-final.log"
+  },
+  "backend-race-acceptance": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "-run",
+      "Test.*(OpenAIResponsesWebSocket_|OpenAIWSIngressWebSearch|OpenAIWSConnWebSearch|OpenAIWSFailedWrite|Relay_IsFirstToken|OpenAIWSPassthroughFirstToken|CapacityShedModelRule|CapacityModelCooldownHTTP|MessagesConvertedEffort|MessagesEffortPolicyBinding|RefreshToken|Runner|Worker|Enqueuer|APIKeyCostCovering|NormalizeCodexPage|CodexPageContextRealHTTP|TempUnschedScopeSQLite)",
+      "-count=1",
+      "-timeout=240s",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:54:20.136473+00:00",
+    "duration_seconds": 152.171,
+    "exit_code": 0,
+    "log": "backend-race-acceptance.log"
+  },
+  "frontend-full-acceptance": {
+    "command": [
+      "pnpm",
+      "run",
+      "test:run"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T16:24:45.356728+00:00",
+    "duration_seconds": 27.294,
+    "exit_code": 0,
+    "log": "frontend-full-acceptance.log"
+  },
+  "openspec-tier2": {
+    "command": [
+      "node",
+      "/home/liang/.npm/_npx/abab5bd700860149/node_modules/@fission-ai/openspec/bin/openspec.js",
+      "validate",
+      "port-upstream-0.2.21-tier2",
+      "--strict"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T16:54:32.930533+00:00",
+    "duration_seconds": 1.244,
+    "exit_code": 0,
+    "log": "openspec-tier2.log"
+  },
+  "short-capacity-before": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "^TestOpenAICapacityShedModelRule_StreamReaders/.*/.*/short_capacity$",
+      "-count=1",
+      "-v",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:10:05.782244+00:00",
+    "duration_seconds": 19.014,
+    "exit_code": 0,
+    "log": "short-capacity-before.log"
+  },
+  "frontend-lifecycle": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/views/user/__tests__/KeysView.spec.ts",
+      "src/views/admin/__tests__/AccountsView.lite.spec.ts",
+      "src/components/account/__tests__/AccountUsageCell.spec.ts",
+      "src/composables/__tests__/useTableLoader.spec.ts"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T15:13:23.985889+00:00",
+    "duration_seconds": 4.425,
+    "exit_code": 0,
+    "log": "frontend-lifecycle.log"
+  },
+  "batch-account-reuse": {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/components/account/__tests__/AccountUsageCell.spec.ts"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T17:01:51.717317+00:00",
+    "duration_seconds": 3.598,
+    "exit_code": 0,
+    "log": "batch-account-reuse.log"
+  },
+  "backend-build-last": {
+    "command": [
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-o",
+      "/tmp/sub2api-021-tier2-server",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T17:12:44.604053+00:00",
+    "duration_seconds": 31.945,
+    "exit_code": 0,
+    "log": "backend-build-last.log"
+  },
+  "backend-build": {
+    "command": [
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-o",
+      "/tmp/sub2api-021-tier2-server",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:40:20.541737+00:00",
+    "duration_seconds": 18.727,
+    "exit_code": 0,
+    "log": "backend-build.log"
+  },
+  "backend-lint-clean": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:34:30.096718+00:00",
+    "duration_seconds": 71.026,
+    "exit_code": 0,
+    "log": "backend-lint-clean.log"
+  },
+  "initial-core": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAIResponsesWebSocket_(FailoverOnUpstreamUsageLimitEvent|NativeLaterTurnUsageLimitDoesNotReplayFirstMessage)|TestOpenAIWSIngressWebSearchActivation|TestOpenAIWSConnWebSearchInitialization|TestNormalizeCodexPageContext|TestMessagesEffortPolicyBinding|TestAuthServiceRefreshTokenPairConsumesTokenOnce|TestRefreshTokenCacheConsumeIsAtomic|TestWorkerClaimsWithoutWaitingForIdlePoll|TestEnqueuerNotifiesOnlyAfterPublish|TestAnthropicCompatAccountErrorPolicy|TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode",
+      "-count=1",
+      "-v",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T14:24:44.740176+00:00",
+    "duration_seconds": 30.314,
+    "exit_code": 1,
+    "log": "initial-core.log"
+  },
+  "openspec-tier2-closed": {
+    "command": [
+      "node",
+      "/home/liang/.npm/_npx/abab5bd700860149/node_modules/@fission-ai/openspec/bin/openspec.js",
+      "validate",
+      "port-upstream-0.2.21-tier2",
+      "--strict"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T17:08:58.045257+00:00",
+    "duration_seconds": 2.761,
+    "exit_code": 0,
+    "log": "openspec-tier2-closed.log"
+  },
+  "frontend-full": {
+    "command": [
+      "pnpm",
+      "run",
+      "test:run"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T14:58:27.042719+00:00",
+    "duration_seconds": 41.8,
+    "exit_code": 0,
+    "log": "frontend-full.log"
+  },
+  "browser-owned-final": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T17:05:59.019792+00:00",
+    "duration_seconds": 3.218,
+    "exit_code": 0,
+    "log": "browser-owned-final.log"
+  },
+  "backend-lint-verified": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:53:19.490479+00:00",
+    "duration_seconds": 66.972,
+    "exit_code": 1,
+    "log": "backend-lint-verified.log"
+  },
+  "backend-race-complete": {
+    "command": [
+      "env",
+      "-u",
+      "HTTP_PROXY",
+      "-u",
+      "HTTPS_PROXY",
+      "-u",
+      "ALL_PROXY",
+      "-u",
+      "http_proxy",
+      "-u",
+      "https_proxy",
+      "-u",
+      "all_proxy",
+      "go",
+      "test",
+      "-race",
+      "-tags=unit",
+      "-run",
+      "Test.*(OpenAIResponsesWebSocket_|OpenAIWSIngressWebSearch|OpenAIWSConnWebSearch|OpenAIWSFailedWrite|Relay_IsFirstToken|OpenAIWSPassthroughFirstToken|OpenAIWSTTFTClassification|CapacityShedModelRule|CapacityModelCooldownHTTP|CapacityModelRuleAfter|MessagesConvertedEffort|MessagesEffortPolicyBinding|RefreshToken|Runner|Worker|Enqueuer|APIKeyCostCovering|NormalizeCodexPage|CodexPageContextRealHTTP|TempUnschedScopeSQLite)",
+      "-count=1",
+      "-timeout=240s",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T16:42:47.488679+00:00",
+    "duration_seconds": 165.687,
+    "exit_code": 0,
+    "log": "backend-race-complete.log"
+  },
+  "protocol-boundaries": {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "-run",
+      "TestOpenAIResponsesWebSocket_NativeLaterTurn|TestMessagesConvertedEffortPolicyAndFinalValidation|TestCountTokensDisabledThinking|TestRefreshTokenRotation|TestRunner|TestEnqueuer|TestRelay_IsFirstTokenEvent|TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode|TestAPIKeyCostCoveringIndexSQLite",
+      "-count=1",
+      "-v",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/securityaudit",
+      "./internal/service/openai_ws_v2"
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:12:31.333074+00:00",
+    "duration_seconds": 23.577,
+    "exit_code": 0,
+    "log": "protocol-boundaries.log"
+  },
+  "browser-diagnosis": {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.21-tier2/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "finished_at_utc": "2026-11-11T15:49:11.045897+00:00",
+    "duration_seconds": 3.598,
+    "exit_code": 0,
+    "log": "browser-diagnosis.log"
+  },
+  "frontend-typecheck-acceptance": {
+    "command": [
+      "pnpm",
+      "run",
+      "typecheck"
+    ],
+    "cwd": "frontend",
+    "finished_at_utc": "2026-11-11T16:24:53.219313+00:00",
+    "duration_seconds": 33.935,
+    "exit_code": 0,
+    "log": "frontend-typecheck-acceptance.log"
+  },
+  "backend-lint-acceptance": {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./..."
+    ],
+    "cwd": "backend",
+    "finished_at_utc": "2026-11-11T15:53:09.473383+00:00",
+    "duration_seconds": 82.653,
+    "exit_code": 1,
+    "log": "backend-lint-acceptance.log"
+  }
+}

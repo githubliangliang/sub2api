@@ -1085,6 +1085,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					respBody,
 					upstreamMsg,
 					!shouldDisable && account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
+					shouldDisable && account.Platform == PlatformOpenAI,
 				)
 			}
 			return s.handleErrorResponse(ctx, resp, c, account, body, billingModel)

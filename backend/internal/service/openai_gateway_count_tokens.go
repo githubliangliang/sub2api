@@ -373,7 +373,12 @@ func prepareOpenAIInputTokensCountRequest(
 	billingModel := resolveOpenAIForwardModel(account, normalizedModel, strings.TrimSpace(defaultMappedModel))
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
 
-	responsesReq, err := apicompat.AnthropicToResponses(&anthropicReq)
+	if err := validateGPT61RawEffort(body, upstreamModel); err != nil {
+		return nil, err
+	}
+	responsesReq, err := apicompat.AnthropicToResponsesWithOptions(&anthropicReq, apicompat.AnthropicToResponsesOptions{
+		DeferReasoningEffortValidation: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("convert anthropic request to responses: %w", err)
 	}

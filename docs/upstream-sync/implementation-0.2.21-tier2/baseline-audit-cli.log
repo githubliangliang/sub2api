@@ -1,0 +1,264 @@
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/success
+2026/11/11 22:16:20 INFO prompt_audit.job_enqueued endpoint="" stage="" request_id=request-async protocol=openai_chat_completions model="" user_id=0 api_key_id=0 job_id=41 config_version=7 group_id=0 provider="" queue_capacity=8 status=queued
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/queue_admission_failures_never_touch_payload
+2026/11/11 22:16:20 WARN prompt_audit.enqueue_dropped api_key_id=0 request_id=request-async user_id=0 model="" config_version=7 queue_capacity=8 status=dropped provider="" protocol=openai_chat_completions group_id=0 endpoint="" stage="" error_code=queue_full
+2026/11/11 22:16:20 WARN prompt_audit.enqueue_dropped api_key_id=0 endpoint="" group_id=0 provider="" protocol=openai_chat_completions stage="" config_version=7 user_id=0 model="" queue_capacity=8 status=dropped error_code=queue_admission_busy request_id=request-async
+2026/11/11 22:16:20 WARN prompt_audit.enqueue_dropped error_code=database_unavailable api_key_id=0 model="" stage="" request_id=request-async user_id=0 provider="" protocol=openai_chat_completions queue_capacity=8 group_id=0 endpoint="" config_version=7 status=dropped
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/payload_failure_marks_staging_failed
+2026/11/11 22:16:20 WARN prompt_audit.enqueue_dropped api_key_id=0 stage="" model="" status=dropped error_code=payload_store_failed user_id=0 group_id=0 provider="" config_version=7 protocol=openai_chat_completions endpoint="" request_id=request-async job_id=42
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/publish_failure_removes_payload_and_marks_staging_failed
+2026/11/11 22:16:20 WARN prompt_audit.enqueue_dropped provider="" model="" request_id=request-async endpoint="" config_version=7 job_id=43 error_code=queue_publish_failed api_key_id=0 protocol=openai_chat_completions stage="" user_id=0 group_id=0 status=dropped
+--- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/success (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/queue_admission_failures_never_touch_payload (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/payload_failure_marks_staging_failed (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/publish_failure_removes_payload_and_marks_staging_failed (0.00s)
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/off
+2026/11/11 22:16:20 INFO prompt_audit.enqueue_skipped protocol=openai_chat_completions endpoint="" api_key_id=0 status=skipped error_code=mode_not_async stage="" request_id=request-async provider="" model="" user_id=0 group_id=0
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/out_of_scope
+2026/11/11 22:16:20 INFO prompt_audit.enqueue_skipped user_id=0 stage="" group_id=0 provider="" protocol=openai_chat_completions model="" error_code=group_out_of_scope api_key_id=0 endpoint="" config_version=7 status=skipped request_id=request-async
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/no_user_text
+2026/11/11 22:16:20 INFO prompt_audit.enqueue_skipped model="" user_id=0 protocol=openai_chat_completions error_code=no_user_text request_id="" api_key_id=0 group_id=0 status=skipped endpoint="" stage="" config_version=7 provider=""
+--- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/off (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/out_of_scope (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/no_user_text (0.00s)
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/accepted_increments_enqueued
+2026/11/11 22:16:20 INFO prompt_audit.job_enqueued config_version=7 request_id=request-async api_key_id=0 provider="" job_id=44 queue_capacity=8 status=queued user_id=0 protocol=openai_chat_completions endpoint="" model="" stage="" group_id=0
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/queue_full_increments_dropped
+2026/11/11 22:16:20 WARN prompt_audit.enqueue_dropped api_key_id=0 protocol=openai_chat_completions endpoint="" user_id=0 stage="" status=dropped error_code=queue_full queue_capacity=8 config_version=7 group_id=0 provider="" model="" request_id=request-async
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/skipped_request_does_not_increment_dropped
+2026/11/11 22:16:20 INFO prompt_audit.enqueue_skipped status=skipped endpoint="" stage="" group_id=0 provider="" model="" error_code=mode_not_async request_id=request-async protocol=openai_chat_completions user_id=0 api_key_id=0
+--- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/accepted_increments_enqueued (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/queue_full_increments_dropped (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/skipped_request_does_not_increment_dropped (0.00s)
+=== RUN   TestWorkerCompletesPassWithoutEventRefreshesEveryChunkAndDeletesPayload
+2026/11/11 22:16:20 INFO prompt_audit.started request_id=worker-request claim_version=3 user_id=0 worker_id=0 endpoint="" stage="" config_version=7 group_id=0 provider="" job_id=51 protocol="" status=processing attempts=1 model="" api_key_id=0
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started group_id=0 provider="" endpoint="" stage="" api_key_id=0 worker_id=0 job_id=51 user_id=0 claim_version=3 config_version=7 chunk_chars=3 model="" protocol="" chunk_index=1 chunk_total=2 input_chars=6 input_limit=3 status=started request_id=worker-request
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_completed status=completed worker_id=0 latency_ms=0 job_id=51 api_key_id=0 group_id=0 endpoint="" chunk_index=1 stage="" user_id=0 protocol="" request_id=worker-request action=Allow model="" claim_version=3 config_version=7 chunk_total=2 guard_endpoint_id=guard provider=""
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started protocol="" request_id=worker-request group_id=0 provider="" stage="" job_id=51 claim_version=3 worker_id=0 config_version=7 endpoint="" user_id=0 api_key_id=0 input_limit=3 status=started model="" input_chars=6 chunk_index=2 chunk_total=2 chunk_chars=3
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_completed config_version=7 request_id=worker-request provider="" job_id=51 claim_version=3 chunk_index=2 group_id=0 model="" stage="" latency_ms=0 action=Allow user_id=0 api_key_id=0 protocol="" endpoint="" worker_id=0 chunk_total=2 status=completed guard_endpoint_id=guard
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunks_aggregated request_id=worker-request provider="" model="" config_version=7 chunk_total=2 status=completed risk_level=low group_id=0 endpoint="" guard_endpoint_id=guard decision=pass stage="" job_id=51 api_key_id=0 protocol="" claim_version=3 user_id=0 action=Allow latency_ms=0 worker_id=0
+2026/11/11 22:16:20 INFO prompt_audit.processed protocol="" request_id=worker-request guard_endpoint_id=guard status=done event_id=0 group_id=0 api_key_id=0 latency_ms=0 provider="" stage="" claim_version=3 config_version=7 decision=pass endpoint="" model="" user_id=0 action=Allow worker_id=0 risk_level=low job_id=51
+--- PASS: TestWorkerCompletesPassWithoutEventRefreshesEveryChunkAndDeletesPayload (0.00s)
+=== RUN   TestWorkerRetryBackoffTerminalFailureAndFailover
+=== RUN   TestWorkerRetryBackoffTerminalFailureAndFailover/first_retry
+2026/11/11 22:16:20 INFO prompt_audit.started request_id=worker-request user_id=0 api_key_id=0 model="" stage="" endpoint="" claim_version=3 provider="" protocol="" group_id=0 config_version=7 attempts=1 status=processing job_id=51 worker_id=0
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started input_limit=3 chunk_index=1 user_id=0 provider="" stage="" request_id=worker-request api_key_id=0 job_id=51 endpoint="" worker_id=0 claim_version=3 protocol="" group_id=0 chunk_chars=3 status=started chunk_total=1 config_version=7 model="" input_chars=6
+2026/11/11 22:16:20 WARN prompt_audit.scan_chunk_failed provider="" claim_version=3 request_id=worker-request input_limit=3 chunk_chars=3 worker_id=0 api_key_id=0 protocol="" model="" group_id=0 config_version=7 user_id=0 latency_ms=0 input_chars=6 stage="" endpoint="" chunk_total=1 error_code=prompt_guard_unavailable chunk_index=1 job_id=51 status=failed
+2026/11/11 22:16:20 WARN prompt_audit.process_failed provider="" protocol="" job_id=51 config_version=7 user_id=0 group_id=0 max_attempts=3 api_key_id=0 endpoint="" model="" stage="" claim_version=3 request_id=worker-request retryable=true attempts=1 status=retry error_code=prompt_guard_unavailable
+=== RUN   TestWorkerRetryBackoffTerminalFailureAndFailover/second_retry
+2026/11/11 22:16:20 INFO prompt_audit.started protocol="" worker_id=0 status=processing request_id=worker-request config_version=7 group_id=0 attempts=2 claim_version=3 endpoint="" job_id=51 api_key_id=0 model="" user_id=0 provider="" stage=""
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started chunk_index=1 model="" api_key_id=0 request_id=worker-request user_id=0 provider="" protocol="" stage="" job_id=51 worker_id=0 chunk_total=1 claim_version=3 endpoint="" config_version=7 input_limit=3 status=started chunk_chars=3 group_id=0 input_chars=6
+2026/11/11 22:16:20 WARN prompt_audit.scan_chunk_failed provider="" endpoint="" job_id=51 config_version=7 worker_id=0 chunk_index=1 request_id=worker-request protocol="" stage="" latency_ms=0 input_chars=6 user_id=0 model="" chunk_total=1 input_limit=3 error_code=prompt_guard_unavailable status=failed chunk_chars=3 api_key_id=0 group_id=0 claim_version=3
+2026/11/11 22:16:20 WARN prompt_audit.process_failed max_attempts=3 error_code=prompt_guard_unavailable api_key_id=0 status=retry model="" config_version=7 claim_version=3 request_id=worker-request retryable=true protocol="" endpoint="" job_id=51 stage="" user_id=0 provider="" group_id=0 attempts=2
+=== RUN   TestWorkerRetryBackoffTerminalFailureAndFailover/third_retry
+2026/11/11 22:16:20 INFO prompt_audit.started status=processing worker_id=0 group_id=0 request_id=worker-request config_version=7 endpoint="" stage="" job_id=51 claim_version=3 protocol="" model="" attempts=3 api_key_id=0 user_id=0 provider=""
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started user_id=0 config_version=7 protocol="" model="" job_id=51 chunk_index=1 api_key_id=0 worker_id=0 chunk_total=1 chunk_chars=3 input_limit=3 request_id=worker-request provider="" group_id=0 endpoint="" stage="" status=started input_chars=6 claim_version=3
+2026/11/11 22:16:20 WARN prompt_audit.scan_chunk_failed endpoint="" request_id=worker-request api_key_id=0 chunk_chars=3 latency_ms=0 stage="" claim_version=3 user_id=0 error_code=prompt_guard_unavailable chunk_total=1 job_id=51 protocol="" model="" chunk_index=1 status=failed group_id=0 provider="" config_version=7 worker_id=0 input_chars=6 input_limit=3
+2026/11/11 22:16:20 WARN prompt_audit.process_failed model="" job_id=51 max_attempts=4 status=retry provider="" request_id=worker-request retryable=true error_code=prompt_guard_unavailable endpoint="" stage="" config_version=7 claim_version=3 attempts=3 user_id=0 api_key_id=0 group_id=0 protocol=""
+=== RUN   TestWorkerRetryBackoffTerminalFailureAndFailover/max_attempts
+2026/11/11 22:16:20 INFO prompt_audit.started request_id=worker-request api_key_id=0 provider="" endpoint="" stage="" group_id=0 config_version=7 protocol="" status=processing worker_id=0 attempts=3 job_id=51 claim_version=3 user_id=0 model=""
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started input_chars=6 worker_id=0 stage="" claim_version=3 group_id=0 job_id=51 api_key_id=0 input_limit=3 provider="" endpoint="" model="" config_version=7 request_id=worker-request status=started chunk_index=1 chunk_total=1 protocol="" user_id=0 chunk_chars=3
+2026/11/11 22:16:20 WARN prompt_audit.scan_chunk_failed input_limit=3 group_id=0 request_id=worker-request api_key_id=0 latency_ms=0 provider="" error_code=prompt_guard_unavailable user_id=0 endpoint="" stage="" claim_version=3 worker_id=0 chunk_chars=3 input_chars=6 status=failed model="" job_id=51 config_version=7 protocol="" chunk_index=1 chunk_total=1
+2026/11/11 22:16:20 ERROR prompt_audit.process_failed group_id=0 job_id=51 config_version=7 error_code=prompt_guard_unavailable request_id=worker-request claim_version=3 attempts=3 max_attempts=3 status=failed provider="" user_id=0 endpoint="" protocol="" model="" stage="" api_key_id=0 retryable=false
+=== RUN   TestWorkerRetryBackoffTerminalFailureAndFailover/invalid_terminal
+2026/11/11 22:16:20 INFO prompt_audit.started provider="" endpoint="" model="" attempts=1 config_version=7 claim_version=3 request_id=worker-request api_key_id=0 group_id=0 worker_id=0 status=processing protocol="" job_id=51 stage="" user_id=0
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started chunk_chars=3 chunk_index=1 claim_version=3 user_id=0 api_key_id=0 protocol="" chunk_total=1 status=started job_id=51 model="" input_chars=6 stage="" group_id=0 provider="" input_limit=3 worker_id=0 config_version=7 request_id=worker-request endpoint=""
+2026/11/11 22:16:20 WARN prompt_audit.scan_chunk_failed job_id=51 stage="" latency_ms=0 error_code=prompt_guard_invalid_response status=failed chunk_total=1 endpoint="" config_version=7 input_chars=6 worker_id=0 request_id=worker-request user_id=0 protocol="" model="" input_limit=3 chunk_chars=3 chunk_index=1 api_key_id=0 group_id=0 claim_version=3 provider=""
+2026/11/11 22:16:20 ERROR prompt_audit.process_failed user_id=0 claim_version=3 status=failed request_id=worker-request api_key_id=0 group_id=0 protocol="" attempts=1 error_code=prompt_guard_invalid_response stage="" config_version=7 retryable=false max_attempts=3 endpoint="" model="" provider="" job_id=51
+2026/11/11 22:16:20 INFO prompt_audit.started job_id=51 group_id=0 protocol="" attempts=1 request_id=worker-request provider="" user_id=0 config_version=7 api_key_id=0 status=processing worker_id=0 claim_version=3 endpoint="" model="" stage=""
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started status=started chunk_index=1 chunk_total=1 protocol="" config_version=7 claim_version=3 worker_id=0 group_id=0 stage="" input_limit=10 job_id=51 request_id=worker-request api_key_id=0 provider="" endpoint="" model="" user_id=0 input_chars=6 chunk_chars=3
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_completed provider="" user_id=0 job_id=51 latency_ms=0 protocol="" stage="" status=completed action=Allow model="" group_id=0 chunk_index=1 guard_endpoint_id=guard-1 claim_version=3 endpoint="" worker_id=0 chunk_total=1 config_version=7 request_id=worker-request api_key_id=0
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunks_aggregated provider="" worker_id=0 action=Allow latency_ms=0 guard_endpoint_id=guard-1 stage="" status=completed risk_level=low user_id=0 claim_version=3 request_id=worker-request chunk_total=1 endpoint="" model="" protocol="" api_key_id=0 decision=pass group_id=0 job_id=51 config_version=7
+2026/11/11 22:16:20 INFO prompt_audit.processed latency_ms=0 provider="" endpoint="" protocol="" guard_endpoint_id=guard-1 claim_version=3 api_key_id=0 group_id=0 stage="" worker_id=0 event_id=0 action=Allow config_version=7 user_id=0 status=done decision=pass risk_level=low request_id=worker-request model="" job_id=51
+--- PASS: TestWorkerRetryBackoffTerminalFailureAndFailover (0.00s)
+    --- PASS: TestWorkerRetryBackoffTerminalFailureAndFailover/first_retry (0.00s)
+    --- PASS: TestWorkerRetryBackoffTerminalFailureAndFailover/second_retry (0.00s)
+    --- PASS: TestWorkerRetryBackoffTerminalFailureAndFailover/third_retry (0.00s)
+    --- PASS: TestWorkerRetryBackoffTerminalFailureAndFailover/max_attempts (0.00s)
+    --- PASS: TestWorkerRetryBackoffTerminalFailureAndFailover/invalid_terminal (0.00s)
+=== RUN   TestWorkerPanicLeaseLossAndLifecycleAreContained
+=== RUN   TestWorkerPanicLeaseLossAndLifecycleAreContained/panic
+2026/11/11 22:16:20 INFO prompt_audit.started request_id=worker-request group_id=0 claim_version=3 protocol="" endpoint="" model="" stage="" config_version=7 user_id=0 attempts=1 status=processing worker_id=0 job_id=51 api_key_id=0 provider=""
+2026/11/11 22:16:20 INFO prompt_audit.scan_chunk_started user_id=0 provider="" config_version=7 worker_id=0 chunk_index=1 chunk_chars=3 protocol="" request_id=worker-request claim_version=3 chunk_total=1 input_chars=6 endpoint="" stage="" group_id=0 job_id=51 input_limit=3 api_key_id=0 model="" status=started
+2026/11/11 22:16:20 ERROR prompt_audit.process_failed error_code=worker_panic model="" user_id=0 group_id=0 status=failed api_key_id=0 protocol="" stage="" job_id=51 claim_version=3 endpoint="" config_version=7 request_id=worker-request provider="" worker_id=0
+=== RUN   TestWorkerPanicLeaseLossAndLifecycleAreContained/lease_loss
+2026/11/11 22:16:20 INFO prompt_audit.started group_id=0 claim_version=3 provider="" endpoint="" request_id=worker-request user_id=0 job_id=51 status=processing model="" api_key_id=0 stage="" config_version=7 protocol="" worker_id=0 attempts=1
+=== RUN   TestWorkerPanicLeaseLossAndLifecycleAreContained/start_and_shutdown
+=== RUN   TestWorkerPanicLeaseLossAndLifecycleAreContained/shutdown_timeout_is_bounded
+2026/11/11 22:16:20 WARN prompt_audit.process_failed error_code=worker_shutdown_timeout status=shutdown_timeout
+--- PASS: TestWorkerPanicLeaseLossAndLifecycleAreContained (0.02s)
+    --- PASS: TestWorkerPanicLeaseLossAndLifecycleAreContained/panic (0.00s)
+    --- PASS: TestWorkerPanicLeaseLossAndLifecycleAreContained/lease_loss (0.00s)
+    --- PASS: TestWorkerPanicLeaseLossAndLifecycleAreContained/start_and_shutdown (0.00s)
+    --- PASS: TestWorkerPanicLeaseLossAndLifecycleAreContained/shutdown_timeout_is_bounded (0.02s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/securityaudit	0.053s
+=== RUN   TestCLIVersionDefaultsToBuiltinPin
+--- PASS: TestCLIVersionDefaultsToBuiltinPin (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/claude	0.003s
+2026/11/11 14:16:21 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestClaudeCodeValidator_ProbeBypass
+--- PASS: TestClaudeCodeValidator_ProbeBypass (0.00s)
+=== RUN   TestClaudeCodeValidator_ProbeBypassRequiresUA
+--- PASS: TestClaudeCodeValidator_ProbeBypassRequiresUA (0.00s)
+=== RUN   TestClaudeCodeValidator_MessagesWithoutProbeStillNeedStrictValidation
+--- PASS: TestClaudeCodeValidator_MessagesWithoutProbeStillNeedStrictValidation (0.00s)
+=== RUN   TestClaudeCodeValidator_CountTokensPathUAOnly
+--- PASS: TestClaudeCodeValidator_CountTokensPathUAOnly (0.00s)
+=== RUN   TestClaudeCodeValidator_CountTokensPathRequiresUA
+--- PASS: TestClaudeCodeValidator_CountTokensPathRequiresUA (0.00s)
+=== RUN   TestClaudeCodeValidator_MessagesPathFullValid
+--- PASS: TestClaudeCodeValidator_MessagesPathFullValid (0.00s)
+=== RUN   TestClaudeCodeValidator_BillingBlockRecognizedWithoutIdentityPrompt
+--- PASS: TestClaudeCodeValidator_BillingBlockRecognizedWithoutIdentityPrompt (0.03s)
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/official_classifier_request
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/classifier_output_with_category_element
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/non-Claude_user_agent
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_X-App
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_anthropic-beta
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_anthropic-version
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_metadata
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/invalid_metadata_user_ID
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/unrelated_prompt
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/opening_sentence_alone
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/opening_sentence_plus_arbitrary_altered_suffix
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/classifier_with_trailing_session_context_entry
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/classifier_with_leading_session_context_entry
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/session_context_entry_alone
+=== RUN   TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/tampered_classifier_with_session_context_entry
+--- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock (0.04s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/official_classifier_request (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/classifier_output_with_category_element (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/non-Claude_user_agent (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_X-App (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_anthropic-beta (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_anthropic-version (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/missing_metadata (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/invalid_metadata_user_ID (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/unrelated_prompt (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/opening_sentence_alone (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/opening_sentence_plus_arbitrary_altered_suffix (0.01s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/classifier_with_trailing_session_context_entry (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/classifier_with_leading_session_context_entry (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/session_context_entry_alone (0.00s)
+    --- PASS: TestClaudeCodeValidator_SecurityMonitorWithoutBillingBlock/tampered_classifier_with_session_context_entry (0.02s)
+=== RUN   TestClaudeCodeValidator_BillingBlockVSCodeEntrypointRecognized
+--- PASS: TestClaudeCodeValidator_BillingBlockVSCodeEntrypointRecognized (0.02s)
+=== RUN   TestClaudeCodeValidator_BillingBlockWithoutEntrypointFallsThrough
+--- PASS: TestClaudeCodeValidator_BillingBlockWithoutEntrypointFallsThrough (0.00s)
+=== RUN   TestClaudeCodeValidator_BillingBlockStillRequiresClaudeCodeUA
+--- PASS: TestClaudeCodeValidator_BillingBlockStillRequiresClaudeCodeUA (0.00s)
+=== RUN   TestClaudeCodeValidator_BillingBlockRecognizedWithoutCCH
+--- PASS: TestClaudeCodeValidator_BillingBlockRecognizedWithoutCCH (0.03s)
+=== RUN   TestClaudeCodeValidator_NoCCHBlockStillRequiresClaudeCodeUA
+--- PASS: TestClaudeCodeValidator_NoCCHBlockStillRequiresClaudeCodeUA (0.00s)
+=== RUN   TestClaudeCodeValidator_MessagesPathRejectsNonClaudeCodeUA
+--- PASS: TestClaudeCodeValidator_MessagesPathRejectsNonClaudeCodeUA (0.00s)
+=== RUN   TestClaudeCodeValidator_MessagesPathWithoutSystemPromptStillRejected
+--- PASS: TestClaudeCodeValidator_MessagesPathWithoutSystemPromptStillRejected (0.00s)
+=== RUN   TestClaudeCodeValidator_NonMessagesPathUAOnly
+--- PASS: TestClaudeCodeValidator_NonMessagesPathUAOnly (0.00s)
+=== RUN   TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku
+=== RUN   TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku/claude-sonnet-4-5
+=== RUN   TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku/claude-opus-4-1
+=== RUN   TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku/claude-haiku-4-5
+--- PASS: TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku (0.00s)
+    --- PASS: TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku/claude-sonnet-4-5 (0.00s)
+    --- PASS: TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku/claude-opus-4-1 (0.00s)
+    --- PASS: TestClaudeCodeValidator_MaxTokensOneProbeIsNotLimitedToHaiku/claude-haiku-4-5 (0.00s)
+=== RUN   TestClaudeCodeValidator_MaxTokensOneProbeStillRequiresClaudeCodeUA
+--- PASS: TestClaudeCodeValidator_MaxTokensOneProbeStillRequiresClaudeCodeUA (0.00s)
+=== RUN   TestClaudeCodeValidator_NonProbeValuesKeepStrictValidation
+--- PASS: TestClaudeCodeValidator_NonProbeValuesKeepStrictValidation (0.00s)
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/empty/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/empty/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/text_block
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/string
+=== RUN   TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/text_block
+--- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16 (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/empty/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/empty/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_ascii/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/ascii/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/chinese/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/short_chinese/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/mixed/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/emoji_before_indices/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_high_surrogate/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/isolated_low_surrogate/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/sampled_surrogates_form_pair/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/nul_is_not_missing/text_block (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/string (0.00s)
+    --- PASS: TestClaudeCodeFingerprint_JavaScriptUTF16/long_prompt/text_block (0.00s)
+=== RUN   TestScheduledTestWorkerSQLiteStarts
+2026/11/11 14:16:21 [ScheduledTestRunner] started (tick=every minute)
+--- PASS: TestScheduledTestWorkerSQLiteStarts (0.00s)
+=== RUN   TestScheduledTestWorkerStopCancelsDelayedTick
+--- PASS: TestScheduledTestWorkerStopCancelsDelayedTick (0.01s)
+=== RUN   TestScheduledTestWorkerExecutionAndRecovery
+=== RUN   TestScheduledTestWorkerExecutionAndRecovery/success
+2026/11/11 14:16:21 [ScheduledTestRunner] found 1 due plans
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+2026/11/11 14:16:21 [ScheduledTestRunner] plan=1 auto-recover: account=42 recovered from error status
+=== RUN   TestScheduledTestWorkerExecutionAndRecovery/upstream_failure
+2026/11/11 14:16:21 [ScheduledTestRunner] found 1 due plans
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+=== RUN   TestScheduledTestWorkerExecutionAndRecovery/result_save_failure
+2026/11/11 14:16:21 [ScheduledTestRunner] found 1 due plans
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+2026/11/11 14:16:21 [ScheduledTestRunner] plan=1 SaveResult error: fixture storage unavailable
+--- PASS: TestScheduledTestWorkerExecutionAndRecovery (0.00s)
+    --- PASS: TestScheduledTestWorkerExecutionAndRecovery/success (0.00s)
+    --- PASS: TestScheduledTestWorkerExecutionAndRecovery/upstream_failure (0.00s)
+    --- PASS: TestScheduledTestWorkerExecutionAndRecovery/result_save_failure (0.00s)
+=== RUN   TestScheduledTestWorkerSkipsOverlappingTick
+--- PASS: TestScheduledTestWorkerSkipsOverlappingTick (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	0.253s

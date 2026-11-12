@@ -1,0 +1,163 @@
+# github.com/Wei-Shaw/sub2api/internal/service [github.com/Wei-Shaw/sub2api/internal/service.test]
+internal/service/min_output_tokens_test.go:33:17: undefined: anthropicToResponses
+FAIL	github.com/Wei-Shaw/sub2api/internal/service [build failed]
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/user_message
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:42041 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:06:43 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_next_turn_chain account_id=9902 turn=2 next_turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_prev_response_strict_eval account_id=9902 turn=3 conn_id=oa_ws_9902_1 action=drop_previous_response_id_full_create reason=non_input_changed previous_response_id=resp_ws_turn_2 expected_previous_response_id=resp_ws_turn_2 has_function_call_output=false
+2026/11/11 23:06:43 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=2 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+2026/11/11 23:06:43 WARN rate_limit_429_fallback_used account_id=9902 platform=openai reason=no_reset_time using_default=5s
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_error_event account_id=9902 turn=3 conn_id=oa_ws_9902_1 idx=1 fallback_reason=upstream_rate_limited err_code=rate_limit_exceeded err_type=usage_limit_reached err_message=The usage limit has been reached previous_response_id=- previous_response_id_kind=empty response_id=- store_disabled=true has_prompt_cache_key=false
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/tool_result
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:43223 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:06:43 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_next_turn_chain account_id=9902 turn=2 next_turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_turn_chain account_id=9902 turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true preferred_conn_id=oa_ws_9902_1 header_session_id=- header_conversation_id=- has_turn_state=false turn_state_len=0 has_prompt_cache_key=false store_disabled=true
+2026/11/11 23:06:43 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=1 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+2026/11/11 23:06:43 WARN rate_limit_429_fallback_used account_id=9902 platform=openai reason=no_reset_time using_default=5s
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_error_event account_id=9902 turn=3 conn_id=oa_ws_9902_1 idx=1 fallback_reason=upstream_rate_limited err_code=rate_limit_exceeded err_type=usage_limit_reached err_message=The usage limit has been reached previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id response_id=- store_disabled=true has_prompt_cache_key=false
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/handshake_after_disconnect
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:40349 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:06:43 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=0 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_next_turn_chain account_id=9902 turn=2 next_turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_turn_chain account_id=9902 turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true preferred_conn_id=oa_ws_9902_1 header_session_id=- header_conversation_id=- has_turn_state=false turn_state_len=0 has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_turn_retry account_id=9902 turn=3 retry=1 reason=write_upstream conn_id=oa_ws_9902_1
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_acquire_fail account_id=9902 turn=3 reason=upstream_rate_limited dial_status=429 dial_class=dial_err dial_close_status=- dial_close_reason=- dial_resp_server=- dial_resp_via=- dial_resp_cf_ray=- dial_resp_x_request_id=- cause=openai ws dial fail: status=429 err=fail to WebSocket dial: expected handshake response status code 101 but got 429 preferred_conn_id=- force_preferred_conn=false ws_host=127.0.0.1:40349 ws_path=/v1/responses proxy_enabled=false
+2026/11/11 23:06:43 WARN rate_limit_429_fallback_used account_id=9902 platform=openai reason=no_reset_time using_default=5s
+--- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage (0.01s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/user_message (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/tool_result (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/handshake_after_disconnect (0.00s)
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:37503 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:06:43 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=0 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"response.failed","response":{"error":{"code":"slow_down","message":"overloaded"}}}
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:37695 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:06:43 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:06:43 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:06:43 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:06:43 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=0 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+--- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}} (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"response.failed","response":{"error":{"code":"slow_down","message":"overloaded"}}} (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	0.066s
+=== RUN   TestRefreshTokenRotationServiceUsesAtomicMiniredis
+2026/11/11 23:06:43 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:06:43 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:06:43 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:06:43 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:06:43 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:06:43 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:06:43 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:06:43 [Auth] Refresh token not found, possible reuse attack
+--- PASS: TestRefreshTokenRotationServiceUsesAtomicMiniredis (0.01s)
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/expired
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/disabled
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/version
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/family
+2026/11/11 23:06:43 [Auth] Refresh token not found, possible reuse attack
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/consume_failure
+2026/11/11 23:06:43 [Auth] Failed to consume old refresh token: cache unavailable
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/cancelled
+2026/11/11 23:06:43 [Auth] Error getting refresh token: context canceled
+--- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure (0.01s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/expired (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/disabled (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/version (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/family (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/consume_failure (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/cancelled (0.00s)
+=== RUN   TestAPIKeyCostCoveringIndexSQLiteUpgradeAndCost
+    usage_api_key_cost_index_sqlite_test.go:111: modernc SQLite; synthetic 20000 rows, same 5000-row write workload; before_plan=SEARCH usage_logs USING INDEX idx_usage_logs_api_key_created_at (api_key_id=? AND created_at>?) after_plan=SEARCH usage_logs USING COVERING INDEX idx_usage_logs_api_key_created_cost (api_key_id=? AND created_at>?)
+    usage_api_key_cost_index_sqlite_test.go:112: index_build=32.702667ms query_median_7_before=6.314136ms after=4.725475ms database_bytes_before=14917632 after=15785984 increase=868352 writes_before=137.735482ms after=146.221425ms
+--- PASS: TestAPIKeyCostCoveringIndexSQLiteUpgradeAndCost (4.67s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/repository	4.728s
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/success
+2026/11/11 23:06:43 INFO prompt_audit.job_enqueued endpoint="" request_id=request-async provider="" protocol=openai_chat_completions config_version=7 api_key_id=0 group_id=0 model="" stage="" user_id=0 job_id=41 queue_capacity=8 status=queued
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/queue_admission_failures_never_touch_payload
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped status=dropped error_code=queue_full user_id=0 group_id=0 protocol=openai_chat_completions stage="" request_id=request-async queue_capacity=8 api_key_id=0 model="" provider="" endpoint="" config_version=7
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped error_code=queue_admission_busy queue_capacity=8 protocol=openai_chat_completions model="" request_id=request-async provider="" user_id=0 api_key_id=0 status=dropped stage="" endpoint="" config_version=7 group_id=0
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped request_id=request-async queue_capacity=8 status=dropped error_code=database_unavailable group_id=0 provider="" protocol=openai_chat_completions stage="" config_version=7 endpoint="" user_id=0 api_key_id=0 model=""
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/payload_failure_marks_staging_failed
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped user_id=0 protocol=openai_chat_completions api_key_id=0 group_id=0 provider="" job_id=42 endpoint="" model="" request_id=request-async status=dropped error_code=payload_store_failed stage="" config_version=7
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/publish_failure_removes_payload_and_marks_staging_failed
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped status=dropped error_code=queue_publish_failed group_id=0 provider="" model="" stage="" request_id=request-async user_id=0 protocol=openai_chat_completions config_version=7 api_key_id=0 endpoint="" job_id=43
+--- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/success (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/queue_admission_failures_never_touch_payload (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/payload_failure_marks_staging_failed (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/publish_failure_removes_payload_and_marks_staging_failed (0.00s)
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/off
+2026/11/11 23:06:43 INFO prompt_audit.enqueue_skipped provider="" user_id=0 group_id=0 protocol=openai_chat_completions endpoint="" error_code=mode_not_async model="" stage="" request_id=request-async api_key_id=0 status=skipped
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/out_of_scope
+2026/11/11 23:06:43 INFO prompt_audit.enqueue_skipped request_id=request-async endpoint="" config_version=7 model="" user_id=0 error_code=group_out_of_scope status=skipped api_key_id=0 group_id=0 stage="" provider="" protocol=openai_chat_completions
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/no_user_text
+2026/11/11 23:06:43 INFO prompt_audit.enqueue_skipped model="" protocol=openai_chat_completions stage="" config_version=7 status=skipped user_id=0 group_id=0 request_id="" provider="" error_code=no_user_text api_key_id=0 endpoint=""
+--- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/off (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/out_of_scope (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/no_user_text (0.00s)
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/accepted_increments_enqueued
+2026/11/11 23:06:43 INFO prompt_audit.job_enqueued endpoint="" stage="" group_id=0 queue_capacity=8 status=queued model="" request_id=request-async config_version=7 api_key_id=0 provider="" job_id=44 protocol=openai_chat_completions user_id=0
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/queue_full_increments_dropped
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped queue_capacity=8 error_code=queue_full provider="" protocol=openai_chat_completions model="" stage="" status=dropped group_id=0 endpoint="" request_id=request-async user_id=0 api_key_id=0 config_version=7
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/skipped_request_does_not_increment_dropped
+2026/11/11 23:06:43 INFO prompt_audit.enqueue_skipped endpoint="" stage="" protocol=openai_chat_completions model="" user_id=0 group_id=0 provider="" request_id=request-async api_key_id=0 status=skipped error_code=mode_not_async
+--- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/accepted_increments_enqueued (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/queue_full_increments_dropped (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/skipped_request_does_not_increment_dropped (0.00s)
+=== RUN   TestEnqueuerNotifiesOnlyAfterPublish
+=== RUN   TestEnqueuerNotifiesOnlyAfterPublish/published
+2026/11/11 23:06:43 INFO prompt_audit.job_enqueued config_version=7 request_id=request-async user_id=0 provider="" protocol=openai_chat_completions endpoint="" api_key_id=0 job_id=41 stage="" group_id=0 model="" queue_capacity=8 status=queued
+=== RUN   TestEnqueuerNotifiesOnlyAfterPublish/publish_failed
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped api_key_id=0 protocol=openai_chat_completions stage="" config_version=7 user_id=0 group_id=0 endpoint="" status=dropped request_id=request-async provider="" model="" error_code=queue_publish_failed job_id=41
+--- PASS: TestEnqueuerNotifiesOnlyAfterPublish (0.00s)
+    --- PASS: TestEnqueuerNotifiesOnlyAfterPublish/published (0.00s)
+    --- PASS: TestEnqueuerNotifiesOnlyAfterPublish/publish_failed (0.00s)
+=== RUN   TestRunnerShutdownWaitsForStartingWorkers
+--- PASS: TestRunnerShutdownWaitsForStartingWorkers (0.03s)
+=== RUN   TestRunnerConcurrentLifecycleAndCoalescedWake
+--- PASS: TestRunnerConcurrentLifecycleAndCoalescedWake (0.00s)
+=== RUN   TestEnqueuerAdmissionAndPayloadFailureNeverWake
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped group_id=0 protocol=openai_chat_completions stage="" config_version=7 provider="" queue_capacity=8 error_code=queue_full api_key_id=0 request_id=request-async user_id=0 endpoint="" model="" status=dropped
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped error_code=queue_admission_busy endpoint="" model="" stage="" request_id=request-async user_id=0 group_id=0 protocol=openai_chat_completions config_version=7 provider="" api_key_id=0 queue_capacity=8 status=dropped
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped api_key_id=0 error_code=database_unavailable model="" stage="" config_version=7 group_id=0 user_id=0 provider="" queue_capacity=8 status=dropped protocol=openai_chat_completions request_id=request-async endpoint=""
+2026/11/11 23:06:43 WARN prompt_audit.enqueue_dropped api_key_id=0 model="" stage="" status=dropped error_code=payload_store_failed provider="" group_id=0 protocol=openai_chat_completions config_version=7 job_id=41 request_id=request-async endpoint="" user_id=0
+--- PASS: TestEnqueuerAdmissionAndPayloadFailureNeverWake (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/securityaudit	0.051s
+=== RUN   TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken
+=== PAUSE TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken
+=== CONT  TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken
+--- PASS: TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken (0.01s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2	0.015s
+FAIL

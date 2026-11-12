@@ -79,6 +79,7 @@ type RelayOptions struct {
 	BeforeRelayCancel               func(exit RelayExit)
 	ReadClientFrame                 func(ctx context.Context, clientConn FrameConn) (coderws.MessageType, []byte, error)
 	OnTrace                         func(event RelayTraceEvent)
+	IsFirstTokenEvent               func(eventType string, message []byte) bool
 	Now                             func() time.Time
 }
 
@@ -105,6 +106,7 @@ type relayState struct {
 	firstTokenMs            *int
 	turnTimingByID          map[string]*relayTurnTiming
 	activeTurn              *relayTurnTiming
+	isFirstTokenEvent       func(eventType string, message []byte) bool
 }
 
 type relayExitSignal struct {
@@ -167,7 +169,7 @@ func Relay(
 		firstMessageType = coderws.MessageText
 	}
 	startAt := nowFn()
-	state := &relayState{requestModel: result.RequestModel}
+	state := &relayState{requestModel: result.RequestModel, isFirstTokenEvent: options.IsFirstTokenEvent}
 	onTrace := options.OnTrace
 
 	relayCtx, relayCancel := context.WithCancel(ctx)
@@ -702,7 +704,7 @@ func observeUpstreamMessage(
 	}
 	now := nowFn()
 
-	if state.firstTokenMs == nil && isTokenEvent(eventType) {
+	if state.firstTokenMs == nil && state.startsFirstToken(eventType, message) {
 		ms := int(now.Sub(startAt).Milliseconds())
 		if ms >= 0 {
 			state.firstTokenMs = &ms
@@ -722,7 +724,7 @@ func observeUpstreamMessage(
 	}
 	// Deltas without a response ID belong to the active turn. Each turn records
 	// its own first token even after the connection has seen an earlier token.
-	if turnTiming != nil && turnTiming.firstTokenMs == nil && isTokenEvent(eventType) {
+	if turnTiming != nil && turnTiming.firstTokenMs == nil && state.startsFirstToken(eventType, message) {
 		ms := int(now.Sub(turnTiming.startAt).Milliseconds())
 		if ms >= 0 {
 			turnTiming.firstTokenMs = &ms
@@ -1096,6 +1098,13 @@ func shouldParseUsage(eventType string) bool {
 	default:
 		return false
 	}
+}
+
+func (s *relayState) startsFirstToken(eventType string, message []byte) bool {
+	if s.isFirstTokenEvent != nil {
+		return !isTerminalEvent(eventType) && s.isFirstTokenEvent(eventType, message)
+	}
+	return isTokenEvent(eventType)
 }
 
 func isTokenEvent(eventType string) bool {

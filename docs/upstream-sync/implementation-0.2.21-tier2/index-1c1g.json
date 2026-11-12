@@ -1,0 +1,32 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--read-only",
+    "--tmpfs",
+    "/tmp",
+    "--memory",
+    "1g",
+    "--memory-swap",
+    "1g",
+    "--cpus",
+    "1",
+    "--pids-limit",
+    "64",
+    "-v",
+    "/tmp/sub2api-021-tier2-repository.test:/test:ro",
+    "python:3.13-slim",
+    "/test",
+    "-test.run",
+    "^TestAPIKeyCostCoveringIndexSQLiteUpgradeAndCost$",
+    "-test.v"
+  ],
+  "cwd": ".",
+  "finished_at_utc": "2026-11-11T15:20:50.707613+00:00",
+  "duration_seconds": 2.166,
+  "exit_code": 0,
+  "log": "index-1c1g.log"
+}

@@ -30,7 +30,7 @@ func TestConfiguredMinOutputTokens_DefaultAndInstanceIsolation(t *testing.T) {
 			for range 20 {
 				req := &apicompat.AnthropicRequest{Model: "gpt-4o", MaxTokens: 1,
 					Messages: []apicompat.AnthropicMessage{{Role: "user", Content: json.RawMessage(`"hello"`)}}}
-				out, err := anthropicToResponses(cfg, req)
+				out, err := apicompat.AnthropicToResponsesWithOptions(req, apicompat.AnthropicToResponsesOptions{MinOutputTokens: configuredMinOutputTokens(cfg), DeferReasoningEffortValidation: true})
 				require.NoError(t, err)
 				require.Equal(t, floor, *out.MaxOutputTokens)
 			}

@@ -58,10 +58,12 @@ export function useTableLoader<T, P extends Record<string, any>>(options: TableL
         { signal: currentController.signal }
       )
 
+      if (disposed || currentController.signal.aborted || abortController !== currentController) return
       items.value = response.items || []
       pagination.total = response.total || 0
       pagination.pages = response.pages || 0
     } catch (error) {
+      if (disposed || currentController.signal.aborted || abortController !== currentController) return
       if (!isAbortError(error)) {
         console.error('Table load error:', error)
         throw error

@@ -1,0 +1,307 @@
+2026/11/11 15:09:19 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode
+=== RUN   TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode/semantic
+2026/11/11 15:09:19 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_start account_id=454 model=gpt-5.4 previous_response_id=- first_message_type=text first_message_bytes=57
+2026/11/11 15:09:19 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_dial_start account_id=454 ws_host=api.openai.com ws_path=/v1/responses proxy_enabled=false
+2026/11/11 15:09:19 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_dial_ok account_id=454 status_code=0 upstream_request_id=-
+2026/11/11 15:09:19 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=relay_start direction=- msg_type=text bytes=57 graceful=false wrote_downstream=false err=-
+2026/11/11 15:09:19 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=write_first_message_skipped direction=client_to_upstream msg_type=text bytes=57 graceful=false wrote_downstream=false err=-
+2026/11/11 15:09:20 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_turn_completed account_id=454 turn=1 request_id=resp_ttft_1 terminal_event=response.completed turn_requested_model=gpt-5.4 turn_upstream_model=gpt-5.4 duration_ms=901 first_token_ms=300 input_tokens=3 output_tokens=2 cache_read_tokens=0
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_turn_completed account_id=454 turn=2 request_id=resp_ttft_2 terminal_event=response.completed turn_requested_model=gpt-5.4 turn_upstream_model=gpt-5.4 duration_ms=902 first_token_ms=300 input_tokens=3 output_tokens=2 cache_read_tokens=0
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=read_upstream_fail direction=upstream_to_client msg_type=- bytes=0 graceful=true wrote_downstream=true err=EOF
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=first_exit direction=upstream_to_client msg_type=- bytes=0 graceful=true wrote_downstream=true err=EOF
+    openai_ws_v2_passthrough_ttft_mode_test.go:170: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_ws_v2_passthrough_ttft_mode_test.go:170
+        	            				/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_ws_v2_passthrough_ttft_mode_test.go:60
+        	Error:      	"300ms" is not greater than or equal to "500ms"
+        	Test:       	TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode/semantic
+        	Messages:   	turn 2 first token must not precede the SSE first-token event
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=read_client_fail direction=client_to_upstream msg_type=- bytes=0 graceful=true wrote_downstream=false err=fail to get reader: fail to read frame header: EOF
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=second_exit direction=client_to_upstream msg_type=- bytes=0 graceful=true wrote_downstream=false err=fail to get reader: fail to read frame header: EOF
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=relay_complete direction=- msg_type=- bytes=0 graceful=true wrote_downstream=true err=-
+=== RUN   TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode/visible
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_completed account_id=454 request_id=resp_ttft_2 terminal_event=response.completed duration_ms=2005 c2u_frames=2 u2c_frames=12 dropped_frames=0 turns=2
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_start account_id=454 model=gpt-5.4 previous_response_id=- first_message_type=text first_message_bytes=57
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_dial_start account_id=454 ws_host=api.openai.com ws_path=/v1/responses proxy_enabled=false
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_dial_ok account_id=454 status_code=0 upstream_request_id=-
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=relay_start direction=- msg_type=text bytes=57 graceful=false wrote_downstream=false err=-
+2026/11/11 15:09:21 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=write_first_message_skipped direction=client_to_upstream msg_type=text bytes=57 graceful=false wrote_downstream=false err=-
+2026/11/11 15:09:22 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_turn_completed account_id=454 turn=1 request_id=resp_ttft_1 terminal_event=response.completed turn_requested_model=gpt-5.4 turn_upstream_model=gpt-5.4 duration_ms=901 first_token_ms=901 input_tokens=3 output_tokens=2 cache_read_tokens=0
+2026/11/11 15:09:23 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_turn_completed account_id=454 turn=2 request_id=resp_ttft_2 terminal_event=response.completed turn_requested_model=gpt-5.4 turn_upstream_model=gpt-5.4 duration_ms=901 first_token_ms=901 input_tokens=3 output_tokens=2 cache_read_tokens=0
+2026/11/11 15:09:23 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=read_upstream_fail direction=upstream_to_client msg_type=- bytes=0 graceful=true wrote_downstream=true err=EOF
+2026/11/11 15:09:23 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=first_exit direction=upstream_to_client msg_type=- bytes=0 graceful=true wrote_downstream=true err=EOF
+    openai_ws_v2_passthrough_ttft_mode_test.go:170: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_ws_v2_passthrough_ttft_mode_test.go:170
+        	            				/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_ws_v2_passthrough_ttft_mode_test.go:60
+        	Error:      	"901ms" is not greater than or equal to "1.1s"
+        	Test:       	TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode/visible
+        	Messages:   	turn 2 first token must not precede the SSE first-token event
+2026/11/11 15:09:23 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=read_client_fail direction=client_to_upstream msg_type=- bytes=0 graceful=true wrote_downstream=false err=fail to get reader: fail to read frame header: EOF
+--- FAIL: TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode (4.01s)
+    --- FAIL: TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode/semantic (2.01s)
+    --- FAIL: TestOpenAIWSPassthroughFirstTokenFollowsTTFTMode/visible (2.01s)
+2026/11/11 15:09:23 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=second_exit direction=client_to_upstream msg_type=- bytes=0 graceful=true wrote_downstream=false err=fail to get reader: fail to read frame header: EOF
+2026/11/11 15:09:23 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_trace account_id=454 stage=relay_complete direction=- msg_type=- bytes=0 graceful=true wrote_downstream=true err=-
+2026/11/11 15:09:23 [OpenAI WS v2 passthrough] ws_mode=passthrough ws_router=v2 relay_completed account_id=454 request_id=resp_ttft_2 terminal_event=response.completed duration_ms=2004 c2u_frames=2 u2c_frames=12 dropped_frames=0 turns=2
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_mapped/chat=false
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	build upstream request: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_mapped/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_capped/chat=false
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	build upstream request: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_capped/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_denied/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_still_invalid/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/explicit_invalid_cannot_be_rescued/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/omitted_default/chat=false
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	build upstream request: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/omitted_default/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/max/chat=false
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	build upstream request: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/max/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_none/chat=false
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	build upstream request: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_none/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_max/chat=false
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	build upstream request: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_max/chat=false
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_mapped/chat=true
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	invalid base_url: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_mapped/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_capped/chat=true
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	invalid base_url: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_capped/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_denied/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_still_invalid/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/explicit_invalid_cannot_be_rescued/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/omitted_default/chat=true
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	invalid base_url: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/omitted_default/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/max/chat=true
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	invalid base_url: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/max/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_none/chat=true
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	invalid base_url: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_none/chat=true
+=== RUN   TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_max/chat=true
+    tier221_effort_conversion_test.go:70: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/tier221_effort_conversion_test.go:70
+        	Error:      	Received unexpected error:
+        	            	invalid base_url: invalid base_url: invalid url scheme: http
+        	Test:       	TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_max/chat=true
+--- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_mapped/chat=false (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_capped/chat=false (0.00s)
+    --- PASS: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_denied/chat=false (0.00s)
+    --- PASS: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_still_invalid/chat=false (0.00s)
+    --- PASS: TestMessagesConvertedEffortPolicyAndFinalValidation/explicit_invalid_cannot_be_rescued/chat=false (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/omitted_default/chat=false (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/max/chat=false (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_none/chat=false (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_max/chat=false (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_mapped/chat=true (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_capped/chat=true (0.00s)
+    --- PASS: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_denied/chat=true (0.00s)
+    --- PASS: TestMessagesConvertedEffortPolicyAndFinalValidation/disabled_still_invalid/chat=true (0.00s)
+    --- PASS: TestMessagesConvertedEffortPolicyAndFinalValidation/explicit_invalid_cannot_be_rescued/chat=true (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/omitted_default/chat=true (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/max/chat=true (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_none/chat=true (0.00s)
+    --- FAIL: TestMessagesConvertedEffortPolicyAndFinalValidation/Terra_max/chat=true (0.00s)
+=== RUN   TestCountTokensDisabledThinkingAcceptsMappedSolAndTerra
+--- PASS: TestCountTokensDisabledThinkingAcceptsMappedSolAndTerra (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	4.316s
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/user_message
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:33927 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:09:19 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_next_turn_chain account_id=9902 turn=2 next_turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_prev_response_strict_eval account_id=9902 turn=3 conn_id=oa_ws_9902_1 action=drop_previous_response_id_full_create reason=non_input_changed previous_response_id=resp_ws_turn_2 expected_previous_response_id=resp_ws_turn_2 has_function_call_output=false
+2026/11/11 23:09:19 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=2 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+2026/11/11 23:09:19 WARN rate_limit_429_fallback_used account_id=9902 platform=openai reason=no_reset_time using_default=5s
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_error_event account_id=9902 turn=3 conn_id=oa_ws_9902_1 idx=1 fallback_reason=upstream_rate_limited err_code=rate_limit_exceeded err_type=usage_limit_reached err_message=The usage limit has been reached previous_response_id=- previous_response_id_kind=empty response_id=- store_disabled=true has_prompt_cache_key=false
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/tool_result
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:44219 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:09:19 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_next_turn_chain account_id=9902 turn=2 next_turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_turn_chain account_id=9902 turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true preferred_conn_id=oa_ws_9902_1 header_session_id=- header_conversation_id=- has_turn_state=false turn_state_len=0 has_prompt_cache_key=false store_disabled=true
+2026/11/11 23:09:19 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=1 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+2026/11/11 23:09:19 WARN rate_limit_429_fallback_used account_id=9902 platform=openai reason=no_reset_time using_default=5s
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_error_event account_id=9902 turn=3 conn_id=oa_ws_9902_1 idx=1 fallback_reason=upstream_rate_limited err_code=rate_limit_exceeded err_type=usage_limit_reached err_message=The usage limit has been reached previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id response_id=- store_disabled=true has_prompt_cache_key=false
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/handshake_after_disconnect
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:43441 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:09:19 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=0 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_next_turn_chain account_id=9902 turn=2 next_turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_turn_chain account_id=9902 turn=3 conn_id=oa_ws_9902_1 previous_response_id=resp_ws_turn_2 previous_response_id_kind=response_id last_turn_response_id=resp_ws_turn_2 chained_from_last=true preferred_conn_id=oa_ws_9902_1 header_session_id=- header_conversation_id=- has_turn_state=false turn_state_len=0 has_prompt_cache_key=false store_disabled=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_turn_retry account_id=9902 turn=3 retry=1 reason=write_upstream conn_id=oa_ws_9902_1
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_acquire_fail account_id=9902 turn=3 reason=upstream_rate_limited dial_status=429 dial_class=dial_err dial_close_status=- dial_close_reason=- dial_resp_server=- dial_resp_via=- dial_resp_cf_ray=- dial_resp_x_request_id=- cause=openai ws dial fail: status=429 err=fail to WebSocket dial: expected handshake response status code 101 but got 429 preferred_conn_id=- force_preferred_conn=false ws_host=127.0.0.1:43441 ws_path=/v1/responses proxy_enabled=false
+2026/11/11 23:09:19 WARN rate_limit_429_fallback_used account_id=9902 platform=openai reason=no_reset_time using_default=5s
+--- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage (0.01s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/user_message (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/tool_result (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/handshake_after_disconnect (0.00s)
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}}
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:36777 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:09:19 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=1 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+=== RUN   TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"response.failed","response":{"error":{"code":"slow_down","message":"overloaded"}}}
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=true oauth_enabled=false apikey_enabled=true force_http=false responses_websockets_v2=true responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_protocol_confirm account_id=9902 account_type=apikey transport=responses_websockets_v2 ws_host=127.0.0.1:37123 ws_path=/v1/responses ws_mode=ctx_pool store_disabled=false has_session_hash=true has_previous_response_id=false
+2026/11/11 23:09:19 [OpenAI WS Mode][openai_ws_mode=true] ingress_ws_upstream_connected account_id=9902 turn=1 conn_id=oa_ws_9902_1 conn_reused=false conn_idle_ms=0 conn_age_ms=0 upstream_pings=0 conn_pick_ms=0 queue_wait_ms=0 preferred_conn_id=-
+2026/11/11 23:09:19 [Billing] Using fallback pricing for model: gpt-5.1
+2026/11/11 23:09:19 [SIMPLE MODE] Usage recorded (not billed): user=1702, tokens=2
+2026/11/11 23:09:19 [warn] [OpenAI WS Mode][openai_ws_mode=true] conn_reader_loop_closed conn_id=oa_ws_9902_1 leased=true idle_ms=0 age_ms=0 upstream_pings=0 cause=fail to get reader: fail to read frame header: EOF
+--- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"error","error":{"code":"server_is_overloaded","message":"overloaded"}} (0.00s)
+    --- PASS: TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{"type":"response.failed","response":{"error":{"code":"slow_down","message":"overloaded"}}} (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	0.058s
+=== RUN   TestRefreshTokenRotationServiceUsesAtomicMiniredis
+2026/11/11 23:09:19 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:09:19 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:09:19 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:09:19 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:09:19 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:09:19 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:09:19 [Auth] Refresh token already consumed, possible reuse attack
+2026/11/11 23:09:19 [Auth] Refresh token not found, possible reuse attack
+--- PASS: TestRefreshTokenRotationServiceUsesAtomicMiniredis (0.00s)
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/expired
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/disabled
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/version
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/family
+2026/11/11 23:09:19 [Auth] Refresh token not found, possible reuse attack
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/consume_failure
+2026/11/11 23:09:19 [Auth] Failed to consume old refresh token: cache unavailable
+=== RUN   TestRefreshTokenRotationPrechecksAndCacheFailure/cancelled
+2026/11/11 23:09:19 [Auth] Error getting refresh token: context canceled
+--- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure (0.01s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/expired (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/disabled (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/version (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/family (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/consume_failure (0.00s)
+    --- PASS: TestRefreshTokenRotationPrechecksAndCacheFailure/cancelled (0.00s)
+=== RUN   TestAPIKeyCostCoveringIndexSQLiteUpgradeAndCost
+    usage_api_key_cost_index_sqlite_test.go:111: modernc SQLite; synthetic 20000 rows, same 5000-row write workload; before_plan=SEARCH usage_logs USING INDEX idx_usage_logs_api_key_created_at (api_key_id=? AND created_at>?) after_plan=SEARCH usage_logs USING COVERING INDEX idx_usage_logs_api_key_created_cost (api_key_id=? AND created_at>?)
+    usage_api_key_cost_index_sqlite_test.go:112: index_build=25.875569ms query_median_7_before=6.45461ms after=2.940546ms database_bytes_before=14917632 after=15785984 increase=868352 writes_before=136.887482ms after=151.309382ms
+--- PASS: TestAPIKeyCostCoveringIndexSQLiteUpgradeAndCost (4.75s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/repository	4.803s
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/success
+2026/11/11 23:09:19 INFO prompt_audit.job_enqueued job_id=41 status=queued group_id=0 protocol=openai_chat_completions stage="" config_version=7 request_id=request-async user_id=0 api_key_id=0 queue_capacity=8 provider="" endpoint="" model=""
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/queue_admission_failures_never_touch_payload
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped stage="" queue_capacity=8 provider="" config_version=7 request_id=request-async endpoint="" user_id=0 group_id=0 status=dropped error_code=queue_full protocol=openai_chat_completions model="" api_key_id=0
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped request_id=request-async endpoint="" status=dropped error_code=queue_admission_busy user_id=0 api_key_id=0 provider="" stage="" group_id=0 model="" queue_capacity=8 protocol=openai_chat_completions config_version=7
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped model="" user_id=0 api_key_id=0 provider="" endpoint="" queue_capacity=8 error_code=database_unavailable group_id=0 protocol=openai_chat_completions stage="" config_version=7 status=dropped request_id=request-async
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/payload_failure_marks_staging_failed
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped status=dropped error_code=payload_store_failed model="" config_version=7 api_key_id=0 stage="" request_id=request-async protocol=openai_chat_completions endpoint="" group_id=0 provider="" user_id=0 job_id=42
+=== RUN   TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/publish_failure_removes_payload_and_marks_staging_failed
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped config_version=7 group_id=0 job_id=43 error_code=queue_publish_failed provider="" stage="" user_id=0 api_key_id=0 protocol=openai_chat_completions endpoint="" request_id=request-async status=dropped model=""
+--- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/success (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/queue_admission_failures_never_touch_payload (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/payload_failure_marks_staging_failed (0.00s)
+    --- PASS: TestEnqueuerStagingPayloadPublishProtocolAndFailureCleanup/publish_failure_removes_payload_and_marks_staging_failed (0.00s)
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/off
+2026/11/11 23:09:19 INFO prompt_audit.enqueue_skipped error_code=mode_not_async request_id=request-async model="" stage="" user_id=0 api_key_id=0 provider="" protocol=openai_chat_completions status=skipped endpoint="" group_id=0
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/out_of_scope
+2026/11/11 23:09:19 INFO prompt_audit.enqueue_skipped endpoint="" protocol=openai_chat_completions user_id=0 api_key_id=0 status=skipped error_code=group_out_of_scope group_id=0 provider="" model="" stage="" request_id=request-async config_version=7
+=== RUN   TestEnqueuerSkipsOffOutOfScopeAndNoText/no_user_text
+2026/11/11 23:09:19 INFO prompt_audit.enqueue_skipped api_key_id=0 provider="" model="" error_code=no_user_text user_id=0 group_id=0 protocol=openai_chat_completions endpoint="" stage="" request_id="" config_version=7 status=skipped
+--- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/off (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/out_of_scope (0.00s)
+    --- PASS: TestEnqueuerSkipsOffOutOfScopeAndNoText/no_user_text (0.00s)
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/accepted_increments_enqueued
+2026/11/11 23:09:19 INFO prompt_audit.job_enqueued protocol=openai_chat_completions stage="" api_key_id=0 job_id=44 queue_capacity=8 status=queued endpoint="" config_version=7 request_id=request-async user_id=0 group_id=0 provider="" model=""
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/queue_full_increments_dropped
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped config_version=7 queue_capacity=8 endpoint="" model="" group_id=0 request_id=request-async api_key_id=0 status=dropped error_code=queue_full provider="" stage="" user_id=0 protocol=openai_chat_completions
+=== RUN   TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/skipped_request_does_not_increment_dropped
+2026/11/11 23:09:19 INFO prompt_audit.enqueue_skipped group_id=0 endpoint="" model="" stage="" user_id=0 api_key_id=0 status=skipped provider="" request_id=request-async protocol=openai_chat_completions error_code=mode_not_async
+--- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/accepted_increments_enqueued (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/queue_full_increments_dropped (0.00s)
+    --- PASS: TestEnqueuerRecordsAcceptedDroppedAndSkippedMetrics/skipped_request_does_not_increment_dropped (0.00s)
+=== RUN   TestEnqueuerNotifiesOnlyAfterPublish
+=== RUN   TestEnqueuerNotifiesOnlyAfterPublish/published
+2026/11/11 23:09:19 INFO prompt_audit.job_enqueued provider="" config_version=7 request_id=request-async user_id=0 job_id=41 status=queued api_key_id=0 group_id=0 protocol=openai_chat_completions endpoint="" model="" stage="" queue_capacity=8
+=== RUN   TestEnqueuerNotifiesOnlyAfterPublish/publish_failed
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped config_version=7 provider="" protocol=openai_chat_completions job_id=41 user_id=0 group_id=0 api_key_id=0 status=dropped error_code=queue_publish_failed request_id=request-async endpoint="" model="" stage=""
+--- PASS: TestEnqueuerNotifiesOnlyAfterPublish (0.00s)
+    --- PASS: TestEnqueuerNotifiesOnlyAfterPublish/published (0.00s)
+    --- PASS: TestEnqueuerNotifiesOnlyAfterPublish/publish_failed (0.00s)
+=== RUN   TestRunnerShutdownWaitsForStartingWorkers
+--- PASS: TestRunnerShutdownWaitsForStartingWorkers (0.03s)
+=== RUN   TestRunnerConcurrentLifecycleAndCoalescedWake
+--- PASS: TestRunnerConcurrentLifecycleAndCoalescedWake (0.00s)
+=== RUN   TestEnqueuerAdmissionAndPayloadFailureNeverWake
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped error_code=queue_full group_id=0 stage="" config_version=7 provider="" request_id=request-async user_id=0 status=dropped api_key_id=0 protocol=openai_chat_completions endpoint="" model="" queue_capacity=8
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped status=dropped error_code=queue_admission_busy user_id=0 group_id=0 endpoint="" stage="" protocol=openai_chat_completions model="" config_version=7 queue_capacity=8 api_key_id=0 request_id=request-async provider=""
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped user_id=0 group_id=0 provider="" queue_capacity=8 error_code=database_unavailable protocol=openai_chat_completions stage="" endpoint="" api_key_id=0 status=dropped model="" config_version=7 request_id=request-async
+2026/11/11 23:09:19 WARN prompt_audit.enqueue_dropped error_code=payload_store_failed config_version=7 request_id=request-async api_key_id=0 provider="" stage="" group_id=0 endpoint="" status=dropped user_id=0 protocol=openai_chat_completions model="" job_id=41
+--- PASS: TestEnqueuerAdmissionAndPayloadFailureNeverWake (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/securityaudit	0.049s
+=== RUN   TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken
+=== PAUSE TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken
+=== CONT  TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken
+--- PASS: TestRelay_IsFirstTokenEventDecidesEveryTurnFirstToken (0.01s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2	0.013s
+FAIL

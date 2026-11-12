@@ -1,0 +1,117 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 11 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/components/account/__tests__/AccountUsageCell.spec.ts (27 tests | 1 failed) 227ms
+   × AccountUsageCell > keeps cached Claude quota visible while a replacement batch is loading 16ms
+     → Unable to get [data-test="quota"] within: <div>
+  <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
+  <!-- Loading state -->
+  <div class="space-y-1.5">
+    <!-- OAuth: 3 rows, Setup Token: 1 row -->
+    <div class="flex items-center gap-1">
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+    <div class="flex items-center gap-1">
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+    <div class="flex items-center gap-1">
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+  </div>
+</div>
+ ❯ src/views/user/__tests__/KeysView.spec.ts (16 tests | 1 failed) 360ms
+   × user KeysView column settings > usage stats loading > renders the key list without waiting for slow usage stats 11ms
+     → expected true to be false // Object.is equality
+ ❯ src/views/admin/__tests__/AccountsView.lite.spec.ts (13 tests | 1 failed) 365ms
+   × admin AccountsView lite account list > keeps existing rows mounted and busy while a manual list refresh is pending 17ms
+     → expected true to be false // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/account/__tests__/AccountUsageCell.spec.ts > AccountUsageCell > keeps cached Claude quota visible while a replacement batch is loading
+Error: Unable to get [data-test="quota"] within: <div>
+  <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
+  <!-- Loading state -->
+  <div class="space-y-1.5">
+    <!-- OAuth: 3 rows, Setup Token: 1 row -->
+    <div class="flex items-center gap-1">
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+    <div class="flex items-center gap-1">
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+    <div class="flex items-center gap-1">
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+      <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+    </div>
+  </div>
+</div>
+ ❯ VueWrapper.BaseWrapper.get node_modules/.pnpm/@vue+test-utils@2.4.6/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7279:15
+    7277|             return result;
+    7278|         }
+    7279|         throw new Error("Unable to get ".concat(selector, " within: ")…
+       |               ^
+    7280|     };
+    7281|     BaseWrapper.prototype.getComponent = function (selector) {
+ ❯ src/components/account/__tests__/AccountUsageCell.spec.ts:1133:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/views/admin/__tests__/AccountsView.lite.spec.ts > admin AccountsView lite account list > keeps existing rows mounted and busy while a manual list refresh is pending
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/views/admin/__tests__/AccountsView.lite.spec.ts:403:66
+    401|     await wrapper.get('[data-test="manual-refresh"]').trigger('click')
+    402|     await flushPromises()
+    403|     expect(wrapper.getComponent(DataTableStub).props('loading')).toBe(…
+       |                                                                  ^
+    404|     expect(wrapper.get('[data-account-name="compact row"]').element).t…
+    405|     expect(wrapper.find('[aria-busy="true"]').attributes()).toHaveProp…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/views/user/__tests__/KeysView.spec.ts > user KeysView column settings > usage stats loading > renders the key list without waiting for slow usage stats
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/views/user/__tests__/KeysView.spec.ts:502:38
+    500| 
+    501|       const table = wrapper.findComponent({ name: 'DataTable' })
+    502|       expect(table.props('loading')).toBe(false)
+       |                                      ^
+    503|       expect(table.props('data')).toHaveLength(1)
+    504|       expect(wrapper.find('[data-test="usage-pending"]').exists()).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  3 failed (3)
+      Tests  3 failed | 53 passed (56)
+   Start at  22:35:41
+   Duration  4.74s (transform 4.12s, setup 177ms, collect 6.62s, tests 952ms, environment 953ms, prepare 361ms)
+

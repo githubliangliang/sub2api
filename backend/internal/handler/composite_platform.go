@@ -2,12 +2,10 @@ package handler
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/tidwall/gjson"
 )
 
 func ensureCompositeTargetPlatform(c *gin.Context, apiKey *service.APIKey, model string) {
@@ -93,16 +91,9 @@ func bindOpenAIReasoningEffortPolicyForMessagesRequest(c *gin.Context, apiKey *s
 	if c == nil || c.Request == nil {
 		return
 	}
-	// The Messages bridge synthesizes a default OpenAI effort when
-	// output_config.effort is omitted. Bind the group policy only for an
-	// explicit client value so the ceiling does not alter that default.
-	effort := gjson.GetBytes(body, "output_config.effort")
-	if !effort.Exists() || effort.Type != gjson.String || strings.TrimSpace(effort.String()) == "" {
-		return
-	}
 	maxEffort, mappings, overLimit, ok := openAIReasoningEffortPolicyForRequest(c, apiKey)
 	if !ok {
 		return
 	}
-	c.Request = c.Request.WithContext(service.WithOpenAIReasoningEffortPolicy(c.Request.Context(), maxEffort, mappings, overLimit))
+	c.Request = c.Request.WithContext(service.WithOpenAIReasoningEffortPolicyForMessages(c.Request.Context(), body, maxEffort, mappings, overLimit))
 }

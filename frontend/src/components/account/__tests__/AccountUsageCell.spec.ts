@@ -1120,4 +1120,75 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).not.toContain('7d S')
     expect(wrapper.text()).not.toContain('7d F')
   })
+  it('keeps cached Claude quota visible while a replacement batch is loading', async () => {
+    const requestBatchedUsage = vi.fn()
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 98101, platform: 'anthropic', type: 'oauth' }), requestBatchedUsage,
+        batchedUsage: { five_hour: { utilization: 21 } }, batchedUsageLoading: false },
+      global: { stubs: { UsageProgressBar: { props: ['utilization'], template: '<div data-test="quota">{{ utilization }}</div>' }, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    const quota = wrapper.get('[data-test="quota"]').element
+    await wrapper.setProps({ batchedUsageLoading: true })
+    expect(wrapper.get('[data-test="quota"]').text()).toBe('21')
+    expect(wrapper.get('[data-test="quota"]').element).toBe(quota)
+    expect(wrapper.find('.animate-pulse').exists()).toBe(false)
+    expect(wrapper.attributes('aria-busy')).toBe('true')
+    await wrapper.setProps({ batchedUsage: { five_hour: { utilization: 44 } }, batchedUsageLoading: false })
+    expect(wrapper.get('[data-test="quota"]').text()).toBe('44')
+    expect(wrapper.get('[data-test="quota"]').element).toBe(quota)
+    wrapper.unmount()
+  })
+
+  it('keeps known quota after refresh failure and ignores a previous account response', async () => {
+    const quota = { five_hour: { utilization: 23 } }
+    let oldAccount!: (value: unknown) => void
+    let newAccount!: (value: unknown) => void
+    getUsage.mockResolvedValueOnce(quota)
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 98201, platform: 'anthropic', type: 'oauth' }) },
+      global: { stubs: { UsageProgressBar: { props: ['utilization'], template: '<div data-test="quota">{{ utilization }}</div>' }, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    const bar = wrapper.get('[data-test="quota"]').element
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    getUsage.mockRejectedValueOnce(new Error('refresh failure'))
+    await wrapper.setProps({ manualRefreshToken: 1 })
+    await flushPromises()
+    expect(wrapper.get('[data-test="quota"]').text()).toBe('23')
+    expect(wrapper.get('[data-test="quota"]').element).toBe(bar)
+    getUsage.mockImplementationOnce(() => new Promise(resolve => { oldAccount = resolve }))
+    await wrapper.setProps({ manualRefreshToken: 2 })
+    await flushPromises()
+    getUsage.mockImplementationOnce(() => new Promise(resolve => { newAccount = resolve }))
+    await wrapper.setProps({ account: makeAccount({ id: 98202, platform: 'anthropic', type: 'oauth' }) })
+    await flushPromises()
+    expect(wrapper.find('[data-test="quota"]').exists()).toBe(false)
+    newAccount({ five_hour: { utilization: 47 } })
+    await flushPromises()
+    expect(wrapper.get('[data-test="quota"]').text()).toBe('47')
+    oldAccount({ five_hour: { utilization: 99 } })
+    await flushPromises()
+    expect(wrapper.get('[data-test="quota"]').text()).toBe('47')
+    error.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('does not reuse a previous account batch snapshot when the row component is reused', async () => {
+    const oldUsage = { five_hour: { utilization: 29 } }
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 98301, platform: 'anthropic', type: 'oauth' }), requestBatchedUsage: vi.fn(), batchedUsage: oldUsage },
+      global: { stubs: { UsageProgressBar: { props: ['utilization'], template: '<div data-test="quota">{{ utilization }}</div>' }, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-test="quota"]').text()).toBe('29')
+    await wrapper.setProps({ account: makeAccount({ id: 98302, platform: 'anthropic', type: 'oauth' }), batchedUsageLoading: true })
+    await flushPromises()
+    expect(wrapper.find('[data-test="quota"]').exists()).toBe(false)
+    await wrapper.setProps({ batchedUsage: { five_hour: { utilization: 53 } }, batchedUsageLoading: false })
+    await flushPromises()
+    expect(wrapper.get('[data-test="quota"]').text()).toBe('53')
+    wrapper.unmount()
+  })
+
 })

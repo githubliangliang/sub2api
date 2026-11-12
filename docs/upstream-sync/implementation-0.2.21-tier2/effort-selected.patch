@@ -1,0 +1,122 @@
+diff --git a/backend/internal/pkg/apicompat/anthropic_to_responses.go b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+index 8d09617a4..b326241aa 100644
+--- a/backend/internal/pkg/apicompat/anthropic_to_responses.go
++++ b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+@@ -19,8 +19,22 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
+ // AnthropicToResponsesWithMinOutputTokens converts an Anthropic request using
+ // the supplied max_output_tokens floor.
+ func AnthropicToResponsesWithMinOutputTokens(req *AnthropicRequest, minOutputTokens int) (*ResponsesRequest, error) {
+-	if err := openai.ValidateGPT61ReasoningEffort(req.Model, anthropicReasoningEffort(req)); err != nil {
+-		return nil, err
++	return AnthropicToResponsesWithOptions(req, AnthropicToResponsesOptions{MinOutputTokens: minOutputTokens})
++}
++
++// AnthropicToResponsesOptions controls conversion and optional deferred effort
++// validation. Callers deferring validation must validate raw selections before
++// conversion and the final effort after applying their policy.
++type AnthropicToResponsesOptions struct {
++	MinOutputTokens                int
++	DeferReasoningEffortValidation bool
++}
++
++func AnthropicToResponsesWithOptions(req *AnthropicRequest, options AnthropicToResponsesOptions) (*ResponsesRequest, error) {
++	if !options.DeferReasoningEffortValidation {
++		if err := openai.ValidateGPT61ReasoningEffort(req.Model, anthropicReasoningEffort(req)); err != nil {
++			return nil, err
++		}
+ 	}
+ 	input, err := convertAnthropicToResponsesInput(req.System, req.Messages)
+ 	if err != nil {
+@@ -56,8 +70,8 @@ func AnthropicToResponsesWithMinOutputTokens(req *AnthropicRequest, minOutputTok
+ 
+ 	if req.MaxTokens > 0 {
+ 		v := req.MaxTokens
+-		if v < minOutputTokens {
+-			v = minOutputTokens
++		if v < options.MinOutputTokens {
++			v = options.MinOutputTokens
+ 		}
+ 		out.MaxOutputTokens = &v
+ 	}
+diff --git a/backend/internal/service/openai_gateway_count_tokens.go b/backend/internal/service/openai_gateway_count_tokens.go
+index 60bed92f8..94361a456 100644
+--- a/backend/internal/service/openai_gateway_count_tokens.go
++++ b/backend/internal/service/openai_gateway_count_tokens.go
+@@ -406,7 +406,9 @@ func prepareOpenAIInputTokensCountRequest(
+ 	billingModel := resolveOpenAIForwardModel(account, normalizedModel, strings.TrimSpace(defaultMappedModel))
+ 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
+ 
+-	responsesReq, err := apicompat.AnthropicToResponses(&anthropicReq)
++	responsesReq, err := apicompat.AnthropicToResponsesWithOptions(&anthropicReq, apicompat.AnthropicToResponsesOptions{
++		DeferReasoningEffortValidation: true,
++	})
+ 	if err != nil {
+ 		return nil, fmt.Errorf("convert anthropic request to responses: %w", err)
+ 	}
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index 3e3c622aa..4756d8338 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -98,7 +98,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+ 	// 2. Model mapping
+ 	billingModel := resolveOpenAIForwardModel(account, normalizedModel, defaultMappedModel)
+ 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
+-	if err := validateGPT61CompatRequest(body, upstreamModel); err != nil {
++	if err := validateGPT61RawEffort(body, upstreamModel); err != nil {
+ 		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+ 		return nil, err
+ 	}
+@@ -154,7 +154,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+ 
+ 	// 3. Convert Anthropic → Responses after compatibility-only replay guard.
+ 	anthropicReq.Model = upstreamModel
+-	responsesReq, err := anthropicToResponses(s.cfg, &anthropicReq)
++	responsesReq, err := apicompat.AnthropicToResponsesWithOptions(&anthropicReq, apicompat.AnthropicToResponsesOptions{
++		MinOutputTokens:                configuredMinOutputTokens(s.cfg),
++		DeferReasoningEffortValidation: true,
++	})
+ 	if err != nil {
+ 		return nil, fmt.Errorf("convert anthropic to responses: %w", err)
+ 	}
+@@ -315,6 +318,11 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+ 		}
+ 	}
+ 
++	if err := validateGPT61CompatRequest(responsesBody, upstreamModel); err != nil {
++		writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
++		return nil, err
++	}
++
+ 	// 4c. Apply OpenAI fast policy (may filter service_tier or block the request).
+ 	// Mirrors the Claude anthropic-beta "fast-mode-2026-02-01" filter, but keyed
+ 	// on the body-level service_tier field (priority/flex).
+diff --git a/backend/internal/service/openai_reasoning_effort_policy.go b/backend/internal/service/openai_reasoning_effort_policy.go
+index 907025597..b8f7f3b40 100644
+--- a/backend/internal/service/openai_reasoning_effort_policy.go
++++ b/backend/internal/service/openai_reasoning_effort_policy.go
+@@ -445,6 +445,25 @@ func WithOpenAIReasoningEffortPolicy(ctx context.Context, maxEffort string, mapp
+ 	return context.WithValue(ctx, openAIReasoningEffortPolicyContextKey{}, policy)
+ }
+ 
++// WithOpenAIReasoningEffortPolicyForMessages preserves ordinary bridge defaults,
++// but retains ceilings and none mappings for explicitly disabled thinking.
++func WithOpenAIReasoningEffortPolicyForMessages(ctx context.Context, body []byte, maxEffort string, mappings []ReasoningEffortMapping, overLimit string) context.Context {
++	effort := gjson.GetBytes(body, "output_config.effort")
++	if effort.Type != gjson.String || strings.TrimSpace(effort.String()) == "" {
++		if gjson.GetBytes(body, "thinking.type").String() != "disabled" {
++			maxEffort = ""
++		}
++		noneMappings := make([]ReasoningEffortMapping, 0, len(mappings))
++		for _, mapping := range mappings {
++			if normalizeReasoningEffortMappingSource(mapping.From) == "none" {
++				noneMappings = append(noneMappings, mapping)
++			}
++		}
++		mappings = noneMappings
++	}
++	return WithOpenAIReasoningEffortPolicy(ctx, maxEffort, mappings, overLimit)
++}
++
+ // ApplyOpenAIReasoningEffortPolicyFromContext applies a policy previously bound
+ // to the request. An unbound request is returned byte-for-byte unchanged.
+ func ApplyOpenAIReasoningEffortPolicyFromContext(ctx context.Context, body []byte) ([]byte, bool, error) {
