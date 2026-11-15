@@ -34,7 +34,8 @@
 
 ## 后端
 
-- 不注册：dashboard / announcements / redeem / promo 管理路由
+- dashboard：仅注册 `/api/v1/admin/dashboard/user-breakdown`，供 `/admin/usage` 用户排行使用；其余仪表盘接口不注册。
+- 不注册：announcements / redeem / promo 管理路由
 - ops：`/api/v1/admin/ops/*` 始终保留（用量页错误请求依赖）；2026-10-25 恢复完整前端页面，继续使用这些 API。
 - 不注册：用户 announcements / redeem / subscriptions / channel-monitors
 - 不注册：`RegisterPaymentRoutes`

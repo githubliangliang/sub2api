@@ -31,7 +31,7 @@ func RegisterAdminRoutes(
 		// 部署与运营合规确认
 		registerAdminComplianceRoutes(admin, h)
 
-		// 仪表盘 / 公告 / 卡密 / 优惠码：页面已下线，不再注册 HTTP 路由
+		// 仪表盘 / 公告 / 卡密 / 优惠码：页面已下线；用量页用户排行接口在 registerUsageRoutes 中单独保留
 		// 运维监控 API（供运维页面和用量页错误日志使用）
 		registerOpsRoutes(admin, h)
 
@@ -598,6 +598,9 @@ func registerSubscriptionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 }
 
 func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	// 用量页用户排行复用仪表盘统计接口，沿用管理员中间件。
+	admin.GET("/dashboard/user-breakdown", h.Admin.Dashboard.GetUserBreakdown)
+
 	usage := admin.Group("/usage")
 	{
 		usage.GET("", h.Admin.Usage.List)
