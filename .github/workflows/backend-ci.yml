@@ -38,6 +38,23 @@ jobs:
       - name: Unit tests
         working-directory: backend
         run: make test-unit
+      # Docker CLI surfaces registry stream errors that testcontainers v0.40.0 can ignore.
+      - name: Prepare Redis integration image
+        run: |
+          redis_test_image=redis:8.4-alpine
+          if ! docker image inspect "$redis_test_image" >/dev/null 2>&1; then
+            for redis_pull_attempt in 1 2 3; do
+              if docker pull "$redis_test_image" \
+                 && docker image inspect "$redis_test_image" >/dev/null 2>&1; then
+                break
+              fi
+              if [ "$redis_pull_attempt" -eq 3 ]; then
+                echo "Redis integration image unavailable: $redis_test_image" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+          fi
       - name: Integration tests
         working-directory: backend
         run: make test-integration
