@@ -21,7 +21,7 @@ func TestScanCCStreamCapturesProviderServiceTier(t *testing.T) {
 		}, "\n"))),
 	}
 
-	scan := (&OpenAIGatewayService{}).scanCCStream(resp, "test", "rid-tier", time.Now(), func(*apicompat.ChatCompletionsChunk) {})
+	scan := (&OpenAIGatewayService{}).scanCCStream(nil, resp, "test", "rid-tier", time.Now(), func(*apicompat.ChatCompletionsChunk) {})
 
 	require.NoError(t, scan.Err)
 	require.Equal(t, "flex", scan.ServiceTier)

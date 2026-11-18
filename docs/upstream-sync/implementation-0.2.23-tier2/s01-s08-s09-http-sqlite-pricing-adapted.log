@@ -1,0 +1,498 @@
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/rotated
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/unchanged
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 [Forward] Upstream error (failover): Account=3(tier223) Status=401 RequestID= Body={"type":"error","error":{"type":"authentication_error","message":"access token revoked"}}
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/second-401
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+2026/11/18 19:04:00 [Forward] Upstream error (failover): Account=3(tier223) Status=401 RequestID= Body={"type":"error","error":{"type":"authentication_error","message":"access token revoked"}}
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/wrong-status
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 [Forward] Upstream error (non-retryable): Account=3(tier223) Status=400 RequestID= Body={"type":"error","error":{"type":"authentication_error","message":"access token revoked"}}
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/canceled
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/rotated
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/unchanged
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 [Forward] Upstream error (failover): Account=3(tier223) Status=401 RequestID= Body={"type":"error","error":{"type":"authentication_error","message":"access token revoked"}}
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/second-401
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+2026/11/18 19:04:00 [Forward] Upstream error (failover): Account=3(tier223) Status=401 RequestID= Body={"type":"error","error":{"type":"authentication_error","message":"access token revoked"}}
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/wrong-status
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 [Forward] Upstream error (non-retryable): Account=3(tier223) Status=400 RequestID= Body={"type":"error","error":{"type":"authentication_error","message":"access token revoked"}}
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/canceled
+2026/11/18 19:04:00 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:00 [Forward] Upstream error (failover): Account=3(tier223) Status=401 RequestID= Body={"type":"error","error":{"type":"authentication_error","message":"access token revoked"}}
+2026/11/18 19:04:00 WARN oauth_401_set_temp_unschedulable_failed account_id=3 error="context canceled"
+    tier223_protocol_sqlite_test.go:206: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/tier223_protocol_sqlite_test.go:206
+        	Error:      	Should be true
+        	Test:       	TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/canceled
+        	Messages:   	upstream error: 401 (failover)
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/rotated
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/unchanged
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/second-401
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/wrong-status
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/canceled
+2026/11/18 19:04:00 WARN oauth_401_set_temp_unschedulable_failed account_id=3 error="context canceled"
+    tier223_protocol_sqlite_test.go:206: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/tier223_protocol_sqlite_test.go:206
+        	Error:      	Should be true
+        	Test:       	TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/canceled
+        	Messages:   	upstream error: 401 (failover)
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/rotated
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/unchanged
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/second-401
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/wrong-status
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/canceled
+2026/11/18 19:04:00 WARN oauth_401_set_temp_unschedulable_failed account_id=3 error="context canceled"
+    tier223_protocol_sqlite_test.go:206: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/tier223_protocol_sqlite_test.go:206
+        	Error:      	Should be true
+        	Test:       	TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/canceled
+        	Messages:   	upstream error: 401 (failover)
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/rotated
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/unchanged
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/second-401
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/wrong-status
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/canceled
+2026/11/18 19:04:00 WARN oauth_401_set_temp_unschedulable_failed account_id=3 error="context canceled"
+    tier223_protocol_sqlite_test.go:206: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/tier223_protocol_sqlite_test.go:206
+        	Error:      	Should be true
+        	Test:       	TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/canceled
+        	Messages:   	upstream error: 401 (failover)
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/rotated
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/unchanged
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/second-401
+2026/11/18 19:04:00 INFO claude_oauth_rotated_token_retry account_id=3
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/wrong-status
+=== RUN   TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/canceled
+2026/11/18 19:04:00 WARN oauth_401_set_temp_unschedulable_failed account_id=3 error="context canceled"
+    tier223_protocol_sqlite_test.go:206: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/tier223_protocol_sqlite_test.go:206
+        	Error:      	Should be true
+        	Test:       	TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/canceled
+        	Messages:   	upstream error: 401 (failover)
+--- FAIL: TestClaudeTokenRotationBarrierHTTPAndSQLite (2.16s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/rotated (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/unchanged (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/second-401 (0.03s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/wrong-status (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=false/canceled (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/rotated (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/unchanged (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/second-401 (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/wrong-status (0.02s)
+    --- FAIL: TestClaudeTokenRotationBarrierHTTPAndSQLite/messages/stream=true/canceled (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/rotated (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/unchanged (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/second-401 (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/wrong-status (0.02s)
+    --- FAIL: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=false/canceled (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/rotated (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/unchanged (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/second-401 (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/wrong-status (0.02s)
+    --- FAIL: TestClaudeTokenRotationBarrierHTTPAndSQLite/chat/completions/stream=true/canceled (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/rotated (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/unchanged (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/second-401 (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/wrong-status (0.02s)
+    --- FAIL: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=false/canceled (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/rotated (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/unchanged (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/second-401 (0.02s)
+    --- PASS: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/wrong-status (0.02s)
+    --- FAIL: TestClaudeTokenRotationBarrierHTTPAndSQLite/responses/stream=true/canceled (0.02s)
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/split-updates
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag1372300325/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/contradictory-details
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag3901203592/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/zero-price
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag3936345439/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/model-downgrade
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag2650987036/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/model-conflict
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag2542035954/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/split-updates
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag1722248148/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/contradictory-details
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag941696890/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/zero-price
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag2976422669/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/model-downgrade
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag71963529/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/model-conflict
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag2925079066/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=oauth TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:02 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/split-updates
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag1692774373/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/contradictory-details
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag759068523/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/zero-price
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag3366537191/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/model-downgrade
+2026/11/18 19:04:02 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag828109133/002/model_pricing.json
+2026/11/18 19:04:02 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:02 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:02 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:02 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:02 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:02 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/model-conflict
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag1952904332/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:03 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:03 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/split-updates
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag3384023573/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/contradictory-details
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag3080857595/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/zero-price
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag3081195545/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/model-downgrade
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag957177571/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:03 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:03 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/model-conflict
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementmessag3610143269/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Forward] Using account: ID=3 Name=tier223 Platform=anthropic Type=apikey TLSFingerprint=<nil> Proxy=
+2026/11/18 19:04:03 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:03 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/split-updates
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc3135588431/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/contradictory-details
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc1564352415/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/zero-price
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc1819319078/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/model-downgrade
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc2481454369/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:03 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/model-conflict
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc4240108223/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:03 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/split-updates
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc226011324/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/contradictory-details
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc1354748197/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/zero-price
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc38353958/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/model-downgrade
+2026/11/18 19:04:03 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc2613550703/002/model_pricing.json
+2026/11/18 19:04:03 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:03 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:03 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:03 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:03 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:04 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/model-conflict
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementchatc2358679343/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:04 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/split-updates
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon1085306066/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/contradictory-details
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon4005501601/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/zero-price
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon918422570/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/model-downgrade
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon4125427276/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:04 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/model-conflict
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon213216221/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:04 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/split-updates
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon2145519420/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/contradictory-details
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon2165299977/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/zero-price
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon2402443274/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/model-downgrade
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon2785264570/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:04 INFO billing.response_model_applied component=service.gateway request_id=tier223-cache baseline_model=claude-opus-4-6 response_model=claude-sonnet-4-6 baseline_cost=0.0283 billed_cost=0.00283 platform=anthropic account_id=3
+2026/11/18 19:04:04 [Pricing] Service stopped
+=== RUN   TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/model-conflict
+2026/11/18 19:04:04 [Pricing] Loaded 3 models from /tmp/TestClaudeCacheTTLTransportObservationAndSQLiteSettlementrespon3785559909/002/model_pricing.json
+2026/11/18 19:04:04 [Pricing] Local file is 0s old, updating...
+2026/11/18 19:04:04 [Pricing] Download failed, using existing file: invalid pricing url: url is required
+2026/11/18 19:04:04 [Pricing] Remote sync disabled: pricing remote URL is empty
+2026/11/18 19:04:04 [Pricing] Service initialized with 3 models
+2026/11/18 19:04:04 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:04 WARN upstream_response_model_conflict platform=anthropic account_id=3 request_id=tier223-cache sent_model=claude-opus-4-6 selected_response_model=claude-sonnet-4-6
+2026/11/18 19:04:04 [Pricing] Service stopped
+--- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement (4.03s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/split-updates (0.05s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/contradictory-details (0.05s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/zero-price (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/model-downgrade (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/model-conflict (0.08s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/split-updates (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/contradictory-details (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/zero-price (0.05s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/model-downgrade (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/model-conflict (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/split-updates (0.08s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/contradictory-details (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/zero-price (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/model-downgrade (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/model-conflict (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/split-updates (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/contradictory-details (0.08s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/zero-price (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/model-downgrade (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/model-conflict (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/split-updates (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/contradictory-details (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/zero-price (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/model-downgrade (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/model-conflict (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/split-updates (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/contradictory-details (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/zero-price (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/model-downgrade (0.09s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/model-conflict (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/split-updates (0.08s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/contradictory-details (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/zero-price (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/model-downgrade (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/model-conflict (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/split-updates (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/contradictory-details (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/zero-price (0.07s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/model-downgrade (0.06s)
+    --- PASS: TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/model-conflict (0.07s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler	6.244s
+FAIL

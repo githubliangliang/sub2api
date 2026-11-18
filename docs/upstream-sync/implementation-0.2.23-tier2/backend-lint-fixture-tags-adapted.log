@@ -1,0 +1,29 @@
+internal/repository/gateway_sticky_compare_delete_test.go:19:17: Error return value is not checked (errcheck)
+	conditional := cache.(service.StickySessionAccountCompareDeleter)
+	               ^
+internal/repository/user_group_rate_repo.go:61:20: Error return value of `(*strings.Builder).WriteString` is not checked (errcheck)
+		query.WriteString(`INSERT INTO user_group_rate_multipliers (user_id,group_id,` + column + `,created_at,updated_at) VALUES `)
+		                 ^
+internal/repository/user_group_rate_repo.go:65:20: Error return value of `(*strings.Builder).WriteByte` is not checked (errcheck)
+				query.WriteByte(',')
+				               ^
+internal/repository/user_group_rate_repo.go:71:20: Error return value of `(*strings.Builder).WriteString` is not checked (errcheck)
+		query.WriteString(` ON CONFLICT(user_id,group_id) DO UPDATE SET ` + column + `=excluded.` + column + `,updated_at=excluded.updated_at`)
+		                 ^
+internal/service/openai_raw_flush_test.go:24:2: Error return value is not checked (errcheck)
+	w.ResponseWriter.(http.Flusher).Flush()
+	^
+internal/service/gateway_forward_as_responses.go:77:2: ineffectual assignment to reasoningEffort (ineffassign)
+	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, mappedModel)
+	^
+internal/repository/user_group_rate_atomic_sqlite_test.go:59:5: QF1003: could use tagged switch on failure (staticcheck)
+				if failure == "delete" {
+				^
+internal/service/scheduler_snapshot_service.go:280:6: func snapshotHasSchedulableAccount is unused (unused)
+func snapshotHasSchedulableAccount(accounts []Account) bool {
+     ^
+8 issues:
+* errcheck: 5
+* ineffassign: 1
+* staticcheck: 1
+* unused: 1

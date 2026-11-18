@@ -1,0 +1,54 @@
+2026/11/18 11:47:37 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestSSEParseGateEscapedMetadata
+=== RUN   TestSSEParseGateEscapedMetadata/ordinary
+=== RUN   TestSSEParseGateEscapedMetadata/claude-code
+--- PASS: TestSSEParseGateEscapedMetadata (0.00s)
+    --- PASS: TestSSEParseGateEscapedMetadata/ordinary (0.00s)
+    --- PASS: TestSSEParseGateEscapedMetadata/claude-code (0.00s)
+=== RUN   TestS22RequestCandidatesPreserveBytes
+--- PASS: TestS22RequestCandidatesPreserveBytes (0.02s)
+2026/11/18 11:47:38 [Warning] Removed illegal cache_control from thinking block in system
+2026/11/18 11:47:38 [Warning] Removed illegal cache_control from thinking block in system
+=== RUN   TestFirstOutputMemoryFallbackEightMiBLifecycle
+=== RUN   TestFirstOutputMemoryFallbackEightMiBLifecycle/commit
+=== RUN   TestFirstOutputMemoryFallbackEightMiBLifecycle/drop
+--- PASS: TestFirstOutputMemoryFallbackEightMiBLifecycle (0.02s)
+    --- PASS: TestFirstOutputMemoryFallbackEightMiBLifecycle/commit (0.01s)
+    --- PASS: TestFirstOutputMemoryFallbackEightMiBLifecycle/drop (0.01s)
+goos: linux
+goarch: amd64
+pkg: github.com/Wei-Shaw/sub2api/internal/service
+cpu: 13th Gen Intel(R) Core(TM) i9-13900H
+BenchmarkS22Requests
+BenchmarkS22Requests/ollama/before
+BenchmarkS22Requests/ollama/before         	       5	  13385609 ns/op	29463452 B/op	    2724 allocs/op
+BenchmarkS22Requests/ollama/candidate
+BenchmarkS22Requests/ollama/candidate      	       5	    310447 ns/op	  331819 B/op	     827 allocs/op
+BenchmarkS22Requests/cache_limit_escaped/before
+BenchmarkS22Requests/cache_limit_escaped/before         	       5	    248520 ns/op	  131072 B/op	       4 allocs/op
+BenchmarkS22Requests/cache_limit_escaped/candidate
+BenchmarkS22Requests/cache_limit_escaped/candidate      	       5	    244613 ns/op	  131072 B/op	       4 allocs/op
+BenchmarkS22Requests/cache_limit_ascii/before
+BenchmarkS22Requests/cache_limit_ascii/before           	       5	    240179 ns/op	  114688 B/op	       4 allocs/op
+BenchmarkS22Requests/cache_limit_ascii/candidate
+BenchmarkS22Requests/cache_limit_ascii/candidate        	       5	     54809 ns/op	       0 B/op	       0 allocs/op
+BenchmarkS22Requests/tool_cache/before
+BenchmarkS22Requests/tool_cache/before                  	       5	    107887 ns/op	  180339 B/op	      18 allocs/op
+BenchmarkS22Requests/tool_cache/candidate
+BenchmarkS22Requests/tool_cache/candidate               	       5	     67544 ns/op	  131587 B/op	       9 allocs/op
+BenchmarkS22Requests/billing/before
+BenchmarkS22Requests/billing/before                     	       5	    857441 ns/op	  801676 B/op	     132 allocs/op
+BenchmarkS22Requests/billing/candidate
+BenchmarkS22Requests/billing/candidate                  	       5	    240913 ns/op	  449264 B/op	     110 allocs/op
+BenchmarkS22Requests/tool_map/before
+BenchmarkS22Requests/tool_map/before                    	       5	    167656 ns/op	  143787 B/op	     654 allocs/op
+BenchmarkS22Requests/tool_map/candidate
+BenchmarkS22Requests/tool_map/candidate                 	       5	    159437 ns/op	   95083 B/op	     647 allocs/op
+BenchmarkS22Requests/reverse/before
+BenchmarkS22Requests/reverse/before                     	       5	     92272 ns/op	  344064 B/op	       3 allocs/op
+BenchmarkS22Requests/reverse/candidate
+BenchmarkS22Requests/reverse/candidate                  	       5	      4911 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFirstOutputMemoryFallbackEightMiB
+BenchmarkFirstOutputMemoryFallbackEightMiB              	       5	   5195878 ns/op	1614.47 MB/s	16744496 B/op	      10 allocs/op
+PASS
+{"exit_code": 0, "GOMAXPROCS": "1", "cgroup": {"memory.max": "1073741824", "memory.peak": "69771264", "cpu.max": "100000 100000"}, "scope": "standalone service test binary; 8 MiB staging and 200-message/tool synthetic requests; no business database or vendor network"}

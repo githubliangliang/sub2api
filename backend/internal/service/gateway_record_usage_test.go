@@ -326,6 +326,8 @@ func TestGatewayServiceRecordUsage_PeakRateAffectsTokenModeImageOutputTokens(t *
 		},
 		User:    &User{ID: 602},
 		Account: &Account{ID: 702},
+		// The configured peak window excludes 23:59.
+		PricingAt: time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC),
 	})
 
 	require.NoError(t, err)

@@ -83,6 +83,12 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		h.chatCompletionsErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by composite groups")
 		return
 	}
+	if capped, changed, err := applyOpenAIReasoningEffortPolicyForRequest(c, apiKey, body); err != nil {
+		respondOpenAIReasoningEffortPolicyError(c, err, h.chatCompletionsErrorResponse)
+		return
+	} else if changed {
+		body = capped
+	}
 	reqStream, ok := parseOpenAICompatibleStream(body)
 	if !ok {
 		h.chatCompletionsErrorResponse(c, http.StatusBadRequest, "invalid_request_error", invalidStreamFieldTypeMessage)
@@ -341,6 +347,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
+			h.gatewayService.ReleaseStickySessionAfterCommittedNoContent(c.Request.Context(), apiKey.GroupID, sessionHash, account.ID, err)
 			if errors.As(err, &failoverErr) {
 				if c.Writer.Size() != writerSizeBeforeForward && !failoverErr.SafeToFailoverAfterWrite {
 					h.handleCCFailoverExhausted(c, failoverErr, true)

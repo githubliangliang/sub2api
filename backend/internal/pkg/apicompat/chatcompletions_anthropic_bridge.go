@@ -411,6 +411,7 @@ func ChatCompletionsResponseToAnthropic(resp *ChatCompletionsResponse, model str
 		Type:  "message",
 		Role:  "assistant",
 		Model: model,
+		Usage: chatUsageToAnthropicUsage(nil),
 	}
 
 	if resp != nil {
@@ -517,21 +518,13 @@ func chatFinishReasonToAnthropicStopReason(reason string, blocks []AnthropicCont
 // usage shape. Mirrors ChatUsageToResponsesUsage + anthropicUsageFromResponsesUsage.
 func chatUsageToAnthropicUsage(usage *ChatUsage) AnthropicUsage {
 	if usage == nil {
-		return AnthropicUsage{}
+		return AnthropicUsage{CacheCreationInputTokensPresent: true, CacheReadInputTokensPresent: true}
 	}
 
 	cachedTokens := 0
-	cacheCreationTokens := 0
+	cacheCreationTokens := usage.PromptTokensDetails.cacheCreationInputTokens()
 	if usage.PromptTokensDetails != nil {
 		cachedTokens = usage.PromptTokensDetails.CachedTokens
-		// cache_write_tokens and cache_creation_tokens are alternate spellings of
-		// the same quantity, not additive; the double-conversion path
-		// (ChatUsageToResponsesUsage) prefers write and falls back to creation.
-		if usage.PromptTokensDetails.CacheWriteTokens > 0 {
-			cacheCreationTokens = usage.PromptTokensDetails.CacheWriteTokens
-		} else {
-			cacheCreationTokens = usage.PromptTokensDetails.CacheCreationTokens
-		}
 	}
 
 	inputTokens := usage.PromptTokens - cachedTokens - cacheCreationTokens
@@ -539,11 +532,18 @@ func chatUsageToAnthropicUsage(usage *ChatUsage) AnthropicUsage {
 		inputTokens = 0
 	}
 
+	var creation *AnthropicCacheCreation
+	if usage.PromptTokensDetails != nil {
+		creation = usage.PromptTokensDetails.CacheCreation
+	}
 	return AnthropicUsage{
-		InputTokens:              inputTokens,
-		OutputTokens:             usage.CompletionTokens,
-		CacheReadInputTokens:     cachedTokens,
-		CacheCreationInputTokens: cacheCreationTokens,
+		InputTokens:                     inputTokens,
+		OutputTokens:                    usage.CompletionTokens,
+		CacheReadInputTokens:            cachedTokens,
+		CacheCreationInputTokens:        cacheCreationTokens,
+		CacheCreationInputTokensPresent: true,
+		CacheCreation:                   creation,
+		CacheReadInputTokensPresent:     true,
 	}
 }
 
@@ -590,6 +590,7 @@ type ChatCompletionsToAnthropicStreamState struct {
 	OutputTokens             int
 	CacheReadInputTokens     int
 	CacheCreationInputTokens int
+	CacheCreation            *AnthropicCacheCreation
 
 	ResponseID string
 	Model      string
@@ -634,6 +635,7 @@ func ChatCompletionsChunkToAnthropicEvents(
 		state.OutputTokens = u.OutputTokens
 		state.CacheReadInputTokens = u.CacheReadInputTokens
 		state.CacheCreationInputTokens = u.CacheCreationInputTokens
+		state.CacheCreation = u.CacheCreation
 	}
 
 	var events []AnthropicStreamEvent
@@ -714,10 +716,13 @@ func FinalizeChatCompletionsAnthropicStream(state *ChatCompletionsToAnthropicStr
 				StopReason: stopReason,
 			},
 			Usage: &AnthropicUsage{
-				InputTokens:              state.InputTokens,
-				OutputTokens:             state.OutputTokens,
-				CacheReadInputTokens:     state.CacheReadInputTokens,
-				CacheCreationInputTokens: state.CacheCreationInputTokens,
+				InputTokens:                     state.InputTokens,
+				OutputTokens:                    state.OutputTokens,
+				CacheReadInputTokens:            state.CacheReadInputTokens,
+				CacheCreationInputTokens:        state.CacheCreationInputTokens,
+				CacheCreation:                   state.CacheCreation,
+				CacheCreationInputTokensPresent: true,
+				CacheReadInputTokensPresent:     true,
 			},
 		},
 		AnthropicStreamEvent{Type: "message_stop"},
@@ -741,7 +746,7 @@ func ensureCCAnthropicMessageStart(state *ChatCompletionsToAnthropicStreamState)
 			Content:    []AnthropicContentBlock{},
 			Model:      state.Model,
 			StopReason: nil, // JSON null; never ""
-			Usage:      AnthropicUsage{InputTokens: 0, OutputTokens: 0},
+			Usage:      chatUsageToAnthropicUsage(nil),
 		},
 	}}
 }

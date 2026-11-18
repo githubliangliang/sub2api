@@ -41,6 +41,11 @@ func (r *schedulerCancellationAccountRepo) ListSchedulableUngroupedByPlatform(ct
 	return nil, ctx.Err()
 }
 
+func (r *schedulerCancellationAccountRepo) ListModelAvailabilityCandidates(ctx context.Context, _ *int64, _ []string, _ bool) ([]Account, error) {
+	r.listCalls++
+	return nil, ctx.Err()
+}
+
 func (r *schedulerCancellationAccountRepo) GetByID(ctx context.Context, _ int64) (*Account, error) {
 	r.getByIDCalls++
 	return nil, ctx.Err()

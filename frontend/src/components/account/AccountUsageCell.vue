@@ -118,11 +118,15 @@
 
     <!-- OpenAI OAuth accounts: single source from /usage API -->
     <template v-else-if="account.platform === 'openai' && account.type === 'oauth'">
+      <div v-if="error || usageInfo?.error || usageInfo?.error_code" role="alert" class="mb-1 text-[10px] text-amber-700 dark:text-amber-300">
+        {{ t(hasOpenAIQuotaObservation ? 'admin.accounts.usageWindow.quotaRefreshFailedCached' : 'admin.accounts.usageWindow.quotaRefreshFailedUnknown') }}
+      </div>
       <div v-if="hasOpenAIUsageFallback" class="space-y-1">
         <UsageProgressBar
           v-if="usageInfo?.five_hour"
           label="5h"
           :utilization="usageInfo.five_hour.utilization"
+          :utilization-unknown="usageInfo.five_hour.utilization_unknown"
           :resets-at="usageInfo.five_hour.resets_at"
           :window-stats="usageInfo.five_hour.window_stats"
           :show-now-when-idle="true"
@@ -132,6 +136,7 @@
           v-if="usageInfo?.seven_day"
           label="7d"
           :utilization="usageInfo.seven_day.utilization"
+          :utilization-unknown="usageInfo.seven_day.utilization_unknown"
           :resets-at="usageInfo.seven_day.resets_at"
           :window-stats="usageInfo.seven_day.window_stats"
           :show-now-when-idle="true"
@@ -168,6 +173,11 @@
             </button>
           </template>
         </OpenAIQuotaResetCell>
+        <div v-if="hasOpenAIQuotaObservation" class="text-[10px] text-gray-500 dark:text-gray-400">
+          {{ t('admin.accounts.usageWindow.quotaObservedAt') }}
+          <time v-if="usageInfo?.updated_at" :datetime="usageInfo.updated_at">{{ formatDateTime(usageInfo.updated_at) }}</time>
+          <span v-else>{{ t('admin.accounts.usageWindow.quotaObservationUnknown') }}</span>
+        </div>
       </div>
       <div v-else-if="loading" class="space-y-1.5">
         <div class="flex items-center gap-1">
@@ -620,7 +630,7 @@ import { adminAPI } from '@/api/admin'
 import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
-import { formatCompactNumber } from '@/utils/format'
+import { formatCompactNumber, formatDateTime } from '@/utils/format'
 import UsageProgressBar from './UsageProgressBar.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
@@ -736,6 +746,10 @@ const geminiUsageAvailable = computed(() => {
 const hasOpenAIUsageFallback = computed(() => {
   if (props.account.platform !== 'openai' || props.account.type !== 'oauth') return false
   return !!usageInfo.value?.five_hour || !!usageInfo.value?.seven_day
+})
+
+const hasOpenAIQuotaObservation = computed(() => {
+  return [usageInfo.value?.five_hour, usageInfo.value?.seven_day].some(window => window && !window.utilization_unknown)
 })
 
 const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
@@ -1332,9 +1346,9 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   error.value = null
 
   try {
-		const fetchFn = () => options?.source
-			? adminAPI.accounts.getUsage(account.id, options.source, options.bypassCache === true)
-			: adminAPI.accounts.getUsage(account.id)
+    const fetchFn = () => options?.source
+      ? adminAPI.accounts.getUsage(account.id, options.source, options.bypassCache === true)
+      : adminAPI.accounts.getUsage(account.id)
     const result = await enqueueUsageRequest(account, fetchFn)
     if (isCurrent()) {
       usageInfo.value = result
@@ -1407,11 +1421,18 @@ const loadActiveUsage = async () => {
   const request = ++usageRequest
   const isCurrent = () => !unmounted.value && request === usageRequest && accountKey === currentUsageAccountKey()
   activeQueryLoading.value = true
+  error.value = null
   try {
     const result = await adminAPI.accounts.getUsage(accountID, 'active', true)
-    if (isCurrent()) usageInfo.value = result
+  if (isCurrent()) {
+    usageInfo.value = result
+    _usageCache.set(accountID, { data: result, ts: Date.now() })
+  }
   } catch (e: any) {
-    if (isCurrent()) console.error('Failed to load active usage:', e)
+  if (isCurrent()) {
+    error.value = t('common.error')
+    console.error('Failed to load active usage:', e)
+  }
   } finally {
     if (isCurrent()) activeQueryLoading.value = false
   }

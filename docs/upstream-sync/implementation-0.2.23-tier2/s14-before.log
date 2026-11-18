@@ -1,0 +1,121 @@
+2026/11/18 09:31:57 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAntigravityCompatEmptyStreamAfterKeepaliveIsCommittedNoContent
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    antigravity_compat_committed_no_content_test.go:48: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_committed_no_content_test.go:48
+        	Error:      	Should be true
+        	Test:       	TestAntigravityCompatEmptyStreamAfterKeepaliveIsCommittedNoContent
+        	Messages:   	got empty Antigravity compatibility stream after keepalive
+--- FAIL: TestAntigravityCompatEmptyStreamAfterKeepaliveIsCommittedNoContent (0.05s)
+=== RUN   TestAntigravityCompatPreContentTimeoutAfterKeepaliveIsCommittedNoContent
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    antigravity_compat_committed_no_content_test.go:55: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_committed_no_content_test.go:55
+        	Error:      	Should be true
+        	Test:       	TestAntigravityCompatPreContentTimeoutAfterKeepaliveIsCommittedNoContent
+        	Messages:   	got pre-content stream timeout
+--- FAIL: TestAntigravityCompatPreContentTimeoutAfterKeepaliveIsCommittedNoContent (0.20s)
+=== RUN   TestReleaseStickySessionAfterCommittedNoContent
+=== RUN   TestReleaseStickySessionAfterCommittedNoContent/unbinds_the_session_from_the_account_that_failed
+=== RUN   TestReleaseStickySessionAfterCommittedNoContent/keeps_a_binding_that_already_moved_to_another_account
+=== RUN   TestReleaseStickySessionAfterCommittedNoContent/ignores_other_errors
+=== RUN   TestReleaseStickySessionAfterCommittedNoContent/no_session_hash_is_a_no-op
+--- PASS: TestReleaseStickySessionAfterCommittedNoContent (0.00s)
+    --- PASS: TestReleaseStickySessionAfterCommittedNoContent/unbinds_the_session_from_the_account_that_failed (0.00s)
+    --- PASS: TestReleaseStickySessionAfterCommittedNoContent/keeps_a_binding_that_already_moved_to_another_account (0.00s)
+    --- PASS: TestReleaseStickySessionAfterCommittedNoContent/ignores_other_errors (0.00s)
+    --- PASS: TestReleaseStickySessionAfterCommittedNoContent/no_session_hash_is_a_no-op (0.00s)
+=== RUN   TestAntigravityCompatGeminiThinkingConfig
+=== RUN   TestAntigravityCompatGeminiThinkingConfig/streaming_responses_tier_suffix_enables_includeThoughts_without_thinkingLevel
+    antigravity_compat_timing_test.go:36: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:36
+        	Error:      	Should be true
+        	Test:       	TestAntigravityCompatGeminiThinkingConfig/streaming_responses_tier_suffix_enables_includeThoughts_without_thinkingLevel
+        	Messages:   	thinkingConfig=
+=== RUN   TestAntigravityCompatGeminiThinkingConfig/streaming_chat_completions_tier_suffix_enables_includeThoughts_without_thinkingLevel
+    antigravity_compat_timing_test.go:58: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:58
+        	Error:      	Should be true
+        	Test:       	TestAntigravityCompatGeminiThinkingConfig/streaming_chat_completions_tier_suffix_enables_includeThoughts_without_thinkingLevel
+        	Messages:   	thinkingConfig=
+=== RUN   TestAntigravityCompatGeminiThinkingConfig/streaming_responses_bare_model_with_low_effort_selects_low_variant_and_enables_includeThoughts
+    antigravity_compat_timing_test.go:78: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:78
+        	Error:      	Not equal: 
+        	            	expected: "gemini-3.8-flash-low"
+        	            	actual  : "gemini-3.8-flash-high"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-gemini-3.8-flash-low
+        	            	+gemini-3.8-flash-high
+        	Test:       	TestAntigravityCompatGeminiThinkingConfig/streaming_responses_bare_model_with_low_effort_selects_low_variant_and_enables_includeThoughts
+=== RUN   TestAntigravityCompatGeminiThinkingConfig/streaming_responses_explicit_bare_model_sets_thinkingLevel_and_includeThoughts
+    antigravity_compat_timing_test.go:103: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:103
+        	Error:      	Not equal: 
+        	            	expected: "medium"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-medium
+        	            	+
+        	Test:       	TestAntigravityCompatGeminiThinkingConfig/streaming_responses_explicit_bare_model_sets_thinkingLevel_and_includeThoughts
+        	Messages:   	thinkingConfig=
+=== RUN   TestAntigravityCompatGeminiThinkingConfig/non-streaming_responses_do_not_force_includeThoughts
+--- FAIL: TestAntigravityCompatGeminiThinkingConfig (0.01s)
+    --- FAIL: TestAntigravityCompatGeminiThinkingConfig/streaming_responses_tier_suffix_enables_includeThoughts_without_thinkingLevel (0.00s)
+    --- FAIL: TestAntigravityCompatGeminiThinkingConfig/streaming_chat_completions_tier_suffix_enables_includeThoughts_without_thinkingLevel (0.00s)
+    --- FAIL: TestAntigravityCompatGeminiThinkingConfig/streaming_responses_bare_model_with_low_effort_selects_low_variant_and_enables_includeThoughts (0.00s)
+    --- FAIL: TestAntigravityCompatGeminiThinkingConfig/streaming_responses_explicit_bare_model_sets_thinkingLevel_and_includeThoughts (0.00s)
+    --- PASS: TestAntigravityCompatGeminiThinkingConfig/non-streaming_responses_do_not_force_includeThoughts (0.00s)
+=== RUN   TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream
+=== RUN   TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/responses/keepalive=false
+2026/11/18 09:31:57 Empty Antigravity compatibility stream, triggering failover
+    antigravity_compat_timing_test.go:172: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:172
+        	Error:      	Received unexpected error:
+        	            	upstream error: 502 (failover)
+        	Test:       	TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/responses/keepalive=false
+=== RUN   TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/responses/keepalive=true
+2026/11/18 09:31:57 Empty Antigravity compatibility stream, triggering failover
+    antigravity_compat_timing_test.go:172: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:172
+        	Error:      	Received unexpected error:
+        	            	upstream error: 502 (failover)
+        	Test:       	TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/responses/keepalive=true
+=== RUN   TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/chat_completions/keepalive=false
+2026/11/18 09:31:57 Empty Antigravity compatibility stream, triggering failover
+    antigravity_compat_timing_test.go:172: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:172
+        	Error:      	Received unexpected error:
+        	            	upstream error: 502 (failover)
+        	Test:       	TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/chat_completions/keepalive=false
+=== RUN   TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/chat_completions/keepalive=true
+2026/11/18 09:31:57 Empty Antigravity compatibility stream, triggering failover
+    antigravity_compat_timing_test.go:172: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/antigravity_compat_timing_test.go:172
+        	Error:      	Received unexpected error:
+        	            	upstream error: 502 (failover)
+        	Test:       	TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/chat_completions/keepalive=true
+--- FAIL: TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream (0.00s)
+    --- FAIL: TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/responses/keepalive=false (0.00s)
+    --- FAIL: TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/responses/keepalive=true (0.00s)
+    --- FAIL: TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/chat_completions/keepalive=false (0.00s)
+    --- FAIL: TestAntigravityCompatHeaderWaitExceedingPreContentLimitDoesNotAbortStream/chat_completions/keepalive=true (0.00s)
+=== RUN   TestAntigravityCompatInterleavedThoughtChunksResetIdleTimeout
+--- PASS: TestAntigravityCompatInterleavedThoughtChunksResetIdleTimeout (1.40s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	1.887s
+FAIL

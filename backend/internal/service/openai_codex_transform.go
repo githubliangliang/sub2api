@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 var codexModelMap = map[string]string{
@@ -1380,6 +1382,16 @@ func filterCodexInput(input []any, preserveReferences bool) []any {
 
 func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []any {
 	filtered := make([]any, 0, len(input))
+	additionalToolsIDs := make(map[string]string)
+	for _, raw := range input {
+		if item, ok := raw.(map[string]any); ok && item["type"] == "additional_tools" {
+			if id, ok := item["id"].(string); ok {
+				if normalized := normalizeCodexAdditionalToolsID(id); normalized != id {
+					additionalToolsIDs[id] = normalized
+				}
+			}
+		}
+	}
 	for _, item := range input {
 		m, ok := item.(map[string]any)
 		if !ok {
@@ -1451,6 +1463,11 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 			for key, value := range m {
 				newItem[key] = value
 			}
+			if id, ok := newItem["id"].(string); ok {
+				if normalized, mapped := additionalToolsIDs[id]; mapped {
+					newItem["id"] = normalized
+				}
+			}
 			if id, ok := newItem["id"].(string); ok && strings.HasPrefix(id, "call_") {
 				newItem["id"] = fixCallIDPrefix(id)
 			}
@@ -1512,7 +1529,14 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 			}
 		}
 
-		if !opts.PreserveReferences {
+		if typ == "additional_tools" {
+			if id, ok := m["id"].(string); ok {
+				if normalized, mapped := additionalToolsIDs[id]; mapped {
+					ensureCopy()
+					newItem["id"] = normalized
+				}
+			}
+		} else if !opts.PreserveReferences {
 			ensureCopy()
 			delete(newItem, "id")
 		} else if id, ok := m["id"].(string); ok && shouldStripOpenAIResponsesInputItemID(typ, id) {
@@ -1523,6 +1547,64 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 		filtered = append(filtered, newItem)
 	}
 	return filtered
+}
+
+func normalizeCodexAdditionalToolsID(id string) string {
+	if len(id) != 39 || !strings.HasPrefix(id, "at_") ||
+		id[11] != '-' || id[16] != '-' || id[21] != '-' || id[26] != '-' {
+		return id
+	}
+	uuid := strings.ReplaceAll(id[3:], "-", "")
+	if len(uuid) != 32 {
+		return id
+	}
+	if _, err := hex.DecodeString(uuid); err != nil {
+		return id
+	}
+	return "at_" + uuid
+}
+
+// Patch only declaration IDs and their references, keeping every other raw
+// value (including large numbers and escaped strings) intact.
+func normalizeCodexAdditionalToolsIDsBody(body []byte) ([]byte, bool, error) {
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return body, false, nil
+	}
+	mappings := make(map[string]string)
+	input.ForEach(func(_, item gjson.Result) bool {
+		if id := item.Get("id"); item.Get("type").String() == "additional_tools" && id.Type == gjson.String {
+			if normalized := normalizeCodexAdditionalToolsID(id.Str); normalized != id.Str {
+				mappings[id.Str] = normalized
+			}
+		}
+		return true
+	})
+	if len(mappings) == 0 {
+		return body, false, nil
+	}
+	items := make([]string, 0)
+	var patchErr error
+	input.ForEach(func(_, item gjson.Result) bool {
+		raw := item.Raw
+		if typ := item.Get("type").String(); typ == "additional_tools" || typ == "item_reference" {
+			if id := item.Get("id"); id.Type == gjson.String {
+				if normalized, mapped := mappings[id.Str]; mapped {
+					raw, patchErr = sjson.Set(raw, "id", normalized)
+					if patchErr != nil {
+						return false
+					}
+				}
+			}
+		}
+		items = append(items, raw)
+		return true
+	})
+	if patchErr != nil {
+		return body, false, patchErr
+	}
+	updated, err := sjson.SetRawBytes(body, "input", []byte("["+strings.Join(items, ",")+"]"))
+	return updated, err == nil, err
 }
 
 func isCodexToolCallItemType(typ string) bool {

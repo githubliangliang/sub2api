@@ -275,8 +275,25 @@ type openAIResponsesCompatibilityOptions struct {
 }
 
 func normalizeOpenAIResponsesCompatibilityBodyWithOptions(body []byte, account *Account, opts openAIResponsesCompatibilityOptions) ([]byte, bool, error) {
-	if account == nil || !account.IsOpenAIOAuthLike() || opts.Compact {
+	if account == nil {
 		return body, false, nil
 	}
-	return ensureOpenAIOAuthWebSearchToolForHistoryBody(body, opts.ResponsesLite)
+	sanitized, schemaChanged, err := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform)
+	if err != nil {
+		return body, false, err
+	}
+	if !account.IsOpenAIOAuthLike() || opts.Compact {
+		return sanitized, schemaChanged, nil
+	}
+	normalized, changed, err := ensureOpenAIOAuthWebSearchToolForHistoryBody(sanitized, opts.ResponsesLite)
+	changed = changed || schemaChanged
+	if err != nil {
+		return body, false, err
+	}
+	if next, idsChanged, err := normalizeCodexAdditionalToolsIDsBody(normalized); err != nil {
+		return body, false, err
+	} else if idsChanged {
+		normalized, changed = next, true
+	}
+	return normalized, changed, nil
 }

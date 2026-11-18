@@ -65,6 +65,20 @@ func (c *gatewayCache) DeleteSessionAccountID(ctx context.Context, groupID int64
 	return c.rdb.Del(ctx, key).Err()
 }
 
+var deleteStickySessionIfAccountScript = redis.NewScript(`
+ if redis.call('GET',KEYS[1]) == ARGV[1] then
+  return redis.call('DEL',KEYS[1])
+ end
+ return 0
+`)
+
+func (c *gatewayCache) DeleteSessionAccountIDIfMatch(ctx context.Context, groupID int64, sessionHash string, accountID int64) (bool, error) {
+	deleted, err := deleteStickySessionIfAccountScript.Run(ctx, c.rdb, []string{buildSessionKey(groupID, sessionHash)}, strconv.FormatInt(accountID, 10)).Int()
+	return deleted == 1, err
+}
+
+var _ service.StickySessionAccountCompareDeleter = (*gatewayCache)(nil)
+
 const (
 	grokVideoPendingBillingPrefix = "grok_video_pending:"
 	grokVideoBilledPrefix         = "grok_video_billed:"

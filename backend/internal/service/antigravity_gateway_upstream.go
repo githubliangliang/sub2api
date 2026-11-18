@@ -150,12 +150,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 		Duration:                      duration,
 		FirstTokenMs:                  firstTokenMs,
 		ClientDisconnect:              clientDisconnect,
-		Usage: ClaudeUsage{
-			InputTokens:              usage.InputTokens,
-			OutputTokens:             usage.OutputTokens,
-			CacheReadInputTokens:     usage.CacheReadInputTokens,
-			CacheCreationInputTokens: usage.CacheCreationInputTokens,
-		},
+		Usage:                         *usage,
 	}, nil
 }
 
@@ -343,16 +338,19 @@ func (s *AntigravityGatewayService) extractSSEUsage(line string, usage *ClaudeUs
 	if v, ok := u["cache_read_input_tokens"].(float64); ok && int(v) > 0 {
 		usage.CacheReadInputTokens = int(v)
 	}
-	if v, ok := u["cache_creation_input_tokens"].(float64); ok && int(v) > 0 {
+	if v, ok := u["cache_creation_input_tokens"].(float64); ok && (int(v) > 0 || usage.CacheCreationInputTokens <= 0) {
 		usage.CacheCreationInputTokens = int(v)
+		usage.cacheCreationInputTokensPresent = true
 	}
 	// 解析嵌套的 cache_creation 对象中的 5m/1h 明细
 	if cc, ok := u["cache_creation"].(map[string]any); ok {
 		if v, ok := cc["ephemeral_5m_input_tokens"].(float64); ok {
 			usage.CacheCreation5mTokens = int(v)
+			usage.cacheCreation5mTokensPresent = true
 		}
 		if v, ok := cc["ephemeral_1h_input_tokens"].(float64); ok {
 			usage.CacheCreation1hTokens = int(v)
+			usage.cacheCreation1hTokensPresent = true
 		}
 	}
 }
@@ -376,14 +374,17 @@ func (s *AntigravityGatewayService) extractClaudeUsage(body []byte) *ClaudeUsage
 		}
 		if v, ok := u["cache_creation_input_tokens"].(float64); ok {
 			usage.CacheCreationInputTokens = int(v)
+			usage.cacheCreationInputTokensPresent = true
 		}
 		// 解析嵌套的 cache_creation 对象中的 5m/1h 明细
 		if cc, ok := u["cache_creation"].(map[string]any); ok {
 			if v, ok := cc["ephemeral_5m_input_tokens"].(float64); ok {
 				usage.CacheCreation5mTokens = int(v)
+				usage.cacheCreation5mTokensPresent = true
 			}
 			if v, ok := cc["ephemeral_1h_input_tokens"].(float64); ok {
 				usage.CacheCreation1hTokens = int(v)
+				usage.cacheCreation1hTokensPresent = true
 			}
 		}
 	}

@@ -128,17 +128,14 @@ func buildToolNameRewriteFromBody(body []byte) *ToolNameRewrite {
 	}
 
 	mimicableNames := make([]string, 0)
-	toolsArr := tools.Array()
-	for _, t := range toolsArr {
-		if !shouldMimicToolName(t.Get("type").String()) {
-			continue
+	tools.ForEach(func(_, tool gjson.Result) bool {
+		if shouldMimicToolName(tool.Get("type").String()) {
+			if name := tool.Get("name").String(); name != "" {
+				mimicableNames = append(mimicableNames, name)
+			}
 		}
-		name := t.Get("name").String()
-		if name == "" {
-			continue
-		}
-		mimicableNames = append(mimicableNames, name)
-	}
+		return true
+	})
 
 	dynamic := buildDynamicToolMap(mimicableNames)
 
@@ -265,12 +262,13 @@ func applyToolsLastCacheBreakpoint(body []byte) []byte {
 	if !tools.IsArray() {
 		return body
 	}
-	arr := tools.Array()
-	if len(arr) == 0 {
+	lastIdx := -1
+	var lastTool gjson.Result
+	tools.ForEach(func(_, tool gjson.Result) bool { lastIdx++; lastTool = tool; return true })
+	if lastIdx < 0 {
 		return body
 	}
-	lastIdx := len(arr) - 1
-	existingCC := arr[lastIdx].Get("cache_control")
+	existingCC := lastTool.Get("cache_control")
 
 	if existingCC.Exists() && existingCC.Get("ttl").String() != "" {
 		return body
@@ -346,4 +344,21 @@ func reverseToolNamesIfPresent(c interface {
 		return chunk
 	}
 	return restoreToolNamesInBytes(chunk, rw)
+}
+
+func reverseToolNamesIfPresentString(c interface{ Get(string) (any, bool) }, chunk string) string {
+	rw := toolNameRewriteFromContext(c)
+	if rw != nil {
+		for _, pair := range rw.ReverseOrdered {
+			if pair[0] != "" && pair[0] != pair[1] && strings.Contains(chunk, pair[0]) {
+				chunk = strings.ReplaceAll(chunk, pair[0], pair[1])
+			}
+		}
+	}
+	for prefix, replacement := range staticToolNameRewrites {
+		if strings.Contains(chunk, replacement) {
+			chunk = strings.ReplaceAll(chunk, replacement, prefix)
+		}
+	}
+	return chunk
 }

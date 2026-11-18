@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
 
 	"github.com/tidwall/gjson"
@@ -41,16 +42,20 @@ type openAIResponsesToolSchemaNullType struct {
 // 都会重扫并全量拷贝整个文档，命中 N 处就是 N 次全量拷贝，而 /v1/responses 的
 // body 上限是 gateway.max_body_size（默认 256MB），构造请求能塞进百万级命中。
 func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error) {
+	return sanitizeOpenAIResponsesToolSchemas(body, false)
+}
+
+func sanitizeOpenAIResponsesToolSchemas(body []byte, patterns bool) ([]byte, bool, error) {
 	if len(body) == 0 {
 		return body, false, nil
 	}
 
 	hits := make([]openAIResponsesToolSchemaNullType, 0, 2)
-	collectOpenAIResponsesToolSchemaNullTypes(body, gjson.GetBytes(body, "tools"), 0, &hits)
+	collectOpenAIResponsesToolSchemaNullTypes(body, gjson.GetBytes(body, "tools"), 0, &hits, patterns)
 	if input := gjson.GetBytes(body, "input"); input.IsArray() {
 		input.ForEach(func(_, item gjson.Result) bool {
 			if item.IsObject() {
-				collectOpenAIResponsesToolSchemaNullTypes(body, item.Get("tools"), 0, &hits)
+				collectOpenAIResponsesToolSchemaNullTypes(body, item.Get("tools"), 0, &hits, patterns)
 			}
 			return true
 		})
@@ -60,7 +65,30 @@ func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error
 	}
 
 	// tools 与 input 在 body 里的先后顺序由客户端决定，收集顺序不保证单调。
-	sort.Slice(hits, func(i, j int) bool { return hits[i].offset < hits[j].offset })
+	sort.Slice(hits, func(i, j int) bool {
+		if hits[i].offset != hits[j].offset {
+			return hits[i].offset < hits[j].offset
+		}
+		return hits[i].length > hits[j].length
+	})
+	merged := hits[:0]
+	for _, hit := range hits {
+		if len(merged) > 0 {
+			previous := &merged[len(merged)-1]
+			if hit.offset < previous.offset+previous.length {
+				if hit.offset+hit.length <= previous.offset+previous.length {
+					continue
+				}
+				if hit.replacement != "" || previous.replacement != "" {
+					return nil, false, fmt.Errorf("sanitize tool schemas: overlapping patches")
+				}
+				previous.length = hit.offset + hit.length - previous.offset
+				continue
+			}
+		}
+		merged = append(merged, hit)
+	}
+	hits = merged
 
 	sanitized := make([]byte, 0, len(body)+len(hits)*len(openAIResponsesToolSchemaFallbackType))
 	cursor := 0
@@ -77,11 +105,19 @@ func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error
 	return sanitized, true, nil
 }
 
+func sanitizeOpenAIResponsesToolSchemasForPlatform(body []byte, platform string) ([]byte, bool, error) {
+	return sanitizeOpenAIResponsesToolSchemas(body, platform == PlatformOpenAI)
+}
+
+func sanitizeOpenAIResponsesToolSchemaPatterns(body []byte) ([]byte, bool, error) {
+	return sanitizeOpenAIResponsesToolSchemas(body, true)
+}
+
 // collectOpenAIResponsesToolSchemaNullTypes 收集一个 tools 数组里所有需要修正的
 // parameters.type 位置。不按 tool type 过滤：null 的 schema type 在 function、
 // custom 以及任何 hosted 工具上都同样非法。
 func collectOpenAIResponsesToolSchemaNullTypes(
-	body []byte, tools gjson.Result, depth int, hits *[]openAIResponsesToolSchemaNullType,
+	body []byte, tools gjson.Result, depth int, hits *[]openAIResponsesToolSchemaNullType, patterns bool,
 ) {
 	if depth > openAIResponsesToolSchemaMaxDepth || !tools.IsArray() {
 		return
@@ -102,11 +138,15 @@ func collectOpenAIResponsesToolSchemaNullTypes(
 			if typ := params.Get("type"); typ.Type == gjson.Null && typ.Raw == openAIResponsesToolSchemaNullLiteral {
 				appendOpenAIResponsesToolSchemaNullType(body, typ, hits)
 			}
-			collectOpenAISchemaNullRequired(body, params, hits)
+			if patterns {
+				collectOpenAISchemaRegexEdits(body, params, hits)
+			} else {
+				collectOpenAISchemaNullRequired(body, params, hits)
+			}
 		}
 		// 历史输入里的工具定义会再嵌套一层 tools（upstream 报错路径形如
 		// input[234].tools[0].tools[3].parameters）。
-		collectOpenAIResponsesToolSchemaNullTypes(body, tool.Get("tools"), depth+1, hits)
+		collectOpenAIResponsesToolSchemaNullTypes(body, tool.Get("tools"), depth+1, hits, patterns)
 		return true
 	})
 }

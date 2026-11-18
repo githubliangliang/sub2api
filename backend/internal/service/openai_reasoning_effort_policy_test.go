@@ -30,7 +30,7 @@ func TestNormalizeMaxReasoningEffort(t *testing.T) {
 
 func TestNormalizeReasoningEffortMappings(t *testing.T) {
 	t.Run("canonicalizes fixed OpenAI values", func(t *testing.T) {
-		for _, platform := range []string{PlatformOpenAI, PlatformComposite} {
+		for _, platform := range []string{PlatformOpenAI, PlatformComposite, PlatformAnthropic} {
 			got, err := NormalizeReasoningEffortMappings(platform, []ReasoningEffortMapping{
 				{From: " MAX ", To: " x-high "},
 				{From: "minimal", To: "high"},
@@ -119,9 +119,9 @@ func TestNormalizeReasoningEffortMappings(t *testing.T) {
 	})
 
 	t.Run("rejects mappings for non OpenAI platforms", func(t *testing.T) {
-		for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformAntigravity, PlatformGrok} {
+		for _, platform := range []string{PlatformGemini, PlatformAntigravity, PlatformGrok} {
 			_, err := NormalizeReasoningEffortMappings(platform, []ReasoningEffortMapping{{From: "low", To: "high"}})
-			require.ErrorContains(t, err, "only supported for platforms \"openai\" and \"composite\"")
+			require.ErrorContains(t, err, "only supported for platforms \"openai\", \"composite\" and \"anthropic\"")
 		}
 
 		_, err := NormalizeReasoningEffortMappings(PlatformOpenAI, []ReasoningEffortMapping{{From: "ultra", To: "high"}})
@@ -129,7 +129,7 @@ func TestNormalizeReasoningEffortMappings(t *testing.T) {
 	})
 
 	t.Run("allows none only as a source for OpenAI routes", func(t *testing.T) {
-		for _, platform := range []string{PlatformOpenAI, PlatformComposite} {
+		for _, platform := range []string{PlatformOpenAI, PlatformComposite, PlatformAnthropic} {
 			got, err := NormalizeReasoningEffortMappings(platform, []ReasoningEffortMapping{{From: " NONE ", To: "low"}})
 			require.NoError(t, err)
 			require.Equal(t, []ReasoningEffortMapping{{From: "none", To: "low"}}, got)
@@ -148,9 +148,9 @@ func TestNormalizeMaxReasoningEffortForPlatform(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "max", value)
 
-	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformAntigravity, PlatformGrok} {
+	for _, platform := range []string{PlatformGemini, PlatformAntigravity, PlatformGrok} {
 		_, err = normalizeMaxReasoningEffortForPlatform(platform, "low")
-		require.ErrorContains(t, err, "only supported for platforms \"openai\" and \"composite\"")
+		require.ErrorContains(t, err, "only supported for platforms \"openai\", \"composite\" and \"anthropic\"")
 	}
 
 	_, err = normalizeMaxReasoningEffortForPlatform(PlatformOpenAI, "none")
@@ -177,8 +177,8 @@ func TestNormalizeMaxReasoningEffortOverLimitForPlatform(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ReasoningEffortOverLimitDowngrade, value)
 
-	_, err = normalizeMaxReasoningEffortOverLimitForPlatform(PlatformAnthropic, "deny")
-	require.ErrorContains(t, err, "only supported for platforms \"openai\" and \"composite\"")
+	_, err = normalizeMaxReasoningEffortOverLimitForPlatform(PlatformGemini, "deny")
+	require.ErrorContains(t, err, "only supported for platforms \"openai\", \"composite\" and \"anthropic\"")
 
 	_, err = normalizeMaxReasoningEffortOverLimitForPlatform(PlatformOpenAI, "block")
 	require.ErrorContains(t, err, "not supported")

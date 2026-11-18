@@ -1345,6 +1345,37 @@ func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool 
 	return true
 }
 
+type OpenAIStreamFailedFrame struct {
+	Platform string
+	Payload  []byte
+	Message  string
+}
+
+func writeOpenAIStreamRuleError(c *gin.Context, status int, typ, message string) {
+	MarkResponseCommitted(c)
+	if gatewaySSEStarted(c) {
+		MarkOpsStreamError(c, typ, message, status)
+		source, _ := json.Marshal(gin.H{"error": gin.H{"type": typ, "code": typ, "message": message}})
+		_, _ = fmt.Fprint(c.Writer, buildOpenAIResponseFailedSSE("", "", 0, source, message, NextOpenAIResponsesSequence(c)))
+		c.Writer.Flush()
+		return
+	}
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	c.JSON(status, gin.H{"error": gin.H{"type": typ, "message": message}})
+}
+
+func ApplyOpenAIStreamFailedFrameRule(c *gin.Context, err *UpstreamFailoverError) (int, string, string, bool) {
+	if err == nil || err.StreamFailedFrame == nil {
+		return 0, "", "", false
+	}
+	frame := err.StreamFailedFrame
+	status, typ, message, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, frame.Platform, frame.Payload, frame.Message)
+	if matched && message == "" {
+		message = frame.Message
+	}
+	return status, typ, message, matched
+}
+
 // openAIStreamErrorEventShouldFailover 处理 `error` 终止事件（流式与非流式共用）。
 // 只有可重试的瞬时故障（含仅以文本形式返回的容量降载）才切号；
 // 上下文超长是请求本身的问题，换账号也没用。
@@ -1509,6 +1540,9 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverErrorWithModel(
 		ResponseHeaders:        headers,
 		RetryableOnSameAccount: openAIStreamFailedEventRetryableOnSameAccount(account, payload, message),
 		RequestScopedTransient: isOpenAIUpstreamCapacityShedEvent(payload),
+	}
+	if len(payload) > 0 && account != nil {
+		failoverErr.StreamFailedFrame = &OpenAIStreamFailedFrame{Platform: account.Platform, Payload: payload, Message: message}
 	}
 	if semanticStatus := openAIStreamFailedEventSemanticStatus(payload, message); semanticStatus == http.StatusServiceUnavailable && account != nil && account.Platform == PlatformOpenAI {
 		failoverErr.ClientStatusCode = semanticStatus
@@ -1739,13 +1773,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, errorMessage); matched {
 					s.recordOpenAIStreamUpstreamError(c, account, true, upstreamRequestID, "http_error", dataBytes, errorMessage)
 					MarkResponseCommitted(c)
-					c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-					c.JSON(status, gin.H{
-						"error": gin.H{
-							"type":    errType,
-							"message": errMsg,
-						},
-					})
+					writeOpenAIStreamRuleError(c, status, errType, errMsg)
 					return resultWithUsage(), fmt.Errorf("upstream error event: passthrough rule matched message=%s", errMsg)
 				}
 				if openAIStreamErrorEventShouldFailover(dataBytes, errorMessage) {
@@ -1778,13 +1806,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 						// antigravity 先例），否则透传命中的 failed 在监控中不可见。
 						s.recordOpenAIStreamUpstreamError(c, account, true, upstreamRequestID, "http_error", dataBytes, failedMessage)
 						MarkResponseCommitted(c)
-						c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-						c.JSON(status, gin.H{
-							"error": gin.H{
-								"type":    errType,
-								"message": errMsg,
-							},
-						})
+						writeOpenAIStreamRuleError(c, status, errType, errMsg)
 						return resultWithUsage(), fmt.Errorf("upstream response failed: passthrough rule matched message=%s", errMsg)
 					}
 					if openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {

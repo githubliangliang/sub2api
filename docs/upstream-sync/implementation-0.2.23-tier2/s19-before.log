@@ -1,0 +1,46 @@
+2026/11/18 10:03:42 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestPricingLocalStartupAndStopOwnRemoteHash
+2026/11/18 10:03:42 [Pricing] Loaded 1 models from /tmp/TestPricingLocalStartupAndStopOwnRemoteHash1861669857/001/model_pricing.json
+2026/11/18 10:03:43 [Pricing] Update scheduler started (check every 10m0s, remote sync=true, custom file watch=false)
+2026/11/18 10:03:43 [Pricing] Service initialized with 1 models
+2026/11/18 10:03:43 [Pricing] Service stopped
+    pricing_service_lifecycle_test.go:80: valid local prices must make Initialize return before the remote hash
+--- FAIL: TestPricingLocalStartupAndStopOwnRemoteHash (0.25s)
+=== RUN   TestPricingStartupBodyHashAndOverrideSurviveSync
+2026/11/18 10:03:43 [Pricing] Loaded 1 models from /tmp/TestPricingStartupBodyHashAndOverrideSurviveSync3045074162/001/model_pricing.json
+2026/11/18 10:03:43 [Pricing] Remote hash differs on startup (local=3700afa0 remote=586d458c), downloading...
+2026/11/18 10:03:43 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:03:43 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:03:43 [Pricing] Update scheduler started (check every 10m0s, remote sync=true, custom file watch=true)
+2026/11/18 10:03:43 [Pricing] Service initialized with 1 models
+2026/11/18 10:03:43 [Pricing] Service stopped
+--- PASS: TestPricingStartupBodyHashAndOverrideSurviveSync (0.02s)
+=== RUN   TestPricingConcurrentDownloadsAreSerialized
+2026/11/18 10:03:43 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:03:43 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:03:43 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:03:43 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:03:43 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:03:43 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:03:43 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:03:43 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:03:43 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:03:43 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:03:43 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:03:43 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:03:43 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:03:43 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:03:43 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:03:43 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:03:43 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:03:43 [Pricing] Downloaded 1 models successfully
+    pricing_service_lifecycle_test.go:134: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/pricing_service_lifecycle_test.go:134
+        	Error:      	Not equal: 
+        	            	expected: int(1)
+        	            	actual  : int64(6)
+        	Test:       	TestPricingConcurrentDownloadsAreSerialized
+--- FAIL: TestPricingConcurrentDownloadsAreSerialized (0.01s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.305s
+FAIL

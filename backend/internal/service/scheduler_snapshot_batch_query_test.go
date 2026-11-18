@@ -56,8 +56,8 @@ func (r *batchAccountQueryRepo) ListSchedulableUngroupedByPlatforms(_ context.Co
 	return r.run(batchAccountQueryKey{platform: platforms[0], mixed: true})
 }
 
-func (r *batchAccountQueryRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
-	panic("unexpected ListModelAvailabilityCandidates call")
+func (r *batchAccountQueryRepo) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, _ bool) ([]Account, error) {
+	return r.run(batchAccountQueryKey{groupID: derefGroupID(groupID), platform: firstPlatform(platforms), mixed: len(platforms) > 1})
 }
 
 func (r *batchAccountQueryRepo) ListSchedulableByPlatform(_ context.Context, platform string) ([]Account, error) {
@@ -726,6 +726,10 @@ type batchQueryBenchmarkRepo struct {
 }
 
 func (r *batchQueryBenchmarkRepo) ListSchedulableByGroupIDAndPlatform(context.Context, int64, string) ([]Account, error) {
+	return r.accounts, nil
+}
+
+func (r *batchQueryBenchmarkRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
 	return r.accounts, nil
 }
 

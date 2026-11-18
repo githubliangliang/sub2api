@@ -394,7 +394,12 @@ func TestOpenAIStreamKeepaliveOnlyFailureDoesNotRecordFirstToken(t *testing.T) {
 			require.ErrorAs(t, err, &failoverErr)
 			require.True(t, failoverErr.RetryableOnSameAccount)
 			require.True(t, failoverErr.RequestScopedTransient)
-			require.Empty(t, rec.Body.String())
+			if !passthrough {
+				require.Equal(t, "data: {\"type\":\"keepalive\"}\n\n", rec.Body.String())
+				require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c))
+			} else {
+				require.Empty(t, rec.Body.String())
+			}
 		})
 	}
 }

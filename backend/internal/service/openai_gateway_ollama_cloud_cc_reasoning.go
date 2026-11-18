@@ -77,13 +77,13 @@ func normalizeOllamaCloudChatCompletionsRequest(body []byte) []byte {
 	if !messages.IsArray() {
 		return body
 	}
-	updated := body
-	changed := false
+	var edits []jsonObjectStringFieldEdit
+	var indexes []int
 	for i, msg := range messages.Array() {
 		if msg.Get("role").String() != "assistant" {
 			continue
 		}
-		reasoningContent, ok := jsonNonEmptyString(msg.Get("reasoning_content"))
+		value, ok := jsonNonEmptyString(msg.Get("reasoning_content"))
 		if !ok {
 			continue
 		}
@@ -93,17 +93,24 @@ func normalizeOllamaCloudChatCompletionsRequest(body []byte) []byte {
 		if _, has := jsonNonEmptyString(msg.Get("thinking")); has {
 			continue
 		}
-		next, err := sjson.SetBytes(updated, "messages."+strconv.Itoa(i)+".reasoning", reasoningContent)
+		edits = append(edits, jsonObjectStringFieldEdit{object: msg, value: value})
+		indexes = append(indexes, i)
+	}
+	if len(edits) == 0 {
+		return body
+	}
+	if out, ok := setStringFieldInJSONObjects(body, "reasoning", edits); ok {
+		return out
+	}
+	out := body
+	for n, i := range indexes {
+		next, err := sjson.SetBytes(out, "messages."+strconv.Itoa(i)+".reasoning", edits[n].value)
 		if err != nil {
 			return body
 		}
-		updated = next
-		changed = true
+		out = next
 	}
-	if !changed {
-		return body
-	}
-	return updated
+	return out
 }
 
 func normalizeOllamaCloudChatCompletionsResponseJSON(body []byte) []byte {

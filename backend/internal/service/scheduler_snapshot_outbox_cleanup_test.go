@@ -112,6 +112,10 @@ func (r *outboxCleanupAccountRepo) ListSchedulableUngroupedByPlatform(context.Co
 	return nil, nil
 }
 
+func (r *outboxCleanupAccountRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
+	return nil, nil
+}
+
 type blockingOutboxCleanupCache struct {
 	*outboxCleanupCache
 	mu      sync.Mutex

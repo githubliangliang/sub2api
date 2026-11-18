@@ -282,8 +282,15 @@ type PricingService struct {
 	customFilesHash string
 
 	// 停止信号
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	stopCh           chan struct{}
+	wg               sync.WaitGroup
+	lifecycleMu      sync.Mutex
+	lifecycleCtx     context.Context
+	lifecycleCancel  context.CancelFunc
+	stopped          bool
+	schedulerStarted bool
+	startupCheck     chan struct{}
+	downloadMu       sync.Mutex
 }
 
 // NewPricingService 创建价格服务
@@ -315,15 +322,47 @@ func (s *PricingService) Initialize() error {
 	// 启动定时更新
 	s.startUpdateScheduler()
 
-	logger.LegacyPrintf("service.pricing", "[Pricing] Service initialized with %d models", len(s.pricingData))
+	s.mu.RLock()
+	modelCount := len(s.pricingData)
+	s.mu.RUnlock()
+	logger.LegacyPrintf("service.pricing", "[Pricing] Service initialized with %d models", modelCount)
 	return nil
 }
 
 // Stop 停止价格服务
 func (s *PricingService) Stop() {
-	close(s.stopCh)
+	s.lifecycleMu.Lock()
+	if !s.stopped {
+		s.ensurePricingLifecycleLocked()
+		s.stopped = true
+		s.lifecycleCancel()
+		close(s.stopCh)
+	}
+	s.lifecycleMu.Unlock()
 	s.wg.Wait()
 	logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Service stopped")
+}
+
+func (s *PricingService) ensurePricingLifecycleLocked() {
+	if s.lifecycleCtx == nil {
+		s.lifecycleCtx, s.lifecycleCancel = context.WithCancel(context.Background())
+	}
+	if s.stopCh == nil {
+		s.stopCh = make(chan struct{})
+	}
+}
+
+// Add and Stop are serialized so shutdown waits for every owned fetch and
+// pricing write, including manual refreshes already in progress.
+func (s *PricingService) beginPricingOperation() (context.Context, func(), error) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.stopped {
+		return nil, nil, context.Canceled
+	}
+	s.ensurePricingLifecycleLocked()
+	s.wg.Add(1)
+	return s.lifecycleCtx, s.wg.Done, nil
 }
 
 // startUpdateScheduler 启动定时更新调度器
@@ -346,7 +385,17 @@ func (s *PricingService) startUpdateScheduler() {
 		hashInterval = 10 * time.Minute
 	}
 
+	s.lifecycleMu.Lock()
+	if s.stopped || s.schedulerStarted {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	s.ensurePricingLifecycleLocked()
+	s.schedulerStarted = true
+	s.startupCheck = make(chan struct{}, 1)
+	ctx := s.lifecycleCtx
 	s.wg.Add(1)
+	s.lifecycleMu.Unlock()
 	go func() {
 		defer s.wg.Done()
 		ticker := time.NewTicker(hashInterval)
@@ -354,6 +403,12 @@ func (s *PricingService) startUpdateScheduler() {
 
 		for {
 			select {
+			case <-s.startupCheck:
+				if remoteEnabled {
+					if err := s.syncWithRemote(); err != nil {
+						logger.LegacyPrintf("service.pricing", "[Pricing] Startup sync failed: %v", err)
+					}
+				}
 			case <-ticker.C:
 				if remoteEnabled {
 					if err := s.syncWithRemote(); err != nil {
@@ -363,7 +418,7 @@ func (s *PricingService) startUpdateScheduler() {
 				if watchCustom {
 					s.reloadIfCustomFilesChanged()
 				}
-			case <-s.stopCh:
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -388,25 +443,18 @@ func (s *PricingService) checkAndUpdatePricing() error {
 		return s.downloadPricingData()
 	}
 
-	// 如果配置了哈希URL，通过远程哈希检查是否有更新
+	// Valid local data is already available. One owned worker checks the
+	// remote hash; a slow endpoint does not delay Initialize and listening.
 	if s.cfg.Pricing.HashURL != "" {
-		remoteHash, err := s.fetchRemoteHash()
-		if err != nil {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Failed to fetch remote hash on startup: %v", err)
-			return nil // 已加载本地文件，哈希获取失败不影响启动
-		}
-
-		s.mu.RLock()
-		localHash := s.localHash
-		s.mu.RUnlock()
-
-		if localHash == "" || !strings.EqualFold(remoteHash, localHash) {
-			logger.LegacyPrintf("service.pricing", "[Pricing] Remote hash differs on startup (local=%s remote=%s), downloading...",
-				localHash[:min(8, len(localHash))], remoteHash[:min(8, len(remoteHash))])
-			if err := s.downloadPricingData(); err != nil {
-				logger.LegacyPrintf("service.pricing", "[Pricing] Download failed, using existing file: %v", err)
+		s.startUpdateScheduler()
+		s.lifecycleMu.Lock()
+		if !s.stopped && s.startupCheck != nil {
+			select {
+			case s.startupCheck <- struct{}{}:
+			default:
 			}
 		}
+		s.lifecycleMu.Unlock()
 		return nil
 	}
 
@@ -544,6 +592,13 @@ func (s *PricingService) reloadIfCustomFilesChanged() {
 // reloadCustomPricingLayers 读取本地目录缓存并重新叠加 fallback/override，只替换内存数据
 // 与叠加层指纹。
 func (s *PricingService) reloadCustomPricingLayers() error {
+	ctx, done, operationErr := s.beginPricingOperation()
+	if operationErr != nil {
+		return operationErr
+	}
+	defer done()
+	s.downloadMu.Lock()
+	defer s.downloadMu.Unlock()
 	pricingFile := s.getPricingFilePath()
 	// 定价层文件可能在读取期间被替换。只有构建前后指纹一致时才提交，
 	// 否则丢弃这次混合快照并重试，避免短暂应用不匹配的 fallback/override。
@@ -574,6 +629,9 @@ func (s *PricingService) reloadCustomPricingLayers() error {
 			return fmt.Errorf("custom pricing files changed during reload")
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	s.mu.Lock()
 	s.pricingData = data
@@ -586,13 +644,20 @@ func (s *PricingService) reloadCustomPricingLayers() error {
 
 // downloadPricingData 从远程下载价格数据
 func (s *PricingService) downloadPricingData() error {
+	operationCtx, done, err := s.beginPricingOperation()
+	if err != nil {
+		return err
+	}
+	defer done()
+	s.downloadMu.Lock()
+	defer s.downloadMu.Unlock()
 	remoteURL, err := s.validatePricingURL(s.cfg.Pricing.RemoteURL)
 	if err != nil {
 		return err
 	}
 	logger.LegacyPrintf("service.pricing", "[Pricing] Downloading from %s", remoteURL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(operationCtx, 30*time.Second)
 	defer cancel()
 
 	// 获取远程哈希（用于同步锚点，不作为完整性校验）
@@ -622,6 +687,9 @@ func (s *PricingService) downloadPricingData() error {
 	data, customFilesHash, err := s.buildPricingData(body)
 	if err != nil {
 		return fmt.Errorf("parse pricing data: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// 保存到本地文件
@@ -787,6 +855,13 @@ func (s *PricingService) buildPricingData(body []byte) (map[string]*LiteLLMModel
 
 // loadPricingData 从本地文件加载价格数据
 func (s *PricingService) loadPricingData(filePath string) error {
+	ctx, done, err := s.beginPricingOperation()
+	if err != nil {
+		return err
+	}
+	defer done()
+	s.downloadMu.Lock()
+	defer s.downloadMu.Unlock()
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("read file failed: %w", err)
@@ -801,6 +876,9 @@ func (s *PricingService) loadPricingData(filePath string) error {
 	// 计算哈希
 	hash := sha256.Sum256(data)
 	hashStr := hex.EncodeToString(hash[:])
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	s.mu.Lock()
 	s.pricingData = pricingData
@@ -994,12 +1072,17 @@ func (s *PricingService) useFallbackPricing() error {
 
 // fetchRemoteHash 从远程获取哈希值
 func (s *PricingService) fetchRemoteHash() (string, error) {
+	operationCtx, done, err := s.beginPricingOperation()
+	if err != nil {
+		return "", err
+	}
+	defer done()
 	hashURL, err := s.validatePricingURL(s.cfg.Pricing.HashURL)
 	if err != nil {
 		return "", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(operationCtx, 10*time.Second)
 	defer cancel()
 
 	hash, err := s.remoteClient.FetchHashText(ctx, hashURL)

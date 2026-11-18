@@ -1,0 +1,30 @@
+=== RUN   TestUpstreamDialerRespectsContextCancellation
+--- PASS: TestUpstreamDialerRespectsContextCancellation (0.00s)
+=== RUN   TestUpstreamDialerSetsKeepAliveAndUserTimeoutOnTheSocket
+    http_upstream_keepalive_linux_test.go:66: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/http_upstream_keepalive_linux_test.go:66
+        	Error:      	Not equal: 
+        	            	expected: map[string]int{"SO_KEEPALIVE":1, "TCP_KEEPCNT":3, "TCP_KEEPIDLE":15, "TCP_KEEPINTVL":5, "TCP_USER_TIMEOUT":30000}
+        	            	actual  : map[string]int{"SO_KEEPALIVE":1, "TCP_KEEPCNT":9, "TCP_KEEPIDLE":30, "TCP_KEEPINTVL":15, "TCP_USER_TIMEOUT":0}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -2,6 +2,6 @@
+        	            	  (string) (len=12) "SO_KEEPALIVE": (int) 1,
+        	            	- (string) (len=11) "TCP_KEEPCNT": (int) 3,
+        	            	- (string) (len=12) "TCP_KEEPIDLE": (int) 15,
+        	            	- (string) (len=13) "TCP_KEEPINTVL": (int) 5,
+        	            	- (string) (len=16) "TCP_USER_TIMEOUT": (int) 30000
+        	            	+ (string) (len=11) "TCP_KEEPCNT": (int) 9,
+        	            	+ (string) (len=12) "TCP_KEEPIDLE": (int) 30,
+        	            	+ (string) (len=13) "TCP_KEEPINTVL": (int) 15,
+        	            	+ (string) (len=16) "TCP_USER_TIMEOUT": (int) 0
+        	            	 }
+        	Test:       	TestUpstreamDialerSetsKeepAliveAndUserTimeoutOnTheSocket
+--- FAIL: TestUpstreamDialerSetsKeepAliveAndUserTimeoutOnTheSocket (0.00s)
+=== RUN   TestUpstreamDialerIgnoresUserTimeoutFailure
+--- PASS: TestUpstreamDialerIgnoresUserTimeoutFailure (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/repository	0.015s
+FAIL

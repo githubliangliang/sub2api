@@ -1,0 +1,1701 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index be51ee6fb..3445d663b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -2,6 +2,10 @@
+ 
+ This file provides guidance to coding agents working in this repository.
+ 
++**v0.2.23 first tier implemented (2026-11-18):** [verification](./openspec/changes/port-upstream-0.2.23-tier1/verification.md) completes F01–F21, 70/70 tasks, from `7a0b78fe511f17b0f7eb9d26fcf5e4ff083312c7`. Includes sealed calls/system authority/strict, Codex untrusted HTTP context, per-turn beta/raw headers, post-output account/model error effects, existing Sol Ultra Fast 6x, safe login backfill, independent weekly readings and 5h bounds, bounded memory spool fallback, existing Claude test default, Grok media errors, schema items, whitelist/Bedrock UI, endpoint metadata projection, nonce HTML and metadata/sticky writeback. F20 native Anthropic source is local NOBASE and N/A; F21 already had cancellation protection, only the selected write is aligned to 5 seconds. Backend54-package unit/embed build/lint0/six-package race and actual HTTP/WS/SQLite/miniredis/Fast/settlement+dedup/quota checks passed; frontend2206/2 existing skips, critical179/2, typecheck/lint/build and desktop/mobile browser passed. [Evidence](./docs/upstream-sync/implementation-0.2.23-tier1/README.md) retains failures, source/fixture adaptations and hashes of31 product source/24 test files. A1CPU/1GiB standalone8MiB stage fixture measured70,287,360-byte memory.peak, not production acceptance. VERSION1.1.25, Go1.27.3, SQLite229, auth21, dependencies, Ent/Wire and64MiB/40MiB/120s defaults remain. Implementation is uncommitted in the worktree; second tier remains76 unchecked tasks. Frozen sources/history and earlier active changes stay intact. No release/push/archive or business-instance operation.
++
++**Latest release intake (2026-11-18):** [PORTING-0.2.23.md](./docs/upstream-sync/PORTING-0.2.23.md) assesses v0.2.21–v0.2.23 (including v0.2.22) against `7a0b78fe511f17b0f7eb9d26fcf5e4ff083312c7` / VERSION1.1.25 / Go1.27.3 / SQLite229 / auth snapshot21. Covers128 non-merge commits,78PRs+4direct commits and524 candidate-file states A0/C269/X199/N56, all reverse-before-forward. Recommends21 first-tier and23 second-tier clusters from55PRs; [first](./openspec/changes/port-upstream-0.2.23-tier1/README.md) / [second](./openspec/changes/port-upstream-0.2.23-tier2/README.md) proposals remain **unimplemented** (70/76 unchecked tasks). Prioritizes existing Claude/Codex/Grok protocol, token, cache5m/1h billing, bounded pre-output recovery and SQLite atomic configuration. Ten-package targeted baseline and89frontend tests passed; six-package test-only overlays compiled with26 failed desired top-level behaviours and20 passing controls, including actual SQLite/Ent and embed HTML. Temporary frontend tests9failed/11passed; no browser acceptance. Single-P Ollama helper PoC preserved bytes and reduced7.92ms/12.56MB allocation to0.34ms/0.26MB for200messages; source SSE escaped-usage predicate fails, requiring adaptation. Read-only Go1.27.4 embed build/three-package tests passed without changing the current declaration; network/fixture/runner failures are retained. RPM/Gemini refresh/DeepSeek override already-equivalent paths are not reopened; Codex account namespace/raw metadata/inflight test and PG rollup bases are absent. PR8822 ultimately retains ForceCacheBilling despite the release summary. New models/platforms/force/channel Ultra Fast configuration,30m/12h and bulk lane/coalescing remain on demand; payment excluded. [Evidence](./docs/upstream-sync/evidence-0.2.23/MANIFEST.md) separates assessment from future implementation. Six prior active changes have180 completed checkboxes and await archive; frozen sources/evidence stay intact. No product/schema/version/dependency change, commit/push/release/archive or business-instance operation.
++
+ **User-selected v1.1.25 release (2026-11-12):** VERSION is 1.1.25. [Detailed release notes](./docs/releases/v1.1.25.md) cover the actual increment after v1.1.24: upstream v0.2.21 first tier (`63c764704`, F01–F11, 39/39 tasks) and second tier (`83729b130`, S01–S12, 42/42 tasks). Product baseline is `83729b13035c6ad7a26f7dec797ac4a2c0af8e17`; [release readiness](./docs/releases/evidence-v1.1.25/readiness.md) separates frozen implementation acceptance from this release's checks. SQLite maximum migration changes 228→229 with the API-key cost covering index only; Go1.27.3, auth snapshot21, dependencies, Ent/Wire and 64MiB body/40MiB SSE line/120s idle defaults remain. The user authorized an annotated tag and pushing main/tag. Publication refs and Release workflow are checked after pushing; historical sources/evidence and active changes awaiting archival retain their content. No business-instance deployment is included.
+ 
+ **v0.2.21 second tier implemented (2026-11-12):** [verification](./openspec/changes/port-upstream-0.2.21-tier2/verification.md) completes S01–S12, 42/42 tasks. Started at `4f4c80c3ce48ce4afbc9344536b9cf44ed3fd898` with existing tier1 edits; tier1 was independently committed as `63c764704761073e69ff25ba41d64eeab5793cd0` during implementation, with all28 product hashes verified. Covers native WS later-turn1013 close, OAuth hosted-search activation/full history, shared TTFT classification, explicit model-only capacity cooldown, Anthropic compatibility error policies, synthetic effort mapping/final validation, atomic refresh rotation, independent Key usage loading/SQLite covering index, retained account rows/quotas, strict Codex page context, audit worker wakes and Claude Code2.1.321. Actual SQLite testing exposed mixed timestamp claim comparisons; julianday fixes due-job recognition while preserving transaction/claim-version ownership. Backend full unit/embed build/lint0, five-package targeted race, real local HTTP/SQLite/miniredis/Fast/settlement+dedup/fixed quota checks passed; frontend2197/2 existing skips, critical179/2, typecheck/lint/build and desktop/mobile browser checks passed. SQLite migration229 adds `(api_key_id,created_at,actual_cost)` only; a1GiB/1CPU temporary fixture measured covering-plan/result consistency, query/write/storage cost and66850816-byte memory peak, not production acceptance. VERSION1.1.24, Go1.27.3, auth snapshot21, dependencies, Ent/Wire and64MiB/40MiB/120s defaults remain. [Implementation evidence](./docs/upstream-sync/implementation-0.2.21-tier2/README.md) retains failures and final worktree hashes. Implementation is included in this commit and remains active awaiting archival; frozen source/history and tier1 implementation remain intact. No payment/new model/platform/TTL/adaptive budget, push/release or business-instance deployment.
+@@ -83,7 +87,7 @@ This is a personal-use project. **Do not introduce, enable, extend, or port paym
+ 
+ **Previous intake status:** [PORTING-0.2.9.md](./docs/upstream-sync/PORTING-0.2.9.md) was assessed on 2026-09-28. Its second tier's 48 PRs / 16 clusters **landed at `159d04222`** and are included in v1.1.14; [acceptance evidence](openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier2/verification.md) records backend unit/build/race, SQLite, frontend 1808 passed / 2 existing skips and browser checks. The user confirmed the first tier (39 PRs / 15 clusters) complete on 2026-10-24, and it is now archived; see its [completion record](./openspec/changes/archive/2026-10-24-port-upstream-0.2.9-tier1/completion-record.md). Earlier pending labels and blank verification slots are historical snapshots, superseded for completion status by that explicit user confirmation; this archival update does not infer a new implementation SHA or merge path. The v0.2.5 main batches already landed at bfbcd79. Frozen intake and verification notes retain their historical baseline; current leftovers are restated in the latest assessment §5.
+ 
+-**Merging upstream:** git history was rewritten (no shared ancestor). Do **not** `git merge upstream/main`. Cherry-pick or port by feature. Process + current checklists: [latest v0.2.21 assessment](./docs/upstream-sync/PORTING-0.2.21.md), [previous v0.2.20 assessment](./docs/upstream-sync/PORTING-0.2.20.md), [previous v0.2.19 assessment](./docs/upstream-sync/PORTING-0.2.19.md), [selected personal maintenance supplement](./docs/upstream-sync/PORTING-0.2.18-personal-maintenance.md), [previous v0.2.18 assessment](./docs/upstream-sync/PORTING-0.2.18.md), [docs/upstream-sync/README.md](./docs/upstream-sync/README.md), [docs/upstream-sync/PORTING-0.2.4.md](./docs/upstream-sync/PORTING-0.2.4.md) (previous intake, 2026-09-12: v0.2.1–v0.2.4 including the v0.2.2 tag; 13 第一档 items + 12 第二档 clusters **landed on main and verified** at `a26b6b55d`, including the API Key Responses namespace follow-up fix; release target `v1.1.12`; OpenSpec changes, frozen intake evidence and final implementation report linked there; earlier leftovers rechecked), [docs/upstream-sync/PORTING-0.2.0.md](./docs/upstream-sync/PORTING-0.2.0.md) (0.1.185 + 0.2.0 first/second-tier main batches merged into main at `c9d9bebe8`; DOMPurify maintenance completed in v0.2.16 tier-2), [docs/upstream-sync/PORTING-0.1.184.md](./docs/upstream-sync/PORTING-0.1.184.md) (0.1.184, P0/P1 merged), [docs/upstream-sync/PORTING-0.1.183.md](./docs/upstream-sync/PORTING-0.1.183.md) (0.1.181–0.1.183 bugfixes), [docs/upstream-sync/PORTING-0.1.180.md](./docs/upstream-sync/PORTING-0.1.180.md).
++**Merging upstream:** git history was rewritten (no shared ancestor). Do **not** `git merge upstream/main`. Cherry-pick or port by feature. Process + current checklists: [latest v0.2.23 assessment](./docs/upstream-sync/PORTING-0.2.23.md), [previous v0.2.21 assessment](./docs/upstream-sync/PORTING-0.2.21.md), [previous v0.2.20 assessment](./docs/upstream-sync/PORTING-0.2.20.md), [previous v0.2.19 assessment](./docs/upstream-sync/PORTING-0.2.19.md), [selected personal maintenance supplement](./docs/upstream-sync/PORTING-0.2.18-personal-maintenance.md), [previous v0.2.18 assessment](./docs/upstream-sync/PORTING-0.2.18.md), [docs/upstream-sync/README.md](./docs/upstream-sync/README.md), [docs/upstream-sync/PORTING-0.2.4.md](./docs/upstream-sync/PORTING-0.2.4.md) (previous intake, 2026-09-12: v0.2.1–v0.2.4 including the v0.2.2 tag; 13 第一档 items + 12 第二档 clusters **landed on main and verified** at `a26b6b55d`, including the API Key Responses namespace follow-up fix; release target `v1.1.12`; OpenSpec changes, frozen intake evidence and final implementation report linked there; earlier leftovers rechecked), [docs/upstream-sync/PORTING-0.2.0.md](./docs/upstream-sync/PORTING-0.2.0.md) (0.1.185 + 0.2.0 first/second-tier main batches merged into main at `c9d9bebe8`; DOMPurify maintenance completed in v0.2.16 tier-2), [docs/upstream-sync/PORTING-0.1.184.md](./docs/upstream-sync/PORTING-0.1.184.md) (0.1.184, P0/P1 merged), [docs/upstream-sync/PORTING-0.1.183.md](./docs/upstream-sync/PORTING-0.1.183.md) (0.1.181–0.1.183 bugfixes), [docs/upstream-sync/PORTING-0.1.180.md](./docs/upstream-sync/PORTING-0.1.180.md).
+ 
+ **Go version:** `1.27.3` (from `backend/go.mod`). CI asserts this string; bump go.mod and workflow version checks together.
+ 
+diff --git a/backend/internal/handler/gateway_handler.go b/backend/internal/handler/gateway_handler.go
+index 60d2b837a..28b808fcb 100644
+--- a/backend/internal/handler/gateway_handler.go
++++ b/backend/internal/handler/gateway_handler.go
+@@ -1095,7 +1095,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+ 			// - 粘性账号因负载/RPM 被跳过、选中了其他账号：不覆盖原绑定，
+ 			//   下次请求粘性账号恢复后仍可命中
+ 			if sessionKey != "" && (sessionBoundAccountID == 0 || sessionBoundAccountID == account.ID) {
+-				bindCtx, cancelBind := postForwardContext(c.Request.Context())
++				bindCtx, cancelBind := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 5*time.Second)
+ 				if err := h.gatewayService.BindStickySession(bindCtx, currentAPIKey.GroupID, sessionKey, account.ID); err != nil {
+ 					reqLog.Warn("gateway.bind_sticky_session_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+ 				}
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index f6ced1921..60b2b3b1d 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -393,7 +393,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+ 	}
+ 	if normalizedBody, changed := normalizeCodexPageContext(body); changed {
+ 		body = normalizedBody
+-		reqLog.Info("openai.codex_page_context_normalized",
++		reqLog.Info("openai.codex_untrusted_context_normalized",
+ 			zap.String("normalization", "call_output_to_user_message"),
+ 		)
+ 	}
+diff --git a/backend/internal/handler/openai_page_context.go b/backend/internal/handler/openai_page_context.go
+index c61e83042..ee107dcc7 100644
+--- a/backend/internal/handler/openai_page_context.go
++++ b/backend/internal/handler/openai_page_context.go
+@@ -11,10 +11,10 @@ import (
+ 
+ var codexSelectedPageName = regexp.MustCompile(`^codex_apps_selected_page_part_([1-9][0-9]*)_of_([1-9][0-9]*)$`)
+ 
+-// Desktop injects page snapshots as standalone outputs, without a model tool call.
+-// Keep them as untrusted user text, including on history replay and mixed bootstrap turns.
++// Codex injects external context without a model tool call. Keep it as untrusted
++// user text, including on history replay and mixed bootstrap turns.
+ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
+-	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_") || !hasUniqueJSONMembers(body) {
++	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context") || !hasUniqueJSONMembers(body) {
+ 		return body, false
+ 	}
+ 	var request map[string]json.RawMessage
+@@ -46,15 +46,19 @@ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
+ 			}
+ 		}
+ 		name, output := readString("name"), readString("output")
+-		if !validCodexPageContext(name, output) {
++		if !validCodexUntrustedContext(name, output) {
+ 			continue
+ 		}
++		text := "<external_" + name + ">" + output + "</external_" + name + ">"
++		if validCodexPageContext(name, output) {
++			text = "<external_" + name + ">\n" + output + "\n</external_" + name + ">"
++		}
+ 		message := map[string]any{
+ 			"type": "message",
+ 			"role": "user",
+ 			"content": []map[string]string{{
+ 				"type": "input_text",
+-				"text": "<external_" + name + ">\n" + output + "\n</external_" + name + ">",
++				"text": text,
+ 			}},
+ 		}
+ 		encoded, err := json.Marshal(message)
+@@ -79,6 +83,15 @@ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
+ 	return encoded, true
+ }
+ 
++func validCodexUntrustedContext(name, output string) bool {
++	switch name {
++	case "browser_info", "goal_objective", "untrusted_context":
++		return strings.TrimSpace(output) != ""
++	default:
++		return validCodexPageContext(name, output)
++	}
++}
++
+ func validCodexPageContext(name, output string) bool {
+ 	if name == "codex_apps_open_page" {
+ 		return validCodexPageSnapshot(output)
+diff --git a/backend/internal/handler/openai_page_context_http_test.go b/backend/internal/handler/openai_page_context_http_test.go
+index 006e4ef89..e14cae180 100644
+--- a/backend/internal/handler/openai_page_context_http_test.go
++++ b/backend/internal/handler/openai_page_context_http_test.go
+@@ -48,7 +48,7 @@ func TestCodexPageContextRealHTTPFirstRequest(t *testing.T) {
+ 	router.POST("/v1/responses", h.Responses)
+ 	server := httptest.NewServer(router)
+ 	defer server.Close()
+-	body := pageContextRequest(t, pageContextItem("codex_apps_open_page", `{"page_id":"page-fixture","text":"untrusted page content"}`), pageContextItem("codex_apps_selected_page_part_1_of_1", "Companion Page snapshot part 1 of 1:\n"+`{"page_id":null}`), map[string]any{"role": "user", "content": "hello"})
++	body := pageContextRequest(t, pageContextItem("codex_apps_open_page", `{"page_id":"page-fixture","text":"untrusted page content"}`), pageContextItem("codex_apps_selected_page_part_1_of_1", "Companion Page snapshot part 1 of 1:\n"+`{"page_id":null}`), pageContextItem("browser_info", "active browser"), pageContextItem("goal_objective", "current objective"), pageContextItem("untrusted_context", "external context"), map[string]any{"role": "user", "content": "hello"})
+ 	response, err := server.Client().Post(server.URL+"/v1/responses", "application/json", strings.NewReader(string(body)))
+ 	require.NoError(t, err)
+ 	raw, err := io.ReadAll(response.Body)
+@@ -58,14 +58,14 @@ func TestCodexPageContextRealHTTPFirstRequest(t *testing.T) {
+ 	select {
+ 	case forwarded := <-captured:
+ 		items := gjson.GetBytes(forwarded, "input").Array()
+-		require.Len(t, items, 3)
+-		for _, item := range items[:2] {
++		require.Len(t, items, 6)
++		for _, item := range items[:5] {
+ 			require.Equal(t, "user", item.Get("role").String())
+ 			require.Equal(t, "message", item.Get("type").String())
+-			require.Contains(t, item.Get("content.0.text").String(), "<external_codex_apps_")
++			require.Contains(t, item.Get("content.0.text").String(), "<external_")
+ 		}
+ 		require.Contains(t, items[0].Get("content.0.text").String(), "untrusted page content")
+-		require.Equal(t, "hello", items[2].Get("content").String())
++		require.Equal(t, "hello", items[5].Get("content").String())
+ 	case <-time.After(time.Second):
+ 		t.Fatal("the first request never reached the HTTP upstream")
+ 	}
+diff --git a/backend/internal/handler/openai_page_context_test.go b/backend/internal/handler/openai_page_context_test.go
+index dccdc6fd8..7a04a064b 100644
+--- a/backend/internal/handler/openai_page_context_test.go
++++ b/backend/internal/handler/openai_page_context_test.go
+@@ -54,6 +54,122 @@ func TestNormalizeCodexPageContextFirstMessage(t *testing.T) {
+ 	require.Equal(t, got, again)
+ }
+ 
++func TestNormalizeCodexAdditionalUntrustedContext(t *testing.T) {
++	// AdditionalContextToolOutput derives names from caller-provided context keys.
++	// Codex 0.169.0 enables this representation by default (openai/codex#60487).
++	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++		t.Run(name, func(t *testing.T) {
++			output := "external context\nline two"
++			body := pageContextRequest(t, pageContextItem(name, output),
++				map[string]any{"role": "user", "content": "continue"})
++			h := &OpenAIGatewayHandler{}
++			w := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(w)
++			require.False(t, h.validateFunctionCallOutputRequest(c, body, zap.NewNop()))
++
++			got, changed := normalizeCodexPageContext(body)
++			require.True(t, changed)
++			w = httptest.NewRecorder()
++			c, _ = gin.CreateTestContext(w)
++			require.True(t, h.validateFunctionCallOutputRequest(c, got, zap.NewNop()))
++			require.False(t, c.Writer.Written())
++			item := gjson.GetBytes(got, "input.0")
++			require.Equal(t, "message", item.Get("type").String())
++			require.Equal(t, "user", item.Get("role").String())
++			require.Equal(t, "<external_"+name+">"+output+"</external_"+name+">", item.Get("content.0.text").String())
++			require.False(t, item.Get("call_id").Exists())
++			require.Equal(t, "continue", gjson.GetBytes(got, "input.1.content").String())
++			again, changed := normalizeCodexPageContext(got)
++			require.False(t, changed)
++			require.Equal(t, got, again)
++		})
++	}
++}
++
++func TestNormalizeCodexAdditionalUntrustedContextPreservesRealAndMalformedOutputs(t *testing.T) {
++	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++		for _, override := range []map[string]any{
++			{"call_id": "call_real"},
++			{"call_id": nil},
++			{"call_id": 42},
++			{"namespace": "other"},
++			{"namespace": nil},
++			{"namespace": 42},
++			{"output": []any{map[string]any{"type": "encrypted_content", "encrypted_content": "sealed"}}},
++			{"output": " "},
++			{"output": nil},
++		} {
++			item := pageContextItem(name, "context")
++			for key, value := range override {
++				item[key] = value
++			}
++			body := pageContextRequest(t, item)
++			got, changed := normalizeCodexPageContext(body)
++			require.False(t, changed, "name=%s override=%v", name, override)
++			require.Equal(t, body, got)
++		}
++		item := pageContextItem(name, "context")
++		delete(item, "namespace")
++		body := pageContextRequest(t, item)
++		got, changed := normalizeCodexPageContext(body)
++		require.False(t, changed)
++		require.Equal(t, body, got)
++	}
++	// Recognized external context cannot make an unrelated tool result valid.
++	body := pageContextRequest(t, pageContextItem("browser_info", "tab"),
++		pageContextItem("read_file", "result"))
++	got, changed := normalizeCodexPageContext(body)
++	require.True(t, changed)
++	h := &OpenAIGatewayHandler{}
++	w := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(w)
++	require.False(t, h.validateFunctionCallOutputRequest(c, got, zap.NewNop()))
++	require.Equal(t, 400, w.Code)
++
++	// Keep historical calls, prior response and exact numeric metadata intact.
++	body = []byte(`{"model":"gpt-5","previous_response_id":"resp_history","metadata":{"large":9007199254740993},"input":[{"type":"function_call","name":"read_file","call_id":"call_real","arguments":"{}"},{"type":"function_call_output","call_id":"call_real","output":"result"},{"type":"function_call_output","namespace":"agent","name":"goal_objective","output":"finish"}]}`)
++	got, changed = normalizeCodexPageContext(body)
++	require.True(t, changed)
++	require.Equal(t, "resp_history", gjson.GetBytes(got, "previous_response_id").String())
++	require.Equal(t, "9007199254740993", gjson.GetBytes(got, "metadata.large").Raw)
++	for _, index := range []string{"input.0", "input.1"} {
++		require.JSONEq(t, gjson.GetBytes(body, index).Raw, gjson.GetBytes(got, index).Raw)
++	}
++}
++
++func TestNormalizeCodexAdditionalUntrustedContextBlankCallIDsAndMixedInput(t *testing.T) {
++	names := []string{"browser_info", "goal_objective", "untrusted_context"}
++	for _, callID := range []string{"", " \t\n"} {
++		items := make([]any, 0, len(names))
++		for _, name := range names {
++			item := pageContextItem(name, "context for "+name)
++			item["call_id"] = callID
++			delete(item, "id")
++			items = append(items, item)
++		}
++		got, changed := normalizeCodexPageContext(pageContextRequest(t, items...))
++		require.True(t, changed)
++		require.Len(t, gjson.GetBytes(got, "input").Array(), len(names))
++		for i, item := range gjson.GetBytes(got, "input").Array() {
++			require.Equal(t, "user", item.Get("role").String())
++			require.Equal(t, "<external_"+names[i]+">context for "+names[i]+"</external_"+names[i]+">", item.Get("content.0.text").String())
++		}
++	}
++}
++
++func TestNormalizeCodexAdditionalUntrustedContextRejectsDuplicateMembers(t *testing.T) {
++	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++		for _, body := range []string{
++			`{"input":[{"type":"function_call_output","namespace":"agent","name":"` + name + `","call_id":"real","call_id":"","output":"context"}]}`,
++			`{"input":[{"type":"function_call_output","namespace":"agent","name":"` + name + `","output":"first","output":"second"}]}`,
++		} {
++			got, changed := normalizeCodexPageContext([]byte(body))
++			require.False(t, changed)
++			require.Equal(t, body, string(got))
++		}
++	}
++}
++
+ func TestNormalizeCodexPageContextPreservesHistoryAndToolValidation(t *testing.T) {
+ 	body := []byte(`{"model":"gpt-5","previous_response_id":"resp_history","metadata":{"large":9007199254740993},"input":[{"type":"function_call","name":"read_file","call_id":"call_real","arguments":"{}"},{"type":"function_call_output","call_id":"call_real","output":"result"},{"type":"function_call_output","namespace":"agent","name":"codex_apps_open_page","output":"{\"page_id\":\"page_1\"}"}]}`)
+ 	got, changed := normalizeCodexPageContext(body)
+diff --git a/backend/internal/pkg/antigravity/schema_cleaner.go b/backend/internal/pkg/antigravity/schema_cleaner.go
+index 73cf36256..e22338a58 100644
+--- a/backend/internal/pkg/antigravity/schema_cleaner.go
++++ b/backend/internal/pkg/antigravity/schema_cleaner.go
+@@ -376,24 +376,15 @@ func cleanJSONSchemaRecursive(value any) any {
+ 			}
+ 		}
+ 
+-		// 8. [SAFETY] 处理缺失 items 的 Array (Gemini 严苛要求 array 必须声明 items Schema)
++		// 8. Only arrays may carry items, and their items must be a non-empty schema.
+ 		if t, _ := schemaMap["type"].(string); t == "array" {
+-			itemsVal, hasItems := schemaMap["items"]
+-			needDefaultItems := false
+-			if !hasItems || itemsVal == nil {
+-				needDefaultItems = true
+-			} else if itemsMap, ok := itemsVal.(map[string]any); ok {
+-				if len(itemsMap) == 0 {
+-					needDefaultItems = true
+-				}
+-			} else if _, isBool := itemsVal.(bool); isBool {
+-				needDefaultItems = true
+-			}
+-			if needDefaultItems {
++			if items, ok := schemaMap["items"].(map[string]any); !ok || len(items) == 0 {
+ 				schemaMap["items"] = map[string]any{
+ 					"type": "string",
+ 				}
+ 			}
++		} else {
++			delete(schemaMap, "items")
+ 		}
+ 
+ 		// 9. [SAFETY] Required 字段对齐
+diff --git a/backend/internal/pkg/apicompat/anthropic_to_responses.go b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+index b326241aa..548f08882 100644
+--- a/backend/internal/pkg/apicompat/anthropic_to_responses.go
++++ b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+@@ -206,6 +206,8 @@ func anthropicMsgToResponsesItems(m AnthropicMessage) ([]ResponsesInputItem, err
+ 		return anthropicUserToResponses(m.Content)
+ 	case "assistant":
+ 		return anthropicAssistantToResponses(m.Content)
++	case "system":
++		return anthropicContentToResponses(m.Content, "developer")
+ 	default:
+ 		return anthropicUserToResponses(m.Content)
+ 	}
+@@ -215,6 +217,11 @@ func anthropicMsgToResponsesItems(m AnthropicMessage) ([]ResponsesInputItem, err
+ // plain string or an array of blocks. tool_result blocks are extracted into
+ // function_call_output items. Image blocks are converted to input_image parts.
+ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error) {
++	return anthropicContentToResponses(raw, "user")
++}
++
++// System text retains developer authority while tool-result media stays user input.
++func anthropicContentToResponses(raw json.RawMessage, role string) ([]ResponsesInputItem, error) {
+ 	// Try plain string.
+ 	var s string
+ 	if err := json.Unmarshal(raw, &s); err == nil {
+@@ -223,7 +230,7 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+-		return []ResponsesInputItem{{Type: "message", Role: "user", Content: partsJSON}}, nil
++		return []ResponsesInputItem{{Type: "message", Role: role, Content: partsJSON}}, nil
+ 	}
+ 
+ 	var blocks []AnthropicContentBlock
+@@ -265,13 +272,22 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
+ 			}
+ 		}
+ 	}
+-	parts = append(parts, toolResultImageParts...)
++	if role == "user" {
++		parts = append(parts, toolResultImageParts...)
++	}
+ 
+ 	if len(parts) > 0 {
+ 		content, err := json.Marshal(parts)
+ 		if err != nil {
+ 			return nil, err
+ 		}
++		out = append(out, ResponsesInputItem{Type: "message", Role: role, Content: content})
++	}
++	if role != "user" && len(toolResultImageParts) > 0 {
++		content, err := json.Marshal(toolResultImageParts)
++		if err != nil {
++			return nil, err
++		}
+ 		out = append(out, ResponsesInputItem{Type: "message", Role: "user", Content: content})
+ 	}
+ 
+diff --git a/backend/internal/pkg/apicompat/response_format.go b/backend/internal/pkg/apicompat/response_format.go
+index afb5c3e2f..7e1a5d9e1 100644
+--- a/backend/internal/pkg/apicompat/response_format.go
++++ b/backend/internal/pkg/apicompat/response_format.go
+@@ -23,6 +23,10 @@ func chatResponseFormatToResponsesTextFormat(raw json.RawMessage) json.RawMessag
+ 		return raw
+ 	}
+ 	schema["type"] = rawJSONString("json_schema")
++	// Chat defaults strict to false; Responses needs that choice explicitly.
++	if _, ok := schema["strict"]; !ok {
++		schema["strict"] = json.RawMessage("false")
++	}
+ 
+ 	out, err := json.Marshal(schema)
+ 	if err != nil {
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index c79a72a00..4b7628665 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -501,6 +501,7 @@ type bufferedFuncCall struct {
+ 	Name                  string
+ 	Namespace             string
+ 	EncryptedFunctionArgs json.RawMessage
++	EncryptedContent      string
+ 	Args                  strings.Builder
+ }
+ 
+@@ -545,6 +546,7 @@ func (a *BufferedResponseAccumulator) ProcessEvent(event *ResponsesStreamEvent)
+ 				Name:                  event.Item.Name,
+ 				Namespace:             event.Item.Namespace,
+ 				EncryptedFunctionArgs: event.Item.EncryptedFunctionArgs,
++				EncryptedContent:      event.Item.EncryptedContent,
+ 			})
+ 		}
+ 	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
+@@ -614,6 +616,7 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
+ 			Name:                  a.funcCalls[i].Name,
+ 			Namespace:             a.funcCalls[i].Namespace,
+ 			EncryptedFunctionArgs: a.funcCalls[i].EncryptedFunctionArgs,
++			EncryptedContent:      a.funcCalls[i].EncryptedContent,
+ 			Arguments:             a.funcCalls[i].Args.String(),
+ 		})
+ 	}
+diff --git a/backend/internal/pkg/claude/constants.go b/backend/internal/pkg/claude/constants.go
+index 0718a2cb0..b0f6bb165 100644
+--- a/backend/internal/pkg/claude/constants.go
++++ b/backend/internal/pkg/claude/constants.go
+@@ -30,6 +30,7 @@ const (
+ 	BetaContextManagement           = "context-management-2025-06-27"
+ 	BetaThinkingBindingControls     = "thinking-binding-controls-2026-08-01"
+ 	BetaMidConversationOutputConfig = "mid-conversation-output-config-2026-07-01"
++	BetaPerTurnControl              = "per-turn-control-2026-07-01"
+ 	BetaExtendedCacheTTL            = "extended-cache-ttl-2025-04-11"
+ 
+ 	// server-side refusal fallback beta 字段族（beta Messages API 专有）。
+@@ -229,7 +230,7 @@ func DefaultModelIDs() []string {
+ }
+ 
+ // DefaultTestModel 测试时使用的默认模型
+-const DefaultTestModel = "claude-sonnet-4-5-20250929"
++const DefaultTestModel = "claude-sonnet-4-6"
+ 
+ // ModelIDOverrides Claude OAuth 请求需要的模型 ID 映射
+ var ModelIDOverrides = map[string]string{
+diff --git a/backend/internal/repository/account_repo.go b/backend/internal/repository/account_repo.go
+index 350589d14..4b4a60b42 100644
+--- a/backend/internal/repository/account_repo.go
++++ b/backend/internal/repository/account_repo.go
+@@ -2428,8 +2428,10 @@ func (r *accountRepository) UpdateSessionWindow(ctx context.Context, id int64, s
+ }
+ 
+ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64, end time.Time) error {
++	// Active quota reads advance both bounds so old-window cost is excluded.
+ 	_, err := r.client.Account.Update().
+ 		Where(dbaccount.IDEQ(id)).
++		SetSessionWindowStart(end.Add(-5 * time.Hour)).
+ 		SetSessionWindowEnd(end).
+ 		Save(ctx)
+ 	if err != nil {
+diff --git a/backend/internal/repository/scheduler_cache.go b/backend/internal/repository/scheduler_cache.go
+index 99a5ac37d..395f6fa63 100644
+--- a/backend/internal/repository/scheduler_cache.go
++++ b/backend/internal/repository/scheduler_cache.go
+@@ -964,7 +964,7 @@ func filterSchedulerCredentials(credentials map[string]any) map[string]any {
+ 	if len(credentials) == 0 {
+ 		return nil
+ 	}
+-	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type", "account_scheduling_threshold"}
++	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type", "account_scheduling_threshold", "openai_capabilities"}
+ 	filtered := make(map[string]any)
+ 	for _, key := range keys {
+ 		if value, ok := credentials[key]; ok && value != nil {
+diff --git a/backend/internal/service/antigravity_gateway_compat_test.go b/backend/internal/service/antigravity_gateway_compat_test.go
+index cc1984f9a..e7588000f 100644
+--- a/backend/internal/service/antigravity_gateway_compat_test.go
++++ b/backend/internal/service/antigravity_gateway_compat_test.go
+@@ -118,6 +118,74 @@ func antigravityCompatSuccessResponse() *http.Response {
+ 	}
+ }
+ 
++func TestAntigravityCompatToolSchemaItemsMatchSelectedType(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const schema = `{"type":"object","properties":{
++		"uri":{"type":["string","array"],"items":{"type":"string"}},
++		"paths":{"type":["array","string"],"items":{"type":"integer"}},
++		"nested":{"type":"array","items":{"type":"object","properties":{
++			"uri":{"type":["string","array"],"items":{"type":"string"}}
++		}}},
++		"fallback":{"type":"array","items":17},
++		"inferred":{"items":{"type":"integer"}},
++		"items":{"type":"string"}
++	}}`
++	const expected = `{"type":"object","properties":{
++		"uri":{"type":"string"},
++		"paths":{"type":"array","items":{"type":"integer"}},
++		"nested":{"type":"array","items":{"type":"object","properties":{
++			"uri":{"type":"string"}
++		}}},
++		"fallback":{"type":"array","items":{"type":"string"}},
++		"inferred":{"type":"array","items":{"type":"integer"}},
++		"items":{"type":"string"}
++	}}`
++	for _, protocol := range []string{"chat", "responses", "messages"} {
++		t.Run(protocol, func(t *testing.T) {
++			var parameters map[string]any
++			require.NoError(t, json.Unmarshal([]byte(schema), &parameters))
++			tool := map[string]any{"name": "inspect", "parameters": parameters}
++			request := map[string]any{"model": "gemini-3.1-pro-high", "max_tokens": 128}
++			switch protocol {
++			case "chat":
++				request["messages"] = []map[string]any{{"role": "user", "content": "inspect URI"}}
++				request["tools"] = []any{map[string]any{"type": "function", "function": tool}}
++			case "responses":
++				request["input"] = "inspect URI"
++				tool["type"] = "function"
++				request["tools"] = []any{tool}
++			case "messages":
++				request["messages"] = []map[string]any{{"role": "user", "content": "inspect URI"}}
++				request["tools"] = []any{map[string]any{"name": "inspect", "input_schema": parameters}}
++			}
++			body, err := json.Marshal(request)
++			require.NoError(t, err)
++			var forwarded []byte
++			upstream := &queuedHTTPUpstreamStub{
++				responses: []*http.Response{antigravityCompatSuccessResponse()},
++				onCall: func(req *http.Request, _ *queuedHTTPUpstreamStub) {
++					forwarded, err = io.ReadAll(req.Body)
++					require.NoError(t, err)
++				},
++			}
++			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
++			account := newAntigravityCompatAccount(AccountTypeOAuth)
++			c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/"+protocol, body)
++			switch protocol {
++			case "chat":
++				_, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, nil)
++			case "responses":
++				_, err = svc.ForwardAsResponses(context.Background(), c, account, body, nil)
++			case "messages":
++				_, err = svc.Forward(context.Background(), c, account, body, false)
++			}
++			require.NoError(t, err)
++			require.Equal(t, http.StatusOK, recorder.Code)
++			require.JSONEq(t, expected, gjson.GetBytes(forwarded, "request.tools.0.functionDeclarations.0.parameters").Raw)
++		})
++	}
++}
++
+ func TestAntigravitySystemIdentityAcrossProtocols(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	const task = "\nKeep GPT-5.6, gpt-6 and Claude model ids unchanged."
+diff --git a/backend/internal/service/auth_service.go b/backend/internal/service/auth_service.go
+index f07b0551b..bc40a649e 100644
+--- a/backend/internal/service/auth_service.go
++++ b/backend/internal/service/auth_service.go
+@@ -1050,6 +1050,9 @@ func (s *AuthService) shouldApplyEmailFirstBindDefaults(
+ 	identity *dbent.AuthIdentity,
+ 	created bool,
+ ) bool {
++	if identity == nil {
++		return false
++	}
+ 	source := emailAuthIdentitySource(identity.Metadata)
+ 	if source == "auth_service_login_backfill" {
+ 		return false
+@@ -1057,7 +1060,7 @@ func (s *AuthService) shouldApplyEmailFirstBindDefaults(
+ 	if created {
+ 		return true
+ 	}
+-	if s == nil || s.entClient == nil || userID <= 0 || identity == nil || identity.UserID != userID {
++	if s == nil || s.entClient == nil || userID <= 0 || identity.UserID != userID {
+ 		return false
+ 	}
+ 	if source != "auth_service_dual_write" {
+diff --git a/backend/internal/service/auth_service_identity_sync_test.go b/backend/internal/service/auth_service_identity_sync_test.go
+index d8c084fa4..e714c7a9c 100644
+--- a/backend/internal/service/auth_service_identity_sync_test.go
++++ b/backend/internal/service/auth_service_identity_sync_test.go
+@@ -292,6 +292,53 @@ func TestAuthServiceRecordSuccessfulLoginBackfillsEmailIdentity(t *testing.T) {
+ 	require.Equal(t, user.ID, identity.UserID)
+ }
+ 
++func TestAuthServiceRecordSuccessfulLogin_EmailIdentityOwnedByAnotherUser(t *testing.T) {
++	assigner := &authIdentityDefaultSubAssignerStub{}
++	svc, _, client := newAuthServiceWithEnt(t, map[string]string{
++		service.SettingKeyRegistrationEnabled:                    "true",
++		service.SettingKeyAuthSourceDefaultEmailBalance:          "8.5",
++		service.SettingKeyAuthSourceDefaultEmailGrantOnFirstBind: "true",
++	}, assigner)
++	ctx := context.Background()
++
++	// users.email 唯一索引区分大小写，email 身份按小写邮箱唯一：只差大小写的两个账号共用一条身份。
++	owner, err := client.User.Create().
++		SetEmail("Shared@Example.com").
++		SetPasswordHash("hash").
++		SetBalance(1).
++		SetConcurrency(1).
++		SetRole(service.RoleUser).
++		SetStatus(service.StatusActive).
++		Save(ctx)
++	require.NoError(t, err)
++	user, err := client.User.Create().
++		SetEmail("shared@example.com").
++		SetPasswordHash("hash").
++		SetBalance(1).
++		SetConcurrency(1).
++		SetRole(service.RoleUser).
++		SetStatus(service.StatusActive).
++		Save(ctx)
++	require.NoError(t, err)
++	require.NoError(t, client.AuthIdentity.Create().
++		SetUserID(owner.ID).
++		SetProviderType("email").
++		SetProviderKey("email").
++		SetProviderSubject("shared@example.com").
++		SetVerifiedAt(time.Now().UTC()).
++		SetMetadata(map[string]any{"source": "auth_service_dual_write"}).
++		Exec(ctx))
++
++	require.NotPanics(t, func() { svc.RecordSuccessfulLogin(ctx, user.ID) })
++
++	storedUser, err := client.User.Get(ctx, user.ID)
++	require.NoError(t, err)
++	require.NotNil(t, storedUser.LastLoginAt)
++	require.Equal(t, 1.0, storedUser.Balance)
++	require.Empty(t, assigner.calls)
++	require.Equal(t, 0, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
++}
++
+ func TestAuthServiceLogin_DoesNotApplyEmailFirstBindDefaultsWhenBackfillingLegacyEmailIdentity(t *testing.T) {
+ 	assigner := &authIdentityDefaultSubAssignerStub{}
+ 	svc, _, client := newAuthServiceWithEnt(t, map[string]string{
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index 7e1d723c4..099c66f86 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -1606,7 +1606,7 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
+ 		return pricing
+ 	}
+ 	cloned := *pricing
+-	if isOpenAIGPT6AstraModel(normalized) {
++	if isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6.1-sol" {
+ 		cloned.UltrafastMultiplier = 6
+ 	}
+ 	if fastRatio > 0 {
+diff --git a/backend/internal/service/error_passthrough_runtime.go b/backend/internal/service/error_passthrough_runtime.go
+index 011c3ce4d..0a6038be3 100644
+--- a/backend/internal/service/error_passthrough_runtime.go
++++ b/backend/internal/service/error_passthrough_runtime.go
+@@ -36,6 +36,20 @@ func applyErrorPassthroughRule(
+ 	defaultStatus int,
+ 	defaultErrType string,
+ 	defaultErrMsg string,
++) (status int, errType string, errMsg string, matched bool) {
++	return applyErrorPassthroughRuleWithMessage(c, platform, upstreamStatus, responseBody, defaultStatus, defaultErrType, defaultErrMsg, ExtractUpstreamErrorMessage)
++}
++
++// Grok media supplies its own extractor for xAI's flat error fields.
++func applyErrorPassthroughRuleWithMessage(
++	c *gin.Context,
++	platform string,
++	upstreamStatus int,
++	responseBody []byte,
++	defaultStatus int,
++	defaultErrType string,
++	defaultErrMsg string,
++	extractMessage func([]byte) string,
+ ) (status int, errType string, errMsg string, matched bool) {
+ 	status = defaultStatus
+ 	errType = defaultErrType
+@@ -56,7 +70,7 @@ func applyErrorPassthroughRule(
+ 		status = *rule.ResponseCode
+ 	}
+ 
+-	errMsg = ExtractUpstreamErrorMessage(responseBody)
++	errMsg = extractMessage(responseBody)
+ 	if !rule.PassthroughBody && rule.CustomMessage != nil {
+ 		errMsg = *rule.CustomMessage
+ 	}
+diff --git a/backend/internal/service/gateway_count_tokens.go b/backend/internal/service/gateway_count_tokens.go
+index b6b42057e..062fa6e39 100644
+--- a/backend/internal/service/gateway_count_tokens.go
++++ b/backend/internal/service/gateway_count_tokens.go
+@@ -445,11 +445,11 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
+ 	req.Header.Del("cookie")
+ 	setAnthropicAPIKeyAuthHeader(req.Header, account, token)
+ 
+-	if req.Header.Get("content-type") == "" {
+-		req.Header.Set("content-type", "application/json")
++	if getHeaderRaw(req.Header, "content-type") == "" {
++		setHeaderRaw(req.Header, "content-type", "application/json")
+ 	}
+-	if req.Header.Get("anthropic-version") == "" {
+-		req.Header.Set("anthropic-version", "2023-06-01")
++	if getHeaderRaw(req.Header, "anthropic-version") == "" {
++		setHeaderRaw(req.Header, "anthropic-version", "2023-06-01")
+ 	}
+ 
+ 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+diff --git a/backend/internal/service/gateway_forward_as_chat_completions.go b/backend/internal/service/gateway_forward_as_chat_completions.go
+index ced6c8d4c..76a0b9863 100644
+--- a/backend/internal/service/gateway_forward_as_chat_completions.go
++++ b/backend/internal/service/gateway_forward_as_chat_completions.go
+@@ -99,6 +99,9 @@ func (s *GatewayService) ForwardAsChatCompletions(
+ 	if err != nil {
+ 		return nil, fmt.Errorf("marshal anthropic request: %w", err)
+ 	}
++	if account.Type == AccountTypeAPIKey {
++		anthropicBody = withChatCompletionsMetadataUserID(body, anthropicBody)
++	}
+ 
+ 	// 6. Apply Claude Code mimicry for OAuth accounts.
+ 	// Chat Completions 协议进来的请求永远不是 Claude Code 客户端，所以对 OAuth 账号
+diff --git a/backend/internal/service/gateway_mid_conversation_output_config_test.go b/backend/internal/service/gateway_mid_conversation_output_config_test.go
+index d551fae78..2c563c177 100644
+--- a/backend/internal/service/gateway_mid_conversation_output_config_test.go
++++ b/backend/internal/service/gateway_mid_conversation_output_config_test.go
+@@ -5,8 +5,10 @@ package service
+ import (
+ 	"bytes"
+ 	"context"
++	"io"
+ 	"net/http"
+ 	"net/http/httptest"
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+@@ -17,7 +19,7 @@ import (
+ )
+ 
+ // ============================================================================
+-// message-level output_config ↔ mid-conversation-output-config beta
++// message-level output_config ↔ mid-conversation-output-config / per-turn-control beta
+ // ============================================================================
+ //
+ // 背景：pi-ai（Harness 使用的 Anthropic provider）会为 opus5 生成形如
+@@ -32,11 +34,11 @@ import (
+ //	"output_config: Extra inputs are not permitted"
+ //
+ // 修复策略（剥字段，不注入 beta）：
+-//   - header 缺该 token：仅为携带 message-level output_config 的消息剥此字段；
++//   - header 缺这两种 token：仅为携带 message-level output_config 的消息剥此字段；
+ //     role=system 且 content 无正文（缺失 / null / 空 string / 空 array / 仅空
+ //     text 块）时整条删除；system 有正文保留正文与其余字段；user/assistant 只剥
+ //     字段，绝不整条删除。
+-//   - header 含该 token：完全保留。
++//   - header 含任一 token：完全保留。
+ //   - 无任何 message-level output_config：字节 no-op。
+ //   - 顶层 output_config / effort 不受该 beta 约束，本增量不触碰。
+ //
+@@ -154,10 +156,120 @@ func TestSanitizeAnthropicBodyForBetaTokens_MidConversationOutputConfig_SystemWi
+ // header 含该 beta → 完全保留，字节 no-op（即使是空控制 system 消息）。
+ func TestSanitizeAnthropicBodyForBetaTokens_MidConversationOutputConfig_ByteNoopWhenBetaPresent(t *testing.T) {
+ 	body := []byte(`{"model":"claude-opus-5","output_config":{"effort":"high"},"messages":[{"role":"system","content":[],"output_config":{"effort":"high"}},{"role":"user","content":"hi"}]}`)
+-	out, changed := sanitizeAnthropicBodyForBetaTokens(body,
+-		"claude-code-20250219,oauth-2025-04-20,"+claude.BetaMidConversationOutputConfig)
+-	require.False(t, changed, "header 含 mid-conversation-output-config beta → 完全保留")
+-	require.True(t, bytes.Equal(body, out), "含 beta 时必须字节 no-op")
++	for _, beta := range []string{
++		claude.BetaMidConversationOutputConfig,
++		"per-turn-control-2026-07-01",
++		"per-turn-control-2026-07-01," + claude.BetaMidConversationOutputConfig,
++	} {
++		t.Run(beta, func(t *testing.T) {
++			out, changed := sanitizeAnthropicBodyForBetaTokens(body, "claude-code-20250219, "+beta+" ")
++			require.False(t, changed, "a supported beta must preserve message-level output_config")
++			require.True(t, bytes.Equal(body, out), "含 beta 时必须字节 no-op")
++		})
++	}
++}
++
++func TestForward_PerTurnControlMessageOutputConfig(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const perTurnBeta = "per-turn-control-2026-07-01"
++	const body = `{"model":"claude-opus-5","max_tokens":256,"output_config":{"effort":"high"},` +
++		`"metadata":{"user_id":"user_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2_account_550e8400-e29b-41d4-a716-446655440000_session_123e4567-e89b-12d3-a456-426614174000"},` +
++		`"messages":[{"role":"user","content":"Hello"},{"role":"assistant","content":"Hi"},` +
++		`{"role":"system","content":[],"output_config":{"effort":"low"}},` +
++		`{"role":"user","content":"Summarize that in one sentence."}]}`
++	for _, mode := range []string{"oauth_claude_code", "oauth_mimic", "apikey", "apikey_passthrough"} {
++		for _, withBeta := range []bool{true, false} {
++			name := "without_beta"
++			if withBeta {
++				name = "with_beta"
++			}
++			t.Run(mode+"/"+name, func(t *testing.T) {
++				c, _ := gin.CreateTestContext(httptest.NewRecorder())
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
++				c.Request.Header.Set("User-Agent", "claude-cli/2.1.321")
++				if mode == "oauth_mimic" {
++					c.Request.Header.Set("User-Agent", "third-party-client/1.0")
++				}
++				if withBeta {
++					c.Request.Header.Set("Anthropic-Beta", "claude-code-20250219,"+perTurnBeta)
++				}
++				account := newAnthropicAPIKeyAccountForTest()
++				account.Extra["anthropic_passthrough"] = mode == "apikey_passthrough"
++				if strings.HasPrefix(mode, "oauth") {
++					account = newAnthropicOAuthAccountForPartialUsageTest()
++				}
++				upstream := &anthropicHTTPUpstreamRecorder{resp: &http.Response{
++					StatusCode: http.StatusOK,
++					Header:     http.Header{"Content-Type": []string{"application/json"}},
++					Body: io.NopCloser(strings.NewReader(`{"id":"msg_test","type":"message","role":"assistant",` +
++						`"model":"claude-opus-5","content":[{"type":"text","text":"OK"}],"stop_reason":"end_turn",` +
++						`"usage":{"input_tokens":10,"output_tokens":1}}`)),
++				}}
++				parsed, err := ParseGatewayRequest(NewRequestBodyRef([]byte(body)), PlatformAnthropic)
++				require.NoError(t, err)
++				svc := newForwardPartialUsageServiceForTest(upstream)
++				_, err = svc.Forward(context.Background(), c, account, parsed)
++				require.NoError(t, err)
++				require.NotNil(t, upstream.lastReq)
++
++				beta := getHeaderRaw(upstream.lastReq.Header, "anthropic-beta")
++				require.Equal(t, withBeta && mode != "oauth_mimic", anthropicBetaTokensContains(beta, perTurnBeta))
++				wantControl := withBeta || mode == "oauth_mimic"
++				messages := gjson.GetBytes(upstream.lastBody, "messages").Array()
++				if wantControl {
++					require.Len(t, messages, 4)
++					require.Equal(t, "system", messages[2].Get("role").String())
++					require.Equal(t, "[]", messages[2].Get("content").Raw)
++					require.Equal(t, "low", messages[2].Get("output_config.effort").String())
++				} else {
++					require.Len(t, messages, 3)
++				}
++				require.Equal(t, "Hello", messages[0].Get("content").String())
++				require.Equal(t, "Hi", messages[1].Get("content").String())
++				require.Equal(t, "Summarize that in one sentence.", messages[len(messages)-1].Get("content").String())
++				require.Equal(t, "high", gjson.GetBytes(upstream.lastBody, "output_config.effort").String())
++			})
++		}
++	}
++}
++
++func TestBuildUpstreamRequest_PerTurnControlPolicyFilter(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const perTurnBeta = "per-turn-control-2026-07-01"
++	const midConversationBeta = "mid-conversation-output-config-2026-07-01"
++	body := []byte(`{"model":"claude-opus-5","messages":[{"role":"user","content":"Hello"},` +
++		`{"role":"system","content":[],"output_config":{"effort":"low"}}]}`)
++	for _, tc := range []struct {
++		name string
++		drop []string
++		keep bool
++	}{
++		{"drop_per_turn_only", []string{perTurnBeta}, true},
++		{"drop_mid_conversation_only", []string{midConversationBeta}, true},
++		{"drop_both", []string{perTurnBeta, midConversationBeta}, false},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			c, _ := gin.CreateTestContext(httptest.NewRecorder())
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
++			c.Request.Header.Set("Anthropic-Beta", "claude-code-20250219,"+perTurnBeta+","+midConversationBeta)
++			c.Set(betaPolicyFilterSetKey, buildBetaTokenSet(tc.drop))
++			svc := &GatewayService{cfg: &config.Config{}}
++			req, _, err := svc.buildUpstreamRequest(context.Background(), c,
++				newAnthropicOAuthAccountForPartialUsageTest(), body,
++				"oauth-token", "oauth", "claude-opus-5", false, false)
++			require.NoError(t, err)
++			for _, token := range tc.drop {
++				require.False(t, anthropicBetaTokensContains(getHeaderRaw(req.Header, "anthropic-beta"), token))
++			}
++			out := readUpstreamBodyForTest(t, req)
++			require.Equal(t, tc.keep, gjson.GetBytes(out, "messages.1.output_config").Exists())
++			if tc.keep {
++				require.Equal(t, "low", gjson.GetBytes(out, "messages.1.output_config.effort").String())
++			} else {
++				require.Len(t, gjson.GetBytes(out, "messages").Array(), 1)
++			}
++		})
++	}
+ }
+ 
+ // 无 message-level output_config（仅有顶层 output_config，或完全没有）→ 字节 no-op。
+diff --git a/backend/internal/service/gateway_request.go b/backend/internal/service/gateway_request.go
+index d82fe99b0..15be7395f 100644
+--- a/backend/internal/service/gateway_request.go
++++ b/backend/internal/service/gateway_request.go
+@@ -1032,7 +1032,7 @@ func sanitizeAnthropicBodyForBetaTokens(body []byte, anthropicBetaHeader string)
+ 		body, changed = b, true
+ 	}
+ 
+-	// messages[].output_config：mid-conversation-output-config beta 专属字段。
++	// messages[].output_config：需要 mid-conversation-output-config 或 per-turn-control beta。
+ 	// 顶层 output_config / effort 不受该 beta 约束，本分支只净化消息内字段。
+ 	if b, deleted := stripAnthropicMessageOutputConfigUnlessBeta(body, anthropicBetaHeader); deleted {
+ 		body, changed = b, true
+@@ -1081,17 +1081,18 @@ func anthropicBetaTokensContains(header, token string) bool {
+ }
+ 
+ // stripAnthropicMessageOutputConfigUnlessBeta 在 anthropic-beta header 缺
+-// mid-conversation-output-config beta 时，净化 **messages[].output_config**：
++// mid-conversation-output-config 和 per-turn-control 两种 beta 时，净化 **messages[].output_config**：
+ //   - 仅为携带 message-level output_config 的消息剥该字段；
+ //   - 若该消息 role=system 且 content 无正文（缺失 / null / 空 string / 空 array /
+ //     仅空 text 块），整条删除（pi-ai 为 opus5 生成的空 system 控制消息即此形态）；
+ //   - system 有正文则保留正文与其余字段；user/assistant 只剥字段，绝不整条删除；
+ //   - 无任何消息携带该字段时返回原 body（字节 no-op）。
+ //
+-// header 含该 beta 时完全保留。顶层 output_config / effort 不属于该 beta 保护范围，
++// header 含任一 beta 时完全保留。顶层 output_config / effort 不属于这些 beta 保护范围，
+ // 本函数不做任何处理。多条删除用「稳健重建」实现，保留其余字段与消息先后顺序。
+ func stripAnthropicMessageOutputConfigUnlessBeta(body []byte, anthropicBetaHeader string) ([]byte, bool) {
+-	if anthropicBetaTokensContains(anthropicBetaHeader, claude.BetaMidConversationOutputConfig) {
++	if anthropicBetaTokensContains(anthropicBetaHeader, claude.BetaMidConversationOutputConfig) ||
++		anthropicBetaTokensContains(anthropicBetaHeader, claude.BetaPerTurnControl) {
+ 		return body, false
+ 	}
+ 	// 快速路径：body 中不含 output_config 字面量时无需解析。
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index eac9daa33..14e252c14 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -349,7 +349,7 @@ func buildClaudeMimicDebugLine(req *http.Request, body []byte, account *Account,
+ 
+ 	h := make([]string, 0, len(interesting))
+ 	for _, k := range interesting {
+-		if v := req.Header.Get(k); v != "" {
++		if v := getHeaderRaw(req.Header, k); v != "" {
+ 			h = append(h, fmt.Sprintf("%s=%q", k, safeHeaderValueForLog(k, v)))
+ 		}
+ 	}
+diff --git a/backend/internal/service/grok_media.go b/backend/internal/service/grok_media.go
+index 4f9639732..81a2119e8 100644
+--- a/backend/internal/service/grok_media.go
++++ b/backend/internal/service/grok_media.go
+@@ -1244,7 +1244,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 	// Reconcile readiness before configurable passthrough branches can return;
+ 	// otherwise a Grok 429 can remain schedulable.
+ 	s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
+-	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(body)))
++	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokUpstreamErrorMessage(body)))
+ 	if upstreamMsg == "" {
+ 		upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
+ 	}
+@@ -1271,11 +1271,11 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 			Detail:             upstreamDetail,
+ 		})
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, http.StatusForbidden, "invalid_request_error", clientMsg)
++		writeGrokMediaErrorResponse(c, http.StatusForbidden, "invalid_request_error", clientMsg, grokUpstreamErrorCode(body))
+ 		return nil, fmt.Errorf("grok content policy rejection: %s", clientMsg)
+ 	}
+ 
+-	if status, errType, errMsg, matched := applyErrorPassthroughRule(
++	if status, errType, errMsg, matched := applyErrorPassthroughRuleWithMessage(
+ 		c,
+ 		account.Platform,
+ 		resp.StatusCode,
+@@ -1283,9 +1283,10 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 		http.StatusBadGateway,
+ 		"upstream_error",
+ 		"Upstream request failed",
++		grokUpstreamErrorMessage,
+ 	); matched {
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, status, errType, errMsg)
++		writeGrokMediaErrorResponse(c, status, errType, errMsg, "")
+ 		return nil, fmt.Errorf("upstream error: %d (passthrough rule matched) message=%s", resp.StatusCode, upstreamMsg)
+ 	}
+ 
+@@ -1301,7 +1302,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 			Detail:             upstreamDetail,
+ 		})
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, http.StatusInternalServerError, "upstream_error", "Upstream gateway error")
++		writeGrokMediaErrorResponse(c, http.StatusInternalServerError, "upstream_error", "Upstream gateway error", "")
+ 		return nil, fmt.Errorf("upstream error: %d (not in custom error codes) message=%s", resp.StatusCode, upstreamMsg)
+ 	}
+ 
+@@ -1329,7 +1330,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 	}
+ 
+ 	MarkResponseCommitted(c)
+-	writeGrokMediaErrorResponse(c, resp.StatusCode, grokMediaErrorType(resp.StatusCode), upstreamMsg)
++	writeGrokMediaErrorResponse(c, resp.StatusCode, grokMediaErrorType(resp.StatusCode), upstreamMsg, grokUpstreamErrorCode(body))
+ 	return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
+ }
+ 
+@@ -1346,16 +1347,18 @@ func grokMediaErrorType(statusCode int) string {
+ 	}
+ }
+ 
+-func writeGrokMediaErrorResponse(c *gin.Context, statusCode int, errType, message string) {
++func writeGrokMediaErrorResponse(c *gin.Context, statusCode int, errType, message, code string) {
+ 	if c == nil || c.Writer == nil || c.Writer.Written() {
+ 		return
+ 	}
+-	c.JSON(statusCode, gin.H{
+-		"error": gin.H{
+-			"type":    strings.TrimSpace(errType),
+-			"message": strings.TrimSpace(message),
+-		},
+-	})
++	payload := gin.H{
++		"type":    strings.TrimSpace(errType),
++		"message": sanitizeUpstreamErrorMessage(strings.TrimSpace(message)),
++	}
++	if code = sanitizeUpstreamErrorMessage(strings.TrimSpace(code)); code != "" {
++		payload["code"] = code
++	}
++	c.JSON(statusCode, gin.H{"error": payload})
+ }
+ 
+ func writeGrokMediaResponse(c *gin.Context, resp *http.Response, body []byte, filter *responseheaders.CompiledHeaderFilter) {
+diff --git a/backend/internal/service/grok_upstream_errors.go b/backend/internal/service/grok_upstream_errors.go
+index 0039ea4cd..00b305910 100644
+--- a/backend/internal/service/grok_upstream_errors.go
++++ b/backend/internal/service/grok_upstream_errors.go
+@@ -6,6 +6,8 @@ import (
+ 	"net/http"
+ 	"strings"
+ 	"time"
++
++	"github.com/tidwall/gjson"
+ )
+ 
+ // isGrokContentPolicyRejection identifies request-scoped safety refusals from
+@@ -181,13 +183,35 @@ func grokContentPolicyMessage(value string) bool {
+ }
+ 
+ func grokContentPolicyClientMessage(responseBody []byte) string {
+-	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)))
++	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokUpstreamErrorMessage(responseBody)))
+ 	if message == "" {
+ 		return "Request blocked by upstream content policy"
+ 	}
+ 	return message
+ }
+ 
++// xAI's flat error fields are handled only by Grok; shared account and model
++// classifiers retain the existing nested-error contract.
++func grokUpstreamErrorMessage(body []byte) string {
++	if message := extractUpstreamErrorMessage(body); strings.TrimSpace(message) != "" {
++		return message
++	}
++	if value := gjson.GetBytes(body, "error"); value.Type == gjson.String {
++		return value.String()
++	}
++	return ""
++}
++
++func grokUpstreamErrorCode(body []byte) string {
++	if code := strings.TrimSpace(extractUpstreamErrorCode(body)); code != "" {
++		return code
++	}
++	if code := gjson.GetBytes(body, "code"); code.Type == gjson.String || code.Type == gjson.Number {
++		return strings.TrimSpace(code.String())
++	}
++	return ""
++}
++
+ // shouldFailoverGrokUpstreamError is the body-aware counterpart of the
+ // status-only failover helper. Grok content refusals must stay on the current
+ // account and be returned to the caller instead of consuming the account pool.
+diff --git a/backend/internal/service/openai_first_output_timeout.go b/backend/internal/service/openai_first_output_timeout.go
+index fbd985d06..66b6c674d 100644
+--- a/backend/internal/service/openai_first_output_timeout.go
++++ b/backend/internal/service/openai_first_output_timeout.go
+@@ -145,7 +145,9 @@ func (s *openAIFirstOutputStage) prepareWrite(incoming int) error {
+ 	}
+ 	file, err := s.createTemp()
+ 	if err != nil {
+-		return fmt.Errorf("create first-output spool: %w", err)
++		// Keep the same bounded stage when temporary storage is unavailable.
++		s.memoryOnly = true
++		return nil
+ 	}
+ 	path := file.Name()
+ 	// Unlink before writing any request data. Unix keeps the file descriptor
+diff --git a/backend/internal/service/openai_first_output_timeout_test.go b/backend/internal/service/openai_first_output_timeout_test.go
+index 5ebe47f67..59ca52e96 100644
+--- a/backend/internal/service/openai_first_output_timeout_test.go
++++ b/backend/internal/service/openai_first_output_timeout_test.go
+@@ -4,10 +4,12 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"os"
++	"path/filepath"
+ 	"runtime"
+ 	"strings"
+ 	"sync"
+@@ -295,6 +297,84 @@ func TestOpenAIFirstOutputStageCommitCopiesSpoolAndRemovesTemp(t *testing.T) {
+ 	require.NoError(t, stage.Close())
+ }
+ 
++func TestOpenAIFirstOutputStageCreateFailurePreservesBoundedBuffer(t *testing.T) {
++	for _, useWriteString := range []bool{false, true} {
++		t.Run(fmt.Sprintf("write_string_%t", useWriteString), func(t *testing.T) {
++			stage := newOpenAIFirstOutputStage(70 * 1024)
++			stage.memoryOnly = false
++			t.Cleanup(func() { require.NoError(t, stage.Close()) })
++			createCalls := 0
++			stage.createTemp = func() (*os.File, error) {
++				createCalls++
++				return nil, &os.PathError{Op: "open", Path: "unwritable/spool", Err: os.ErrPermission}
++			}
++			stage.removeFile = func(string) error {
++				t.Fatal("failed creation must not leave a spool to remove")
++				return nil
++			}
++			write := func(value string) (int, error) {
++				if useWriteString {
++					return stage.WriteString(value)
++				}
++				return stage.Write([]byte(value))
++			}
++
++			payload := ""
++			for _, chunk := range []string{strings.Repeat("a", 32*1024), strings.Repeat("b", 36*1024), strings.Repeat("c", 2*1024)} {
++				n, err := write(chunk)
++				require.NoError(t, err)
++				require.Equal(t, len(chunk), n)
++				payload += chunk
++			}
++			require.Equal(t, 1, createCalls, "fallback must not retry CreateTemp on later writes")
++			require.EqualValues(t, len(payload), stage.Buffered())
++
++			n, err := write("overflow")
++			require.Zero(t, n)
++			require.ErrorIs(t, err, errOpenAIFirstOutputStageLimit)
++			require.EqualValues(t, len(payload), stage.Buffered())
++			var downstream bytes.Buffer
++			require.NoError(t, stage.CommitTo(&downstream))
++			require.Equal(t, payload, downstream.String())
++			require.Zero(t, stage.Buffered())
++		})
++	}
++}
++
++func TestOpenAINativeFirstOutputWithUnavailableTempDir(t *testing.T) {
++	missingDir := filepath.Join(t.TempDir(), "missing")
++	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
++		t.Setenv(name, missingDir)
++	}
++	cfg := &config.Config{Gateway: config.GatewayConfig{
++		OpenAIFirstOutputTimeoutSeconds: 30,
++		MaxLineSize:                     defaultMaxLineSize,
++	}}
++	svc := &OpenAIGatewayService{cfg: cfg, responseHeaderFilter: compileResponseHeaderFilter(cfg)}
++	// Cross the disk-spill threshold before any semantic output is available.
++	preamble := `data: {"type":"response.created","response":{"id":"resp_no_temp","created_at":1700000000,"padding":"` + strings.Repeat("x", 68*1024) + `"}}` + "\n\n"
++	delta := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n"
++	payload := preamble + delta +
++		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_no_temp\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n"
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{
++		"X-Request-Id": []string{"request-no-temp"},
++	}, Body: io.NopCloser(strings.NewReader(payload))}
++
++	result, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI}, time.Now(), "model", "model")
++
++	require.NoError(t, err)
++	require.NotNil(t, result)
++	require.NotNil(t, result.firstTokenMs)
++	require.True(t, strings.HasPrefix(rec.Body.String(), preamble+delta), "buffered preamble and first output must be forwarded intact")
++	require.Contains(t, rec.Body.String(), `"type":"response.completed"`)
++	require.Equal(t, 3, result.usage.InputTokens)
++	require.Equal(t, 2, result.usage.OutputTokens)
++	require.Equal(t, "request-no-temp", rec.Header().Get("X-Request-Id"))
++}
++
+ func TestOpenAIFirstOutputStageUnlinkFailurePermanentlyFallsBackToMemoryAndRetriesCleanup(t *testing.T) {
+ 	stage := newDefaultOpenAIFirstOutputStage()
+ 	stage.memoryOnly = false
+diff --git a/backend/internal/service/openai_gateway_chat_completions.go b/backend/internal/service/openai_gateway_chat_completions.go
+index e8c272a7c..a1c824966 100644
+--- a/backend/internal/service/openai_gateway_chat_completions.go
++++ b/backend/internal/service/openai_gateway_chat_completions.go
+@@ -890,7 +890,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
+ 				usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
+ 			}
+ 		}
+-		if strings.TrimSpace(event.Type) == "response.failed" {
++		if eventType := strings.TrimSpace(event.Type); eventType == "response.failed" || eventType == "error" {
+ 			payloadBytes := []byte(payload)
+ 			message := extractOpenAISSEErrorMessage(payloadBytes)
+ 			if hit, code, msg := detectOpenAICyberPolicy(payloadBytes); hit {
+@@ -924,10 +924,11 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
+ 				}
+ 				return true
+ 			}
+-			if openAIStreamFailedEventShouldFailover(payloadBytes, message) {
++			if !clientOutputStarted && openAIStreamFailedEventShouldFailover(payloadBytes, message) {
+ 				streamFailoverErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, requestID, payloadBytes, message, upstreamModel, resp.Header)
+ 				return true
+ 			}
++			s.handleOpenAIStreamTerminalAccountSideEffects(c, account, payloadBytes, message, resp.Header, upstreamModel)
+ 			message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)
+ 			defaultStatus, defaultErrType, defaultMsg := http.StatusBadGateway, "upstream_error", message
+ 			// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index bfebd7112..c29315a07 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -1090,6 +1090,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 					streamFailoverErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, requestID, payloadBytes, message, upstreamModel, resp.Header)
+ 					return true
+ 				}
++				s.handleOpenAIStreamTerminalAccountSideEffects(c, account, payloadBytes, message, resp.Header, upstreamModel)
+ 				message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)
+ 				errStatus, errType, errMsg := http.StatusBadGateway, "api_error", message
+ 				// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index 5e6748080..120c5204f 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -1400,6 +1400,27 @@ func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []b
+ 		isOpenAITransientProcessingError(http.StatusBadRequest, message, payload)
+ }
+ 
++// Apply health updates without replaying a stream that already reached the client.
++// Capacity errors retain the existing explicit model-only cooldown policy.
++func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffects(
++	c *gin.Context, account *Account, payload []byte, message string, headers http.Header, canonicalModel string,
++) {
++	if s == nil || account == nil {
++		return
++	}
++	ctx := context.Background()
++	if c != nil && c.Request != nil {
++		ctx = c.Request.Context()
++	}
++	status := openAIStreamFailedEventSemanticStatus(payload, message)
++	if account.Platform == PlatformOpenAI && status == http.StatusServiceUnavailable {
++		s.handleOpenAIExplicitModelCooldown(ctx, account, status, payload, canonicalModel)
++		return
++	}
++	body := openAIStreamFailedEventPassthroughBody(payload, message)
++	s.handleOpenAIAccountUpstreamError(ctx, account, status, headers, body, canonicalModel)
++}
++
+ func (s *OpenAIGatewayService) recordOpenAIStreamUpstreamError(
+ 	c *gin.Context,
+ 	account *Account,
+diff --git a/backend/internal/service/openai_responses_sealed_call_test.go b/backend/internal/service/openai_responses_sealed_call_test.go
+index 4c27ae288..a51434e70 100644
+--- a/backend/internal/service/openai_responses_sealed_call_test.go
++++ b/backend/internal/service/openai_responses_sealed_call_test.go
+@@ -8,6 +8,7 @@ import (
+ 	"net/http/httptest"
+ 	"strings"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/stretchr/testify/require"
+@@ -18,20 +19,17 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	const arguments = `{"message":"synthetic-sealed-message"}`
+ 	for _, marker := range []struct {
+-		name string
+-		raw  string
++		name             string
++		raw              string
++		encryptedContent string
+ 	}{
+-		{name: "encrypted", raw: `["message"]`},
++		{name: "encrypted", raw: `["message"]`, encryptedContent: "synthetic-call-ciphertext"},
+ 		{name: "plaintext", raw: `[]`},
+ 		{name: "null", raw: `null`},
+-		{name: "absent"},
++		{name: "absent", encryptedContent: "synthetic-call-ciphertext"},
+ 	} {
+ 		for _, shape := range []string{"terminal_output", "item_done", "delta_fallback"} {
+-			for _, passthrough := range []bool{false, true} {
+-				mode := "normal"
+-				if passthrough {
+-					mode = "passthrough"
+-				}
++			for _, mode := range []string{"normal", "passthrough", "streaming"} {
+ 				t.Run(marker.name+"/"+shape+"/"+mode, func(t *testing.T) {
+ 					item := map[string]any{
+ 						"type": "function_call", "call_id": "call_sealed", "name": "send_message",
+@@ -40,6 +38,9 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 					if marker.raw != "" {
+ 						item["encrypted_function_args"] = json.RawMessage(marker.raw)
+ 					}
++					if marker.encryptedContent != "" {
++						item["encrypted_content"] = marker.encryptedContent
++					}
+ 					output := []any{}
+ 					var frames []string
+ 					addFrame := func(event map[string]any) {
+@@ -75,20 +76,33 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 					}
+ 					account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+ 					svc := newCompactBridgeTestService()
+-					if passthrough {
++					switch mode {
++					case "streaming":
++						result, err := svc.handleStreamingResponse(context.Background(), resp, c, account, time.Now(), "test-model", "test-model")
++						require.NoError(t, err)
++						require.Equal(t, 7, result.usage.InputTokens)
++						require.Equal(t, 3, result.usage.OutputTokens)
++					case "passthrough":
+ 						result, err := svc.handleNonStreamingResponsePassthrough(context.Background(), resp, c, account, "test-model", "test-model")
+ 						require.NoError(t, err)
+ 						require.Equal(t, 7, result.usage.InputTokens)
+ 						require.Equal(t, 3, result.usage.OutputTokens)
+-					} else {
++					default:
+ 						result, err := svc.handleNonStreamingResponse(context.Background(), resp, c, account, "test-model", "test-model")
+ 						require.NoError(t, err)
+ 						require.Equal(t, 7, result.usage.InputTokens)
+ 						require.Equal(t, 3, result.usage.OutputTokens)
+ 					}
+ 					require.Equal(t, http.StatusOK, rec.Code)
+-					require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+ 					body := rec.Body.Bytes()
++					if mode == "streaming" {
++						require.Contains(t, rec.Header().Get("Content-Type"), "text/event-stream")
++						_, terminal, ok := extractOpenAISSETerminalEvent(string(body))
++						require.True(t, ok)
++						body = []byte(gjson.GetBytes(terminal, "response").Raw)
++					} else {
++						require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
++					}
+ 					require.Len(t, gjson.GetBytes(body, "output").Array(), 1)
+ 					call := gjson.GetBytes(body, "output.0")
+ 					require.Equal(t, "function_call", call.Get("type").String())
+@@ -100,6 +114,11 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 					} else {
+ 						require.Equal(t, marker.raw, call.Get("encrypted_function_args").Raw)
+ 					}
++					if marker.encryptedContent == "" {
++						require.False(t, call.Get("encrypted_content").Exists())
++					} else {
++						require.Equal(t, marker.encryptedContent, call.Get("encrypted_content").String())
++					}
+ 					require.Equal(t, "collaboration", call.Get("namespace").String())
+ 				})
+ 			}
+diff --git a/backend/internal/service/ratelimit_service.go b/backend/internal/service/ratelimit_service.go
+index cc5bb265a..275ec273f 100644
+--- a/backend/internal/service/ratelimit_service.go
++++ b/backend/internal/service/ratelimit_service.go
+@@ -1983,16 +1983,9 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
+ 		slog.Info("account_session_window_initialized", "account_id", account.ID, "window_start", start, "window_end", end, "status", status)
+ 	}
+ 
+-	// 窗口重置时清除旧的 utilization 和被动采样数据，避免残留上个窗口的数据
++	// 5h utilization belongs to the old window; weekly readings expire independently.
+ 	if windowEnd != nil && needInitWindow {
+-		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+-			"session_window_utilization":      nil,
+-			"passive_usage_7d_utilization":    nil,
+-			"passive_usage_7d_reset":          nil,
+-			"passive_usage_7d_oi_utilization": nil,
+-			"passive_usage_7d_oi_reset":       nil,
+-			"passive_usage_sampled_at":        nil,
+-		})
++		_ = s.accountRepo.UpdateExtra(ctx, account.ID, rolloverPassiveUsageClears(account.Extra, time.Now()))
+ 	}
+ 
+ 	if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, windowStart, windowEnd, status); err != nil {
+@@ -2010,6 +2003,32 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
+ 	}
+ }
+ 
++// rolloverPassiveUsageClears preserves weekly readings until their own reset.
++// The sample time remains meaningful while either existing weekly bucket survives.
++func rolloverPassiveUsageClears(extra map[string]any, now time.Time) map[string]any {
++	updates := map[string]any{"session_window_utilization": nil}
++	kept := false
++	for _, keys := range [][2]string{
++		{"passive_usage_7d_utilization", "passive_usage_7d_reset"},
++		{"passive_usage_7d_oi_utilization", "passive_usage_7d_oi_reset"},
++	} {
++		reset := parseExtraFloat64(extra[keys[1]])
++		if reset > 1e11 {
++			reset /= 1000
++		}
++		if reset > 0 && time.Unix(int64(reset), 0).After(now) {
++			kept = true
++			continue
++		}
++		updates[keys[0]] = nil
++		updates[keys[1]] = nil
++	}
++	if !kept {
++		updates["passive_usage_sampled_at"] = nil
++	}
++	return updates
++}
++
+ // samplePassiveUsageFromHeaders 从 Anthropic 响应头收集 5h/7d/7d_oi 的
+ // utilization 与 reset 被动采样数据，合并为一次 Extra 写入。无数据时不写。
+ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, account *Account, headers http.Header) {
+diff --git a/backend/internal/web/embed_on.go b/backend/internal/web/embed_on.go
+index 19f07d6d9..cc15d9ab9 100644
+--- a/backend/internal/web/embed_on.go
++++ b/backend/internal/web/embed_on.go
+@@ -143,14 +143,15 @@ func (s *FrontendServer) tryServeOverride(c *gin.Context, cleanPath string) bool
+ }
+ 
+ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
++	applyHTMLNoCacheHeaders(c.Writer.Header())
+ 	// Get nonce from context (generated by SecurityHeaders middleware)
+ 	nonce := middleware.GetNonceFromContext(c)
+ 
+ 	// Check cache first
+ 	cached := s.cache.Get()
+ 	if cached != nil {
+-		// Check If-None-Match for 304 response
+-		if match := c.GetHeader("If-None-Match"); match == cached.ETag {
++		// Nonce-bearing HTML must match this request's CSP, even with the same ETag.
++		if match := c.GetHeader("If-None-Match"); nonce == "" && match == cached.ETag {
+ 			c.Status(http.StatusNotModified)
+ 			c.Abort()
+ 			return
+@@ -160,7 +161,6 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 		content := replaceNoncePlaceholder(cached.Content, nonce)
+ 
+ 		c.Header("ETag", cached.ETag)
+-		c.Header("Cache-Control", "no-cache") // Must revalidate
+ 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+ 		c.Abort()
+ 		return
+@@ -196,7 +196,6 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 	if cached != nil {
+ 		c.Header("ETag", cached.ETag)
+ 	}
+-	c.Header("Cache-Control", "no-cache")
+ 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+ 	c.Abort()
+ }
+diff --git a/backend/internal/web/embed_test.go b/backend/internal/web/embed_test.go
+index 5e996fb06..158e633ad 100644
+--- a/backend/internal/web/embed_test.go
++++ b/backend/internal/web/embed_test.go
+@@ -352,7 +352,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 		assert.True(t, strings.HasSuffix(etag, `"`))
+ 	})
+ 
+-	t.Run("returns_304_for_matching_etag", func(t *testing.T) {
++	t.Run("returns_304_only_when_no_nonce_is_present", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+ 			settings: map[string]string{"test": "value"},
+ 		}
+@@ -360,12 +360,8 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 		server, err := NewFrontendServer(provider)
+ 		require.NoError(t, err)
+ 
+-		// Use a real router for proper 304 handling
++		// No nonce in context means the cached body has no per-request part.
+ 		router := gin.New()
+-		router.Use(func(c *gin.Context) {
+-			c.Set(middleware.CSPNonceKey, "test-nonce")
+-			c.Next()
+-		})
+ 		router.Use(server.Middleware())
+ 
+ 		// First request to populate cache and get ETag
+@@ -383,9 +379,47 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 
+ 		assert.Equal(t, http.StatusNotModified, w2.Code)
+ 		assert.Empty(t, w2.Body.String())
++		assertNoStoreHTMLHeaders(t, w2.Header())
+ 	})
+ 
+-	t.Run("sets_cache_control_header", func(t *testing.T) {
++	t.Run("serves_fresh_html_when_cached_nonce_is_stale", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: map[string]string{"test": "value"},
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		router := gin.New()
++		router.Use(func(c *gin.Context) {
++			c.Set(middleware.CSPNonceKey, c.GetHeader("X-Test-Nonce"))
++			c.Next()
++		})
++		router.Use(server.Middleware())
++
++		w1 := httptest.NewRecorder()
++		req1 := httptest.NewRequest(http.MethodGet, "/", nil)
++		req1.Header.Set("X-Test-Nonce", "first-nonce")
++		router.ServeHTTP(w1, req1)
++		etag := w1.Header().Get("ETag")
++		require.NotEmpty(t, etag)
++		assert.Contains(t, w1.Body.String(), `nonce="first-nonce"`)
++
++		// The document embeds the request nonce, so a matching ETag must not
++		// turn this into a 304 that reuses the previous nonce.
++		w2 := httptest.NewRecorder()
++		req2 := httptest.NewRequest(http.MethodGet, "/", nil)
++		req2.Header.Set("X-Test-Nonce", "second-nonce")
++		req2.Header.Set("If-None-Match", etag)
++		router.ServeHTTP(w2, req2)
++
++		assert.Equal(t, http.StatusOK, w2.Code)
++		assert.Contains(t, w2.Body.String(), `nonce="second-nonce"`)
++		assert.NotContains(t, w2.Body.String(), `nonce="first-nonce"`)
++		assertNoStoreHTMLHeaders(t, w2.Header())
++	})
++
++	t.Run("sets_no_store_cache_headers", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+ 			settings: map[string]string{"test": "value"},
+ 		}
+@@ -400,7 +434,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 
+ 		server.serveIndexHTML(c)
+ 
+-		assert.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
++		assertNoStoreHTMLHeaders(t, w.Header())
+ 	})
+ 
+ 	t.Run("fallback_on_settings_error", func(t *testing.T) {
+@@ -427,6 +461,78 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 	})
+ }
+ 
++func assertNoStoreHTMLHeaders(t *testing.T, header http.Header) {
++	t.Helper()
++	assert.Equal(t, "no-cache, no-store, must-revalidate", header.Get("Cache-Control"))
++	assert.Equal(t, "no-cache", header.Get("Pragma"))
++	assert.Equal(t, "0", header.Get("Expires"))
++	assert.Equal(t, "no-store", header.Get("CDN-Cache-Control"))
++	assert.Equal(t, "no-store", header.Get("Surrogate-Control"))
++}
++
++func TestFrontendServer_NoStoreHeadersOnEveryHTMLPath(t *testing.T) {
++	t.Run("cache_hit", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: map[string]string{"test": "value"},
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w1 := httptest.NewRecorder()
++		c1, _ := gin.CreateTestContext(w1)
++		c1.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c1.Set(middleware.CSPNonceKey, "nonce1")
++		server.serveIndexHTML(c1)
++		require.Equal(t, http.StatusOK, w1.Code)
++
++		w2 := httptest.NewRecorder()
++		c2, _ := gin.CreateTestContext(w2)
++		c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c2.Set(middleware.CSPNonceKey, "nonce2")
++		server.serveIndexHTML(c2)
++
++		assert.Equal(t, http.StatusOK, w2.Code)
++		assertNoStoreHTMLHeaders(t, w2.Header())
++	})
++
++	t.Run("settings_error_fallback", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			err: context.DeadlineExceeded,
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(w)
++		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c.Set(middleware.CSPNonceKey, "nonce123")
++		server.serveIndexHTML(c)
++
++		assert.Equal(t, http.StatusOK, w.Code)
++		assertNoStoreHTMLHeaders(t, w.Header())
++	})
++
++	t.Run("settings_marshal_error_fallback", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: make(chan struct{}),
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(w)
++		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c.Set(middleware.CSPNonceKey, "nonce123")
++		server.serveIndexHTML(c)
++
++		assert.Equal(t, http.StatusOK, w.Code)
++		assertNoStoreHTMLHeaders(t, w.Header())
++	})
++}
++
+ func TestFrontendServer_InvalidateCache(t *testing.T) {
+ 	t.Run("invalidates_cache", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+diff --git a/docs/upstream-sync/README.md b/docs/upstream-sync/README.md
+index 80731874b..52dab701d 100644
+--- a/docs/upstream-sync/README.md
++++ b/docs/upstream-sync/README.md
+@@ -1,5 +1,16 @@
+ # 上游合并指南
+ 
++最新评估（2026-11-18）：[PORTING-0.2.23.md](./PORTING-0.2.23.md)，覆盖v0.2.22/v0.2.23，基线v1.1.25+用量排行修复`7a0b78fe5` / Go1.27.3 / SQLite229 / auth21。128非merge、78PR+4直接提交，524文件态A0/C269/X199/N56。建议[第一档21簇](../../openspec/changes/port-upstream-0.2.23-tier1/README.md)、[第二档23簇](../../openspec/changes/port-upstream-0.2.23-tier2/README.md)，选55PR中的既有消费者维护，**两批未实施，70/76任务全未勾选**。[来源/失败/测量索引](./evidence-0.2.23/MANIFEST.md)。六份旧活动change共180完成checkbox、零未完成，等待归档；下方历史时点原文保留。
++
++- [x] 冻结fork/release/tag/main，整PR覆盖与全部文件先反后正，保护历史和产品哈希。
++- [x] 全候选分档，复查真实消费者/最小前置及旧按需项，优先Claude/Codex/Grok和SQLite数据完整性。
++- [x] backend定向/前端89基线通过；6包overlay26目标失败/20对照通过，含实际SQLite/Ent/embed；临时前端9失败/11通过。
++- [x] Go1.27.4只读embed/3包可行性与Ollama单P函数PoC；来源SSE转义字段漏判已保留，不作为可直接移植证据。
++- [x] 两份OpenSpec评估方案、全部任务未勾选和实施验收空槽；严格校验/链接/范围见证据。
++- [ ] 按后续选定范围实施；新能力独立按需，支付排除，发布/部署另行处理。
++
++本轮教训：同PR最终提交可能推翻release摘要（Gemini ForceCacheBilling）；ALREADY=0也可能已手工实现RPM/刷新/override语义；cache presence/TTL/差额需联合检验；SSE字节predicate必须处理JSON转义；首内容hold需有界；SQLite失败原子性和临时测试runner须实际检查；新Go编译不等于新CI/codegen验收。见[§9](./PORTING-0.2.23.md#9-本轮通用教训)。
++
+ v0.2.21第二档已完成（2026-11-12）：S01–S12，42/42任务；[验收](../../openspec/changes/port-upstream-0.2.21-tier2/verification.md) / [实施证据](./implementation-0.2.21-tier2/README.md)。实际起点`4f4c80c3c`加已有第一档代码，第一档在期间由独立流程提交`63c764704`；本批实现随本次提交保存，等待归档。覆盖WS会话/搜索/TTFT、模型冷却、兼容错误/effort、token原子轮换、Key独立用量/SQLite覆盖索引、账号刷新、Desktop页面上下文、审计worker唤醒和Claude2.1.321。后端全量unit/embed build/lint0、五包race、真实HTTP/SQLite/miniredis结算去重/Fast/固定配额通过；前端2197/2既有跳过、critical179/2、typecheck/lint/build及桌面/390px移动验收通过。新增SQLite229；1GiB/1CPU临时夹具峰值66850816字节，索引查询/写入/大小成本已记录，不能外推生产。S11另修真实SQLite混合时间格式claim比较。VERSION1.1.24/Go1.27.3/auth snapshot21、依赖/生成代码与64MiB/40MiB/120s保留。无支付、新能力、推送/发布或业务部署；下方来源/评估/历史状态不回写。
+ 
+ v0.2.21第一档已完成（2026-11-11）：F01–F11，39/39任务；[验收](../../openspec/changes/port-upstream-0.2.21-tier1/verification.md) / [实施证据](./implementation-0.2.21-tier1/README.md)。基于`4f4c80c3c`，独立tier1快照54包unit、embed build、lint0、五包race126顶层测试及实际HTTP/SQLite/miniredis通过。覆盖Codex协议/会话/错误状态、并发槽释放、定价hash与缓存读价、Gemini思考与工具媒体、UTF-8边界。共享工作区出现并行tier2改动，额外修改不归入本批验收；完整tier1 patch仍在共享工作区。保持VERSION1.1.24/Go1.27.3/SQLite228/auth snapshot21、依赖/前端/生成代码及64MiB/40MiB/120s默认值。实现随本次提交保存，未发布/推送/业务部署；下方评估状态保留原始时点含义。
+diff --git a/frontend/src/components/account/ModelWhitelistSelector.vue b/frontend/src/components/account/ModelWhitelistSelector.vue
+index 5a4a5f64f..9481d0601 100644
+--- a/frontend/src/components/account/ModelWhitelistSelector.vue
++++ b/frontend/src/components/account/ModelWhitelistSelector.vue
+@@ -269,6 +269,10 @@ const copyModelId = async (model: string) => {
+ const addCustom = () => {
+   const model = customModel.value.trim()
+   if (!model) return
++  if (model.includes('*')) {
++    appStore.showInfo(t('admin.accounts.modelWildcardNotSupported'))
++    return
++  }
+   if (props.modelValue.includes(model)) {
+     appStore.showInfo(t('admin.accounts.modelExists'))
+     return
+diff --git a/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts b/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts
+index 7a96d68fa..f2681d90c 100644
+--- a/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts
++++ b/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts
+@@ -91,6 +91,33 @@ describe('ModelWhitelistSelector', () => {
+     syncUpstreamModelsPreview.mockReset()
+   })
+ 
++  it.each(['claude-*', '*', 'gpt-*-mini'])(
++    'rejects wildcard whitelist entry %s without clearing the input', async (model) => {
++      const wrapper = mountSelector({ modelValue: ['gpt-5'] })
++      const input = wrapper.get('input[placeholder="admin.accounts.enterCustomModelName"]')
++      await input.setValue(model)
++      await wrapper.findAll('button').find(button => button.text() === 'admin.accounts.addModel')!.trigger('click')
++
++      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
++      expect(showInfo).toHaveBeenCalledWith('admin.accounts.modelWildcardNotSupported')
++      expect((input.element as HTMLInputElement).value).toBe(model)
++    }
++  )
++
++  it('rejects wildcard entries submitted with Enter and accepts a corrected exact model', async () => {
++    const wrapper = mountSelector()
++    const input = wrapper.get('input[placeholder="admin.accounts.enterCustomModelName"]')
++    await input.setValue(' claude-* ')
++    await input.trigger('keydown.enter')
++    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
++    expect(showInfo).toHaveBeenCalledWith('admin.accounts.modelWildcardNotSupported')
++
++    await input.setValue(' claude-sonnet-4-5 ')
++    await input.trigger('keydown.enter')
++    expect(wrapper.emitted('update:modelValue')).toEqual([[['claude-sonnet-4-5']]])
++    expect((input.element as HTMLInputElement).value).toBe('')
++  })
++
+   it('rejects a custom whitelist model that is already mapped to a different target', async () => {
+     const wrapper = mountSelector({ modelMappings: [{ from: 'gpt-latest', to: 'deepseek-chat' }] })
+     await wrapper.get('input[placeholder="admin.accounts.enterCustomModelName"]').setValue(' gpt-latest ')
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index e18b0c103..2b52393f9 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -724,6 +724,7 @@ export default {
+       enterCustomModelName: 'Enter custom model name',
+       addModel: 'Add',
+       modelExists: 'Model already exists',
++      modelWildcardNotSupported: 'Wildcards are not supported in the model whitelist. Enter an exact model name.',
+       modelMappingConflict: 'A mapping already exists for {from} → {to}. Modify or remove it under Model Mapping before adding this whitelist model',
+       modelCount: '{count} models',
+       poolMode: 'Pool Mode',
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index 89272ccd2..ebeb7f765 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -789,6 +789,7 @@ export default {
+       enterCustomModelName: '输入自定义模型名称',
+       addModel: '填入',
+       modelExists: '该模型已存在',
++      modelWildcardNotSupported: '模型白名单不支持通配符，请输入完整的模型名称。',
+       modelMappingConflict: '该模型已配置映射 {from} → {to}，请在模型映射中修改或删除后再添加白名单模型',
+       modelCount: '{count} 个模型',
+       poolMode: '池模式',
+diff --git a/frontend/src/views/admin/ChannelsView.vue b/frontend/src/views/admin/ChannelsView.vue
+index dc6025bcd..1c5a56a92 100644
+--- a/frontend/src/views/admin/ChannelsView.vue
++++ b/frontend/src/views/admin/ChannelsView.vue
+@@ -1158,18 +1158,10 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
+     delete featuresConfig.codex_image_generation_bridge
+   }
+ 
+-  const bedrockCCCompat: Record<string, boolean> = {}
+-  for (const section of form.platforms) {
+-    if (!section.enabled) continue
+-    if (section.platform === 'anthropic') {
+-      bedrockCCCompat[section.platform] = !!section.bedrock_cc_compat
+-    }
+-  }
+-  if (Object.keys(bedrockCCCompat).length > 0) {
+-    featuresConfig.bedrock_cc_compat = bedrockCCCompat
+-  } else {
+-    delete featuresConfig.bedrock_cc_compat
+-  }
++  // The backend reads a boolean; an explicit false clears a saved value.
++  featuresConfig.bedrock_cc_compat = form.platforms.some(
++    section => section.enabled && section.platform === 'anthropic' && section.bedrock_cc_compat
++  )
+ 
+   return { group_ids: uniqueGroupIds, model_pricing, model_mapping, features_config: featuresConfig }
+ }

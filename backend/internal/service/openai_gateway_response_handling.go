@@ -200,14 +200,14 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		streamInterval = resolveGrokStreamIdleTimeout(cfgSec)
 	}
 	// 仅监控上游数据间隔超时，不被下游写入阻塞影响
-	var intervalTicker *time.Ticker
+	var intervalTimer *time.Timer
 	if streamInterval > 0 {
-		intervalTicker = time.NewTicker(streamInterval)
-		defer intervalTicker.Stop()
+		intervalTimer = time.NewTimer(streamInterval)
+		defer intervalTimer.Stop()
 	}
 	var intervalCh <-chan time.Time
-	if intervalTicker != nil {
-		intervalCh = intervalTicker.C
+	if intervalTimer != nil {
+		intervalCh = intervalTimer.C
 	}
 
 	keepaliveInterval := time.Duration(0)
@@ -289,7 +289,27 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		clientDisconnected = true
 		logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
 	}
+	keepaliveEventDirect := false
+	writeKeepaliveDirect := func(value string) {
+		if clientDisconnected {
+			return
+		}
+		n, err := w.Write([]byte(value))
+		recordOpenAIStreamKeepaliveBytes(c, n)
+		if err != nil {
+			clientDisconnected = true
+		}
+	}
 	completeGuardedEvent := func(queueDrained bool) {
+		if keepaliveEventDirect {
+			keepaliveEventDirect = false
+			eventInProgress = false
+			if !clientDisconnected {
+				flusher.Flush()
+				lastDownstreamWriteAt = time.Now()
+			}
+			return
+		}
 		completedProgressEvent := eventStartsClientOutput
 		completedTTFTEvent := eventStartsTTFTOutput
 		shouldFlush := eventShouldFlush || (queueDrained && clientOutputStarted)
@@ -347,6 +367,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 
 	needModelReplace := originalModel != mappedModel
 	streamOutputAccumulator := apicompat.NewBufferedResponseAccumulator()
+	streamOutputAccumulator.XAIServerSideSearch = account != nil && account.IsGrok()
 	streamDoneItems := newResponsesStreamOutputItems()
 	streamImageOutputs := make([]json.RawMessage, 0, 1)
 	streamSeenImages := make(map[string]struct{})
@@ -503,6 +524,13 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		return resultWithUsage(), fmt.Errorf("stream read error: %w", scanErr), true
 	}
 	processSSELine := func(line string, queueDrained bool) {
+		if name, ok := extractOpenAISSEEventLine(line); ok && name == "keepalive" && stageFirstOutput && !firstOutputStage.closed {
+			bareErrors.eventName = name
+			keepaliveEventDirect = true
+			eventInProgress = true
+			writeKeepaliveDirect(line + "\n")
+			return
+		}
 		if _, isData := extractOpenAISSEDataLine(line); !isData && bareErrors.skipLine(line, clientDisconnected || openAIStreamClientOutputStarted(c, clientOutputStarted)) {
 			return
 		}
@@ -513,6 +541,12 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 		// Extract data from SSE line (supports both "data: " and "data:" formats)
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
+			if keepaliveEventDirect || (effectiveOpenAISSEEventType(dataBytes, bareErrors.eventName) == "keepalive" && stageFirstOutput && !firstOutputStage.closed) {
+				keepaliveEventDirect = true
+				eventInProgress = true
+				writeKeepaliveDirect(line + "\n")
+				return
+			}
 			if bytes.Contains(dataBytes, []byte("service_tier")) {
 				if tier := extractOpenAIResponseServiceTierFromJSONBytes(dataBytes); tier != nil {
 					providerServiceTier = tier
@@ -547,13 +581,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				if status, errType, errMsg, matched := applyOpenAIStreamFailedErrorPassthroughRule(c, account.Platform, dataBytes, errorMessage); matched {
 					s.recordOpenAIStreamUpstreamError(c, account, false, upstreamRequestID, "http_error", dataBytes, errorMessage)
 					MarkResponseCommitted(c)
-					c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-					c.JSON(status, gin.H{
-						"error": gin.H{
-							"type":    errType,
-							"message": errMsg,
-						},
-					})
+					writeOpenAIStreamRuleError(c, status, errType, errMsg)
 					streamEarlyErr = fmt.Errorf("upstream error event: passthrough rule matched message=%s", errMsg)
 					return
 				}
@@ -588,13 +616,7 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 						// antigravity 先例），否则透传命中的 failed 在监控中不可见。
 						s.recordOpenAIStreamUpstreamError(c, account, false, upstreamRequestID, "http_error", dataBytes, failedMessage)
 						MarkResponseCommitted(c)
-						c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-						c.JSON(status, gin.H{
-							"error": gin.H{
-								"type":    errType,
-								"message": errMsg,
-							},
-						})
+						writeOpenAIStreamRuleError(c, status, errType, errMsg)
 						streamEarlyErr = fmt.Errorf("upstream response failed: passthrough rule matched message=%s", errMsg)
 						return
 					}
@@ -732,6 +754,11 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 
 		// A blank line dispatches a guarded event from the attempt-local stage.
 		if stageFirstOutput && line == "" {
+			if keepaliveEventDirect {
+				writeKeepaliveDirect("\n")
+				completeGuardedEvent(false)
+				return
+			}
 			if !clientDisconnected {
 				if _, err := writePendingString("\n"); err != nil {
 					handlePendingWriteError(err)
@@ -883,7 +910,8 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				return finalizeStream()
 			}
 			lastRead := time.Unix(0, atomic.LoadInt64(&lastReadAt))
-			if time.Since(lastRead) < streamInterval {
+			if remaining := streamInterval - time.Since(lastRead); remaining > 0 {
+				intervalTimer.Reset(remaining)
 				continue
 			}
 			if clientDisconnected {
@@ -893,6 +921,12 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 			// 处理流超时，可能标记账户为临时不可调度或错误状态
 			if s.rateLimitService != nil {
 				s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
+			}
+			if account != nil && account.Platform == PlatformOpenAI && !openAIStreamClientOutputStarted(c, clientOutputStarted) && !eventShouldFlush {
+				_ = resp.Body.Close()
+				failover := s.newOpenAIStreamFailoverErrorWithModel(c, account, false, upstreamRequestID, nil, "OpenAI upstream stream idle timeout before model output", mappedModel, resp.Header)
+				failover.SafeToFailoverAfterWrite = true
+				return resultWithUsage(), failover
 			}
 			// Grok: short cool + account failover when no client-visible bytes
 			// were committed yet (pre-commit). After output started we keep the
@@ -1199,7 +1233,7 @@ func (s *OpenAIGatewayService) parseSSEUsageBytes(data []byte, usage *OpenAIUsag
 	}
 
 	if parsedUsage, ok := extractOpenAIUsageFromJSONBytes(data); ok {
-		*usage = parsedUsage
+		mergeOpenAIUsageSnapshot(usage, parsedUsage)
 	}
 }
 
@@ -1385,6 +1419,13 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 		CacheReadInputTokens:     cacheReadTokens,
 		ImageOutputTokens:        int(imageOutputTokens),
 	}
+	for _, path := range []string{"input_tokens_details.cache_write_tokens", "prompt_tokens_details.cache_write_tokens", "input_tokens_details.cache_creation_tokens", "prompt_tokens_details.cache_creation_tokens", "cache_write_tokens", "cache_creation_input_tokens", "cache_write_input_tokens", "cache_creation_tokens"} {
+		if field := value.Get(path); field.Exists() && field.Type != gjson.Null {
+			usage.cacheCreationInputTokensPresent = true
+			break
+		}
+	}
+	mergeOpenAICacheCreationUsage(value, &usage)
 	if ticks := value.Get("cost_in_usd_ticks"); ticks.Exists() && ticks.Type == gjson.Number {
 		cost := float64(ticks.Int()) / 10_000_000_000
 		usage.ProviderCostUSD = &cost

@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
@@ -24,6 +23,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -305,19 +305,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 
 	// 3) select account (sticky session based on request body)
 	// 优先使用 Gemini CLI 的会话标识（privileged-user-id + tmp 目录哈希）
-	sessionHash := extractGeminiCLISessionHash(c, body)
-	if sessionHash == "" {
-		// Fallback: 使用通用的会话哈希生成逻辑（适用于其他客户端）
-		parsedReq, _ := service.ParseGatewayRequest(service.NewRequestBodyRef(body), domain.PlatformGemini)
-		if parsedReq != nil {
-			parsedReq.SessionContext = &service.SessionContext{
-				ClientIP:  ip.GetClientIP(c),
-				UserAgent: c.GetHeader("User-Agent"),
-				APIKeyID:  apiKey.ID,
-			}
-		}
-		sessionHash = h.gatewayService.GenerateSessionHash(parsedReq)
-	}
+	sessionHash := geminiRequestSessionHash(c, apiKey.ID, modelName, body)
 	sessionKey := sessionHash
 	if sessionHash != "" {
 		sessionKey = "gemini:" + sessionHash
@@ -871,6 +859,20 @@ func extractGeminiCLISessionHash(c *gin.Context, body []byte) string {
 
 	// 如果没有 privileged-user-id，直接使用 tmp 目录哈希
 	return tmpDirHash
+}
+
+func geminiRequestSessionHash(c *gin.Context, keyID int64, model string, body []byte) string {
+	if explicit := extractGeminiCLISessionHash(c, body); explicit != "" {
+		return explicit
+	}
+	// Preserve the legacy explicit metadata session before using the stable
+	// native contents prefix for clients without an explicit identifier.
+	if userID := gjson.GetBytes(body, "metadata.user_id"); userID.Type == gjson.String {
+		if parsed := service.ParseMetadataUserID(userID.String()); parsed != nil && parsed.SessionID != "" {
+			return parsed.SessionID
+		}
+	}
+	return service.GenerateGeminiContentSessionHash(keyID, model, body)
 }
 
 // truncateDigestChain 截断摘要链用于日志显示

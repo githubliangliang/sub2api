@@ -77,7 +77,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	defaultMappedModel string,
 	compatPromptCacheTenantIsolated bool,
 ) (*OpenAIForwardResult, error) {
-	if sanitized, changed, err := sanitizeOpenAIResponsesToolParameterTypes(body); err != nil {
+	if sanitized, changed, err := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform); err != nil {
 		return nil, err
 	} else if changed {
 		body = sanitized
@@ -234,7 +234,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 
 	if account.Type == AccountTypeOAuth {
 		var reqBody map[string]any
-		if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
+		if err := decodeOpenAIJSONUseNumber(responsesBody, &reqBody); err != nil {
 			return nil, fmt.Errorf("unmarshal for codex transform: %w", err)
 		}
 		isJSONObjectFormat := strings.EqualFold(strings.TrimSpace(gjson.GetBytes(responsesBody, "text.format.type").String()), "json_object")
@@ -262,7 +262,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	if account.Type == AccountTypeAPIKey {
 		if trimmedKey := strings.TrimSpace(promptCacheKey); trimmedKey != "" {
 			var reqBody map[string]any
-			if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
+			if err := decodeOpenAIJSONUseNumber(responsesBody, &reqBody); err != nil {
 				return nil, fmt.Errorf("unmarshal for prompt cache key injection: %w", err)
 			}
 			if existing, ok := reqBody["prompt_cache_key"].(string); !ok || strings.TrimSpace(existing) == "" {
@@ -697,7 +697,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 	// accumulated delta events so the client receives the full content.
 	acc.SupplementResponseOutput(finalResponse)
 
-	chatResp := apicompat.ResponsesToChatCompletions(finalResponse, originalModel)
+	chatResp := apicompat.ResponsesToChatCompletions(finalResponse, compositeClientModelFromGin(c, originalModel))
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -795,7 +795,8 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
 
 	state := apicompat.NewResponsesEventToChatState()
-	state.Model = originalModel
+	state.XAIServerSideSearch = account != nil && account.IsGrok()
+	state.Model = compositeClientModelFromGin(c, originalModel)
 	// 网关作为计费链路的一环，不能把下游 usage 输出绑定到客户端是否显式请求。
 	// raw Chat Completions 直转路径已经强制透出 usage，这里保持同样行为，避免级联代理计费为 0。
 	state.IncludeUsage = true
@@ -884,10 +885,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if isTerminalEvent {
 			if event.Usage != nil {
-				usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
+				mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Usage))
 			}
 			if event.Response != nil && event.Response.Usage != nil {
-				usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
+				mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Response.Usage))
 			}
 		}
 		if eventType := strings.TrimSpace(event.Type); eventType == "response.failed" || eventType == "error" {

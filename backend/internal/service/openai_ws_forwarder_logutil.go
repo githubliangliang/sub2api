@@ -200,7 +200,7 @@ func parseOpenAIWSResponseUsageFromCompletedEvent(message []byte, usage *OpenAIU
 		return
 	}
 	if parsedUsage, ok := extractOpenAIUsageFromJSONBytes(message); ok {
-		*usage = parsedUsage
+		mergeOpenAIUsageSnapshot(usage, parsedUsage)
 	}
 }
 

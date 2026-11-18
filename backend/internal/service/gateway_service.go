@@ -401,10 +401,8 @@ func isClaudeCodeCredentialScopeError(msg string) bool {
 		strings.Contains(m, "cannot be used for other api requests")
 }
 
-// sseDataRe matches SSE data lines with optional whitespace after colon.
 // Some upstream APIs return non-standard "data:" without space (should be "data: ").
 var (
-	sseDataRe            = regexp.MustCompile(`^data:\s*`)
 	claudeCliUserAgentRe = regexp.MustCompile(`(?i)^claude-cli/\d+\.\d+\.\d+`)
 
 	// claudeCodePromptPrefixes 用于检测 Claude Code 系统提示词的前缀列表
@@ -504,6 +502,12 @@ type GatewayCache interface {
 	GetReasoningContent(ctx context.Context, itemID string) (string, error)
 }
 
+// StickySessionAccountCompareDeleter atomically removes only the expected binding.
+// Caches without this operation retain the binding on no-content recovery.
+type StickySessionAccountCompareDeleter interface {
+	DeleteSessionAccountIDIfMatch(context.Context, int64, string, int64) (bool, error)
+}
+
 // derefGroupID safely dereferences *int64 to int64, returning 0 if nil
 func derefGroupID(groupID *int64) int64 {
 	if groupID == nil {
@@ -596,14 +600,20 @@ func (r *AccountSelectionResult) ProfitGateActive() bool {
 
 // ClaudeUsage 表示Claude API返回的usage信息
 type ClaudeUsage struct {
-	Speed                    string `json:"-"` // Recognized upstream usage.speed for log display.
-	InputTokens              int    `json:"input_tokens"`
-	OutputTokens             int    `json:"output_tokens"`
-	CacheCreationInputTokens int    `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int    `json:"cache_read_input_tokens"`
-	CacheCreation5mTokens    int    // 5分钟缓存创建token（来自嵌套 cache_creation 对象）
-	CacheCreation1hTokens    int    // 1小时缓存创建token（来自嵌套 cache_creation 对象）
-	ImageOutputTokens        int    `json:"image_output_tokens,omitempty"`
+	Speed                               string `json:"-"` // Recognized upstream usage.speed for log display.
+	InputTokens                         int    `json:"input_tokens"`
+	OutputTokens                        int    `json:"output_tokens"`
+	CacheCreationInputTokens            int    `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens                int    `json:"cache_read_input_tokens"`
+	CacheCreation5mTokens               int    // 5分钟缓存创建token（来自嵌套 cache_creation 对象）
+	CacheCreation1hTokens               int    // 1小时缓存创建token（来自嵌套 cache_creation 对象）
+	ImageOutputTokens                   int    `json:"image_output_tokens,omitempty"`
+	cacheCreationInputTokensPresent     bool
+	cacheCreationInputTokensFromDetails bool
+	cacheCreation5mTokensPresent        bool
+	cacheCreation1hTokensPresent        bool
+	promptTotalTokens                   int
+	promptTotalPresent                  bool
 }
 
 // ForwardResult 转发结果
@@ -677,6 +687,7 @@ type GatewayFailureReason string
 // trigger account failover. Additive metadata keeps existing composite literals
 // source-compatible and preserves their legacy retry-next-account behavior.
 type UpstreamFailoverError struct {
+	StreamFailedFrame        *OpenAIStreamFailedFrame
 	StatusCode               int
 	ResponseBody             []byte        // 上游响应体，用于错误透传规则匹配
 	ResponseHeaders          http.Header   // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息

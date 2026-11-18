@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 // WithResolvedTargetPlatform stores the concrete provider chosen for a request
@@ -70,6 +73,35 @@ func RequestedPublicModelFromContext(ctx context.Context) (string, bool) {
 		return "", false
 	}
 	return model, true
+}
+
+func compositeClientModel(ctx context.Context, fallback string) string {
+	public, ok := RequestedPublicModelFromContext(ctx)
+	if !ok {
+		return fallback
+	}
+	if upstream, ok := ResolvedUpstreamModelFromContext(ctx); !ok || upstream == public {
+		return fallback
+	}
+	return public
+}
+
+func compositeClientModelFromGin(c *gin.Context, fallback string) string {
+	if c == nil || c.Request == nil {
+		return fallback
+	}
+	return compositeClientModel(c.Request.Context(), fallback)
+}
+
+func restoreCompositeClientModel(ctx context.Context, body []byte) []byte {
+	public := compositeClientModel(ctx, "")
+	if public == "" || gjson.GetBytes(body, "model").Type != gjson.String {
+		return body
+	}
+	if updated, err := sjson.SetBytes(body, "model", public); err == nil {
+		return updated
+	}
+	return body
 }
 
 func CompositeRouteSourceFromContext(ctx context.Context) (string, bool) {

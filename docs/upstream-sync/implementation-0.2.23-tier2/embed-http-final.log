@@ -1,0 +1,96 @@
+=== RUN   TestReplaceNoncePlaceholder
+=== RUN   TestReplaceNoncePlaceholder/replaces_single_placeholder
+=== RUN   TestReplaceNoncePlaceholder/replaces_multiple_placeholders
+=== RUN   TestReplaceNoncePlaceholder/handles_empty_nonce
+=== RUN   TestReplaceNoncePlaceholder/no_placeholder_returns_unchanged
+=== RUN   TestReplaceNoncePlaceholder/handles_empty_html
+--- PASS: TestReplaceNoncePlaceholder (0.00s)
+    --- PASS: TestReplaceNoncePlaceholder/replaces_single_placeholder (0.00s)
+    --- PASS: TestReplaceNoncePlaceholder/replaces_multiple_placeholders (0.00s)
+    --- PASS: TestReplaceNoncePlaceholder/handles_empty_nonce (0.00s)
+    --- PASS: TestReplaceNoncePlaceholder/no_placeholder_returns_unchanged (0.00s)
+    --- PASS: TestReplaceNoncePlaceholder/handles_empty_html (0.00s)
+=== RUN   TestNonceHTMLPlaceholder
+=== RUN   TestNonceHTMLPlaceholder/constant_value
+--- PASS: TestNonceHTMLPlaceholder (0.00s)
+    --- PASS: TestNonceHTMLPlaceholder/constant_value (0.00s)
+=== RUN   TestFrontendServer_ServeIndexHTML
+=== RUN   TestFrontendServer_ServeIndexHTML/serves_html_with_nonce
+=== RUN   TestFrontendServer_ServeIndexHTML/caches_html_content
+=== RUN   TestFrontendServer_ServeIndexHTML/sets_etag_header
+=== RUN   TestFrontendServer_ServeIndexHTML/returns_304_only_when_no_nonce_is_present
+=== RUN   TestFrontendServer_ServeIndexHTML/serves_fresh_html_when_cached_nonce_is_stale
+=== RUN   TestFrontendServer_ServeIndexHTML/sets_no_store_cache_headers
+=== RUN   TestFrontendServer_ServeIndexHTML/fallback_on_settings_error
+--- PASS: TestFrontendServer_ServeIndexHTML (0.00s)
+    --- PASS: TestFrontendServer_ServeIndexHTML/serves_html_with_nonce (0.00s)
+    --- PASS: TestFrontendServer_ServeIndexHTML/caches_html_content (0.00s)
+    --- PASS: TestFrontendServer_ServeIndexHTML/sets_etag_header (0.00s)
+    --- PASS: TestFrontendServer_ServeIndexHTML/returns_304_only_when_no_nonce_is_present (0.00s)
+    --- PASS: TestFrontendServer_ServeIndexHTML/serves_fresh_html_when_cached_nonce_is_stale (0.00s)
+    --- PASS: TestFrontendServer_ServeIndexHTML/sets_no_store_cache_headers (0.00s)
+    --- PASS: TestFrontendServer_ServeIndexHTML/fallback_on_settings_error (0.00s)
+=== RUN   TestFrontendServer_NoStoreHeadersOnEveryHTMLPath
+=== RUN   TestFrontendServer_NoStoreHeadersOnEveryHTMLPath/cache_hit
+=== RUN   TestFrontendServer_NoStoreHeadersOnEveryHTMLPath/settings_error_fallback
+=== RUN   TestFrontendServer_NoStoreHeadersOnEveryHTMLPath/settings_marshal_error_fallback
+--- PASS: TestFrontendServer_NoStoreHeadersOnEveryHTMLPath (0.00s)
+    --- PASS: TestFrontendServer_NoStoreHeadersOnEveryHTMLPath/cache_hit (0.00s)
+    --- PASS: TestFrontendServer_NoStoreHeadersOnEveryHTMLPath/settings_error_fallback (0.00s)
+    --- PASS: TestFrontendServer_NoStoreHeadersOnEveryHTMLPath/settings_marshal_error_fallback (0.00s)
+=== RUN   TestOverrideFilesNeverReceiveImmutableCacheHeaders
+=== PAUSE TestOverrideFilesNeverReceiveImmutableCacheHeaders
+=== RUN   TestHTMLCache
+=== RUN   TestHTMLCache/new_cache_returns_nil
+=== RUN   TestHTMLCache/set_and_get
+=== RUN   TestHTMLCache/invalidate_clears_cache
+=== RUN   TestHTMLCache/etag_changes_with_settings
+=== RUN   TestHTMLCache/etag_format
+--- PASS: TestHTMLCache (0.00s)
+    --- PASS: TestHTMLCache/new_cache_returns_nil (0.00s)
+    --- PASS: TestHTMLCache/set_and_get (0.00s)
+    --- PASS: TestHTMLCache/invalidate_clears_cache (0.00s)
+    --- PASS: TestHTMLCache/etag_changes_with_settings (0.00s)
+    --- PASS: TestHTMLCache/etag_format (0.00s)
+=== RUN   TestFrontendHTMLRealHTTPNonceSettingsAndAssets
+--- PASS: TestFrontendHTMLRealHTTPNonceSettingsAndAssets (0.00s)
+=== RUN   TestApplyStaticAssetCacheHeaders
+=== PAUSE TestApplyStaticAssetCacheHeaders
+=== CONT  TestOverrideFilesNeverReceiveImmutableCacheHeaders
+=== CONT  TestApplyStaticAssetCacheHeaders
+=== RUN   TestApplyStaticAssetCacheHeaders/sets_immutable_cache_for_fingerprinted_asset
+=== PAUSE TestApplyStaticAssetCacheHeaders/sets_immutable_cache_for_fingerprinted_asset
+=== RUN   TestOverrideFilesNeverReceiveImmutableCacheHeaders/frontend_server_override
+=== PAUSE TestOverrideFilesNeverReceiveImmutableCacheHeaders/frontend_server_override
+=== RUN   TestApplyStaticAssetCacheHeaders/skips_assets/index.js
+=== PAUSE TestApplyStaticAssetCacheHeaders/skips_assets/index.js
+=== RUN   TestApplyStaticAssetCacheHeaders/skips_logo.png
+=== PAUSE TestApplyStaticAssetCacheHeaders/skips_logo.png
+=== RUN   TestApplyStaticAssetCacheHeaders/skips_favicon.ico
+=== PAUSE TestApplyStaticAssetCacheHeaders/skips_favicon.ico
+=== RUN   TestApplyStaticAssetCacheHeaders/skips_index.html
+=== PAUSE TestApplyStaticAssetCacheHeaders/skips_index.html
+=== RUN   TestApplyStaticAssetCacheHeaders/nil_header_is_noop
+=== PAUSE TestApplyStaticAssetCacheHeaders/nil_header_is_noop
+=== CONT  TestApplyStaticAssetCacheHeaders/sets_immutable_cache_for_fingerprinted_asset
+=== CONT  TestApplyStaticAssetCacheHeaders/skips_favicon.ico
+=== CONT  TestApplyStaticAssetCacheHeaders/nil_header_is_noop
+=== CONT  TestApplyStaticAssetCacheHeaders/skips_index.html
+=== CONT  TestApplyStaticAssetCacheHeaders/skips_logo.png
+=== CONT  TestApplyStaticAssetCacheHeaders/skips_assets/index.js
+=== RUN   TestOverrideFilesNeverReceiveImmutableCacheHeaders/legacy_override
+=== PAUSE TestOverrideFilesNeverReceiveImmutableCacheHeaders/legacy_override
+=== CONT  TestOverrideFilesNeverReceiveImmutableCacheHeaders/frontend_server_override
+--- PASS: TestApplyStaticAssetCacheHeaders (0.00s)
+    --- PASS: TestApplyStaticAssetCacheHeaders/sets_immutable_cache_for_fingerprinted_asset (0.00s)
+    --- PASS: TestApplyStaticAssetCacheHeaders/skips_favicon.ico (0.00s)
+    --- PASS: TestApplyStaticAssetCacheHeaders/skips_assets/index.js (0.00s)
+    --- PASS: TestApplyStaticAssetCacheHeaders/skips_logo.png (0.00s)
+    --- PASS: TestApplyStaticAssetCacheHeaders/nil_header_is_noop (0.00s)
+    --- PASS: TestApplyStaticAssetCacheHeaders/skips_index.html (0.00s)
+=== CONT  TestOverrideFilesNeverReceiveImmutableCacheHeaders/legacy_override
+--- PASS: TestOverrideFilesNeverReceiveImmutableCacheHeaders (0.00s)
+    --- PASS: TestOverrideFilesNeverReceiveImmutableCacheHeaders/frontend_server_override (0.00s)
+    --- PASS: TestOverrideFilesNeverReceiveImmutableCacheHeaders/legacy_override (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/web	0.016s

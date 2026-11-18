@@ -1,5 +1,7 @@
 # 上游合并指南
 
+v0.2.23第二档已完成（2026-11-18）：S01–S23、76/76任务，[验收](../../openspec/changes/port-upstream-0.2.23-tier2/verification.md) / [实施证据](./implementation-0.2.23-tier2/README.md)。Go1.27.4对齐；VERSION1.1.25、SQLite229、auth21、库/前端依赖、Ent/Wire及64MiB/40MiB/120s保留。54包unit/embed/lint0/六包race、实际HTTP/WS/SQLite/miniredis/Fast/结算去重通过；前端2212/2原跳过、critical179/2和桌面/移动操作通过。实际TCP202→1flush，1C1G独立夹具峰值69771264B，非生产性能承诺。起点为7a0b78fe5加第一档工作树；第一档在期间独立提交d8d126da9，55文件匹配。本批实现随本次本地提交保存，等待归档；无推送/发布/归档/业务实例操作。以下评估与历史时点原文保留。
+
 最新评估（2026-11-18）：[PORTING-0.2.23.md](./PORTING-0.2.23.md)，覆盖v0.2.22/v0.2.23，基线v1.1.25+用量排行修复`7a0b78fe5` / Go1.27.3 / SQLite229 / auth21。128非merge、78PR+4直接提交，524文件态A0/C269/X199/N56。建议[第一档21簇](../../openspec/changes/port-upstream-0.2.23-tier1/README.md)、[第二档23簇](../../openspec/changes/port-upstream-0.2.23-tier2/README.md)，选55PR中的既有消费者维护，**两批未实施，70/76任务全未勾选**。[来源/失败/测量索引](./evidence-0.2.23/MANIFEST.md)。六份旧活动change共180完成checkbox、零未完成，等待归档；下方历史时点原文保留。
 
 - [x] 冻结fork/release/tag/main，整PR覆盖与全部文件先反后正，保护历史和产品哈希。

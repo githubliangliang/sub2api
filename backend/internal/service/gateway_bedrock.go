@@ -130,7 +130,7 @@ func (s *GatewayService) forwardBedrock(
 
 	// 错误/failover 处理
 	if resp.StatusCode >= 400 {
-		return s.handleBedrockUpstreamErrors(ctx, resp, c, account, account.GetMappedModel(reqModel))
+		return s.handleBedrockUpstreamErrors(ctx, resp, c, account, bedrockSchedulingModelKey(ctx, account, reqModel))
 	}
 
 	// Bedrock 分支绕过通用 Forward 成功路径，这里保持上游接受回调语义一致。
@@ -145,6 +145,9 @@ func (s *GatewayService) forwardBedrock(
 	if reqStream {
 		streamResult, err := s.handleBedrockStreamingResponse(ctx, resp, c, account, startTime, reqModel)
 		if err != nil {
+			if partial := partialStreamUsageResult(c, resp, streamResult, reqModel, mappedModel, startTime, err); partial != nil {
+				return partial, err
+			}
 			return nil, err
 		}
 		usage = streamResult.usage
@@ -210,6 +213,14 @@ func (s *GatewayService) executeBedrockUpstream(
 		}
 
 		if resp.StatusCode >= 400 && resp.StatusCode != 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
+			if resp.StatusCode >= http.StatusInternalServerError {
+				body, _ := s.readUpstreamErrorBody(resp)
+				_ = resp.Body.Close()
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				if isBedrockContentFilterError(resp.StatusCode, body) {
+					break
+				}
+			}
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)
 				if elapsed >= maxRetryElapsed {
@@ -268,6 +279,14 @@ func (s *GatewayService) handleBedrockUpstreamErrors(
 	account *Account,
 	requestedModel ...string,
 ) (*ForwardResult, error) {
+	if resp.StatusCode >= http.StatusInternalServerError {
+		body, _ := s.readUpstreamErrorBody(resp)
+		_ = resp.Body.Close()
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		if isBedrockContentFilterError(resp.StatusCode, body) {
+			return s.handleErrorResponse(ctx, resp, c, account, requestedModel...)
+		}
+	}
 	// retry exhausted + failover
 	if s.shouldRetryUpstreamError(account, resp.StatusCode) {
 		if s.shouldFailoverUpstreamError(resp.StatusCode) {

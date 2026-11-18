@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -32,6 +33,16 @@ import (
 // 调用方，属于有意保留的行为差异，不在此强行统一。
 
 // newUpstreamSSEScanner 构造读取上游 SSE 流的行扫描器，按配置放大单行上限。
+type flushBeforeUpstreamRead struct {
+	r     io.Reader
+	flush func()
+}
+
+func (f *flushBeforeUpstreamRead) Read(p []byte) (int, error) {
+	f.flush()
+	return f.r.Read(p)
+}
+
 func (s *OpenAIGatewayService) newUpstreamSSEScanner(r io.Reader) *bufio.Scanner {
 	scanner := bufio.NewScanner(r)
 	maxLineSize := defaultMaxLineSize
@@ -269,12 +280,14 @@ type ccStreamScanState struct {
 // emit 回调做各自的协议转换与写出。读错误按既有约定过滤 context 取消类噪声后
 // 记入 Warn 日志。
 func (s *OpenAIGatewayService) scanCCStream(
+	c *gin.Context,
 	resp *http.Response,
 	logPrefix string,
 	requestID string,
 	startTime time.Time,
 	emit func(*apicompat.ChatCompletionsChunk),
 ) ccStreamScanState {
+	observer := beginUpstreamResponseModelObservation(c)
 	var st ccStreamScanState
 
 	scanner := s.newUpstreamSSEScanner(resp.Body)
@@ -294,9 +307,10 @@ func (s *OpenAIGatewayService) scanCCStream(
 		}
 
 		if u := extractCCStreamUsage(payload); u != nil {
-			st.Usage = *u
+			mergeOpenAIUsageSnapshot(&st.Usage, *u)
 		}
 
+		observer.ObserveOpenAI([]byte(payload), gjson.Get(payload, "type").String())
 		var chunk apicompat.ChatCompletionsChunk
 		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
 			logger.L().Warn(logPrefix+": failed to parse chat stream chunk",
@@ -341,6 +355,7 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 	resp *http.Response,
 	writeError compatErrorWriter,
 ) (*apicompat.ChatCompletionsResponse, OpenAIUsage, error) {
+	observer := beginUpstreamResponseModelObservation(c)
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
@@ -349,6 +364,7 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 		return nil, OpenAIUsage{}, fmt.Errorf("read upstream body: %w", err)
 	}
 
+	observer.ObserveOpenAI(respBody, gjson.GetBytes(respBody, "type").String())
 	var ccResp apicompat.ChatCompletionsResponse
 	if err := json.Unmarshal(respBody, &ccResp); err != nil {
 		writeError(c, http.StatusBadGateway, "api_error", "Failed to parse upstream response")

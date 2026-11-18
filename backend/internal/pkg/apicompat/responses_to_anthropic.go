@@ -20,6 +20,7 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
 		Type:  "message",
 		Role:  "assistant",
 		Model: model,
+		Usage: anthropicUsageFromResponsesUsage(nil),
 	}
 
 	var blocks []AnthropicContentBlock
@@ -92,7 +93,7 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
 
 func anthropicUsageFromResponsesUsage(usage *ResponsesUsage) AnthropicUsage {
 	if usage == nil {
-		return AnthropicUsage{}
+		return AnthropicUsage{CacheCreationInputTokensPresent: true, CacheReadInputTokensPresent: true}
 	}
 
 	cachedTokens := 0
@@ -100,16 +101,20 @@ func anthropicUsageFromResponsesUsage(usage *ResponsesUsage) AnthropicUsage {
 		cachedTokens = usage.InputTokensDetails.CachedTokens
 	}
 
-	inputTokens := usage.InputTokens - cachedTokens - usage.CacheCreationInputTokens
+	creationTokens := anthropicCacheCreationInputTokens(AnthropicUsage{CacheCreationInputTokens: usage.CacheCreationInputTokens, CacheCreation: usage.CacheCreation})
+	inputTokens := usage.InputTokens - cachedTokens - creationTokens
 	if inputTokens < 0 {
 		inputTokens = 0
 	}
 
 	return AnthropicUsage{
-		InputTokens:              inputTokens,
-		OutputTokens:             usage.OutputTokens,
-		CacheReadInputTokens:     cachedTokens,
-		CacheCreationInputTokens: usage.CacheCreationInputTokens,
+		InputTokens:                     inputTokens,
+		OutputTokens:                    usage.OutputTokens,
+		CacheReadInputTokens:            cachedTokens,
+		CacheCreationInputTokens:        creationTokens,
+		CacheCreation:                   usage.CacheCreation,
+		CacheCreationInputTokensPresent: true,
+		CacheReadInputTokensPresent:     true,
 	}
 }
 
@@ -188,6 +193,11 @@ type ResponsesEventToAnthropicState struct {
 	PendingThinkingSignature string
 	HasToolCall              bool
 
+	// XAIServerSideSearch is set by callers whose upstream is xAI. A
+	// custom_tool_call that IsServerSideSearchCall then never becomes a tool_use
+	// block, because xAI runs it itself.
+	XAIServerSideSearch bool
+
 	// OutputIndexToBlockIdx maps Responses output_index → Anthropic content block index.
 	OutputIndexToBlockIdx map[int]int
 
@@ -202,6 +212,7 @@ type ResponsesEventToAnthropicState struct {
 	OutputTokens             int
 	CacheReadInputTokens     int
 	CacheCreationInputTokens int
+	CacheCreation            *AnthropicCacheCreation
 
 	ResponseID string
 	Model      string
@@ -280,10 +291,13 @@ func FinalizeResponsesAnthropicStream(state *ResponsesEventToAnthropicState) []A
 				StopReason: stopReason,
 			},
 			Usage: &AnthropicUsage{
-				InputTokens:              state.InputTokens,
-				OutputTokens:             state.OutputTokens,
-				CacheReadInputTokens:     state.CacheReadInputTokens,
-				CacheCreationInputTokens: state.CacheCreationInputTokens,
+				InputTokens:                     state.InputTokens,
+				OutputTokens:                    state.OutputTokens,
+				CacheReadInputTokens:            state.CacheReadInputTokens,
+				CacheCreationInputTokens:        state.CacheCreationInputTokens,
+				CacheCreation:                   state.CacheCreation,
+				CacheCreationInputTokensPresent: true,
+				CacheReadInputTokensPresent:     true,
 			},
 		},
 		AnthropicStreamEvent{Type: "message_stop"},
@@ -331,8 +345,10 @@ func resToAnthHandleCreated(evt *ResponsesStreamEvent, state *ResponsesEventToAn
 			Model:      state.Model,
 			StopReason: nil,
 			Usage: AnthropicUsage{
-				InputTokens:  0,
-				OutputTokens: 0,
+				InputTokens:                     0,
+				OutputTokens:                    0,
+				CacheCreationInputTokensPresent: true,
+				CacheReadInputTokensPresent:     true,
 			},
 		},
 	}}
@@ -347,6 +363,9 @@ func resToAnthHandleOutputItemAdded(evt *ResponsesStreamEvent, state *ResponsesE
 	// function_call 与 custom_tool_call（custom/freeform 工具，如新版 apply_patch）
 	// 同样映射为 Anthropic 的 tool_use 块。
 	case "function_call", "custom_tool_call":
+		if state.XAIServerSideSearch && IsServerSideSearchCall(evt.Item.Type, evt.Item.CallID) {
+			return nil
+		}
 		var events []AnthropicStreamEvent
 		events = append(events, closeCurrentBlock(state)...)
 
@@ -735,6 +754,7 @@ func resToAnthHandleCompleted(evt *ResponsesStreamEvent, state *ResponsesEventTo
 		state.OutputTokens = usage.OutputTokens
 		state.CacheReadInputTokens = usage.CacheReadInputTokens
 		state.CacheCreationInputTokens = usage.CacheCreationInputTokens
+		state.CacheCreation = usage.CacheCreation
 	}
 	if evt.Response != nil {
 		if evt.Response.Usage != nil {
@@ -743,6 +763,7 @@ func resToAnthHandleCompleted(evt *ResponsesStreamEvent, state *ResponsesEventTo
 			state.OutputTokens = usage.OutputTokens
 			state.CacheReadInputTokens = usage.CacheReadInputTokens
 			state.CacheCreationInputTokens = usage.CacheCreationInputTokens
+			state.CacheCreation = usage.CacheCreation
 		}
 		switch evt.Response.Status {
 		case "incomplete":
@@ -763,10 +784,13 @@ func resToAnthHandleCompleted(evt *ResponsesStreamEvent, state *ResponsesEventTo
 				StopReason: stopReason,
 			},
 			Usage: &AnthropicUsage{
-				InputTokens:              state.InputTokens,
-				OutputTokens:             state.OutputTokens,
-				CacheReadInputTokens:     state.CacheReadInputTokens,
-				CacheCreationInputTokens: state.CacheCreationInputTokens,
+				InputTokens:                     state.InputTokens,
+				OutputTokens:                    state.OutputTokens,
+				CacheReadInputTokens:            state.CacheReadInputTokens,
+				CacheCreationInputTokens:        state.CacheCreationInputTokens,
+				CacheCreation:                   state.CacheCreation,
+				CacheCreationInputTokensPresent: true,
+				CacheReadInputTokensPresent:     true,
 			},
 		},
 		AnthropicStreamEvent{Type: "message_stop"},

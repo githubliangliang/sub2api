@@ -838,7 +838,7 @@ export default {
         rpmLimitHint: '每用户在本分组每分钟最大请求数，0 = 不限制；一旦设置即接管该用户的限流（覆盖用户级 rpm_limit）',
         maxReasoningEffort: '推理强度上限',
         maxReasoningEffortUnlimited: '不限制（跟随请求）',
-        maxReasoningEffortHint: '仅限制客户端主动请求的 OpenAI reasoning effort；Composite 分组仅对解析到 OpenAI 的请求生效。不会为缺省请求主动开启推理。上限优先级高于推理强度映射。',
+        maxReasoningEffortHint: '限制 OpenAI 请求及 Anthropic Chat/Responses 兼容入口的显式推理强度，也适用于 Composite 路由到这些平台的请求。原生 Anthropic Messages 使用自身的思考配置。缺省请求保持省略，上限在映射后执行。',
         maxReasoningEffortOverLimit: '超限访问控制',
         maxReasoningEffortOverLimitDowngrade: '超过上限时自动降档',
         maxReasoningEffortOverLimitDeny: '拒绝访问',

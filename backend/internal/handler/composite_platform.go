@@ -73,6 +73,12 @@ func openAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKe
 
 func applyOpenAIReasoningEffortPolicyForRequest(c *gin.Context, apiKey *service.APIKey, body []byte) ([]byte, bool, error) {
 	maxEffort, mappings, overLimit, ok := openAIReasoningEffortPolicyForRequest(c, apiKey)
+	// OpenAI-shaped compatibility requests to Anthropic consume the same group
+	// policy; native Messages keep their separate output_config semantics.
+	if !ok && apiKey != nil && apiKey.Group != nil &&
+		(apiKey.Group.Platform == service.PlatformAnthropic || apiKey.Group.Platform == service.PlatformComposite) && effectiveAPIKeyPlatform(c, apiKey) == service.PlatformAnthropic {
+		maxEffort, mappings, overLimit, ok = apiKey.Group.MaxReasoningEffort, apiKey.Group.ReasoningEffortMappings, apiKey.Group.MaxReasoningEffortOverLimit, true
+	}
 	if !ok {
 		return body, false, nil
 	}

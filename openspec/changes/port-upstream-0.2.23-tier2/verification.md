@@ -1,41 +1,43 @@
-# 实施验收（空表）
+# 实施验收
 
-当前仅评估和提案完成；下表全部空白，等待实际实施。
+2026-11-18，S01–S23及组合门禁76/76完成。验收在未提交工作树完成，当时HEAD为第一档独立提交 `d8d126da949d2f7cb12283e594bcdd467adc527d`；本批以已测工作树产品哈希标识；实现随本次提交保存，原始验收记录不回写。
 
 | 项目 | 命令/结果 | 证据 |
 |---|---|---|
-| 实际实施起点 | | |
-| 实现SHA/产品哈希 | | |
-| VERSION/Go/SQLite/auth snapshot | | |
-| backend全量unit/embed/lint/race | | |
-| 真实HTTP/WS/SQLite/miniredis | | |
-| frontend完整门禁/浏览器/移动端 | | |
-| 性能/资源/工具链测量 | | |
-| 依赖/生成代码/历史保护 | | |
-| 遗留与边界 | | |
+| 实际实施起点 | `7a0b78fe5` +第一档未提交工作树；第一档后独立提交，55文件匹配 | [start](../../../docs/upstream-sync/implementation-0.2.23-tier2/start.json) |
+| 实现SHA/产品哈希 | 验收HEAD `d8d126da9`，保留当时增量/哈希；实现随本次提交保存 | [scope](../../../docs/upstream-sync/implementation-0.2.23-tier2/scope-final.json) / [hashes](../../../docs/upstream-sync/implementation-0.2.23-tier2/changed-files.json) |
+| VERSION/Go/SQLite/auth | 1.1.25 / 1.27.4 /229 /21，库及生成代码不变 | [生成一致性](../../../docs/upstream-sync/implementation-0.2.23-tier2/go1274-generation-consistency.json) |
+| backend全量unit/embed/lint/race | 54包unit、embed构建、lint0、六包相关race通过 | [unit](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log) / [race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) / [lint](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-lint-scope-clean.log) |
+| 真实HTTP/WS/SQLite/miniredis | 全协议/TTL/模型冲突/token barrier/部分结算/去重/完整Fast及quota邻近 | [组合传输](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-http-ledger-final.log) / [race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| frontend完整门禁/浏览器/移动端 | 2212通过/2原跳过，critical179/2，typecheck/lint/build；Chrome桌面/390px八项操作 | [test](../../../docs/upstream-sync/implementation-0.2.23-tier2/frontend-full-test-final.log) / [browser](../../../docs/upstream-sync/implementation-0.2.23-tier2/browser/results.json) |
+| 性能/资源/Go | 逐hunk单P字节/成本、实际TCP202→1flush；1C1G独立峰值69771264B；同版lint重建/隔离Ent-Wire/跨OS通过 | [基准](../../../docs/upstream-sync/implementation-0.2.23-tier2/s22-accepted.log) / [资源](../../../docs/upstream-sync/implementation-0.2.23-tier2/resource-1c1g.log) |
+| 依赖/生成代码/历史保护 | 331Ent文件/Wire一致，3691历史文件原样；5个第一档回写匹配独立提交，无未归因改变 | [保护](../../../docs/upstream-sync/implementation-0.2.23-tier2/protected-concurrent-writebacks.json) |
+| 遗留与边界 | 原生OpenAI-Anthropic、监控quota-fetcher缺失消费者N/A；不导入新能力/PG/大并发/新TTL/付款，不发布/归档/部署 | [适配和留存失败](../../../docs/upstream-sync/implementation-0.2.23-tier2/source-adaptations.json) |
 
 | 簇 | 实际结果 | 证据 |
 |---|---|---|
-| S01 5m/1h 缓存明细与互斥计费 | | |
-| S02 Claude 并发 token 轮换恢复 | | |
-| S03 SQLite 分组倍率/RPM 原子同步 | | |
-| S04 首内容前换号与 keepalive 错误 | | |
-| S05 空闲超时与一次换号预算 | | |
-| S06 Codex additional_tools 声明 ID | | |
-| S07 Grok 服务端搜索调用 | | |
-| S08 原文模型和真实端点观测 | | |
-| S09 Composite 公开模型名还原 | | |
-| S10 Anthropic 兼容入口 effort 策略 | | |
-| S11 Bedrock 错误语义与部分用量 | | |
-| S12 Gemini 并行与分片工具 | | |
-| S13 Gemini Chat 结构化响应格式 | | |
-| S14 Antigravity 兼容思考/等待/空流 | | |
-| S15 Gemini 原生稳定前缀会话 | | |
-| S16 冷却账号快照成员 | | |
-| S17 OpenAI 用量观测新鲜度 | | |
-| S18 实际扣除与账号成本统计 | | |
-| S19 价格启动不阻塞远端哈希 | | |
-| S20 上游 TCP 死连接检测 | | |
-| S21 OpenAI 工具 schema 正则适配 | | |
-| S22 既有流与请求热点窄优化 | | |
-| S23 Go工具链与时钟测试维护 | | |
+| S01 5m/1h 缓存明细与互斥计费 | 已完成：presence、独立TTL更新、聚合正值/0占位、矛盾明细同比例封顶及5m差额。Claude八路径40用例、OpenAI九路径含真实WS均在SQLite229结算两次，余额/配额/去重一致；零价与完整Fast保持。 | [s01-s02-s08-s09-http-sqlite-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/s01-s02-s08-s09-http-sqlite-final.log), [s21-number-map-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s21-number-map-adapted.log), [backend-http-ledger-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-http-ledger-final.log) |
+| S02 Claude 并发 token 轮换恢复 | 已完成：三入口比较实际发送token，DB新有效token仅重试一次；cache旧值、barrier在途/提交、同token、第二次401、400与取消通过。11秒虚拟时钟超过10秒预算后仍走原401策略。 | [s01-s02-s08-s09-http-sqlite-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/s01-s02-s08-s09-http-sqlite-final.log), [s02-budget-refresh-fixture-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s02-budget-refresh-fixture-adapted.log) |
+| S03 SQLite 分组倍率/RPM 原子同步 | 已完成：一个事务内清空目标列、分批upsert及最后清理，两列互相保留；重复last-wins，nil/0语义，10000行bind-safe及触发器/取消回滚通过。既有提交成功后的缓存失效路径保留。 | [s03-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s03-after.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log) |
+| S04 首内容前换号与 keepalive 错误 | 已完成：Messages使用既有8MiB stage持有前奏，内容/终态释放，keepalive可提前输出且不泄露私有头。真实TCP两号失败/成功、规则/耗尽、取消和lease释放通过；Responses耗尽使用response.failed终态。 | [s04-s05-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s04-s05-after.log), [s04-handler-first](../../../docs/upstream-sync/implementation-0.2.23-tier2/s04-handler-first.log), [s21-number-map-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s21-number-map-adapted.log), [backend-http-ledger-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-http-ledger-final.log) |
+| S05 空闲超时与一次换号预算 | 已完成：最后读取deadline计时、持续注释重置idle、首内容前最多一次换号；两号均idle不消费第三号；有内容/keepalive/取消与既有Grok、模型冷却策略邻近通过。默认120s不变。 | [s04-s05-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s04-s05-after.log), [backend-http-ledger-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-http-ledger-final.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log) |
+| S06 Codex additional_tools 声明 ID | 已完成：仅合法at_UUID声明/对应引用紧凑化，store=false保留声明；前向引用、opaque/非法ID、普通call_id、UTF8、HTTP转换/透传/完整重放通过。实际OAuth透传及WS工具请求纳入组合夹具。 | [s01-s06-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s01-s06-after.log), [s21-number-map-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s21-number-map-adapted.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S07 Grok 服务端搜索调用 | 已完成：Grok-only xs_/as_ custom搜索保留原文类型/input并去重计数，Chat/Messages不发客户端调用；Responses原文保留。实际HTTP三协议流/非流、普通custom及非Grok前缀通过。 | [s07-real-http-api-key-identity-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s07-real-http-api-key-identity-adapted.log), [backend-http-ledger-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-http-ledger-final.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S08 原文模型和真实端点观测 | 已完成：每attempt新observer，先观察再改公开名；普通/中断/多模型冲突进入usage边界，兼容错误记录真实messages URL。实际SQLite验证降价准入及冲突回退，同时保留已解析tier。缺失原生OpenAI-Anthropic文件不导入。 | [s01-s02-s08-s09-http-sqlite-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/s01-s02-s08-s09-http-sqlite-final.log), [effort-final-neighbors](../../../docs/upstream-sync/implementation-0.2.23-tier2/effort-final-neighbors.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log) |
+| S09 Composite 公开模型名还原 | 已完成：各桥及原生Anthropic流/非流还原公开名，原生只改message_start.message.model；正文/工具参数不替换，非Composite负对照及观测/冲突/费用通过。 | [s01-s02-s08-s09-http-sqlite-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/s01-s02-s08-s09-http-sqlite-final.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S10 Anthropic 兼容入口 effort 策略 | 已完成：真实group保存允许Anthropic；两个兼容handler在选择前执行现有mapping/ceiling/deny策略，发送前最终校验并由实际Anthropic body推导费用effort；禁用/省略/非法值、none/GLM/count_tokens邻近通过。桌面/手机保存重开及原生Messages范围提示通过。 | [effort-final-neighbors](../../../docs/upstream-sync/implementation-0.2.23-tier2/effort-final-neighbors.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [browser-menu-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/browser-menu-adapted.log) |
+| S11 Bedrock 错误语义与部分用量 | 已完成：精确400/404封号/缺用例、反射字段负对照、请求过滤不换号、429只模型及渠道调度键、5xx与显式规则通过；真实TCP AWS EventStream截断保留用量，SQLite费用/配额结算两次只扣一次。 | [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [backend-http-ledger-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-http-ledger-final.log) |
+| S12 Gemini 并行与分片工具 | 已完成：既有两reader使用65行边界helper；同名/同参、id学习/变化、字符串首片/快照/重传、无ID歧义与完成事件保守策略通过。 | [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S13 Gemini Chat 结构化响应格式 | 已完成：Studio/既有CLI传responseMimeType/responseJsonSchema，保留原始schema大数和属性顺序；tools/image互斥，文本/缺省/无效格式对照通过。仅现有2.5/3思考家族最小前置。 | [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S14 Antigravity 兼容思考/等待/空流 | 已完成：按headers到达锚定pre-content等待，保留总TTFT；有效thought、连续ping、slow headers、empty/timeout/取消通过。无内容已提交的绑定释放用真实Redis Lua compare-delete防并发误删；仅现有模型thinking子集。 | [s14-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s14-after.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S15 Gemini 原生稳定前缀会话 | 已完成：Key/model/tools/system/首用户parts稳定哈希，省略role及后续tool历史不漂移，空parts无哈希、显式客户端ID优先；仅此哈希用UseNumber保留大整数身份。ForceCacheBilling保留。 | [s16-neighbors-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/s16-neighbors-final.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log) |
+| S16 冷却账号快照成员 | 已完成：沿用候选仓储加载完整配置成员，每次读取IsSchedulable；虚拟到期无需outbox、真禁用、实际SQLite成员范围、simple/混排、取消、revision/retire/未就绪回源通过。旧查询mock和已无消费者helper已同步。 | [s16-first-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s16-first-after.log), [s16-neighbors-final](../../../docs/upstream-sync/implementation-0.2.23-tier2/s16-neighbors-final.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S17 OpenAI 用量观测新鲜度 | 已完成：只上游额度观测更新主动时间，legacy无时间保持unknown，失败/无quota不伪造更新；本地窗口不当作0%配额。批量/手动失败保留读数，重试时间更新，移动端和请求生命周期通过；缺失监控quota-fetcher消费者N/A。 | [s17-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s17-after.log), [s17-s18-frontend-first](../../../docs/upstream-sync/implementation-0.2.23-tier2/s17-s18-frontend-first.log), [browser-menu-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/browser-menu-adapted.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log) |
+| S18 实际扣除与账号成本统计 | 已完成：models/endpoints分别actual_cost/account_cost，SQLite端点列/旧path查询与所有既有筛选保留；Gemini批量独立账号成本、NULL/0覆盖及用户API脱敏通过。真实浏览器管理员三价分列、用户隐藏账号价通过。 | [s18-sqlite-third](../../../docs/upstream-sync/implementation-0.2.23-tier2/s18-sqlite-third.log), [s18-frontend-mock-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s18-frontend-mock-adapted.log), [browser-menu-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/browser-menu-adapted.log) |
+| S19 价格启动不阻塞远端哈希 | 已完成：owned worker/ctx/wg/Stop和串行下载/文件重载；本地价格立即启动，远端失败/取消、真实HTTP响应体关闭、并发同步、正文hash一致及零override通过。 | [s19-first-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s19-first-after.log), [s19-real-http-url-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s19-real-http-url-adapted.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S20 上游 TCP 死连接检测 | 已完成：标准dialer15s idle/5s interval/3 probes及Linux TCP_USER_TIMEOUT=30000；实际socket选项、错误降级、proxy/TLS/取消、Darwin/Windows编译通过。30秒仅来源参数，不宣称实测死peer耗时。 | [s20-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s20-after.log), [cross-darwin](../../../docs/upstream-sync/implementation-0.2.23-tier2/cross-darwin.log), [cross-windows](../../../docs/upstream-sync/implementation-0.2.23-tier2/cross-windows.log), [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log) |
+| S21 OpenAI 工具 schema 正则适配 | 已完成：本地185→225行sanitizer加155行窄regexp predicate；合并相邻删除/覆盖编辑，patternProperties删除后必要时重开additionalProperties。实例/default/enum/Python/非OpenAI与隔离jsonschema解析通过；实际HTTP/WS大数保留，兼容map变换复用现有UseNumber。未引入约899行parser或产品依赖。 | [s21-jsonschema-proxy-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s21-jsonschema-proxy-adapted.log), [s21-number-map-adapted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s21-number-map-adapted.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+| S22 既有流与请求热点窄优化 | 已完成：采用逐hunk已测Ollama单次offset编辑、cache raw预检/转义回退、tool ForEach、指纹一次、string反向及SSE map gate；保留本地最后工具TTL策略。raw CC read前/EOF flush保字节及断开语义；实际TCP202→1 flush、0.59→0.25ms。未采用缺消费者/全body懒日志/COW/lane/coalescing。 | [s22-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/s22-accepted.log), [s22-tcp-flush-before](../../../docs/upstream-sync/implementation-0.2.23-tier2/s22-tcp-flush-before.log), [s22-tcp-flush-after](../../../docs/upstream-sync/implementation-0.2.23-tier2/s22-tcp-flush-after.log), [resource-1c1g](../../../docs/upstream-sync/implementation-0.2.23-tier2/resource-1c1g.log) |
+| S23 Go工具链与时钟测试维护 | 已完成：Go1.27.4、五处CI断言、三个Docker构建镜像/开发指针；同版本lint2.14.0重建，隔离Ent331文件/Wire/依赖一致。两峰时用例固定noon PricingAt避开23:59末端；full unit/lint/race/embed与跨OS通过。 | [backend-unit-final-accepted](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-unit-final-accepted.log), [backend-lint-scope-clean](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-lint-scope-clean.log), [backend-race](../../../docs/upstream-sync/implementation-0.2.23-tier2/backend-race.log) |
+
+全部命令与失败记录见[实施索引](../../../docs/upstream-sync/implementation-0.2.23-tier2/README.md)，最终范围、文档链接和OpenSpec严格校验结果在同目录保存。资源、实际TCP和浏览器合成数据不外推生产性能或vendor网络结果。

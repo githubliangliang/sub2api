@@ -113,6 +113,7 @@ type EndpointStat struct {
 	TotalTokens int64   `json:"total_tokens"`
 	Cost        float64 `json:"cost"`        // 标准计费
 	ActualCost  float64 `json:"actual_cost"` // 实际扣除
+	AccountCost float64 `json:"account_cost,omitempty"`
 }
 
 // GroupUsageSummary represents today's and cumulative cost for a single group.

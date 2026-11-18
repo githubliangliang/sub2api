@@ -1,0 +1,95 @@
+2026/11/18 09:47:50 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAccountSparkShadowHelpers
+--- PASS: TestAccountSparkShadowHelpers (0.00s)
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime
+=== PAUSE TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime
+=== RUN   TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError
+=== PAUSE TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError
+=== RUN   TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot
+=== PAUSE TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot
+=== RUN   TestGetOpenAIUsage_SparkShadow_WritesExtraAndReturnsNonEmptyWindows
+=== PAUSE TestGetOpenAIUsage_SparkShadow_WritesExtraAndReturnsNonEmptyWindows
+=== RUN   TestShouldRefreshOpenAICodexSnapshot_SparkShadowIgnoresWSv2
+=== PAUSE TestShouldRefreshOpenAICodexSnapshot_SparkShadowIgnoresWSv2
+=== RUN   TestExtractOpenAICodexProbeUpdatesAccepts429WithCodexHeaders
+=== PAUSE TestExtractOpenAICodexProbeUpdatesAccepts429WithCodexHeaders
+=== RUN   TestAccountUsageService_PersistOpenAICodexProbeSnapshotOnlyUpdatesExtra
+=== PAUSE TestAccountUsageService_PersistOpenAICodexProbeSnapshotOnlyUpdatesExtra
+=== RUN   TestAccountUsageService_GetOpenAIUsage_DoesNotPromoteCodexExtraToRateLimit
+=== PAUSE TestAccountUsageService_GetOpenAIUsage_DoesNotPromoteCodexExtraToRateLimit
+=== RUN   TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow
+=== PAUSE TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow
+=== RUN   TestResetAccountQuota_PreservesLookupAndSparkShadowShortCircuits
+=== RUN   TestResetAccountQuota_PreservesLookupAndSparkShadowShortCircuits/lookup_failure
+=== RUN   TestResetAccountQuota_PreservesLookupAndSparkShadowShortCircuits/spark_shadow
+--- PASS: TestResetAccountQuota_PreservesLookupAndSparkShadowShortCircuits (0.00s)
+    --- PASS: TestResetAccountQuota_PreservesLookupAndSparkShadowShortCircuits/lookup_failure (0.00s)
+    --- PASS: TestResetAccountQuota_PreservesLookupAndSparkShadowShortCircuits/spark_shadow (0.00s)
+=== RUN   TestOpenAI429FastPath_SkipsSparkShadow
+--- PASS: TestOpenAI429FastPath_SkipsSparkShadow (0.00s)
+=== RUN   TestOpenAIGatewayServiceRecordUsage_SparkShadowUsesCurrentParentBillingSetting
+=== RUN   TestOpenAIGatewayServiceRecordUsage_SparkShadowUsesCurrentParentBillingSetting/parent_opt_out_overrides_stale_enabled_shadow
+2026/11/18 09:47:50 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 09:47:50 [Billing] Using fallback pricing for model: gpt-5.4-2026-03-05
+=== RUN   TestOpenAIGatewayServiceRecordUsage_SparkShadowUsesCurrentParentBillingSetting/parent_opt_in_overrides_stale_disabled_shadow
+2026/11/18 09:47:50 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 09:47:50 [Billing] Using fallback pricing for model: gpt-5.4-2026-03-05
+--- PASS: TestOpenAIGatewayServiceRecordUsage_SparkShadowUsesCurrentParentBillingSetting (0.00s)
+    --- PASS: TestOpenAIGatewayServiceRecordUsage_SparkShadowUsesCurrentParentBillingSetting/parent_opt_out_overrides_stale_enabled_shadow (0.00s)
+    --- PASS: TestOpenAIGatewayServiceRecordUsage_SparkShadowUsesCurrentParentBillingSetting/parent_opt_in_overrides_stale_disabled_shadow (0.00s)
+=== RUN   TestGetAccessToken_SparkShadowResolvesToParent
+--- PASS: TestGetAccessToken_SparkShadowResolvesToParent (0.00s)
+=== RUN   TestRateLimitService_HandleUpstreamError_SparkShadow401RedirectsToParent
+--- PASS: TestRateLimitService_HandleUpstreamError_SparkShadow401RedirectsToParent (0.00s)
+=== RUN   TestHandle429_SkipsSparkShadow
+2026/11/18 09:47:50 INFO openai_429_7d_limit_exhausted reset_after_seconds=604800 reset_at=2026-11-25T09:47:50.430Z
+2026/11/18 09:47:50 INFO openai_account_rate_limited account_id=902 reset_at=2026-11-25T09:47:50.430Z
+--- PASS: TestHandle429_SkipsSparkShadow (0.00s)
+=== RUN   TestDefaultSparkShadowModelMapping
+--- PASS: TestDefaultSparkShadowModelMapping (0.00s)
+=== RUN   TestSparkShadowIntegration
+=== RUN   TestSparkShadowIntegration/credential_readthrough_initial_T1
+=== RUN   TestSparkShadowIntegration/credential_readthrough_after_rotation_T2
+=== RUN   TestSparkShadowIntegration/get_access_token_e2e_reads_through_T3
+=== RUN   TestSparkShadowIntegration/normal_account_returns_its_own_token
+=== RUN   TestSparkShadowIntegration/routing_invariant
+=== RUN   TestSparkShadowIntegration/parent_health_propagated_to_shadow
+--- PASS: TestSparkShadowIntegration (0.00s)
+    --- PASS: TestSparkShadowIntegration/credential_readthrough_initial_T1 (0.00s)
+    --- PASS: TestSparkShadowIntegration/credential_readthrough_after_rotation_T2 (0.00s)
+    --- PASS: TestSparkShadowIntegration/get_access_token_e2e_reads_through_T3 (0.00s)
+    --- PASS: TestSparkShadowIntegration/normal_account_returns_its_own_token (0.00s)
+    --- PASS: TestSparkShadowIntegration/routing_invariant (0.00s)
+    --- PASS: TestSparkShadowIntegration/parent_health_propagated_to_shadow (0.00s)
+=== CONT  TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime
+=== CONT  TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow
+=== CONT  TestAccountUsageService_GetOpenAIUsage_DoesNotPromoteCodexExtraToRateLimit
+=== CONT  TestExtractOpenAICodexProbeUpdatesAccepts429WithCodexHeaders
+=== CONT  TestGetOpenAIUsage_SparkShadow_WritesExtraAndReturnsNonEmptyWindows
+--- PASS: TestExtractOpenAICodexProbeUpdatesAccepts429WithCodexHeaders (0.00s)
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/2026-11-16T09:47:50Z
+=== CONT  TestShouldRefreshOpenAICodexSnapshot_SparkShadowIgnoresWSv2
+=== CONT  TestAccountUsageService_PersistOpenAICodexProbeSnapshotOnlyUpdatesExtra
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/#00
+=== CONT  TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/invalid
+--- PASS: TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError (0.00s)
+--- PASS: TestShouldRefreshOpenAICodexSnapshot_SparkShadowIgnoresWSv2 (0.00s)
+=== RUN   TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow/expired_5h_window_zeroes_utilization
+--- PASS: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime (0.00s)
+    --- PASS: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/2026-11-16T09:47:50Z (0.00s)
+    --- PASS: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/#00 (0.00s)
+    --- PASS: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/invalid (0.00s)
+=== CONT  TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot
+--- PASS: TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot (0.00s)
+=== RUN   TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow/active_5h_window_keeps_utilization
+=== RUN   TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow/expired_7d_window_zeroes_utilization
+--- PASS: TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow (0.00s)
+    --- PASS: TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow/expired_5h_window_zeroes_utilization (0.00s)
+    --- PASS: TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow/active_5h_window_keeps_utilization (0.00s)
+    --- PASS: TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow/expired_7d_window_zeroes_utilization (0.00s)
+--- PASS: TestGetOpenAIUsage_SparkShadow_WritesExtraAndReturnsNonEmptyWindows (0.00s)
+--- PASS: TestAccountUsageService_PersistOpenAICodexProbeSnapshotOnlyUpdatesExtra (0.20s)
+--- PASS: TestAccountUsageService_GetOpenAIUsage_DoesNotPromoteCodexExtraToRateLimit (0.20s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	0.315s

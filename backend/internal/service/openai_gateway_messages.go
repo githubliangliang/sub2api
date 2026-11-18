@@ -39,7 +39,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		return nil, err
 	}
 	// Sanitize the shared tool schema before choosing Responses, Chat, or Grok.
-	if sanitized, changed, err := sanitizeOpenAIResponsesToolParameterTypes(body); err != nil {
+	if sanitized, changed, err := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform); err != nil {
 		return nil, err
 	} else if changed {
 		body = sanitized
@@ -207,7 +207,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	if account.Type == AccountTypeOAuth && account.Platform != PlatformGrok {
 		var reqBody map[string]any
-		if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
+		if err := decodeOpenAIJSONUseNumber(responsesBody, &reqBody); err != nil {
 			return nil, fmt.Errorf("unmarshal for codex transform: %w", err)
 		}
 		codexResult := applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{
@@ -266,7 +266,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	if account.Type == AccountTypeAPIKey {
 		if trimmedKey := strings.TrimSpace(promptCacheKey); trimmedKey != "" {
 			var reqBody map[string]any
-			if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
+			if err := decodeOpenAIJSONUseNumber(responsesBody, &reqBody); err != nil {
 				return nil, fmt.Errorf("unmarshal for prompt cache key injection: %w", err)
 			}
 			if existing, ok := reqBody["prompt_cache_key"].(string); !ok || strings.TrimSpace(existing) == "" {
@@ -651,7 +651,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 	// accumulated delta events so the client receives the full content.
 	acc.SupplementResponseOutput(finalResponse)
 
-	anthropicResp := apicompat.ResponsesToAnthropic(finalResponse, originalModel)
+	anthropicResp := apicompat.ResponsesToAnthropic(finalResponse, compositeClientModelFromGin(c, originalModel))
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -780,6 +780,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 	requestID string,
 ) (*apicompat.ResponsesResponse, OpenAIUsage, *apicompat.BufferedResponseAccumulator, openAICompatPriorModelAudit, error) {
 	acc := apicompat.NewBufferedResponseAccumulator()
+	acc.XAIServerSideSearch = account != nil && account.IsGrok()
 	var usage OpenAIUsage
 	prior := newOpenAICompatPriorModelAudit(account)
 	if resp == nil || resp.Body == nil {
@@ -870,13 +871,13 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 						prior.record(&event)
 						if isOpenAICompatResponsesTerminalEvent(event.Type) && event.Response != nil {
 							if event.Usage != nil {
-								usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
+								mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Usage))
 								if event.Response.Usage == nil {
 									event.Response.Usage = event.Usage
 								}
 							}
 							if event.Response.Usage != nil {
-								usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
+								mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Response.Usage))
 							}
 							return event.Response, usage, acc, prior, nil
 						}
@@ -918,13 +919,13 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 
 			if isOpenAICompatResponsesTerminalEvent(event.Type) && event.Response != nil {
 				if event.Usage != nil {
-					usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
+					mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Usage))
 					if event.Response.Usage == nil {
 						event.Response.Usage = event.Usage
 					}
 				}
 				if event.Response.Usage != nil {
-					usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
+					mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Response.Usage))
 				}
 				return event.Response, usage, acc, prior, nil
 			}
@@ -958,7 +959,8 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
 
 	state := apicompat.NewResponsesEventToAnthropicState()
-	state.Model = originalModel
+	state.XAIServerSideSearch = account != nil && account.IsGrok()
+	state.Model = compositeClientModelFromGin(c, originalModel)
 	var usage OpenAIUsage
 	responseID := ""
 	var firstTokenMs *int
@@ -1015,6 +1017,36 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		return out
 	}
 
+	held := newDefaultOpenAIFirstOutputStage()
+	defer func() { _ = held.Close() }()
+	emit := func(sse string, release bool) error {
+		if !clientOutputStarted && !release {
+			_, err := held.WriteString(sse)
+			if err != nil {
+				failover := s.newOpenAIStreamFailoverError(c, account, false, requestID, nil, "OpenAI Messages prelude exceeds first-output staging limit")
+				failover.SafeToFailoverAfterWrite = true
+				streamFailoverErr = failover
+			}
+			return err
+		}
+		writeStreamHeaders()
+		if !held.closed {
+			if err := held.CommitTo(c.Writer); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprint(c.Writer, sse); err != nil {
+			return err
+		}
+		clientOutputStarted = true
+		return nil
+	}
+	releaseHeld := func() {
+		if held.Buffered() > 0 && !clientDisconnected && emit("", true) == nil {
+			c.Writer.Flush()
+		}
+	}
+
 	// processDataLine handles a single "data: ..." SSE line from upstream.
 	processDataLine := func(payload string) bool {
 		if firstChunk {
@@ -1050,11 +1082,11 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					responseID = id
 				}
 				if event.Response.Usage != nil {
-					usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
+					mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Response.Usage))
 				}
 			}
 			if event.Usage != nil {
-				usage = copyOpenAIUsageFromResponsesUsage(event.Usage)
+				mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Usage))
 			}
 			// cyber_policy 致命不可重试：标记供 handler 事后记录；以 Anthropic SSE error 事件
 			// 回写让客户端感知并停止重试（F4），丢弃后续转换输出。
@@ -1070,12 +1102,11 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 						UpstreamOutTok: usage.OutputTokens,
 					})
 					if !clientDisconnected {
-						writeStreamHeaders()
 						clientMsg := msg
 						if clientMsg == "" {
 							clientMsg = "Request blocked by upstream cyber-security policy"
 						}
-						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE("invalid_request_error", clientMsg)); err == nil {
+						if emit(buildAnthropicStreamErrorSSE("invalid_request_error", clientMsg), true) == nil {
 							c.Writer.Flush()
 						}
 						clientDisconnected = true
@@ -1105,14 +1136,11 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					MarkResponseCommitted(c)
 				}
 				if !clientDisconnected {
-					if !clientOutputStarted {
+					if !clientOutputStarted && held.Buffered() == 0 {
 						writeAnthropicError(c, errStatus, errType, errMsg)
 						clientOutputStarted = true
-					} else {
-						writeStreamHeaders()
-						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(errType, errMsg)); err == nil {
-							c.Writer.Flush()
-						}
+					} else if emit(buildAnthropicStreamErrorSSE(errType, errMsg), true) == nil {
+						c.Writer.Flush()
 					}
 				}
 				streamNonFailoverErr = fmt.Errorf("upstream response failed: %s", errMsg)
@@ -1132,18 +1160,19 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 					)
 					continue
 				}
-				writeStreamHeaders()
-				if _, err := fmt.Fprint(c.Writer, sse); err != nil {
+				if err := emit(sse, isTerminalEvent || evt.Type == "content_block_delta"); err != nil {
+					if streamFailoverErr != nil {
+						return true
+					}
 					clientDisconnected = true
 					logger.L().Info("openai messages stream: client disconnected, continuing to drain upstream for billing",
 						zap.String("request_id", requestID),
 					)
 					break
 				}
-				clientOutputStarted = true
 			}
 		}
-		if len(events) > 0 && !clientDisconnected {
+		if clientOutputStarted && len(events) > 0 && !clientDisconnected {
 			c.Writer.Flush()
 		}
 		return isTerminalEvent
@@ -1163,8 +1192,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				if err != nil {
 					continue
 				}
-				writeStreamHeaders()
-				if _, err := fmt.Fprint(c.Writer, sse); err != nil {
+				if err := emit(sse, true); err != nil {
 					clientDisconnected = true
 					logger.L().Info("openai messages stream: client disconnected during final flush",
 						zap.String("request_id", requestID),
@@ -1190,6 +1218,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		}
 	}
 	missingTerminalErr := func() (*OpenAIForwardResult, error) {
+		if !clientOutputStarted && c.Request.Context().Err() != nil {
+			clientDisconnected = true
+		}
 		result := resultWithUsage()
 		if clientDisconnected {
 			return result, fmt.Errorf("stream usage incomplete: missing terminal event")
@@ -1230,6 +1261,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		}
 		if err := scanner.Err(); err != nil {
 			handleScanErr(err)
+			releaseHeld()
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", err)
 		}
 		if frame, ok := parser.Finish(); ok {
@@ -1339,18 +1371,24 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				zap.String("model", originalModel),
 				zap.Duration("interval", streamInterval),
 			)
+			releaseHeld()
 			return resultWithUsage(), fmt.Errorf("stream data interval timeout")
 
 		case <-keepaliveCh:
 			if clientDisconnected {
 				continue
 			}
-			if time.Since(lastDataAt) < keepaliveInterval {
+			if clientOutputStarted && time.Since(lastDataAt) < keepaliveInterval {
 				continue
 			}
 			// Send Anthropic-format ping event
-			writeStreamHeaders()
-			if _, err := fmt.Fprint(c.Writer, "event: ping\ndata: {\"type\":\"ping\"}\n\n"); err != nil {
+			if clientOutputStarted {
+				writeStreamHeaders()
+			} else {
+				setSSEHeaders(c)
+			}
+			n, err := fmt.Fprint(c.Writer, "event: ping\ndata: {\"type\":\"ping\"}\n\n")
+			if err != nil {
 				// Client disconnected
 				logger.L().Info("openai messages stream: client disconnected during keepalive",
 					zap.String("request_id", requestID),
@@ -1358,7 +1396,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				clientDisconnected = true
 				continue
 			}
-			clientOutputStarted = true
+			if !clientOutputStarted {
+				recordOpenAIStreamKeepaliveBytes(c, n)
+			}
 			c.Writer.Flush()
 		}
 	}
@@ -1366,6 +1406,13 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 
 // writeAnthropicError writes an error response in Anthropic Messages API format.
 func writeAnthropicError(c *gin.Context, statusCode int, errType, message string) {
+	if c.Writer.Written() && strings.HasPrefix(strings.ToLower(c.Writer.Header().Get("Content-Type")), "text/event-stream") {
+		MarkOpsStreamError(c, errType, message, statusCode)
+		if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(errType, message)); err == nil {
+			c.Writer.Flush()
+		}
+		return
+	}
 	c.JSON(statusCode, gin.H{
 		"type": "error",
 		"error": gin.H{
@@ -1397,10 +1444,19 @@ func copyOpenAIUsageFromResponsesUsage(usage *apicompat.ResponsesUsage) OpenAIUs
 	if usage == nil {
 		return OpenAIUsage{}
 	}
+	cache := ClaudeUsage{}
+	mergeAnthropicCacheCreationUsage(&cache, apicompat.AnthropicUsage{
+		CacheCreationInputTokens:        usage.CacheCreationInputTokens,
+		CacheCreationInputTokensPresent: usage.CacheCreationInputTokensPresent,
+		CacheCreation:                   usage.CacheCreation,
+	})
 	result := OpenAIUsage{
-		InputTokens:              usage.InputTokens,
-		OutputTokens:             usage.OutputTokens,
-		CacheCreationInputTokens: usage.CacheCreationInputTokens,
+		InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens,
+		CacheCreationInputTokens: cache.CacheCreationInputTokens,
+		CacheCreation5mTokens:    cache.CacheCreation5mTokens, CacheCreation1hTokens: cache.CacheCreation1hTokens,
+		cacheCreationInputTokensPresent:     cache.cacheCreationInputTokensPresent,
+		cacheCreationInputTokensFromDetails: cache.cacheCreationInputTokensFromDetails,
+		cacheCreation5mTokensPresent:        cache.cacheCreation5mTokensPresent, cacheCreation1hTokensPresent: cache.cacheCreation1hTokensPresent,
 	}
 	if usage.CostInUSDTicks != nil {
 		cost := float64(*usage.CostInUSDTicks) / 10_000_000_000

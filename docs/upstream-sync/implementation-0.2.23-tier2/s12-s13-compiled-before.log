@@ -1,0 +1,294 @@
+2026/11/18 09:17:48 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestApplyGeminiChatResponseFormat
+=== RUN   TestApplyGeminiChatResponseFormat/json_schema_writes_mime_and_schema
+=== RUN   TestApplyGeminiChatResponseFormat/json_schema_without_schema_writes_mime_only
+=== RUN   TestApplyGeminiChatResponseFormat/json_object_writes_mime_only
+=== RUN   TestApplyGeminiChatResponseFormat/json_object_creates_generationConfig
+=== RUN   TestApplyGeminiChatResponseFormat/text_leaves_request_unchanged
+=== RUN   TestApplyGeminiChatResponseFormat/null_leaves_request_unchanged
+=== RUN   TestApplyGeminiChatResponseFormat/empty_leaves_request_unchanged
+=== RUN   TestApplyGeminiChatResponseFormat/invalid_json_leaves_request_unchanged
+=== RUN   TestApplyGeminiChatResponseFormat/non-object_leaves_request_unchanged
+=== RUN   TestApplyGeminiChatResponseFormat/image_model_leaves_request_unchanged
+=== RUN   TestApplyGeminiChatResponseFormat/unlisted_image_model_leaves_request_unchanged
+=== RUN   TestApplyGeminiChatResponseFormat/text_model_writes_mime
+=== RUN   TestApplyGeminiChatResponseFormat/tools_present_leaves_request_unchanged
+--- PASS: TestApplyGeminiChatResponseFormat (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/json_schema_writes_mime_and_schema (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/json_schema_without_schema_writes_mime_only (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/json_object_writes_mime_only (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/json_object_creates_generationConfig (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/text_leaves_request_unchanged (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/null_leaves_request_unchanged (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/empty_leaves_request_unchanged (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/invalid_json_leaves_request_unchanged (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/non-object_leaves_request_unchanged (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/image_model_leaves_request_unchanged (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/unlisted_image_model_leaves_request_unchanged (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/text_model_writes_mime (0.00s)
+    --- PASS: TestApplyGeminiChatResponseFormat/tools_present_leaves_request_unchanged (0.00s)
+=== RUN   TestGeminiForwardAsChatCompletions_ForwardsResponseFormat
+=== RUN   TestGeminiForwardAsChatCompletions_ForwardsResponseFormat/non-stream_json_schema
+    gemini_compat_response_format_test.go:106: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_compat_response_format_test.go:106
+        	Error:      	Not equal: 
+        	            	expected: "application/json"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-application/json
+        	            	+
+        	Test:       	TestGeminiForwardAsChatCompletions_ForwardsResponseFormat/non-stream_json_schema
+        	Messages:   	{"contents":[{"parts":[{"text":"grade this"}],"role":"user"}],"generationConfig":{"maxOutputTokens":32000}}
+=== RUN   TestGeminiForwardAsChatCompletions_ForwardsResponseFormat/stream_json_object
+    gemini_compat_response_format_test.go:106: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_compat_response_format_test.go:106
+        	Error:      	Not equal: 
+        	            	expected: "application/json"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-application/json
+        	            	+
+        	Test:       	TestGeminiForwardAsChatCompletions_ForwardsResponseFormat/stream_json_object
+        	Messages:   	{"contents":[{"parts":[{"text":"grade this"}],"role":"user"}],"generationConfig":{"maxOutputTokens":32000}}
+--- FAIL: TestGeminiForwardAsChatCompletions_ForwardsResponseFormat (0.00s)
+    --- FAIL: TestGeminiForwardAsChatCompletions_ForwardsResponseFormat/non-stream_json_schema (0.00s)
+    --- FAIL: TestGeminiForwardAsChatCompletions_ForwardsResponseFormat/stream_json_object (0.00s)
+=== RUN   TestGeminiForwardAsChatCompletions_ResponseFormatSkippedWithTools
+--- PASS: TestGeminiForwardAsChatCompletions_ResponseFormatSkippedWithTools (0.00s)
+=== RUN   TestGeminiForwardAsChatCompletions_CodeAssistKeepsResponseSchemaBytes
+    gemini_compat_response_format_test.go:169: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_compat_response_format_test.go:169
+        	Error:      	Not equal: 
+        	            	expected: "application/json"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-application/json
+        	            	+
+        	Test:       	TestGeminiForwardAsChatCompletions_CodeAssistKeepsResponseSchemaBytes
+        	Messages:   	{"model":"gemini-3.8-flash","project":"project-1","request":{"contents":[{"parts":[{"text":"hi"}],"role":"user"}],"generationConfig":{"maxOutputTokens":8192}}}
+--- FAIL: TestGeminiForwardAsChatCompletions_CodeAssistKeepsResponseSchemaBytes (0.00s)
+=== RUN   TestGeminiParallelToolStreams
+=== RUN   TestGeminiParallelToolStreams/same_name_distinct_ids_one_event/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173244bbb90]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_distinct_ids_one_event/chat
+=== RUN   TestGeminiParallelToolStreams/same_name_distinct_ids_one_event/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173244f46f0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_distinct_ids_one_event/messages
+=== RUN   TestGeminiParallelToolStreams/same_name_distinct_ids_separate_events/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173244f4f90]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_distinct_ids_separate_events/chat
+=== RUN   TestGeminiParallelToolStreams/same_name_distinct_ids_separate_events/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173244f5aa0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_distinct_ids_separate_events/messages
+=== RUN   TestGeminiParallelToolStreams/same_name_identical_arguments_distinct_ids/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173245ae2d0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_identical_arguments_distinct_ids/chat
+=== RUN   TestGeminiParallelToolStreams/same_name_identical_arguments_distinct_ids/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173245aec30]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_identical_arguments_distinct_ids/messages
+=== RUN   TestGeminiParallelToolStreams/same_name_no_ids_one_event/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173245af350]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_no_ids_one_event/chat
+=== RUN   TestGeminiParallelToolStreams/same_name_no_ids_one_event/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173245afd40]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_no_ids_one_event/messages
+=== RUN   TestGeminiParallelToolStreams/same_name_no_ids_identical_separate_events/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173245e0690]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_no_ids_identical_separate_events/chat
+=== RUN   TestGeminiParallelToolStreams/same_name_no_ids_identical_separate_events/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173245e1110]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_no_ids_identical_separate_events/messages
+=== RUN   TestGeminiParallelToolStreams/same_id_incremental_strings/chat
+=== RUN   TestGeminiParallelToolStreams/same_id_incremental_strings/messages
+=== RUN   TestGeminiParallelToolStreams/no_id_incremental_strings/chat
+=== RUN   TestGeminiParallelToolStreams/no_id_incremental_strings/messages
+=== RUN   TestGeminiParallelToolStreams/same_id_cumulative_and_duplicate/chat
+=== RUN   TestGeminiParallelToolStreams/same_id_cumulative_and_duplicate/messages
+=== RUN   TestGeminiParallelToolStreams/anonymous_incremental_then_final_snapshot/chat
+=== RUN   TestGeminiParallelToolStreams/anonymous_incremental_then_final_snapshot/messages
+=== RUN   TestGeminiParallelToolStreams/id_first_chunk_only_then_final_snapshot/chat
+=== RUN   TestGeminiParallelToolStreams/id_first_chunk_only_then_final_snapshot/messages
+=== RUN   TestGeminiParallelToolStreams/id_learned_on_second_chunk_then_duplicate/chat
+=== RUN   TestGeminiParallelToolStreams/id_learned_on_second_chunk_then_duplicate/messages
+=== RUN   TestGeminiParallelToolStreams/same_name_no_ids_identical_one_event/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173249e5320]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_no_ids_identical_one_event/chat
+=== RUN   TestGeminiParallelToolStreams/same_name_no_ids_identical_one_event/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173249e5c80]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/same_name_no_ids_identical_one_event/messages
+=== RUN   TestGeminiParallelToolStreams/anonymous_fragments_snapshot_then_identical_call/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x1732478e9f0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/anonymous_fragments_snapshot_then_identical_call/chat
+=== RUN   TestGeminiParallelToolStreams/anonymous_fragments_snapshot_then_identical_call/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x1732478f8c0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/anonymous_fragments_snapshot_then_identical_call/messages
+=== RUN   TestGeminiParallelToolStreams/anonymous_fragments_then_distinct_complete_call/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173248186c0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/anonymous_fragments_then_distinct_complete_call/chat
+=== RUN   TestGeminiParallelToolStreams/anonymous_fragments_then_distinct_complete_call/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173248193e0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/anonymous_fragments_then_distinct_complete_call/messages
+=== RUN   TestGeminiParallelToolStreams/late_id_then_distinct_same_arguments_call/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x17324819da0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/late_id_then_distinct_same_arguments_call/chat
+=== RUN   TestGeminiParallelToolStreams/late_id_then_distinct_same_arguments_call/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x17324894c60]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/late_id_then_distinct_same_arguments_call/messages
+=== RUN   TestGeminiParallelToolStreams/anonymous_cumulative_final_string_then_snapshot/chat
+=== RUN   TestGeminiParallelToolStreams/anonymous_cumulative_final_string_then_snapshot/messages
+=== RUN   TestGeminiParallelToolStreams/explicit_id_change_overrides_fragment_snapshot/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x17323f527e0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/explicit_id_change_overrides_fragment_snapshot/chat
+=== RUN   TestGeminiParallelToolStreams/explicit_id_change_overrides_fragment_snapshot/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x1732403b3e0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/explicit_id_change_overrides_fragment_snapshot/messages
+=== RUN   TestGeminiParallelToolStreams/complete_string_duplicate_no_ids/chat
+=== RUN   TestGeminiParallelToolStreams/complete_string_duplicate_no_ids/messages
+=== RUN   TestGeminiParallelToolStreams/complete_string_duplicate_first_id_only/chat
+=== RUN   TestGeminiParallelToolStreams/complete_string_duplicate_first_id_only/messages
+=== RUN   TestGeminiParallelToolStreams/complete_string_duplicate_final_object_same_id/chat
+=== RUN   TestGeminiParallelToolStreams/complete_string_duplicate_final_object_same_id/messages
+=== RUN   TestGeminiParallelToolStreams/complete_string_final_object_no_ids/chat
+=== RUN   TestGeminiParallelToolStreams/complete_string_final_object_no_ids/messages
+=== RUN   TestGeminiParallelToolStreams/complete_strings_stable_id/chat
+=== RUN   TestGeminiParallelToolStreams/complete_strings_stable_id/messages
+=== RUN   TestGeminiParallelToolStreams/complete_strings_distinct_ids/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173242cb6e0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/complete_strings_distinct_ids/chat
+=== RUN   TestGeminiParallelToolStreams/complete_strings_distinct_ids/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x1732460a690]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/complete_strings_distinct_ids/messages
+=== RUN   TestGeminiParallelToolStreams/complete_string_snapshot_then_identical_native_call/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x1732460b3b0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/complete_string_snapshot_then_identical_native_call/chat
+=== RUN   TestGeminiParallelToolStreams/complete_string_snapshot_then_identical_native_call/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173241b4300]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/complete_string_snapshot_then_identical_native_call/messages
+=== RUN   TestGeminiParallelToolStreams/complete_string_late_id_then_new_id/chat
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173241b5c50]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/complete_string_late_id_then_new_id/chat
+=== RUN   TestGeminiParallelToolStreams/complete_string_late_id_then_new_id/messages
+    gemini_parallel_tools_test.go:83: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gemini_parallel_tools_test.go:83
+        	Error:      	"map[0:0x173244bacf0]" should have 2 item(s), but has 1
+        	Test:       	TestGeminiParallelToolStreams/complete_string_late_id_then_new_id/messages
+=== RUN   TestGeminiParallelToolStreams/different_names/chat
+=== RUN   TestGeminiParallelToolStreams/different_names/messages
+--- FAIL: TestGeminiParallelToolStreams (0.02s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_distinct_ids_one_event/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_distinct_ids_one_event/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_distinct_ids_separate_events/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_distinct_ids_separate_events/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_identical_arguments_distinct_ids/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_identical_arguments_distinct_ids/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_no_ids_one_event/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_no_ids_one_event/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_no_ids_identical_separate_events/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_no_ids_identical_separate_events/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/same_id_incremental_strings/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/same_id_incremental_strings/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/no_id_incremental_strings/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/no_id_incremental_strings/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/same_id_cumulative_and_duplicate/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/same_id_cumulative_and_duplicate/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/anonymous_incremental_then_final_snapshot/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/anonymous_incremental_then_final_snapshot/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/id_first_chunk_only_then_final_snapshot/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/id_first_chunk_only_then_final_snapshot/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/id_learned_on_second_chunk_then_duplicate/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/id_learned_on_second_chunk_then_duplicate/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_no_ids_identical_one_event/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/same_name_no_ids_identical_one_event/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/anonymous_fragments_snapshot_then_identical_call/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/anonymous_fragments_snapshot_then_identical_call/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/anonymous_fragments_then_distinct_complete_call/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/anonymous_fragments_then_distinct_complete_call/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/late_id_then_distinct_same_arguments_call/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/late_id_then_distinct_same_arguments_call/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/anonymous_cumulative_final_string_then_snapshot/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/anonymous_cumulative_final_string_then_snapshot/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/explicit_id_change_overrides_fragment_snapshot/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/explicit_id_change_overrides_fragment_snapshot/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_duplicate_no_ids/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_duplicate_no_ids/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_duplicate_first_id_only/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_duplicate_first_id_only/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_duplicate_final_object_same_id/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_duplicate_final_object_same_id/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_final_object_no_ids/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_string_final_object_no_ids/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_strings_stable_id/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/complete_strings_stable_id/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/complete_strings_distinct_ids/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/complete_strings_distinct_ids/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/complete_string_snapshot_then_identical_native_call/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/complete_string_snapshot_then_identical_native_call/messages (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/complete_string_late_id_then_new_id/chat (0.00s)
+    --- FAIL: TestGeminiParallelToolStreams/complete_string_late_id_then_new_id/messages (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/different_names/chat (0.00s)
+    --- PASS: TestGeminiParallelToolStreams/different_names/messages (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.173s
+FAIL

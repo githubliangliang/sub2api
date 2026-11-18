@@ -1,0 +1,36 @@
+=== RUN   TestOpenAIMessagesFailsOverAfterKeepaliveOnlyWrite
+2026/11/18 16:50:15 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 16:50:16 [Billing] Using fallback pricing for model: gpt-5.4
+2026/11/18 16:50:16 [SIMPLE MODE] Usage recorded (not billed): user=9103, tokens=7
+--- PASS: TestOpenAIMessagesFailsOverAfterKeepaliveOnlyWrite (1.31s)
+=== RUN   TestOpenAIMessagesKeepaliveThenFailoverExhaustedEndsWithSSEError
+2026/11/18 16:50:16 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+--- PASS: TestOpenAIMessagesKeepaliveThenFailoverExhaustedEndsWithSSEError (1.30s)
+=== RUN   TestOpenAIMessagesFailoverThenSecondAccountReadErrorEndsWithSSEError
+2026/11/18 16:50:17 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 16:50:18 [Billing] Using fallback pricing for model: gpt-5.4
+2026/11/18 16:50:18 [SIMPLE MODE] Usage recorded (not billed): user=9103, tokens=0
+--- PASS: TestOpenAIMessagesFailoverThenSecondAccountReadErrorEndsWithSSEError (1.30s)
+=== RUN   TestOpenAIMessagesFailoverThenSecondAccountCredentialErrorEndsWithSSEError
+2026/11/18 16:50:18 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+--- PASS: TestOpenAIMessagesFailoverThenSecondAccountCredentialErrorEndsWithSSEError (1.30s)
+=== RUN   TestOpenAIMessagesSlotAcquireFailureAfterKeepaliveIsSSE
+--- PASS: TestOpenAIMessagesSlotAcquireFailureAfterKeepaliveIsSSE (0.00s)
+=== RUN   TestOpenAIMessagesFailoverExhaustedAppliesFailedFrameRule
+2026/11/18 16:50:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+    openai_gateway_messages_pre_content_failover_test.go:268: status=418 body="{\"error\":{\"message\":\"Rate limit reached for gpt-5.4\",\"type\":\"upstream_error\"},\"type\":\"error\"}"
+--- PASS: TestOpenAIMessagesFailoverExhaustedAppliesFailedFrameRule (0.00s)
+=== RUN   TestOpenAIMessagesFirstEventFailedFrameExhaustedAppliesRule
+2026/11/18 16:50:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+    openai_gateway_messages_pre_content_failover_test.go:299: status=418 content-type="application/json; charset=utf-8" body="{\"error\":{\"message\":\"Rate limit reached for gpt-5.4\",\"type\":\"upstream_error\"},\"type\":\"error\"}"
+--- PASS: TestOpenAIMessagesFirstEventFailedFrameExhaustedAppliesRule (0.00s)
+=== RUN   TestOpenAIMessagesNonStreamFailedFrameExhaustedAppliesRule
+2026/11/18 16:50:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+    openai_gateway_messages_pre_content_failover_test.go:313: status=418 content-type="application/json; charset=utf-8" body="{\"error\":{\"message\":\"Rate limit reached for gpt-5.4\",\"type\":\"upstream_error\"},\"type\":\"error\"}"
+--- PASS: TestOpenAIMessagesNonStreamFailedFrameExhaustedAppliesRule (0.00s)
+=== RUN   TestOpenAIMessagesHTTPStatusFailoverExhaustedIgnoresPassthroughRule
+2026/11/18 16:50:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+    openai_gateway_messages_pre_content_failover_test.go:332: status=502 body="{\"error\":{\"message\":\"Upstream service temporarily unavailable\",\"type\":\"upstream_error\"},\"type\":\"error\"}"
+--- PASS: TestOpenAIMessagesHTTPStatusFailoverExhaustedIgnoresPassthroughRule (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	5.231s

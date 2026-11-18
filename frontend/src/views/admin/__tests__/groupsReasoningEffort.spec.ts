@@ -33,7 +33,7 @@ describe("groupsReasoningEffort", () => {
       "xhigh",
       "max",
     ];
-    for (const platform of ["openai", "composite"] as const) {
+    for (const platform of ["openai", "composite", "anthropic"] as const) {
       expect(
         reasoningEffortOptionsForPlatform(platform).map(
           (option) => option.value,
@@ -42,7 +42,6 @@ describe("groupsReasoningEffort", () => {
       expect(supportsReasoningEffortPolicyPlatform(platform)).toBe(true);
     }
     for (const platform of [
-      "anthropic",
       "gemini",
       "antigravity",
       "grok",

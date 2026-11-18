@@ -3994,3 +3994,14 @@ func TestHandleCompatErrorResponseCyberPolicyEarlyReturn(t *testing.T) {
 	require.NotContains(t, gotMsg, "Upstream request failed")
 	require.NotNil(t, GetOpsCyberPolicy(c))
 }
+
+func (c *stubGatewayCache) DeleteSessionAccountIDIfMatch(ctx context.Context, _ int64, session string, accountID int64) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if c.sessionBindings[session] != accountID {
+		return false, nil
+	}
+	delete(c.sessionBindings, session)
+	return true, nil
+}

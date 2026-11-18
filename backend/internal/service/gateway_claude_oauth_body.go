@@ -1054,6 +1054,22 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath, 
 // enforceCacheControlLimit 让出站 cache_control 满足上游约束：
 // 先执行块数量限制，再修正 TTL 顺序。
 func enforceCacheControlLimit(body []byte) []byte {
+	if len(body) == 0 {
+		return body
+	}
+	if bytes.Contains(body, []byte(`\u`)) {
+		return normalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
+	}
+	key := []byte(`"cache_control"`)
+	if !bytes.Contains(body, key) {
+		return body
+	}
+	if bytes.Count(body, key) <= maxCacheControlBlocks && !bytes.Contains(body, []byte(`"thinking"`)) {
+		if !bytes.Contains(body, []byte(`"1h"`)) {
+			return body
+		}
+		return normalizeCacheControlTTLOrder(body)
+	}
 	return normalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
 }
 

@@ -1,0 +1,104 @@
+2026/11/18 10:08:08 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestGetPricingServiceStatus_NilService
+--- PASS: TestGetPricingServiceStatus_NilService (0.00s)
+=== RUN   TestResolve_GroupPricingOverridesChannel
+2026/11/18 10:08:08 [Billing] Using fallback pricing for model: claude-sonnet-4
+--- PASS: TestResolve_GroupPricingOverridesChannel (0.00s)
+=== RUN   TestGPT61TerraPricingOverridePreservesFrozenDefaults
+--- PASS: TestGPT61TerraPricingOverridePreservesFrozenDefaults (0.00s)
+=== RUN   TestPricingLocalStartupAndStopOwnRemoteHash
+2026/11/18 10:08:09 [Pricing] Loaded 1 models from /tmp/TestPricingLocalStartupAndStopOwnRemoteHash3539245142/001/model_pricing.json
+2026/11/18 10:08:09 [Pricing] Update scheduler started (check every 10m0s, remote sync=true, custom file watch=false)
+2026/11/18 10:08:09 [Pricing] Service initialized with 1 models
+2026/11/18 10:08:09 [Pricing] Failed to fetch remote hash: context canceled
+2026/11/18 10:08:09 [Pricing] Service stopped
+2026/11/18 10:08:09 [Pricing] Service stopped
+--- PASS: TestPricingLocalStartupAndStopOwnRemoteHash (0.00s)
+=== RUN   TestPricingStartupBodyHashAndOverrideSurviveSync
+2026/11/18 10:08:09 [Pricing] Loaded 1 models from /tmp/TestPricingStartupBodyHashAndOverrideSurviveSync1120239494/001/model_pricing.json
+2026/11/18 10:08:09 [Pricing] Update scheduler started (check every 10m0s, remote sync=true, custom file watch=true)
+2026/11/18 10:08:09 [Pricing] Service initialized with 1 models
+2026/11/18 10:08:09 [Pricing] Remote hash differs (local=3700afa0 remote=586d458c), downloading new version...
+2026/11/18 10:08:09 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:08:09 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:08:09 [Pricing] Service stopped
+--- PASS: TestPricingStartupBodyHashAndOverrideSurviveSync (0.02s)
+=== RUN   TestPricingConcurrentDownloadsAreSerialized
+2026/11/18 10:08:09 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:08:09 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:08:09 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:08:09 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:08:09 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:08:09 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:08:09 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:08:09 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:08:09 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:08:09 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:08:09 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:08:09 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:08:09 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:08:09 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:08:09 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:08:09 [Pricing] Downloading from https://fixture.example/pricing.json
+2026/11/18 10:08:09 [Pricing] Hash mismatch warning: remote=stale-re data=3700afa0 (hash file may be out of sync)
+2026/11/18 10:08:09 [Pricing] Downloaded 1 models successfully
+2026/11/18 10:08:09 [Pricing] Service stopped
+--- PASS: TestPricingConcurrentDownloadsAreSerialized (0.07s)
+=== RUN   TestPricingOverride_ExplicitZeroThresholdDisablesCatalogLadder
+--- PASS: TestPricingOverride_ExplicitZeroThresholdDisablesCatalogLadder (0.00s)
+=== RUN   TestPricingOverride_ZeroThresholdDisablesLadderForNonPolicyModels
+--- PASS: TestPricingOverride_ZeroThresholdDisablesLadderForNonPolicyModels (0.00s)
+=== RUN   TestPricingOverride_FieldLevelMergeKeepsOtherFields
+--- PASS: TestPricingOverride_FieldLevelMergeKeepsOtherFields (0.00s)
+=== RUN   TestPricingOverride_NullFieldValueRemovesField
+--- PASS: TestPricingOverride_NullFieldValueRemovesField (0.00s)
+=== RUN   TestPricingOverride_LoadPipelineAddsNewModelAndPatchesFallbackOnly
+2026/11/18 10:08:09 [Pricing] Merged 1 fallback-only models
+2026/11/18 10:08:09 [Pricing] Loaded 3 models from /tmp/TestPricingOverride_LoadPipelineAddsNewModelAndPatchesFallbackOn709385622/001/catalog.json
+--- PASS: TestPricingOverride_LoadPipelineAddsNewModelAndPatchesFallbackOnly (0.00s)
+=== RUN   TestPricingOverride_IneffectiveEntryWarns
+{"level":"WARN","time":"2026-11-18T10:08:09.105Z","msg":"[Pricing] Warning: override had no effect for 1 model(s): typo-model (unknown model name, or patch-only entry without price fields)","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+{"level":"WARN","time":"2026-11-18T10:08:09.105Z","msg":"[Pricing] Loaded 1 models from /tmp/TestPricingOverride_IneffectiveEntryWarns3834196541/001/catalog.json","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+--- PASS: TestPricingOverride_IneffectiveEntryWarns (0.00s)
+=== RUN   TestPricingOverride_NonObjectEntryKeepsCatalogEntry
+{"level":"WARN","time":"2026-11-18T10:08:09.106Z","msg":"[Pricing] Warning: override entry \"gpt-5.5\" skipped: not a JSON object","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+--- PASS: TestPricingOverride_NonObjectEntryKeepsCatalogEntry (0.00s)
+=== RUN   TestPricingOverride_MissingOrInvalidFileIsIgnored
+=== RUN   TestPricingOverride_MissingOrInvalidFileIsIgnored/missing_file
+{"level":"WARN","time":"2026-11-18T10:08:09.106Z","msg":"[Pricing] Warning: override merge skipped: open /tmp/TestPricingOverride_MissingOrInvalidFileIsIgnoredmissing_file2358333858/001/absent.json: no such file or directory","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+{"level":"WARN","time":"2026-11-18T10:08:09.106Z","msg":"[Pricing] Warning: override merge skipped: open /tmp/TestPricingOverride_MissingOrInvalidFileIsIgnoredmissing_file2358333858/001/absent.json: no such file or directory","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+=== RUN   TestPricingOverride_MissingOrInvalidFileIsIgnored/invalid_json
+{"level":"WARN","time":"2026-11-18T10:08:09.106Z","msg":"[Pricing] Warning: override merge skipped: invalid character 'i' looking for beginning of object key string","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+{"level":"WARN","time":"2026-11-18T10:08:09.106Z","msg":"[Pricing] Warning: override merge skipped: invalid character 'i' looking for beginning of object key string","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+--- PASS: TestPricingOverride_MissingOrInvalidFileIsIgnored (0.00s)
+    --- PASS: TestPricingOverride_MissingOrInvalidFileIsIgnored/missing_file (0.00s)
+    --- PASS: TestPricingOverride_MissingOrInvalidFileIsIgnored/invalid_json (0.00s)
+=== RUN   TestPricingOverride_PatchesDefaultCatalogFieldWithoutTouchingOthers
+--- PASS: TestPricingOverride_PatchesDefaultCatalogFieldWithoutTouchingOthers (0.00s)
+=== RUN   TestPricingOverride_FallbackFileStillFillOnlyWhenBothConfigured
+{"level":"WARN","time":"2026-11-18T10:08:09.111Z","msg":"[Pricing] Merged 1 fallback-only models","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+{"level":"WARN","time":"2026-11-18T10:08:09.111Z","msg":"[Pricing] Loaded 2 models from /tmp/TestPricingOverride_FallbackFileStillFillOnlyWhenBothConfigured968793437/001/catalog.json","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+--- PASS: TestPricingOverride_FallbackFileStillFillOnlyWhenBothConfigured (0.00s)
+=== RUN   TestPricingServiceBareGPT6AliasUsesAstra
+--- PASS: TestPricingServiceBareGPT6AliasUsesAstra (0.00s)
+=== RUN   TestPricingService_BareGPT56AliasDeterministicallyUsesSol
+--- PASS: TestPricingService_BareGPT56AliasDeterministicallyUsesSol (0.00s)
+=== RUN   TestPricingService_MergesFallbackOnlyModels
+{"level":"WARN","time":"2026-11-18T10:08:09.112Z","msg":"[Pricing] Merged 1 fallback-only models","service":"sub2api","env":"test","component":"service.pricing","legacy_printf":true}
+--- PASS: TestPricingService_MergesFallbackOnlyModels (0.00s)
+=== RUN   TestPricingService_Gemini36FlashThinkingTiersUseBasePricing
+=== RUN   TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash
+=== RUN   TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-high
+=== RUN   TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-low
+=== RUN   TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-medium
+=== RUN   TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-tiered
+--- PASS: TestPricingService_Gemini36FlashThinkingTiersUseBasePricing (0.00s)
+    --- PASS: TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash (0.00s)
+    --- PASS: TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-high (0.00s)
+    --- PASS: TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-low (0.00s)
+    --- PASS: TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-medium (0.00s)
+    --- PASS: TestPricingService_Gemini36FlashThinkingTiersUseBasePricing/gemini-3.6-flash-tiered (0.00s)
+=== RUN   TestPricingService_Gemini36FlashTierSpecificPricingTakesPrecedence
+--- PASS: TestPricingService_Gemini36FlashTierSpecificPricingTakesPrecedence (0.00s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/service	0.231s

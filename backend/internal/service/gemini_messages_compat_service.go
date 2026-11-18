@@ -2106,6 +2106,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	openToolID := ""
 	openToolName := ""
 	seenToolJSON := ""
+	var toolBoundary geminiToolCallBoundary
 
 	reader := newBoundedSSELineReader(resp.Body, s.cfg)
 	for {
@@ -2168,6 +2169,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					openToolIndex = -1
 					openToolName = ""
 					seenToolJSON = ""
+					toolBoundary = geminiToolCallBoundary{}
 				}
 
 				delta, newSeen := computeGeminiTextDelta(seenText, text)
@@ -2214,7 +2216,6 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 
 			if fc, ok := part["functionCall"].(map[string]any); ok && fc != nil {
 				name, _ := fc["name"].(string)
-				args := fc["args"]
 				if strings.TrimSpace(name) == "" {
 					name = "tool"
 				}
@@ -2230,7 +2231,8 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 				}
 
 				// If we receive streamed tool args in pieces, keep a single tool block open and emit deltas.
-				if openToolIndex >= 0 && openToolName != name {
+				argsJSONText := geminiToolCallArgsJSON(fc["args"])
+				if openToolIndex >= 0 && toolBoundary.startsNewBlock(openToolName, seenToolJSON, argsJSONText, fc) {
 					writeSSE(writer, "content_block_stop", map[string]any{
 						"type":  "content_block_stop",
 						"index": openToolIndex,
@@ -2238,6 +2240,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					openToolIndex = -1
 					openToolName = ""
 					seenToolJSON = ""
+					toolBoundary = geminiToolCallBoundary{}
 				}
 
 				if openToolIndex < 0 {
@@ -2259,22 +2262,9 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 					})
 				}
 
-				argsJSONText := "{}"
-				switch v := args.(type) {
-				case nil:
-					// keep default "{}"
-				case string:
-					if strings.TrimSpace(v) != "" {
-						argsJSONText = v
-					}
-				default:
-					if b, err := json.Marshal(args); err == nil && len(b) > 0 {
-						argsJSONText = string(b)
-					}
-				}
-
 				delta, newSeen := computeGeminiTextDelta(seenToolJSON, argsJSONText)
 				seenToolJSON = newSeen
+				toolBoundary.observe(fc)
 				if delta != "" {
 					writeSSE(writer, "content_block_delta", map[string]any{
 						"type":  "content_block_delta",

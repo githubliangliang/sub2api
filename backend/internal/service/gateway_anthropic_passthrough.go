@@ -491,6 +491,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 		keepaliveTimer.Reset(keepaliveInterval)
 	}
 	inPartialEvent := false
+	clientModel := compositeClientModel(ctx, "")
 
 	for {
 		select {
@@ -550,8 +551,13 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 				}
 			}
 
+			if data, ok := extractAnthropicSSEDataLine(line); ok && clientModel != "" && gjson.Get(data, "type").String() == "message_start" && gjson.Get(data, "message.model").Type == gjson.String {
+				if rewritten, err := sjson.Set(data, "message.model", clientModel); err == nil {
+					line = "data: " + rewritten
+				}
+			}
 			if !clientDisconnected {
-				restored := string(reverseToolNamesIfPresent(c, []byte(line)))
+				restored := reverseToolNamesIfPresentString(c, line)
 				if _, err := io.WriteString(w, restored); err != nil {
 					clientDisconnected = true
 					logger.LegacyPrintf("service.gateway", "[Anthropic passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
@@ -625,107 +631,52 @@ func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsag
 	if usage == nil || data == "" || data == "[DONE]" {
 		return
 	}
-
 	parsed := gjson.Parse(data)
-	switch parsed.Get("type").String() {
-	case "message_start":
-		msgUsage := parsed.Get("message.usage")
-		observeAnthropicUsageSpeed(usage, msgUsage.Get("speed").String())
-		if msgUsage.Exists() {
-			usage.InputTokens = int(msgUsage.Get("input_tokens").Int())
-			usage.CacheCreationInputTokens = int(msgUsage.Get("cache_creation_input_tokens").Int())
-			usage.CacheReadInputTokens = int(msgUsage.Get("cache_read_input_tokens").Int())
+	eventType := parsed.Get("type").String()
+	usageNode := parsed.Get("usage")
+	if nested := parsed.Get("message.usage"); nested.IsObject() && (eventType == "message_start" || !usageNode.IsObject()) {
+		usageNode = nested
+	}
+	previousSpeed := usage.Speed
+	mergeRawAnthropicUsage(usageNode, usage)
+	// Numeric usage can arrive on compatibility delta frames, but provider speed
+	// is authoritative only on the message start/delta usage observations.
+	if eventType != "message_start" && eventType != "message_delta" {
+		usage.Speed = previousSpeed
+	}
+}
 
-			// 保持与通用解析一致：message_start 允许覆盖 5m/1h 明细（包括 0）。
-			cc5m := msgUsage.Get("cache_creation.ephemeral_5m_input_tokens")
-			cc1h := msgUsage.Get("cache_creation.ephemeral_1h_input_tokens")
-			if cc5m.Exists() || cc1h.Exists() {
-				usage.CacheCreation5mTokens = int(cc5m.Int())
-				usage.CacheCreation1hTokens = int(cc1h.Int())
-			}
-		}
-	case "message_delta":
-		deltaUsage := parsed.Get("usage")
-		observeAnthropicUsageSpeed(usage, deltaUsage.Get("speed").String())
-		if deltaUsage.Exists() {
-			if v := deltaUsage.Get("input_tokens").Int(); v > 0 {
-				usage.InputTokens = int(v)
-			}
-			if v := deltaUsage.Get("output_tokens").Int(); v > 0 {
-				usage.OutputTokens = int(v)
-			}
-			if v := deltaUsage.Get("cache_creation_input_tokens").Int(); v > 0 {
-				usage.CacheCreationInputTokens = int(v)
-			}
-			if v := deltaUsage.Get("cache_read_input_tokens").Int(); v > 0 {
-				usage.CacheReadInputTokens = int(v)
-			}
-
-			cc5m := deltaUsage.Get("cache_creation.ephemeral_5m_input_tokens")
-			cc1h := deltaUsage.Get("cache_creation.ephemeral_1h_input_tokens")
-			if cc5m.Exists() {
-				usage.CacheCreation5mTokens = int(cc5m.Int())
-			}
-			if cc1h.Exists() {
-				usage.CacheCreation1hTokens = int(cc1h.Int())
+func mergeRawAnthropicUsage(node gjson.Result, usage *ClaudeUsage) {
+	if usage == nil || !node.IsObject() {
+		return
+	}
+	observeAnthropicUsageSpeed(usage, node.Get("speed").String())
+	if value := node.Get("input_tokens"); value.Int() > 0 && !usage.promptTotalPresent {
+		usage.InputTokens = int(value.Int())
+	}
+	if value := node.Get("output_tokens"); value.Int() > 0 {
+		usage.OutputTokens = int(value.Int())
+	}
+	mergeRawAnthropicCacheCreationUsage(node, usage)
+	for _, path := range []string{"cache_read_input_tokens", "cached_tokens", "prompt_tokens_details.cached_tokens", "prompt_cache_hit_tokens"} {
+		if value := node.Get(path); value.Exists() && value.Type != gjson.Null {
+			if tokens := int(value.Int()); tokens > 0 {
+				usage.CacheReadInputTokens = tokens
+				break
 			}
 		}
 	}
-
-	if usage.CacheReadInputTokens == 0 {
-		if cached := parsed.Get("message.usage.cached_tokens").Int(); cached > 0 {
-			usage.CacheReadInputTokens = int(cached)
-		}
-		if cached := parsed.Get("usage.cached_tokens").Int(); usage.CacheReadInputTokens == 0 && cached > 0 {
-			usage.CacheReadInputTokens = int(cached)
-		}
+	var miss *int
+	if value := node.Get("prompt_cache_miss_tokens"); value.Exists() && value.Type != gjson.Null {
+		tokens := int(value.Int())
+		miss = &tokens
 	}
-	if usage.CacheCreationInputTokens == 0 {
-		cc5m := parsed.Get("message.usage.cache_creation.ephemeral_5m_input_tokens").Int()
-		cc1h := parsed.Get("message.usage.cache_creation.ephemeral_1h_input_tokens").Int()
-		if cc5m == 0 && cc1h == 0 {
-			cc5m = parsed.Get("usage.cache_creation.ephemeral_5m_input_tokens").Int()
-			cc1h = parsed.Get("usage.cache_creation.ephemeral_1h_input_tokens").Int()
-		}
-		total := cc5m + cc1h
-		if total > 0 {
-			usage.CacheCreationInputTokens = int(total)
-		}
-	}
+	normalizeAnthropicPromptTotal(usage, int(node.Get("prompt_tokens").Int()), miss)
 }
 
 func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 	usage := &ClaudeUsage{}
-	if len(body) == 0 {
-		return usage
-	}
-
-	parsed := gjson.ParseBytes(body)
-	usageNode := parsed.Get("usage")
-	observeAnthropicUsageSpeed(usage, usageNode.Get("speed").String())
-	if !usageNode.Exists() {
-		return usage
-	}
-
-	usage.InputTokens = int(usageNode.Get("input_tokens").Int())
-	usage.OutputTokens = int(usageNode.Get("output_tokens").Int())
-	usage.CacheCreationInputTokens = int(usageNode.Get("cache_creation_input_tokens").Int())
-	usage.CacheReadInputTokens = int(usageNode.Get("cache_read_input_tokens").Int())
-
-	cc5m := usageNode.Get("cache_creation.ephemeral_5m_input_tokens").Int()
-	cc1h := usageNode.Get("cache_creation.ephemeral_1h_input_tokens").Int()
-	if cc5m > 0 || cc1h > 0 {
-		usage.CacheCreation5mTokens = int(cc5m)
-		usage.CacheCreation1hTokens = int(cc1h)
-	}
-	if usage.CacheCreationInputTokens == 0 && (cc5m > 0 || cc1h > 0) {
-		usage.CacheCreationInputTokens = int(cc5m + cc1h)
-	}
-	if usage.CacheReadInputTokens == 0 {
-		if cached := usageNode.Get("cached_tokens").Int(); cached > 0 {
-			usage.CacheReadInputTokens = int(cached)
-		}
-	}
+	mergeRawAnthropicUsage(gjson.GetBytes(body, "usage"), usage)
 	return usage
 }
 
@@ -814,6 +765,7 @@ func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
 	if contentType == "" {
 		contentType = "application/json"
 	}
+	body = restoreCompositeClientModel(ctx, body)
 	body = reverseToolNamesIfPresent(c, body)
 	c.Data(resp.StatusCode, contentType, body)
 	return usage, nil

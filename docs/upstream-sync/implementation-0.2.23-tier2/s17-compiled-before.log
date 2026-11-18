@@ -1,0 +1,29 @@
+2026/11/18 09:45:13 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime
+=== PAUSE TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime
+=== RUN   TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError
+=== PAUSE TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError
+=== RUN   TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot
+=== PAUSE TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot
+=== CONT  TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/2026-11-16T09:45:13Z
+=== CONT  TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot
+=== CONT  TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError
+    account_usage_freshness_test.go:65: refresh failure was hidden (shadow=false): &service.UsageInfo{Source:"", UpdatedAt:time.Date(2026, time.November, 18, 9, 45, 13, 800636293, time.UTC), FiveHour:(*service.UsageProgress)(nil), SevenDay:(*service.UsageProgress)(0x830ebfa1c40), SevenDaySonnet:(*service.UsageProgress)(nil), SevenDayFable:(*service.UsageProgress)(nil), GeminiSharedDaily:(*service.UsageProgress)(nil), GeminiProDaily:(*service.UsageProgress)(nil), GeminiFlashDaily:(*service.UsageProgress)(nil), GeminiSharedMinute:(*service.UsageProgress)(nil), GeminiProMinute:(*service.UsageProgress)(nil), GeminiFlashMinute:(*service.UsageProgress)(nil), AntigravityQuota:map[string]*service.AntigravityModelQuota(nil), GrokRequestQuota:(*xai.QuotaWindow)(nil), GrokTokenQuota:(*xai.QuotaWindow)(nil), GrokRetryAfterSeconds:(*int)(nil), GrokEntitlementStatus:"", GrokQuotaSnapshotState:"", GrokLastQuotaProbeAt:"", GrokLastHeadersSeenAt:"", GrokLastStatusCode:0, GrokFreeTokenLimit:0, GrokLocalUsage:(*service.WindowStats)(nil), GrokLocalUsage24h:(*service.WindowStats)(nil), GrokLocalUsage7d:(*service.WindowStats)(nil), GrokLocalUsageMonthly:(*service.WindowStats)(nil), ThirtyDay:(*service.UsageProgress)(nil), GrokBilling:(*xai.BillingSummary)(nil), SubscriptionTier:"", SubscriptionTierRaw:"", AntigravityQuotaDetails:map[string]*service.AntigravityModelDetail(nil), AICredits:[]service.AICredit(nil), ModelForwardingRules:map[string]string(nil), IsForbidden:false, ForbiddenReason:"", ForbiddenType:"", ValidationURL:"", NeedsVerify:false, IsBanned:false, NeedsReauth:false, ErrorCode:"", Error:""}
+--- FAIL: TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError (0.00s)
+=== NAME  TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot
+    account_usage_freshness_test.go:90: missing upstream quota must remain unknown after failure: &service.UsageInfo{Source:"", UpdatedAt:time.Date(2026, time.November, 18, 9, 45, 13, 800638756, time.UTC), FiveHour:(*service.UsageProgress)(0x830ebdbe040), SevenDay:(*service.UsageProgress)(0x830ebdbe080), SevenDaySonnet:(*service.UsageProgress)(nil), SevenDayFable:(*service.UsageProgress)(nil), GeminiSharedDaily:(*service.UsageProgress)(nil), GeminiProDaily:(*service.UsageProgress)(nil), GeminiFlashDaily:(*service.UsageProgress)(nil), GeminiSharedMinute:(*service.UsageProgress)(nil), GeminiProMinute:(*service.UsageProgress)(nil), GeminiFlashMinute:(*service.UsageProgress)(nil), AntigravityQuota:map[string]*service.AntigravityModelQuota(nil), GrokRequestQuota:(*xai.QuotaWindow)(nil), GrokTokenQuota:(*xai.QuotaWindow)(nil), GrokRetryAfterSeconds:(*int)(nil), GrokEntitlementStatus:"", GrokQuotaSnapshotState:"", GrokLastQuotaProbeAt:"", GrokLastHeadersSeenAt:"", GrokLastStatusCode:0, GrokFreeTokenLimit:0, GrokLocalUsage:(*service.WindowStats)(nil), GrokLocalUsage24h:(*service.WindowStats)(nil), GrokLocalUsage7d:(*service.WindowStats)(nil), GrokLocalUsageMonthly:(*service.WindowStats)(nil), ThirtyDay:(*service.UsageProgress)(nil), GrokBilling:(*xai.BillingSummary)(nil), SubscriptionTier:"", SubscriptionTierRaw:"", AntigravityQuotaDetails:map[string]*service.AntigravityModelDetail(nil), AICredits:[]service.AICredit(nil), ModelForwardingRules:map[string]string(nil), IsForbidden:false, ForbiddenReason:"", ForbiddenType:"", ValidationURL:"", NeedsVerify:false, IsBanned:false, NeedsReauth:false, ErrorCode:"", Error:""}
+--- FAIL: TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot (0.00s)
+=== NAME  TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/2026-11-16T09:45:13Z
+    account_usage_freshness_test.go:29: cached snapshot must keep its observation time 2026-11-16 09:45:13 +0000 UTC, got 2026-11-18 09:45:13.800583426 +0000 UTC m=+0.011903630
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/#00
+    account_usage_freshness_test.go:32: unknown observation time must not become the request time: 2026-11-18 09:45:13.800772151 +0000 UTC m=+0.012092363
+=== RUN   TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/invalid
+    account_usage_freshness_test.go:32: unknown observation time must not become the request time: 2026-11-18 09:45:13.800819805 +0000 UTC m=+0.012140016
+--- FAIL: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime (0.00s)
+    --- FAIL: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/2026-11-16T09:45:13Z (0.00s)
+    --- FAIL: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/#00 (0.00s)
+    --- FAIL: TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime/invalid (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.016s
+FAIL

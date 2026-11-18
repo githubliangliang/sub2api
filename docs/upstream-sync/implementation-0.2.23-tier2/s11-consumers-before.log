@@ -1,0 +1,183 @@
+2026/11/18 09:05:53 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestBedrockUpstreamErrors_AccountBlockedDisablesAndFailsOver
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=400 RequestID=aws-req-1 Body={"message":"Operation not allowed"}
+    ratelimit_bedrock_test.go:157: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:157
+        	Error:      	Expected value not to be nil.
+        	Test:       	TestBedrockUpstreamErrors_AccountBlockedDisablesAndFailsOver
+        	Messages:   	封号必须换号，不能把 400 回给客户端
+--- FAIL: TestBedrockUpstreamErrors_AccountBlockedDisablesAndFailsOver (0.00s)
+=== RUN   TestBedrockUpstreamErrors_UseCaseMissingDisablesAndFailsOver
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=404 RequestID=aws-req-1 Body={"message":"Model use case details have not been submitted for this account. Fill out the Anthropic use case details form before using the model. If you have already filled out the form, try again in 15 minutes."}
+    ratelimit_bedrock_test.go:170: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:170
+        	Error:      	Expected value not to be nil.
+        	Test:       	TestBedrockUpstreamErrors_UseCaseMissingDisablesAndFailsOver
+--- FAIL: TestBedrockUpstreamErrors_UseCaseMissingDisablesAndFailsOver (0.00s)
+=== RUN   TestBedrockUpstreamErrors_TempUnschedRuleOverridesAccountLevelDefaults
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=404 RequestID=aws-req-1 Body={"message":"Model use case details have not been submitted for this account."}
+2026/11/18 09:05:53 INFO account_temp_unschedulable account_id=77 until=2026-11-18T09:35:53.992Z rule_index=0 rule_scope=account status_code=404
+--- PASS: TestBedrockUpstreamErrors_TempUnschedRuleOverridesAccountLevelDefaults (0.00s)
+=== RUN   TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel
+=== RUN   TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel/Too_many_requests,_please_wait_before_trying_again.
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN rate_limit_429_no_reset_time account_id=77 platform=anthropic reason="no rate limit reset time in headers, likely not a real rate limit"
+2026/11/18 09:05:53 WARN rate_limit_429_fallback_used account_id=77 platform=anthropic reason=anthropic_no_reset_time using_default=5s
+    ratelimit_bedrock_test.go:203: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:203
+        	Error:      	Should be empty, but was [2026-11-18 09:05:58.992818016 +0000 UTC m=+5.104888277]
+        	Test:       	TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel/Too_many_requests,_please_wait_before_trying_again.
+        	Messages:   	429 不冷却整个账号
+=== RUN   TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel/Too_many_tokens_per_day,_please_wait_before_trying_again.
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN rate_limit_429_no_reset_time account_id=77 platform=anthropic reason="no rate limit reset time in headers, likely not a real rate limit"
+2026/11/18 09:05:53 WARN rate_limit_429_fallback_used account_id=77 platform=anthropic reason=anthropic_no_reset_time using_default=5s
+    ratelimit_bedrock_test.go:203: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:203
+        	Error:      	Should be empty, but was [2026-11-18 09:05:58.992991848 +0000 UTC m=+5.105062112]
+        	Test:       	TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel/Too_many_tokens_per_day,_please_wait_before_trying_again.
+        	Messages:   	429 不冷却整个账号
+--- FAIL: TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel (0.00s)
+    --- FAIL: TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel/Too_many_requests,_please_wait_before_trying_again. (0.00s)
+    --- FAIL: TestBedrockUpstreamErrors_ThrottlingCoolsOnlyRequestedModel/Too_many_tokens_per_day,_please_wait_before_trying_again. (0.00s)
+=== RUN   TestBedrockUpstreamErrors_DailyTokenRuleTakesPrecedenceOverThrottlingCooldown
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 INFO account_model_temp_unschedulable account_id=77 model=claude-sonnet-4-5 until=2026-11-18T13:05:53.993Z rule_index=0 rule_scope=model status_code=429
+--- PASS: TestBedrockUpstreamErrors_DailyTokenRuleTakesPrecedenceOverThrottlingCooldown (0.00s)
+=== RUN   TestBedrockUpstreamErrors_ContentFilterReturnsRequestErrorWithoutFailover
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN account_upstream_error account_id=77 status_code=500
+    ratelimit_bedrock_test.go:246: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:246
+        	Error:      	Expected nil, but got: &service.UpstreamFailoverError{StreamFailedFrame:(*service.OpenAIStreamFailedFrame)(nil), StatusCode:500, ResponseBody:[]uint8{0x7b, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x22, 0x4f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x20, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64, 0x20, 0x62, 0x79, 0x20, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x20, 0x66, 0x69, 0x6c, 0x74, 0x65, 0x72, 0x69, 0x6e, 0x67, 0x20, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x22, 0x7d}, ResponseHeaders:http.Header(nil), ForceCacheBilling:false, RetryableOnSameAccount:false, SameAccountRetryDelay:0, RequestScopedTransient:false, SafeToFailoverAfterWrite:false, Stage:"", Scope:"", Reason:"", NextAccountAction:0x0, ClientStatusCode:0, ClientMessage:""}
+        	Test:       	TestBedrockUpstreamErrors_ContentFilterReturnsRequestErrorWithoutFailover
+        	Messages:   	内容过滤换号结果相同，不换号
+--- FAIL: TestBedrockUpstreamErrors_ContentFilterReturnsRequestErrorWithoutFailover (0.00s)
+=== RUN   TestBedrockUpstreamErrors_ServerErrorsStillFailOverWithoutPenalty
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN account_upstream_error account_id=77 status_code=500
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN account_upstream_error account_id=77 status_code=503
+--- PASS: TestBedrockUpstreamErrors_ServerErrorsStillFailOverWithoutPenalty (0.00s)
+=== RUN   TestBedrockUpstreamErrors_OtherValidationErrorsReturnToClient
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=400 RequestID=aws-req-1 Body={"message":"messages.0.content.0.image.source.base64: image exceeds 5 MB maximum"}
+--- PASS: TestBedrockUpstreamErrors_OtherValidationErrorsReturnToClient (0.00s)
+=== RUN   TestBedrockUpstreamErrors_AccountBlockedMatchesWholeMessageOnly
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=400 RequestID=aws-req-1 Body={"message":"Operation not allowed"}
+    ratelimit_bedrock_test.go:362: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:362
+        	Error:      	Expected value not to be nil.
+        	Test:       	TestBedrockUpstreamErrors_AccountBlockedMatchesWholeMessageOnly
+        	Messages:   	Operation not allowed
+--- FAIL: TestBedrockUpstreamErrors_AccountBlockedMatchesWholeMessageOnly (0.00s)
+=== RUN   TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount
+=== RUN   TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/Operation_not_allowed
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=400 RequestID=aws-req-1 Body={"message":"Malformed input request: #: extraneous key [Operation not allowed] is not permitted, please reformat your input and try again."}
+=== RUN   TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/credit_balance
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=400 RequestID=aws-req-1 Body={"message":"Malformed input request: #: extraneous key [credit balance] is not permitted, please reformat your input and try again."}
+2026/11/18 09:05:53 WARN account_disabled_auth_error account_id=77 error="Credit balance exhausted (400): Malformed input request: #: extraneous key [credit balance] is not permitted, please reformat your input and try again."
+    ratelimit_bedrock_test.go:376: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:376
+        	Error:      	Expected nil, but got: &service.UpstreamFailoverError{StreamFailedFrame:(*service.OpenAIStreamFailedFrame)(nil), StatusCode:400, ResponseBody:[]uint8{0x7b, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x22, 0x4d, 0x61, 0x6c, 0x66, 0x6f, 0x72, 0x6d, 0x65, 0x64, 0x20, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x20, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x3a, 0x20, 0x23, 0x3a, 0x20, 0x65, 0x78, 0x74, 0x72, 0x61, 0x6e, 0x65, 0x6f, 0x75, 0x73, 0x20, 0x6b, 0x65, 0x79, 0x20, 0x5b, 0x63, 0x72, 0x65, 0x64, 0x69, 0x74, 0x20, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x5d, 0x20, 0x69, 0x73, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x70, 0x65, 0x72, 0x6d, 0x69, 0x74, 0x74, 0x65, 0x64, 0x2c, 0x20, 0x70, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x20, 0x72, 0x65, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x79, 0x6f, 0x75, 0x72, 0x20, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x20, 0x61, 0x6e, 0x64, 0x20, 0x74, 0x72, 0x79, 0x20, 0x61, 0x67, 0x61, 0x69, 0x6e, 0x2e, 0x22, 0x7d}, ResponseHeaders:http.Header(nil), ForceCacheBilling:false, RetryableOnSameAccount:false, SameAccountRetryDelay:0, RequestScopedTransient:false, SafeToFailoverAfterWrite:false, Stage:"", Scope:"", Reason:"", NextAccountAction:0x0, ClientStatusCode:0, ClientMessage:""}
+        	Test:       	TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/credit_balance
+        	Messages:   	请求错误不换号
+=== RUN   TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/organization_has_been_disabled
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=400 RequestID=aws-req-1 Body={"message":"Malformed input request: #: extraneous key [organization has been disabled] is not permitted, please reformat your input and try again."}
+2026/11/18 09:05:53 WARN account_disabled_auth_error account_id=77 error="Organization disabled (400): Malformed input request: #: extraneous key [organization has been disabled] is not permitted, please reformat your input and try again."
+    ratelimit_bedrock_test.go:376: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:376
+        	Error:      	Expected nil, but got: &service.UpstreamFailoverError{StreamFailedFrame:(*service.OpenAIStreamFailedFrame)(nil), StatusCode:400, ResponseBody:[]uint8{0x7b, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x22, 0x4d, 0x61, 0x6c, 0x66, 0x6f, 0x72, 0x6d, 0x65, 0x64, 0x20, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x20, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x3a, 0x20, 0x23, 0x3a, 0x20, 0x65, 0x78, 0x74, 0x72, 0x61, 0x6e, 0x65, 0x6f, 0x75, 0x73, 0x20, 0x6b, 0x65, 0x79, 0x20, 0x5b, 0x6f, 0x72, 0x67, 0x61, 0x6e, 0x69, 0x7a, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x20, 0x68, 0x61, 0x73, 0x20, 0x62, 0x65, 0x65, 0x6e, 0x20, 0x64, 0x69, 0x73, 0x61, 0x62, 0x6c, 0x65, 0x64, 0x5d, 0x20, 0x69, 0x73, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x70, 0x65, 0x72, 0x6d, 0x69, 0x74, 0x74, 0x65, 0x64, 0x2c, 0x20, 0x70, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x20, 0x72, 0x65, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x79, 0x6f, 0x75, 0x72, 0x20, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x20, 0x61, 0x6e, 0x64, 0x20, 0x74, 0x72, 0x79, 0x20, 0x61, 0x67, 0x61, 0x69, 0x6e, 0x2e, 0x22, 0x7d}, ResponseHeaders:http.Header(nil), ForceCacheBilling:false, RetryableOnSameAccount:false, SameAccountRetryDelay:0, RequestScopedTransient:false, SafeToFailoverAfterWrite:false, Stage:"", Scope:"", Reason:"", NextAccountAction:0x0, ClientStatusCode:0, ClientMessage:""}
+        	Test:       	TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/organization_has_been_disabled
+        	Messages:   	请求错误不换号
+=== RUN   TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/identity_verification_is_required
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 [Forward] Upstream error (non-retryable): Account=77(bedrock-error-test) Status=400 RequestID=aws-req-1 Body={"message":"Malformed input request: #: extraneous key [identity verification is required] is not permitted, please reformat your input and try again."}
+2026/11/18 09:05:53 WARN account_disabled_auth_error account_id=77 error="Identity verification required (400): Malformed input request: #: extraneous key [identity verification is required] is not permitted, please reformat your input and try again."
+    ratelimit_bedrock_test.go:376: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:376
+        	Error:      	Expected nil, but got: &service.UpstreamFailoverError{StreamFailedFrame:(*service.OpenAIStreamFailedFrame)(nil), StatusCode:400, ResponseBody:[]uint8{0x7b, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x22, 0x4d, 0x61, 0x6c, 0x66, 0x6f, 0x72, 0x6d, 0x65, 0x64, 0x20, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x20, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x3a, 0x20, 0x23, 0x3a, 0x20, 0x65, 0x78, 0x74, 0x72, 0x61, 0x6e, 0x65, 0x6f, 0x75, 0x73, 0x20, 0x6b, 0x65, 0x79, 0x20, 0x5b, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x20, 0x76, 0x65, 0x72, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x20, 0x69, 0x73, 0x20, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x5d, 0x20, 0x69, 0x73, 0x20, 0x6e, 0x6f, 0x74, 0x20, 0x70, 0x65, 0x72, 0x6d, 0x69, 0x74, 0x74, 0x65, 0x64, 0x2c, 0x20, 0x70, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x20, 0x72, 0x65, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x79, 0x6f, 0x75, 0x72, 0x20, 0x69, 0x6e, 0x70, 0x75, 0x74, 0x20, 0x61, 0x6e, 0x64, 0x20, 0x74, 0x72, 0x79, 0x20, 0x61, 0x67, 0x61, 0x69, 0x6e, 0x2e, 0x22, 0x7d}, ResponseHeaders:http.Header(nil), ForceCacheBilling:false, RetryableOnSameAccount:false, SameAccountRetryDelay:0, RequestScopedTransient:false, SafeToFailoverAfterWrite:false, Stage:"", Scope:"", Reason:"", NextAccountAction:0x0, ClientStatusCode:0, ClientMessage:""}
+        	Test:       	TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/identity_verification_is_required
+        	Messages:   	请求错误不换号
+--- FAIL: TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount (0.00s)
+    --- PASS: TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/Operation_not_allowed (0.00s)
+    --- FAIL: TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/credit_balance (0.00s)
+    --- FAIL: TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/organization_has_been_disabled (0.00s)
+    --- FAIL: TestBedrockUpstreamErrors_EchoedRequestContentDoesNotDisableAccount/identity_verification_is_required (0.00s)
+=== RUN   TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey
+=== RUN   TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey/throttling
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-6 -> us.anthropic.claude-sonnet-4-6 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-6->us.anthropic.claude-sonnet-4-6 stream=false
+2026/11/18 09:05:53 WARN rate_limit_429_no_reset_time account_id=77 platform=anthropic reason="no rate limit reset time in headers, likely not a real rate limit"
+2026/11/18 09:05:53 WARN rate_limit_429_fallback_used account_id=77 platform=anthropic reason=anthropic_no_reset_time using_default=5s
+    ratelimit_bedrock_test.go:397: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:397
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey/throttling
+=== RUN   TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey/model_scoped_rule
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-6 -> us.anthropic.claude-sonnet-4-6 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-6->us.anthropic.claude-sonnet-4-6 stream=false
+2026/11/18 09:05:53 INFO account_model_temp_unschedulable account_id=77 model=claude-sonnet-4-6 until=2026-11-18T13:05:53.996Z rule_index=0 rule_scope=model status_code=429
+    ratelimit_bedrock_test.go:413: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:413
+        	Error:      	Not equal: 
+        	            	expected: "claude-sonnet-4-5"
+        	            	actual  : "claude-sonnet-4-6"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-claude-sonnet-4-5
+        	            	+claude-sonnet-4-6
+        	Test:       	TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey/model_scoped_rule
+--- FAIL: TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey (0.00s)
+    --- FAIL: TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey/throttling (0.00s)
+    --- FAIL: TestBedrockUpstreamErrors_ChannelMappedModelCoolsSchedulingKey/model_scoped_rule (0.00s)
+=== RUN   TestBedrockUpstreamErrors_ThrottlingCooldownDisabledWritesNothing
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN rate_limit_429_no_reset_time account_id=77 platform=anthropic reason="no rate limit reset time in headers, likely not a real rate limit"
+2026/11/18 09:05:53 INFO rate_limit_429_fallback_ignored account_id=77 platform=anthropic reason=anthropic_no_reset_time
+--- PASS: TestBedrockUpstreamErrors_ThrottlingCooldownDisabledWritesNothing (0.00s)
+=== RUN   TestBedrockUpstreamErrors_ContentFilterOnlyForRewrittenServerErrors
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN account_upstream_error account_id=77 status_code=501
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 INFO account_overloaded account_id=77 until=2026-11-18T09:15:53.996Z
+2026/11/18 09:05:53 [Bedrock] Model mapping: claude-sonnet-4-5 -> us.anthropic.claude-sonnet-4-5-20250929-v1:0 (account: bedrock-error-test)
+2026/11/18 09:05:53 [Bedrock] 命中 Bedrock 分支: account=77 name=bedrock-error-test model=claude-sonnet-4-5->us.anthropic.claude-sonnet-4-5-20250929-v1:0 stream=false
+2026/11/18 09:05:53 WARN account_upstream_error account_id=77 status_code=500
+    ratelimit_bedrock_test.go:448: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/ratelimit_bedrock_test.go:448
+        	Error:      	Expected nil, but got: &service.UpstreamFailoverError{StreamFailedFrame:(*service.OpenAIStreamFailedFrame)(nil), StatusCode:500, ResponseBody:[]uint8{0x7b, 0x22, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x3a, 0x22, 0x49, 0x6e, 0x70, 0x75, 0x74, 0x20, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x65, 0x64, 0x20, 0x62, 0x79, 0x20, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x20, 0x66, 0x69, 0x6c, 0x74, 0x65, 0x72, 0x69, 0x6e, 0x67, 0x20, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x22, 0x7d}, ResponseHeaders:http.Header(nil), ForceCacheBilling:false, RetryableOnSameAccount:false, SameAccountRetryDelay:0, RequestScopedTransient:false, SafeToFailoverAfterWrite:false, Stage:"", Scope:"", Reason:"", NextAccountAction:0x0, ClientStatusCode:0, ClientMessage:""}
+        	Test:       	TestBedrockUpstreamErrors_ContentFilterOnlyForRewrittenServerErrors
+        	Messages:   	status 500
+--- FAIL: TestBedrockUpstreamErrors_ContentFilterOnlyForRewrittenServerErrors (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.135s
+FAIL

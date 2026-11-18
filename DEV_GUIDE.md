@@ -30,8 +30,8 @@
 ### 开发工具
 
 ```bash
-# golangci-lint（CI 用 v2.14.0；其 x/tools v0.50.0 支持 Go 1.27.3 的 V5 导出格式）
-GOTOOLCHAIN=go1.27.3 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+# golangci-lint（CI 用 v2.14.0；其 x/tools v0.50.0 支持 Go 1.27.4 的 V5 导出格式）
+GOTOOLCHAIN=go1.27.4 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 # pnpm (前端包管理)
 npm install -g pnpm
@@ -49,7 +49,7 @@ npm install -g pnpm
 
 ### CI 要求
 
-- Go 版本必须是 **1.27.0**：三个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.0'`（共 5 行：`backend-ci.yml` 两处、`security-scan.yml` 一处、`release.yml` 两处）。升级 Go 时要同时改 `backend/go.mod` 和这 5 处断言，否则 CI 会在版本校验步骤直接失败。
+- Go 版本必须是 **1.27.4**：三个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.4'`（共 5 行：`backend-ci.yml` 两处、`security-scan.yml` 一处、`release.yml` 两处）。升级 Go 时要同时改 `backend/go.mod`、这 5 处断言和三个 Go 构建镜像（`Dockerfile`、`deploy/Dockerfile` 的 `ARG GOLANG_IMAGE` 及 `backend/Dockerfile` 的 `FROM golang:`），保证 CI 和容器构建使用同一版本。
 - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
 
 ### 本地测试命令

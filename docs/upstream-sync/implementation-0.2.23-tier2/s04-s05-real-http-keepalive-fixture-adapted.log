@@ -1,0 +1,33 @@
+=== RUN   TestOpenAIIdleHTTPBudgetAndKeepalive
+=== RUN   TestOpenAIIdleHTTPBudgetAndKeepalive/first-idle-then-success
+2026/11/18 19:19:14 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 19:19:15 Stream data interval timeout: account=9201 model=gpt-5.4 interval=1s
+2026/11/18 19:19:15 [Billing] Using fallback pricing for model: gpt-5.4
+2026/11/18 19:19:15 [SIMPLE MODE] Usage recorded (not billed): user=9103, tokens=7
+=== RUN   TestOpenAIIdleHTTPBudgetAndKeepalive/both-idle
+2026/11/18 19:19:15 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 19:19:16 Stream data interval timeout: account=9201 model=gpt-5.4 interval=1s
+2026/11/18 19:19:17 Stream data interval timeout: account=9202 model=gpt-5.4 interval=1s
+    openai_idle_http_test.go:84: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/openai_idle_http_test.go:84
+        	Error:      	"event: keepalive\ndata: {\"type\":\"keepalive\"}\n\nevent: keepalive\ndata: {\"type\":\"keepalive\"}\n\nevent: response.failed\ndata: {\"type\":\"response.failed\",\"sequence_number\":0,\"response\":{\"id\":\"resp_60b03d6887fe4baa8aaf6cb6bab39e03\",\"object\":\"response\",\"model\":\"gpt-5.4\",\"status\":\"failed\",\"output\":[],\"error\":{\"code\":\"upstream_error\",\"message\":\"Upstream service temporarily unavailable\"}}}\n\n" does not contain "event: error"
+        	Test:       	TestOpenAIIdleHTTPBudgetAndKeepalive/both-idle
+=== RUN   TestOpenAIIdleHTTPBudgetAndKeepalive/content-then-idle
+2026/11/18 19:19:17 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 19:19:18 Stream data interval timeout: account=9201 model=gpt-5.4 interval=1s
+=== RUN   TestOpenAIIdleHTTPBudgetAndKeepalive/continuous-comments
+2026/11/18 19:19:18 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 19:19:20 [Billing] Using fallback pricing for model: gpt-5.4
+2026/11/18 19:19:20 [SIMPLE MODE] Usage recorded (not billed): user=9103, tokens=7
+=== RUN   TestOpenAIIdleHTTPBudgetAndKeepalive/canceled
+2026/11/18 19:19:20 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 19:19:21 Stream data interval timeout: account=9201 model=gpt-5.4 interval=1s
+--- FAIL: TestOpenAIIdleHTTPBudgetAndKeepalive (6.74s)
+    --- PASS: TestOpenAIIdleHTTPBudgetAndKeepalive/first-idle-then-success (1.05s)
+    --- FAIL: TestOpenAIIdleHTTPBudgetAndKeepalive/both-idle (2.06s)
+    --- PASS: TestOpenAIIdleHTTPBudgetAndKeepalive/content-then-idle (1.06s)
+    --- PASS: TestOpenAIIdleHTTPBudgetAndKeepalive/continuous-comments (1.51s)
+    --- PASS: TestOpenAIIdleHTTPBudgetAndKeepalive/canceled (1.06s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler	6.767s
+FAIL
