@@ -1,0 +1,32 @@
+package main
+
+import (
+	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+)
+
+func main() {
+	result := make(map[string]string)
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "--" { args = args[1:] }
+	for i := 0; i < len(args); i += 2 {
+		data, err := os.ReadFile(args[i])
+		if err != nil { panic(err) }
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, args[i], data, 0)
+		if err != nil { panic(err) }
+		found := false
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if ok && fn.Name.Name == args[i+1] {
+				result[fn.Name.Name] = string(data[fset.Position(fn.Pos()).Offset:fset.Position(fn.End()).Offset])
+				found = true
+			}
+		}
+		if !found { panic("function not found: "+args[i+1]) }
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(result); err != nil { panic(err) }
+}

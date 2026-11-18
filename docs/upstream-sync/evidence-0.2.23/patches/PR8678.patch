@@ -1,0 +1,228 @@
+diff --git a/backend/internal/config/config.go b/backend/internal/config/config.go
+index baf3260dc..3e264053d 100644
+--- a/backend/internal/config/config.go
++++ b/backend/internal/config/config.go
+@@ -1025,7 +1025,7 @@ type CircuitBreakerConfig struct {
+ }
+ 
+ type ConcurrencyConfig struct {
+-	// PingInterval: 并发等待期间的 SSE ping 间隔（秒）
++	// PingInterval: 并发等待期间的 SSE ping 间隔（秒），0 禁用 ping
+ 	PingInterval int `mapstructure:"ping_interval"`
+ }
+ 
+@@ -3887,8 +3887,8 @@ func (c *Config) Validate() error {
+ 	if c.Ops.Cleanup.Enabled && strings.TrimSpace(c.Ops.Cleanup.Schedule) == "" {
+ 		return fmt.Errorf("ops.cleanup.schedule is required when ops.cleanup.enabled=true")
+ 	}
+-	if c.Concurrency.PingInterval < 5 || c.Concurrency.PingInterval > 30 {
+-		return fmt.Errorf("concurrency.ping_interval must be between 5-30 seconds")
++	if c.Concurrency.PingInterval != 0 && (c.Concurrency.PingInterval < 5 || c.Concurrency.PingInterval > 30) {
++		return fmt.Errorf("concurrency.ping_interval must be 0 (disabled) or between 5-30 seconds")
+ 	}
+ 	if c.Gateway.Grok.FreeQuotaSoftGateEnabled {
+ 		if c.Gateway.Grok.FreeQuotaTokenLimit <= 0 {
+diff --git a/backend/internal/config/config_test.go b/backend/internal/config/config_test.go
+index 33a8f13d8..9c17de959 100644
+--- a/backend/internal/config/config_test.go
++++ b/backend/internal/config/config_test.go
+@@ -1577,18 +1577,20 @@ func TestValidateOpsCleanupScheduleRequired(t *testing.T) {
+ 
+ func TestValidateConcurrencyPingInterval(t *testing.T) {
+ 	resetViperWithJWTSecret(t)
+-
+-	cfg, err := Load()
+-	if err != nil {
+-		t.Fatalf("Load() error: %v", err)
+-	}
+-	cfg.Concurrency.PingInterval = 3
+-	err = cfg.Validate()
+-	if err == nil {
+-		t.Fatalf("Validate() expected error for concurrency.ping_interval")
+-	}
+-	if !strings.Contains(err.Error(), "concurrency.ping_interval") {
+-		t.Fatalf("Validate() expected concurrency.ping_interval error, got: %v", err)
++	for _, interval := range []int{-1, 0, 1, 3, 4, 5, 10, 30, 31} {
++		cfg, err := Load()
++		if err != nil {
++			t.Fatalf("Load() error: %v", err)
++		}
++		cfg.Concurrency.PingInterval = interval
++		err = cfg.Validate()
++		valid := interval == 0 || (interval >= 5 && interval <= 30)
++		if valid && err != nil {
++			t.Errorf("Validate() interval %d: %v", interval, err)
++		}
++		if !valid && (err == nil || !strings.Contains(err.Error(), "concurrency.ping_interval")) {
++			t.Errorf("Validate() interval %d: expected concurrency.ping_interval error, got %v", interval, err)
++		}
+ 	}
+ }
+ 
+diff --git a/backend/internal/handler/gateway_handler.go b/backend/internal/handler/gateway_handler.go
+index 154d7df31..b67c010c7 100644
+--- a/backend/internal/handler/gateway_handler.go
++++ b/backend/internal/handler/gateway_handler.go
+@@ -80,7 +80,7 @@ func NewGatewayHandler(
+ 	cfg *config.Config,
+ 	settingService *service.SettingService,
+ ) *GatewayHandler {
+-	pingInterval := time.Duration(0)
++	pingInterval := defaultPingInterval
+ 	maxAccountSwitches := 10
+ 	maxAccountSwitchesGemini := 3
+ 	if cfg != nil {
+diff --git a/backend/internal/handler/gateway_helper.go b/backend/internal/handler/gateway_helper.go
+index 02c275e2b..8fdf726f1 100644
+--- a/backend/internal/handler/gateway_helper.go
++++ b/backend/internal/handler/gateway_helper.go
+@@ -172,7 +172,7 @@ type ConcurrencyHelper struct {
+ 
+ // NewConcurrencyHelper creates a new ConcurrencyHelper
+ func NewConcurrencyHelper(concurrencyService *service.ConcurrencyService, pingFormat SSEPingFormat, pingInterval time.Duration) *ConcurrencyHelper {
+-	if pingInterval <= 0 {
++	if pingInterval < 0 {
+ 		pingInterval = defaultPingInterval
+ 	}
+ 	return &ConcurrencyHelper{
+@@ -380,7 +380,7 @@ func (h *ConcurrencyHelper) waitForSlotWithPingTimeout(c *gin.Context, slotType
+ 	}
+ 
+ 	// Determine if ping is needed (streaming + ping format defined)
+-	needPing := isStream && h.pingFormat != ""
++	needPing := isStream && h.pingFormat != "" && h.pingInterval > 0
+ 
+ 	var flusher http.Flusher
+ 	if needPing {
+diff --git a/backend/internal/handler/gateway_helper_ping_test.go b/backend/internal/handler/gateway_helper_ping_test.go
+new file mode 100644
+index 000000000..051b8f357
+--- /dev/null
++++ b/backend/internal/handler/gateway_helper_ping_test.go
+@@ -0,0 +1,67 @@
++package handler
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func TestConcurrencyWaitPingInterval(t *testing.T) {
++	for _, slotType := range []string{"user", "account"} {
++		for _, format := range []SSEPingFormat{SSEPingFormatClaude, SSEPingFormatComment} {
++			for _, interval := range []time.Duration{0, time.Millisecond} {
++				t.Run(slotType+"/"+string(format)+"/"+interval.String(), func(t *testing.T) {
++					cache := &helperConcurrencyCacheStub{}
++					helper := NewConcurrencyHelper(service.NewConcurrencyService(cache), format, interval)
++					require.Equal(t, interval, helper.pingInterval)
++					recorder := httptest.NewRecorder()
++					c, _ := gin.CreateTestContext(recorder)
++					c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
++					started := false
++					_, err := helper.waitForSlotWithPingTimeout(c, slotType, 1, 1, 150*time.Millisecond, true, &started, false)
++					var concurrencyErr *ConcurrencyError
++					require.ErrorAs(t, err, &concurrencyErr)
++					require.True(t, concurrencyErr.IsTimeout)
++					if interval == 0 {
++						require.False(t, started)
++						require.False(t, c.Writer.Written())
++						require.False(t, recorder.Flushed)
++						require.Empty(t, recorder.Body.String())
++						require.Empty(t, recorder.Header().Get("Content-Type"))
++						c.JSON(http.StatusTooManyRequests, gin.H{"error": "busy"})
++						require.Equal(t, http.StatusTooManyRequests, recorder.Code)
++					} else {
++						require.True(t, started)
++						require.True(t, recorder.Flushed)
++						require.Contains(t, recorder.Body.String(), string(format))
++					}
++				})
++			}
++		}
++	}
++}
++
++func TestConcurrencyWaitWithoutPingAcquiresSlot(t *testing.T) {
++	for _, slotType := range []string{"user", "account"} {
++		t.Run(slotType, func(t *testing.T) {
++			cache := &helperConcurrencyCacheStub{userSeq: []bool{true}, accountSeq: []bool{true}}
++			helper := NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatClaude, 0)
++			recorder := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(recorder)
++			c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
++			started := false
++			release, err := helper.waitForSlotWithPingTimeout(c, slotType, 1, 1, time.Second, true, &started, false)
++			require.NoError(t, err)
++			require.NotNil(t, release)
++			release()
++			require.False(t, started)
++			require.False(t, c.Writer.Written())
++			require.Empty(t, recorder.Body.String())
++		})
++	}
++}
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index f70bce78b..519f03ad3 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -364,7 +364,7 @@ func NewOpenAIGatewayHandler(
+ 	opsService *service.OpsService,
+ 	cfg *config.Config,
+ ) *OpenAIGatewayHandler {
+-	pingInterval := time.Duration(0)
++	pingInterval := defaultPingInterval
+ 	maxAccountSwitches := 3
+ 	if cfg != nil {
+ 		pingInterval = time.Duration(cfg.Concurrency.PingInterval) * time.Second
+diff --git a/backend/internal/handler/user_msg_queue_helper.go b/backend/internal/handler/user_msg_queue_helper.go
+index 839b14cbb..831715495 100644
+--- a/backend/internal/handler/user_msg_queue_helper.go
++++ b/backend/internal/handler/user_msg_queue_helper.go
+@@ -27,7 +27,7 @@ func NewUserMsgQueueHelper(
+ 	pingFormat SSEPingFormat,
+ 	pingInterval time.Duration,
+ ) *UserMsgQueueHelper {
+-	if pingInterval <= 0 {
++	if pingInterval < 0 {
+ 		pingInterval = defaultPingInterval
+ 	}
+ 	return &UserMsgQueueHelper{
+@@ -86,7 +86,7 @@ func (h *UserMsgQueueHelper) waitForLockWithPing(
+ 	streamStarted *bool,
+ 	reqLog *zap.Logger,
+ ) (func(), error) {
+-	needPing := isStream && h.pingFormat != ""
++	needPing := isStream && h.pingFormat != "" && h.pingInterval > 0
+ 
+ 	var flusher http.Flusher
+ 	if needPing {
+@@ -196,7 +196,7 @@ func (h *UserMsgQueueHelper) ThrottleWithPing(
+ 	)
+ 
+ 	// 延迟期间发送 SSE ping（复用 waitForLockWithPing 的 ping 逻辑）
+-	needPing := isStream && h.pingFormat != ""
++	needPing := isStream && h.pingFormat != "" && h.pingInterval > 0
+ 	var flusher http.Flusher
+ 	if needPing {
+ 		flusher, _ = c.Writer.(http.Flusher)
+diff --git a/deploy/config.example.yaml b/deploy/config.example.yaml
+index 2c6859ec0..8bf3900a0 100644
+--- a/deploy/config.example.yaml
++++ b/deploy/config.example.yaml
+@@ -882,8 +882,8 @@ idempotency:
+ # 并发等待配置
+ # =============================================================================
+ concurrency:
+-  # SSE ping interval during concurrency wait (seconds)
+-  # 并发等待期间的 SSE ping 间隔（秒）
++  # SSE ping interval during concurrency wait (seconds); 0 disables pings to avoid committing HTTP status early
++  # 并发等待期间的 SSE ping 间隔（秒）；0 禁用 ping，避免提前写入 HTTP 状态码
+   ping_interval: 10
+ 
+ # =============================================================================

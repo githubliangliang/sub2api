@@ -1,0 +1,284 @@
+diff --git a/backend/internal/handler/gemini_v1beta_handler.go b/backend/internal/handler/gemini_v1beta_handler.go
+index 06e2472f8..2b54d71da 100644
+--- a/backend/internal/handler/gemini_v1beta_handler.go
++++ b/backend/internal/handler/gemini_v1beta_handler.go
+@@ -13,7 +13,6 @@ import (
+ 	"strconv"
+ 	"strings"
+ 
+-	"github.com/Wei-Shaw/sub2api/internal/domain"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
+@@ -468,16 +467,8 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
+ 		sessionHash = extractGeminiCLISessionHash(c, body)
+ 	}
+ 	if sessionHash == "" && cachedContentBinding == nil {
+-		// Fallback: 使用通用的会话哈希生成逻辑（适用于其他客户端）
+-		parsedReq, _ := service.ParseGatewayRequest(service.NewRequestBodyRef(body), domain.PlatformGemini)
+-		if parsedReq != nil {
+-			parsedReq.SessionContext = &service.SessionContext{
+-				ClientIP:  ip.GetClientIP(c),
+-				UserAgent: c.GetHeader("User-Agent"),
+-				APIKeyID:  apiKey.ID,
+-			}
+-		}
+-		sessionHash = h.gatewayService.GenerateSessionHash(parsedReq)
++		// 其他客户端：按 API Key + 模型 + tools + systemInstruction + 第一条 user contents 的 parts 生成内容哈希
++		sessionHash = service.GenerateGeminiContentSessionHash(apiKey.ID, reqModel, body)
+ 	}
+ 	sessionKey := sessionHash
+ 	if sessionHash != "" {
+diff --git a/backend/internal/service/gemini_session.go b/backend/internal/service/gemini_session.go
+index cd2913280..e882f299c 100644
+--- a/backend/internal/service/gemini_session.go
++++ b/backend/internal/service/gemini_session.go
+@@ -4,13 +4,103 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/base64"
+ 	"encoding/json"
++	"fmt"
+ 	"strconv"
+ 	"strings"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+ 	"github.com/cespare/xxhash/v2"
++	"github.com/tidwall/gjson"
+ )
+ 
++// geminiContentSessionSeedPrefix 区分 Gemini 内容派生的会话种子与其他来源的种子。
++const geminiContentSessionSeedPrefix = "gemini_cs_"
++
++// GenerateGeminiContentSessionHash 生成 Gemini 原生请求的内容粘性会话哈希。
++// 种子由 API Key、模型、tools、systemInstruction 与第一条 user contents 的 parts 组成，
++// 后四项的取法与 OpenAI 内容兜底（deriveOpenAIContentSessionSeed）一致，API Key 用于隔离租户。
++// 这些字段不变时，末尾追加、改写或替换 contents 都不改变哈希；字段全部相同的不同会话共享同一哈希。
++// systemInstruction 与 system_instruction 同时存在时取前者。
++// 找不到第一条 user contents（role 为 user 或省略），或其 parts 中没有有效 part 时返回空串，不建立粘性。
++func GenerateGeminiContentSessionHash(apiKeyID int64, model string, body []byte) string {
++	root := parseRawJSONView(body)
++	if !root.IsObject() {
++		return ""
++	}
++	firstUserParts := firstGeminiUserParts(root.Get("contents"))
++	if !firstUserParts.Exists() {
++		return ""
++	}
++
++	d := xxhash.New()
++	_, _ = d.WriteString(geminiContentSessionSeedPrefix)
++	_, _ = d.WriteString("key=")
++	_, _ = d.WriteString(strconv.FormatInt(apiKeyID, 10))
++	if model = strings.TrimSpace(model); model != "" {
++		_, _ = d.WriteString("|model=")
++		_, _ = d.WriteString(model)
++	}
++	if tools := root.Get("tools"); tools.IsArray() {
++		if normalized, ok := normalizeNonEmptyCompatSeedJSON(tools); ok {
++			_, _ = d.WriteString("|tools=")
++			_, _ = d.WriteString(normalized)
++		}
++	}
++	system := root.Get("systemInstruction")
++	if !system.Exists() {
++		system = root.Get("system_instruction")
++	}
++	if normalized, ok := normalizeNonEmptyCompatSeedJSON(system); ok {
++		_, _ = d.WriteString("|system=")
++		_, _ = d.WriteString(normalized)
++	}
++	_, _ = d.WriteString("|first_user=")
++	_, _ = d.WriteString(normalizeCompatSeedJSON(json.RawMessage(firstUserParts.Raw)))
++	return fmt.Sprintf("%016x", d.Sum64())
++}
++
++// firstGeminiUserParts 返回第一条 user contents（role 为 user 或省略）的 parts，跳过它之前的
++// model 等其他角色；该条不是对象或 parts 中没有有效 part 时返回空结果。
++func firstGeminiUserParts(contents gjson.Result) gjson.Result {
++	var parts gjson.Result
++	if !contents.IsArray() {
++		return parts
++	}
++	contents.ForEach(func(_, content gjson.Result) bool {
++		if content.IsObject() {
++			if role := content.Get("role").String(); role != "" && role != "user" {
++				return true
++			}
++			if p := content.Get("parts"); hasMeaningfulGeminiParts(p) {
++				parts = p
++			}
++		}
++		return false
++	})
++	return parts
++}
++
++// hasMeaningfulGeminiParts 判断 parts 中是否至少有一个有效 part：text 去除首尾空白后非空，
++// 或是至少含一个字段的其他 part（如 inlineData、fileData）。
++func hasMeaningfulGeminiParts(parts gjson.Result) bool {
++	if !parts.IsArray() {
++		return false
++	}
++	meaningful := false
++	parts.ForEach(func(_, part gjson.Result) bool {
++		if text := part.Get("text"); text.Exists() {
++			meaningful = strings.TrimSpace(text.String()) != ""
++		} else if part.IsObject() {
++			part.ForEach(func(_, _ gjson.Result) bool {
++				meaningful = true
++				return false
++			})
++		}
++		return !meaningful
++	})
++	return meaningful
++}
++
+ // shortHash 使用 XXHash64 + Base36 生成短 hash（16 字符）
+ // XXHash64 比 SHA256 快约 10 倍，Base36 比 Hex 短约 20%
+ func shortHash(data []byte) string {
+diff --git a/backend/internal/service/gemini_session_test.go b/backend/internal/service/gemini_session_test.go
+index 27321996a..a07e57d9d 100644
+--- a/backend/internal/service/gemini_session_test.go
++++ b/backend/internal/service/gemini_session_test.go
+@@ -405,3 +405,140 @@ func TestGenerateGeminiDigestSessionKey(t *testing.T) {
+ 		}
+ 	})
+ }
++
++func TestGenerateGeminiContentSessionHash_StableAcrossTurns(t *testing.T) {
++	const prefix = `"tools":[{"functionDeclarations":[{"name":"lookup","parameters":{"type":"object"}}]}],"systemInstruction":{"parts":[{"text":"You are Aria."}]}`
++	const first = `{"role":"user","parts":[{"text":"[Story summary] Kim meets Aria."}]},{"role":"model","parts":[{"text":"Noted."}]}`
++	turn1 := `{` + prefix + `,"contents":[` + first + `,{"role":"user","parts":[{"text":"guide v1"}]},{"role":"user","parts":[{"text":"msg1"},{"text":"notes v1"}]}]}`
++	appended := `{` + prefix + `,"contents":[` + first + `,{"role":"user","parts":[{"text":"guide v1"}]},{"role":"user","parts":[{"text":"msg1"},{"text":"notes v1"}]},{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"c2ln"}]},{"role":"user","parts":[{"functionResponse":{"name":"lookup","response":{}}}]}]}`
++	turnContext := `{` + prefix + `,"contents":[` + first + `,{"role":"user","parts":[{"text":"msg1"}]},{"role":"model","parts":[{"text":"reply1"}]},{"role":"user","parts":[{"text":"guide v2"}]},{"role":"user","parts":[{"text":"msg2"},{"text":"notes v2"}]}]}`
++	edited := `{` + prefix + `,"contents":[` + first + `,{"role":"user","parts":[{"text":"guide v1"}]},{"role":"user","parts":[{"text":"msg1 edited"}]}],"generationConfig":{"temperature":0.2}}`
++
++	want := GenerateGeminiContentSessionHash(7, "gemini-4-argon", []byte(turn1))
++	if want == "" {
++		t.Fatal("expected non-empty hash")
++	}
++	for name, body := range map[string]string{"appended": appended, "turn_context": turnContext, "edited_last": edited} {
++		if got := GenerateGeminiContentSessionHash(7, "gemini-4-argon", []byte(body)); got != want {
++			t.Errorf("%s: hash %q, want %q", name, got, want)
++		}
++	}
++}
++
++func TestGenerateGeminiContentSessionHash_SeedFormat(t *testing.T) {
++	body := `{"tools":[{"googleSearch":{}}],"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`
++	want := DeriveSessionHashFromSeed(`gemini_cs_key=3|model=gemini-3.8-flash|tools=[{"googleSearch":{}}]|system={"parts":[{"text":"sys"}]}|first_user=[{"text":"hi"}]`)
++	if got := GenerateGeminiContentSessionHash(3, " gemini-3.8-flash ", []byte(body)); got != want {
++		t.Fatalf("hash %q, want %q", got, want)
++	}
++}
++
++func TestGenerateGeminiContentSessionHash_DistinguishesEachSeedField(t *testing.T) {
++	const (
++		tools    = `"tools":[{"functionDeclarations":[{"name":"a"}]}],`
++		system   = `"systemInstruction":{"parts":[{"text":"sys A"}]},`
++		first    = `{"role":"user","parts":[{"text":"first A"}]}`
++		trailing = `,{"role":"model","parts":[{"text":"reply"}]},{"role":"user","parts":[{"text":"tail"}]}`
++	)
++	base := `{` + tools + system + `"contents":[` + first + trailing + `]}`
++	h := GenerateGeminiContentSessionHash(1, "m1", []byte(base))
++	cases := map[string]string{
++		"other_key":    GenerateGeminiContentSessionHash(2, "m1", []byte(base)),
++		"other_model":  GenerateGeminiContentSessionHash(1, "m2", []byte(base)),
++		"no_model":     GenerateGeminiContentSessionHash(1, "", []byte(base)),
++		"other_tools":  GenerateGeminiContentSessionHash(1, "m1", []byte(`{"tools":[{"functionDeclarations":[{"name":"b"}]}],`+system+`"contents":[`+first+trailing+`]}`)),
++		"no_tools":     GenerateGeminiContentSessionHash(1, "m1", []byte(`{`+system+`"contents":[`+first+trailing+`]}`)),
++		"other_system": GenerateGeminiContentSessionHash(1, "m1", []byte(`{`+tools+`"systemInstruction":{"parts":[{"text":"sys B"}]},"contents":[`+first+trailing+`]}`)),
++		"no_system":    GenerateGeminiContentSessionHash(1, "m1", []byte(`{`+tools+`"contents":[`+first+trailing+`]}`)),
++		"other_first":  GenerateGeminiContentSessionHash(1, "m1", []byte(`{`+tools+system+`"contents":[{"role":"user","parts":[{"text":"first B"}]}`+trailing+`]}`)),
++		"inline_first": GenerateGeminiContentSessionHash(1, "m1", []byte(`{`+tools+system+`"contents":[{"role":"user","parts":[{"text":"first A"},{"inlineData":{"mimeType":"image/png","data":"iVBORw0KGgo="}}]}`+trailing+`]}`)),
++	}
++	for name, got := range cases {
++		if got == "" {
++			t.Errorf("%s: expected non-empty hash", name)
++		}
++		if got == h {
++			t.Errorf("%s: hash should differ from base", name)
++		}
++	}
++}
++
++func TestGenerateGeminiContentSessionHash_FirstUserSkipsLeadingModelContent(t *testing.T) {
++	body := func(firstUser string) []byte {
++		return []byte(`{"systemInstruction":{"parts":[{"text":"You are Aria."}]},"contents":[{"role":"model","parts":[{"text":"Hi! I'm Aria."}]},{"role":"user","parts":[{"text":"` + firstUser + `"}]},{"role":"model","parts":[{"text":"reply"}]},{"role":"user","parts":[{"text":"next"}]}]}`)
++	}
++	kim := GenerateGeminiContentSessionHash(1, "m", body("I'm Kim."))
++	lee := GenerateGeminiContentSessionHash(1, "m", body("I'm Lee."))
++	if kim == "" || lee == "" {
++		t.Fatal("expected non-empty hashes")
++	}
++	if kim == lee {
++		t.Error("conversations sharing only the leading model greeting should not share a hash")
++	}
++
++	userFirst := `{"systemInstruction":{"parts":[{"text":"You are Aria."}]},"contents":[{"role":"user","parts":[{"text":"I'm Kim."}]}]}`
++	if got := GenerateGeminiContentSessionHash(1, "m", []byte(userFirst)); got != kim {
++		t.Errorf("leading model content should be skipped: hash %q, want %q", got, kim)
++	}
++}
++
++func TestGenerateGeminiContentSessionHash_RoleOmittedCountsAsUser(t *testing.T) {
++	withRole := `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`
++	withoutRole := `{"contents":[{"parts":[{"text":"hi"}]}]}`
++	if GenerateGeminiContentSessionHash(1, "m", []byte(withoutRole)) == "" {
++		t.Fatal("expected non-empty hash when role is omitted")
++	}
++	if GenerateGeminiContentSessionHash(1, "m", []byte(withRole)) != GenerateGeminiContentSessionHash(1, "m", []byte(withoutRole)) {
++		t.Error("omitted role and explicit user role should share a hash")
++	}
++}
++
++func TestGenerateGeminiContentSessionHash_NonTextPartAnchors(t *testing.T) {
++	inlineOnly := `{"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"image/png","data":"iVBORw0KGgo="}}]}]}`
++	blankThenInline := `{"contents":[{"role":"user","parts":[{"text":" "},{"fileData":{"fileUri":"gs://b/f.pdf"}}]}]}`
++	for name, body := range map[string]string{"inline_only": inlineOnly, "blank_then_file": blankThenInline} {
++		if GenerateGeminiContentSessionHash(1, "m", []byte(body)) == "" {
++			t.Errorf("%s: expected non-empty hash", name)
++		}
++	}
++}
++
++func TestGenerateGeminiContentSessionHash_NormalizesJSONFormatting(t *testing.T) {
++	compact := `{"tools":[{"googleSearch":{}}],"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"first"}]}]}`
++	reordered := `{ "contents" : [ { "parts" : [ { "text" : "first" } ], "role" : "user" } ], "systemInstruction" : { "parts" : [ { "text" : "sys" } ] }, "tools" : [ { "googleSearch" : { } } ] }`
++	emptyToolsBase := `{"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"first"}]}]}`
++	emptyTools := `{"tools":[],"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"first"}]}]}`
++	if GenerateGeminiContentSessionHash(1, "m", []byte(emptyTools)) != GenerateGeminiContentSessionHash(1, "m", []byte(emptyToolsBase)) {
++		t.Error("empty tools should hash like missing tools")
++	}
++	snakeCase := `{"tools":[{"googleSearch":{}}],"system_instruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"first"}]}]}`
++	bothSystems := `{"tools":[{"googleSearch":{}}],"system_instruction":{"parts":[{"text":"other"}]},"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[{"text":"first"}]}]}`
++
++	want := GenerateGeminiContentSessionHash(1, "m", []byte(compact))
++	for name, body := range map[string]string{"reordered": reordered, "snake_case_system": snakeCase, "camel_case_system_wins": bothSystems} {
++		if got := GenerateGeminiContentSessionHash(1, "m", []byte(body)); got != want {
++			t.Errorf("%s: hash %q, want %q", name, got, want)
++		}
++	}
++}
++
++func TestGenerateGeminiContentSessionHash_EmptyWithoutFirstUserContent(t *testing.T) {
++	for name, body := range map[string]string{
++		"empty_body":       ``,
++		"non_object_body":  `[1,2]`,
++		"no_contents":      `{"systemInstruction":{"parts":[{"text":"sys"}]}}`,
++		"contents_object":  `{"contents":{"role":"user","parts":[{"text":"hi"}]}}`,
++		"empty_contents":   `{"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[]}`,
++		"only_model":       `{"contents":[{"role":"model","parts":[{"text":"Hi!"}]}]}`,
++		"empty_parts":      `{"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user","parts":[]}]}`,
++		"missing_parts":    `{"systemInstruction":{"parts":[{"text":"sys"}]},"contents":[{"role":"user"}]}`,
++		"blank_text":       `{"contents":[{"role":"user","parts":[{"text":"   "}]}]}`,
++		"empty_part":       `{"contents":[{"role":"user","parts":[{}]}]}`,
++		"null_part":        `{"contents":[{"role":"user","parts":[null]}]}`,
++		"non_object_first": `{"contents":["hello",{"role":"user","parts":[{"text":"hi"}]}]}`,
++	} {
++		if got := GenerateGeminiContentSessionHash(1, "m", []byte(body)); got != "" {
++			t.Errorf("%s: expected empty hash, got %q", name, got)
++		}
++	}
++}

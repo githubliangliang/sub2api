@@ -1,0 +1,749 @@
+[
+  {
+    "command": [
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "build",
+      "-tags",
+      "embed",
+      "-o",
+      "/tmp/sub2api-023-tier1-server",
+      "./cmd/server"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:22:51.707498+00:00",
+    "finished_at_utc": "2026-11-18T07:23:04.237989+00:00",
+    "duration_seconds": 12.53,
+    "exit_code": 0,
+    "log": "backend-embed-build.log"
+  },
+  {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./...",
+      "--timeout",
+      "5m"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:26:25.541259+00:00",
+    "finished_at_utc": "2026-11-18T07:27:19.339694+00:00",
+    "duration_seconds": 53.798,
+    "exit_code": 0,
+    "log": "backend-lint-final.log"
+  },
+  {
+    "command": [
+      "golangci-lint",
+      "run",
+      "./...",
+      "--timeout",
+      "5m"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:16:01.309670+00:00",
+    "finished_at_utc": "2026-11-18T07:17:21.862591+00:00",
+    "duration_seconds": 80.553,
+    "exit_code": 1,
+    "log": "backend-lint.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-tags=unit,embed",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/pkg/apicompat",
+      "./internal/pkg/antigravity",
+      "./internal/web",
+      "-run",
+      "Test(OpenAIResponsesSealed|AnthropicToResponses_MidConversation|AnthropicToResponses_SystemToolResult|ChatResponseFormatStrict|CodexPageContextRealHTTP|NormalizeCodex|PerTurn|Forward_PerTurn|BuildUpstreamRequest_PerTurn|CountTokensPassthrough|BuildClaudeMimicDebugLineReadsRaw|OpenAICompat|ForwardAs(ChatCompletions|Anthropic)_StreamError|ExistingSolUltrafast|SolUltrafastHTTP|ClaudeAccountDefault|UpdateSessionWindow_|ActiveFiveHourWindow|OpenAIFirstOutput|OpenAINativeFirstOutput|FirstOutputMemoryFallback|Grok(Media|Upstream)|GrokImagesPreserves|SharedUpstreamError|OpenAICompatibleModelNotFound|AntigravityCompatToolSchemaItems|CleanJSONSchema|.*MetadataUserID|GatewayMessagesStickyWriteback|SchedulerMetadata|FrontendHTMLRealHTTP|FrontendServer|.*(Quota|FixedWindow|SettlementAndDedup|DeletedKey|CapabilityMismatchKeepsSticky|OpenAICapacityShedModelRule))",
+      "-count=1"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:27:51.155104+00:00",
+    "finished_at_utc": "2026-11-18T07:31:44.993247+00:00",
+    "duration_seconds": 233.838,
+    "exit_code": 0,
+    "log": "backend-targeted-race.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./...",
+      "-count=1"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:16:01.309017+00:00",
+    "finished_at_utc": "2026-11-18T07:19:59.007767+00:00",
+    "duration_seconds": 237.699,
+    "exit_code": 0,
+    "log": "backend-unit.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "-overlay=/home/liang/myself/work_space/idea/github/sub2api/docs/upstream-sync/implementation-0.2.23-tier1/tier1-probe-overlay.json",
+      "-run",
+      "^TestIntake023(Sealed|MidSystem|Strict|PerTurn|CountTokensHeader|Login|Spool|Grok.*Media|SolUltra|AstraUltra|Weekly|Codex|SchedulerCap|SQLiteFiveHour|Schema|HTML)",
+      "-count=1",
+      "-v",
+      "./internal/pkg/apicompat",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/pkg/antigravity",
+      "./internal/repository",
+      "./internal/web"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:03:18.094710+00:00",
+    "finished_at_utc": "2026-11-18T06:03:24.725972+00:00",
+    "duration_seconds": 6.631,
+    "exit_code": 1,
+    "log": "baseline-tier1-probes.log"
+  },
+  {
+    "command": [
+      "/tmp/sub2api-023-tier1-server",
+      "-version"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:40:24.102379+00:00",
+    "finished_at_utc": "2026-11-18T07:40:24.128299+00:00",
+    "duration_seconds": 0.026,
+    "exit_code": 0,
+    "log": "binary-version.log"
+  },
+  {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.23-tier1/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:26:24.387592+00:00",
+    "finished_at_utc": "2026-11-18T07:27:04.430412+00:00",
+    "duration_seconds": 40.043,
+    "exit_code": 1,
+    "log": "browser-accordion-fixed.log"
+  },
+  {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.23-tier1/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:36:43.850093+00:00",
+    "finished_at_utc": "2026-11-18T07:37:05.831289+00:00",
+    "duration_seconds": 21.981,
+    "exit_code": 0,
+    "log": "browser-final.log"
+  },
+  {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.23-tier1/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:22:50.550646+00:00",
+    "finished_at_utc": "2026-11-18T07:23:23.259805+00:00",
+    "duration_seconds": 32.709,
+    "exit_code": 1,
+    "log": "browser-first.log"
+  },
+  {
+    "command": [
+      "node",
+      "docs/upstream-sync/implementation-0.2.23-tier1/browser-check.mjs"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:30:13.082487+00:00",
+    "finished_at_utc": "2026-11-18T07:30:33.036816+00:00",
+    "duration_seconds": 19.954,
+    "exit_code": 0,
+    "log": "browser-independent-groups.log"
+  },
+  {
+    "command": [
+      "pnpm",
+      "add",
+      "--ignore-scripts",
+      "--save-exact",
+      "playwright@1.56.1"
+    ],
+    "cwd": "/tmp/sub2api-023-browser",
+    "started_at_utc": "2026-11-18T06:46:28.025507+00:00",
+    "finished_at_utc": "2026-11-18T06:46:36.835166+00:00",
+    "duration_seconds": 8.81,
+    "exit_code": 0,
+    "log": "browser-tooling.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "Test(CountTokensPassthroughHeadersOnHTTPWire|OpenAICompatStreamAfterOutputPolicies|ForwardAs(ChatCompletions|Anthropic)_StreamError)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:14:19.872747+00:00",
+    "finished_at_utc": "2026-11-18T06:14:21.553912+00:00",
+    "duration_seconds": 1.681,
+    "exit_code": 1,
+    "log": "compat-policy-and-wire-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "Test(CountTokensPassthroughHeadersOnHTTPWire|OpenAICompatStreamAfterOutputPolicies|ForwardAs(ChatCompletions|Anthropic)_StreamError)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:14:42.685181+00:00",
+    "finished_at_utc": "2026-11-18T06:15:01.638079+00:00",
+    "duration_seconds": 18.953,
+    "exit_code": 1,
+    "log": "compat-policy-and-wire-compiled-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "TestForwardAs(ChatCompletions|Anthropic)_StreamError",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:11:23.810594+00:00",
+    "finished_at_utc": "2026-11-18T06:11:42.715528+00:00",
+    "duration_seconds": 18.905,
+    "exit_code": 1,
+    "log": "compat-stream-fixture-corrected-before.log"
+  },
+  {
+    "command": [
+      "pnpm",
+      "run",
+      "build"
+    ],
+    "cwd": "frontend",
+    "started_at_utc": "2026-11-18T07:16:44.234975+00:00",
+    "finished_at_utc": "2026-11-18T07:17:27.333677+00:00",
+    "duration_seconds": 43.099,
+    "exit_code": 0,
+    "log": "frontend-build.log"
+  },
+  {
+    "command": [
+      "make",
+      "test-frontend-critical"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:16:44.246969+00:00",
+    "finished_at_utc": "2026-11-18T07:16:50.566326+00:00",
+    "duration_seconds": 6.319,
+    "exit_code": 0,
+    "log": "frontend-critical.log"
+  },
+  {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/components/account/__tests__/ModelWhitelistSelector.spec.ts",
+      "src/views/admin/__tests__/ChannelsView.bedrockCompat.spec.ts",
+      "src/views/admin/__tests__/ChannelsView.webSearch.spec.ts"
+    ],
+    "cwd": "frontend",
+    "started_at_utc": "2026-11-18T06:26:06.525305+00:00",
+    "finished_at_utc": "2026-11-18T06:26:09.130893+00:00",
+    "duration_seconds": 2.606,
+    "exit_code": 0,
+    "log": "frontend-f16-f17-after.log"
+  },
+  {
+    "command": [
+      "pnpm",
+      "exec",
+      "vitest",
+      "run",
+      "src/components/account/__tests__/ModelWhitelistSelector.spec.ts",
+      "src/views/admin/__tests__/ChannelsView.bedrockCompat.spec.ts",
+      "src/views/admin/__tests__/ChannelsView.webSearch.spec.ts"
+    ],
+    "cwd": "frontend",
+    "started_at_utc": "2026-11-18T06:24:39.577621+00:00",
+    "finished_at_utc": "2026-11-18T06:24:42.233234+00:00",
+    "duration_seconds": 2.656,
+    "exit_code": 1,
+    "log": "frontend-f16-f17-before.log"
+  },
+  {
+    "command": [
+      "pnpm",
+      "run",
+      "test:run"
+    ],
+    "cwd": "frontend",
+    "started_at_utc": "2026-11-18T07:13:21.953989+00:00",
+    "finished_at_utc": "2026-11-18T07:13:48.866215+00:00",
+    "duration_seconds": 26.912,
+    "exit_code": 0,
+    "log": "frontend-full-test.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/web",
+      "-count=1"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:32:45.356956+00:00",
+    "finished_at_utc": "2026-11-18T07:32:46.576953+00:00",
+    "duration_seconds": 1.22,
+    "exit_code": 0,
+    "log": "frontend-html-post-build.log"
+  },
+  {
+    "command": [
+      "pnpm",
+      "run",
+      "lint:check"
+    ],
+    "cwd": "frontend",
+    "started_at_utc": "2026-11-18T07:13:21.953684+00:00",
+    "finished_at_utc": "2026-11-18T07:13:50.163406+00:00",
+    "duration_seconds": 28.21,
+    "exit_code": 0,
+    "log": "frontend-lint.log"
+  },
+  {
+    "command": [
+      "pnpm",
+      "run",
+      "typecheck"
+    ],
+    "cwd": "frontend",
+    "started_at_utc": "2026-11-18T07:13:21.953608+00:00",
+    "finished_at_utc": "2026-11-18T07:13:56.052004+00:00",
+    "duration_seconds": 34.098,
+    "exit_code": 0,
+    "log": "frontend-typecheck.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/repository",
+      "-run",
+      "Test(ExistingSolUltrafastPricing|UpdateSessionWindow_|ClaudeAccountDefaultAndExplicitTestModel|ActiveFiveHourWindowBoundsAndCostsSQLite|AuthService.*(Login|Identity)|OpenAIFirstOutput|OpenAINativeFirstOutput|AstraUltrafast|GPT61SolExplicitZero|SyncActiveToPassive|EstimateSetupTokenUsage)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:25:30.653661+00:00",
+    "finished_at_utc": "2026-11-18T06:26:07.545336+00:00",
+    "duration_seconds": 36.892,
+    "exit_code": 0,
+    "log": "health-f08-f13-after.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/repository",
+      "-run",
+      "Test(ExistingSolUltrafastPricing|UpdateSessionWindow_WeeklyRolloverBoundaries|ClaudeAccountDefaultAndExplicitTestModel|ActiveFiveHourWindowBoundsAndCostsSQLite|AuthServiceRecordSuccessfulLogin_EmailIdentityOwnedByAnotherUser|OpenAIFirstOutputStageCreateFailurePreservesBoundedBuffer|OpenAINativeFirstOutputWithUnavailableTempDir)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:21:22.378377+00:00",
+    "finished_at_utc": "2026-11-18T06:21:28.068796+00:00",
+    "duration_seconds": 5.69,
+    "exit_code": 1,
+    "log": "health-f08-f13-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "./internal/repository",
+      "-run",
+      "Test(ExistingSolUltrafastPricing|UpdateSessionWindow_WeeklyRolloverBoundaries|ClaudeAccountDefaultAndExplicitTestModel|ActiveFiveHourWindowBoundsAndCostsSQLite|AuthServiceRecordSuccessfulLogin_EmailIdentityOwnedByAnotherUser|OpenAIFirstOutputStageCreateFailurePreservesBoundedBuffer|OpenAINativeFirstOutputWithUnavailableTempDir)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:23:23.129489+00:00",
+    "finished_at_utc": "2026-11-18T06:23:42.985902+00:00",
+    "duration_seconds": 19.856,
+    "exit_code": 1,
+    "log": "health-f08-f13-compiled-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/service",
+      "-run",
+      "Test(OpenAIResponsesSealedFunctionCallRoundTrip|OpenAICompatStreamAfterOutputPolicies)$",
+      "-count=1"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:26:25.541087+00:00",
+    "finished_at_utc": "2026-11-18T07:26:50.693876+00:00",
+    "duration_seconds": 25.153,
+    "exit_code": 0,
+    "log": "lint-test-adjustments.log"
+  },
+  {
+    "command": [
+      "node",
+      "/home/liang/.npm/_npx/abab5bd700860149/node_modules/@fission-ai/openspec/bin/openspec.js",
+      "validate",
+      "port-upstream-0.2.23-tier1",
+      "--strict"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:48:57.614807+00:00",
+    "finished_at_utc": "2026-11-18T07:48:59.995841+00:00",
+    "duration_seconds": 2.381,
+    "exit_code": 0,
+    "log": "openspec-tier1-first.log"
+  },
+  {
+    "command": [
+      "node",
+      "/home/liang/.npm/_npx/abab5bd700860149/node_modules/@fission-ai/openspec/bin/openspec.js",
+      "validate",
+      "port-upstream-0.2.23-tier1",
+      "--strict"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:51:01.343811+00:00",
+    "finished_at_utc": "2026-11-18T07:51:03.809070+00:00",
+    "duration_seconds": 2.465,
+    "exit_code": 0,
+    "log": "openspec-tier1.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/pkg/apicompat",
+      "./internal/service",
+      "-run",
+      "Test(OpenAIResponsesSealedFunctionCallRoundTrip|AnthropicToResponses_|ChatResponseFormatStrictPresence|ChatCompletionsToResponses_ResponseFormat)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:06:59.003455+00:00",
+    "finished_at_utc": "2026-11-18T06:07:38.289984+00:00",
+    "duration_seconds": 39.287,
+    "exit_code": 0,
+    "log": "protocol-f01-f03-after.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/pkg/apicompat",
+      "./internal/service",
+      "-run",
+      "Test(OpenAIResponsesSealedFunctionCallRoundTrip|AnthropicToResponses_MidConversationSystemAuthority|ChatResponseFormatStrictPresence)$",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:04:35.189610+00:00",
+    "finished_at_utc": "2026-11-18T06:05:18.392816+00:00",
+    "duration_seconds": 43.203,
+    "exit_code": 1,
+    "log": "protocol-f01-f03-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/handler",
+      "./internal/service",
+      "-run",
+      "Test(NormalizeCodex|SanitizeAnthropicBodyForBetaTokens_MidConversation|Forward_PerTurn|BuildUpstreamRequest_PerTurn|CountTokensPassthrough|BuildClaudeMimicDebugLineReadsRaw|ForwardAs(ChatCompletions|Anthropic)_StreamError|OpenAICompatStreamAfterOutputPolicies|OpenAICapacity)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:16:31.443216+00:00",
+    "finished_at_utc": "2026-11-18T06:16:59.206402+00:00",
+    "duration_seconds": 27.763,
+    "exit_code": 0,
+    "log": "protocol-f04-f07-after.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit",
+      "./internal/handler",
+      "./internal/service",
+      "-run",
+      "Test(NormalizeCodex|SanitizeAnthropicBodyForBetaTokens_MidConversation|Forward_PerTurn|BuildUpstreamRequest_PerTurn|CountTokensPassthroughSendsOne|BuildClaudeMimicDebugLineReadsRaw|ForwardAs(ChatCompletions|Anthropic)_StreamError)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:08:37.724801+00:00",
+    "finished_at_utc": "2026-11-18T06:09:39.937910+00:00",
+    "duration_seconds": 62.213,
+    "exit_code": 1,
+    "log": "protocol-f04-f07-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/handler",
+      "./internal/web",
+      "-run",
+      "Test(SolUltrafastHTTPAndWSSettlementSQLite|FrontendHTMLRealHTTPNonceSettingsAndAssets)$",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:09:56.670079+00:00",
+    "finished_at_utc": "2026-11-18T07:10:03.367612+00:00",
+    "duration_seconds": 6.698,
+    "exit_code": 0,
+    "log": "real-http-ws-sqlite-csp-accepted.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/handler",
+      "./internal/web",
+      "-run",
+      "Test(SolUltrafastHTTPAndWSSettlementSQLite|FrontendHTMLRealHTTPNonceSettingsAndAssets)$",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:58:03.347695+00:00",
+    "finished_at_utc": "2026-11-18T06:58:09.678477+00:00",
+    "duration_seconds": 6.331,
+    "exit_code": 1,
+    "log": "real-http-ws-sqlite-csp-fixture-corrected.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/handler",
+      "./internal/web",
+      "-run",
+      "Test(SolUltrafastHTTPAndWSSettlementSQLite|FrontendHTMLRealHTTPNonceSettingsAndAssets)$",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:53:05.045063+00:00",
+    "finished_at_utc": "2026-11-18T06:53:11.119790+00:00",
+    "duration_seconds": 6.075,
+    "exit_code": 1,
+    "log": "real-http-ws-sqlite-csp.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/web",
+      "./internal/pkg/antigravity",
+      "-run",
+      "Test(Grok(Media|Upstream)|SharedUpstreamError|OpenAICompatibleModelNotFound|GrokImagesPreserves|AntigravityCompatToolSchemaItems|.*MetadataUserID|GatewayMessagesStickyWritebackAfterForward|SchedulerMetadata|FrontendServer|CleanJSONSchema)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:42:53.676406+00:00",
+    "finished_at_utc": "2026-11-18T06:43:17.874984+00:00",
+    "duration_seconds": 24.199,
+    "exit_code": 1,
+    "log": "remaining-f14-f21-after.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/web",
+      "-run",
+      "Test(GrokMediaUpstreamErrorFields|GrokMediaErrorRewritesKeepPriority|GrokMediaRetryable|GrokImagesPreserves|AntigravityCompatToolSchemaItems|ForwardAsChatCompletions_.*MetadataUserID|GatewayMessagesStickyWritebackAfterForward|SchedulerMetadataPreserves|FrontendServer_(ServeIndexHTML|NoStoreHeadersOnEveryHTMLPath))",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:31:30.613460+00:00",
+    "finished_at_utc": "2026-11-18T06:31:54.350321+00:00",
+    "duration_seconds": 23.737,
+    "exit_code": 1,
+    "log": "remaining-f14-f21-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "-run",
+      "Test(GrokMediaUpstreamErrorFields|ForwardAsChatCompletions_.*MetadataUserID|GatewayMessagesStickyWritebackAfterForward|SchedulerMetadata)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:37:16.622510+00:00",
+    "finished_at_utc": "2026-11-18T06:37:43.632214+00:00",
+    "duration_seconds": 27.01,
+    "exit_code": 1,
+    "log": "remaining-fixture-corrected-before.log"
+  },
+  {
+    "command": [
+      "docker",
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp",
+      "--memory",
+      "1g",
+      "--memory-swap",
+      "1g",
+      "--cpus",
+      "1",
+      "--pids-limit",
+      "64",
+      "-e",
+      "GOMAXPROCS=1",
+      "-v",
+      "/tmp/sub2api-023-tier1-service.test:/test:ro",
+      "-v",
+      "/home/liang/myself/work_space/idea/github/sub2api/docs/upstream-sync/implementation-0.2.23-tier1/resource-in-container.py:/measure.py:ro",
+      "sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f",
+      "python",
+      "/measure.py"
+    ],
+    "cwd": ".",
+    "started_at_utc": "2026-11-18T07:27:51.159676+00:00",
+    "finished_at_utc": "2026-11-18T07:27:52.012165+00:00",
+    "duration_seconds": 0.852,
+    "exit_code": 0,
+    "log": "resource-1c1g.log"
+  },
+  {
+    "command": [
+      "env",
+      "CGO_ENABLED=0",
+      "go",
+      "test",
+      "-tags=unit",
+      "-c",
+      "-o",
+      "/tmp/sub2api-023-tier1-service.test",
+      "./internal/service"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:16:01.310677+00:00",
+    "finished_at_utc": "2026-11-18T07:17:01.887902+00:00",
+    "duration_seconds": 60.577,
+    "exit_code": 0,
+    "log": "resource-test-build.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "./internal/pkg/apicompat",
+      "-run",
+      "TestAnthropicToResponses_(MidConversationSystemAuthority|SystemToolResultMediaStaysUser)$",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T06:06:12.494404+00:00",
+    "finished_at_utc": "2026-11-18T06:06:14.401322+00:00",
+    "duration_seconds": 1.907,
+    "exit_code": 1,
+    "log": "system-authority-fixture-corrected-before.log"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-tags=unit,embed",
+      "./internal/service",
+      "./internal/handler",
+      "./internal/repository",
+      "./internal/web",
+      "./internal/pkg/apicompat",
+      "./internal/pkg/antigravity",
+      "-run",
+      "Test(OpenAIResponsesSealed|AnthropicToResponses_MidConversation|AnthropicToResponses_SystemToolResult|ChatResponseFormatStrict|NormalizeCodex|CodexPageContextRealHTTP|Forward_PerTurn|BuildUpstreamRequest_PerTurn|CountTokensPassthrough|BuildClaudeMimicDebugLineReadsRaw|OpenAICompat|ForwardAs(ChatCompletions|Anthropic)_StreamError|ExistingSolUltrafast|SolUltrafastHTTP|ClaudeAccountDefault|UpdateSessionWindow_|ActiveFiveHourWindow|OpenAIFirstOutput|OpenAINativeFirstOutput|FirstOutputMemoryFallback|Grok(Media|Upstream)|GrokImagesPreserves|SharedUpstreamError|OpenAICompatibleModelNotFound|AntigravityCompatToolSchemaItems|.*MetadataUserID|GatewayMessagesStickyWriteback|SchedulerMetadata|FrontendHTMLRealHTTP|FrontendServer)",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "backend",
+    "started_at_utc": "2026-11-18T07:12:19.583292+00:00",
+    "finished_at_utc": "2026-11-18T07:12:52.810982+00:00",
+    "duration_seconds": 33.228,
+    "exit_code": 0,
+    "log": "targeted-all-tier1.log"
+  }
+]

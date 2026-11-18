@@ -1,0 +1,605 @@
+diff --git a/backend/internal/domain/constants.go b/backend/internal/domain/constants.go
+index 4a6bbb5a9..da5a4edf9 100644
+--- a/backend/internal/domain/constants.go
++++ b/backend/internal/domain/constants.go
+@@ -178,7 +178,9 @@ var DefaultAntigravityModelMapping = map[string]string{
+ 	"gemini-3.8-flash-low":    "gemini-3.8-flash-low",
+ 	"gemini-3.8-flash-medium": "gemini-3.8-flash-medium",
+ 	"gemini-3.8-flash-tiered": "gemini-3.8-flash-tiered",
+-	// Gemini 4 Argon tiered models
++	// Gemini 4 models
++	// Carbon uses the published model ID; do not infer Argon-style tier aliases.
++	"gemini-4-carbon":       "gemini-4-carbon",
+ 	"gemini-4-argon":        "gemini-4-argon-high",
+ 	"gemini-4-argon-high":   "gemini-4-argon-high",
+ 	"gemini-4-argon-low":    "gemini-4-argon-low",
+diff --git a/backend/internal/domain/constants_test.go b/backend/internal/domain/constants_test.go
+index 93343c89d..5e18964b6 100644
+--- a/backend/internal/domain/constants_test.go
++++ b/backend/internal/domain/constants_test.go
+@@ -107,6 +107,7 @@ func TestDefaultAntigravityModelMapping_Gemini38FlashModels(t *testing.T) {
+ 
+ func TestDefaultAntigravityModelMapping_Gemini4ArgonAndClaude55Models(t *testing.T) {
+ 	cases := map[string]string{
++		"gemini-4-carbon":          "gemini-4-carbon",
+ 		"gemini-4-argon":           "gemini-4-argon-high",
+ 		"gemini-4-argon-high":      "gemini-4-argon-high",
+ 		"gemini-4-argon-low":       "gemini-4-argon-low",
+diff --git a/backend/internal/pkg/antigravity/carbon_thinking_test.go b/backend/internal/pkg/antigravity/carbon_thinking_test.go
+new file mode 100644
+index 000000000..e22bed633
+--- /dev/null
++++ b/backend/internal/pkg/antigravity/carbon_thinking_test.go
+@@ -0,0 +1,68 @@
++package antigravity
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestCarbonGenerationThinkingLevels(t *testing.T) {
++	for _, tc := range []struct {
++		name, body, level string
++		thoughts          bool
++	}{
++		{"default", `{}`, "", false},
++		{"low", `{"output_config":{"effort":"low"}}`, "low", false},
++		{"medium", `{"output_config":{"effort":"medium"}}`, "medium", false},
++		{"high", `{"output_config":{"effort":"high"}}`, "high", false},
++		{"disabled wins", `{"thinking":{"type":"disabled"},"output_config":{"effort":"high"}}`, "low", false},
++		{"low budget", `{"thinking":{"type":"enabled","budget_tokens":1024}}`, "low", true},
++		{"medium budget", `{"thinking":{"type":"enabled","budget_tokens":4096}}`, "medium", true},
++		{"high budget", `{"thinking":{"type":"enabled","budget_tokens":32768}}`, "high", true},
++		{"adaptive default", `{"thinking":{"type":"adaptive"}}`, "", true},
++		{"effort wins", `{"thinking":{"type":"enabled","budget_tokens":32768},"output_config":{"effort":"medium"}}`, "medium", true},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			var req ClaudeRequest
++			require.NoError(t, json.Unmarshal([]byte(tc.body), &req))
++			req.Model = "gemini-4-carbon"
++			req.MaxTokens = 1000
++			config := buildGenerationConfig(&req)
++			data, err := json.Marshal(config)
++			require.NoError(t, err)
++			require.NotContains(t, string(data), "thinkingBudget")
++			require.Equal(t, 1000, config.MaxOutputTokens, "Carbon budgets must not raise output limits")
++			if tc.level == "" && !tc.thoughts {
++				require.Nil(t, config.ThinkingConfig)
++				return
++			}
++			require.NotNil(t, config.ThinkingConfig)
++			require.Equal(t, tc.level, config.ThinkingConfig.ThinkingLevel)
++			require.Equal(t, tc.thoughts, config.ThinkingConfig.IncludeThoughts)
++		})
++	}
++}
++
++func TestCarbonTierPreservesUpstreamSelection(t *testing.T) {
++	for _, tier := range []string{"low", "medium", "high"} {
++		cfg := buildGenerationConfig(&ClaudeRequest{Model: "gemini-4-carbon-" + tier, Thinking: &ThinkingConfig{Type: "enabled", BudgetTokens: 32768}, OutputConfig: &ClaudeOutputConfig{Effort: "low"}})
++		require.NotNil(t, cfg.ThinkingConfig)
++		require.True(t, cfg.ThinkingConfig.IncludeThoughts)
++		require.Empty(t, cfg.ThinkingConfig.ThinkingLevel)
++		require.Zero(t, cfg.ThinkingConfig.ThinkingBudget)
++	}
++	// Other models retain the existing budget behavior.
++	cfg := buildGenerationConfig(&ClaudeRequest{Model: "claude-sonnet-4-6", Thinking: &ThinkingConfig{Type: "enabled", BudgetTokens: 4096}})
++	require.Equal(t, 4096, cfg.ThinkingConfig.ThinkingBudget)
++	require.Empty(t, cfg.ThinkingConfig.ThinkingLevel)
++}
++
++func TestCarbonTransformUsesMappedModelForThinking(t *testing.T) {
++	req := &ClaudeRequest{Model: "client-alias", MaxTokens: 4096, Messages: []ClaudeMessage{{Role: "user", Content: json.RawMessage(`"hello"`)}}, Thinking: &ThinkingConfig{Type: "enabled", BudgetTokens: 4096}}
++	data, err := TransformClaudeToGeminiWithOptions(req, "project", "gemini-4-carbon", TransformOptions{})
++	require.NoError(t, err)
++	require.Contains(t, string(data), `"thinkingLevel":"medium"`)
++	require.NotContains(t, string(data), `thinkingBudget`)
++	require.NotContains(t, string(data), `stopSequences`)
++}
+diff --git a/backend/internal/pkg/antigravity/claude_types.go b/backend/internal/pkg/antigravity/claude_types.go
+index 3af852c8f..5be6e3b7a 100644
+--- a/backend/internal/pkg/antigravity/claude_types.go
++++ b/backend/internal/pkg/antigravity/claude_types.go
+@@ -9,17 +9,23 @@ import (
+ 
+ // ClaudeRequest Claude Messages API 请求
+ type ClaudeRequest struct {
+-	Model       string          `json:"model"`
+-	Messages    []ClaudeMessage `json:"messages"`
+-	MaxTokens   int             `json:"max_tokens,omitempty"`
+-	System      json.RawMessage `json:"system,omitempty"` // string 或 []SystemBlock
+-	Stream      bool            `json:"stream,omitempty"`
+-	Temperature *float64        `json:"temperature,omitempty"`
+-	TopP        *float64        `json:"top_p,omitempty"`
+-	TopK        *int            `json:"top_k,omitempty"`
+-	Tools       []ClaudeTool    `json:"tools,omitempty"`
+-	Thinking    *ThinkingConfig `json:"thinking,omitempty"`
+-	Metadata    *ClaudeMetadata `json:"metadata,omitempty"`
++	Model        string              `json:"model"`
++	Messages     []ClaudeMessage     `json:"messages"`
++	MaxTokens    int                 `json:"max_tokens,omitempty"`
++	System       json.RawMessage     `json:"system,omitempty"` // string 或 []SystemBlock
++	Stream       bool                `json:"stream,omitempty"`
++	Temperature  *float64            `json:"temperature,omitempty"`
++	TopP         *float64            `json:"top_p,omitempty"`
++	TopK         *int                `json:"top_k,omitempty"`
++	Tools        []ClaudeTool        `json:"tools,omitempty"`
++	Thinking     *ThinkingConfig     `json:"thinking,omitempty"`
++	Metadata     *ClaudeMetadata     `json:"metadata,omitempty"`
++	OutputConfig *ClaudeOutputConfig `json:"output_config,omitempty"`
++}
++
++// ClaudeOutputConfig carries the requested reasoning effort.
++type ClaudeOutputConfig struct {
++	Effort string `json:"effort,omitempty"`
+ }
+ 
+ // ClaudeMessage Claude 消息
+@@ -214,6 +220,7 @@ var geminiModels = []modelDef{
+ 	{ID: "gemini-3.8-flash-low", DisplayName: "Gemini 3.8 Flash Low", CreatedAt: "2026-09-02T00:00:00Z", IsReasoning: true},
+ 	{ID: "gemini-3.8-flash-medium", DisplayName: "Gemini 3.8 Flash Medium", CreatedAt: "2026-09-02T00:00:00Z", IsReasoning: true},
+ 	{ID: "gemini-3.8-flash-tiered", DisplayName: "Gemini 3.8 Flash", CreatedAt: "2026-09-02T00:00:00Z", IsReasoning: true},
++	{ID: "gemini-4-carbon", DisplayName: "Gemini 4 Carbon", CreatedAt: "2026-11-10T00:00:00Z", IsReasoning: true},
+ 	{ID: "gemini-4-argon-high", DisplayName: "Gemini 4 Argon (High)", CreatedAt: "2026-10-13T00:00:00Z", IsReasoning: true},
+ 	{ID: "gemini-4-argon-low", DisplayName: "Gemini 4 Argon (Low)", CreatedAt: "2026-10-13T00:00:00Z", IsReasoning: true},
+ 	{ID: "gemini-4-argon-medium", DisplayName: "Gemini 4 Argon (Medium)", CreatedAt: "2026-10-13T00:00:00Z", IsReasoning: true},
+diff --git a/backend/internal/pkg/antigravity/claude_types_test.go b/backend/internal/pkg/antigravity/claude_types_test.go
+index e65dcc286..212254da5 100644
+--- a/backend/internal/pkg/antigravity/claude_types_test.go
++++ b/backend/internal/pkg/antigravity/claude_types_test.go
+@@ -15,6 +15,7 @@ func TestDefaultModels_ContainsNewAndLegacyImageModels(t *testing.T) {
+ 	}
+ 
+ 	requiredIDs := []string{
++		"gemini-4-carbon",
+ 		"claude-fable-5-1",
+ 		"claude-fable-5",
+ 		"claude-opus-4-8",
+@@ -80,6 +81,9 @@ func TestClaudeContentItem_ThinkingAlwaysHasSignature(t *testing.T) {
+ func TestIsGeminiReasoningModel_IncludesProAgent(t *testing.T) {
+ 	t.Parallel()
+ 
++	if !IsGeminiReasoningModel("gemini-4-carbon") {
++		t.Fatal("expected Carbon to be recognized as a Gemini reasoning model")
++	}
+ 	if !IsGeminiReasoningModel("gemini-pro-agent") {
+ 		t.Fatal("expected gemini-pro-agent to be recognized as a Gemini reasoning model")
+ 	}
+diff --git a/backend/internal/pkg/antigravity/gemini_types.go b/backend/internal/pkg/antigravity/gemini_types.go
+index fb773449d..004d8dd3f 100644
+--- a/backend/internal/pkg/antigravity/gemini_types.go
++++ b/backend/internal/pkg/antigravity/gemini_types.go
+@@ -84,8 +84,9 @@ type GeminiImageConfig struct {
+ 
+ // GeminiThinkingConfig Gemini thinking 配置
+ type GeminiThinkingConfig struct {
+-	IncludeThoughts bool `json:"includeThoughts"`
+-	ThinkingBudget  int  `json:"thinkingBudget,omitempty"`
++	IncludeThoughts bool   `json:"includeThoughts"`
++	ThinkingBudget  int    `json:"thinkingBudget,omitempty"`
++	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+ }
+ 
+ // GeminiToolDeclaration Gemini 工具声明
+diff --git a/backend/internal/pkg/antigravity/request_transformer.go b/backend/internal/pkg/antigravity/request_transformer.go
+index d0cac85d9..6a05b1075 100644
+--- a/backend/internal/pkg/antigravity/request_transformer.go
++++ b/backend/internal/pkg/antigravity/request_transformer.go
+@@ -696,6 +696,45 @@ func isAntigravityOpusHighTierModel(model string) bool {
+ 		strings.HasPrefix(lower, "claude-opus-4-8")
+ }
+ 
++// carbonThinkingConfig preserves the upstream default when no effort is specified.
++// https://aistudio.google.com/docs/whats-new-gemini-4-carbon
++func carbonThinkingConfig(req *ClaudeRequest, bareModel bool) *GeminiThinkingConfig {
++	cfg := &GeminiThinkingConfig{}
++	if req.Thinking != nil {
++		cfg.IncludeThoughts = req.Thinking.Type == "enabled" || req.Thinking.Type == "adaptive"
++	}
++	if bareModel {
++		if req.OutputConfig != nil {
++			switch strings.ToLower(strings.TrimSpace(req.OutputConfig.Effort)) {
++			case "none", "minimal", "low":
++				cfg.ThinkingLevel = "low"
++			case "medium":
++				cfg.ThinkingLevel = "medium"
++			case "high", "xhigh", "max":
++				cfg.ThinkingLevel = "high"
++			}
++		}
++		if req.Thinking != nil {
++			if req.Thinking.Type == "disabled" {
++				cfg.ThinkingLevel = "low"
++			} else if cfg.ThinkingLevel == "" && req.Thinking.Type == "enabled" && req.Thinking.BudgetTokens > 0 {
++				switch {
++				case req.Thinking.BudgetTokens <= 1024:
++					cfg.ThinkingLevel = "low"
++				case req.Thinking.BudgetTokens <= 8192:
++					cfg.ThinkingLevel = "medium"
++				default:
++					cfg.ThinkingLevel = "high"
++				}
++			}
++		}
++	}
++	if !cfg.IncludeThoughts && cfg.ThinkingLevel == "" {
++		return nil
++	}
++	return cfg
++}
++
+ func buildGenerationConfig(req *ClaudeRequest) *GeminiGenerationConfig {
+ 	maxLimit := maxOutputTokensLimit(req.Model)
+ 	config := &GeminiGenerationConfig{
+@@ -712,8 +751,16 @@ func buildGenerationConfig(req *ClaudeRequest) *GeminiGenerationConfig {
+ 		config.MaxOutputTokens = req.MaxTokens
+ 	}
+ 
++	// Carbon accepts thinking levels rather than token budgets. Tiered IDs, when
++	// supplied by the account catalog, already select the level upstream.
++	carbonModel := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(req.Model)), "models/")
++	isCarbon := carbonModel == "gemini-4-carbon" || carbonModel == "gemini-4-carbon-low" || carbonModel == "gemini-4-carbon-medium" || carbonModel == "gemini-4-carbon-high"
++	if isCarbon {
++		config.ThinkingConfig = carbonThinkingConfig(req, carbonModel == "gemini-4-carbon")
++	}
++
+ 	// Thinking 配置
+-	if req.Thinking != nil && (req.Thinking.Type == "enabled" || req.Thinking.Type == "adaptive") {
++	if !isCarbon && req.Thinking != nil && (req.Thinking.Type == "enabled" || req.Thinking.Type == "adaptive") {
+ 		config.ThinkingConfig = &GeminiThinkingConfig{
+ 			IncludeThoughts: true,
+ 		}
+diff --git a/backend/internal/pkg/gemini/function_response_test.go b/backend/internal/pkg/gemini/function_response_test.go
+index d464a327b..81d515eb0 100644
+--- a/backend/internal/pkg/gemini/function_response_test.go
++++ b/backend/internal/pkg/gemini/function_response_test.go
+@@ -4,7 +4,7 @@ import "testing"
+ 
+ func TestSupportsMultimodalFunctionResponses(t *testing.T) {
+ 	for model, want := range map[string]bool{
+-		"gemini-3-pro": true, "gemini-3.8-flash": true, "gemini-4-argon": true,
++		"gemini-3-pro": true, "gemini-3.8-flash": true, "gemini-4-argon": true, "gemini-4-carbon": true,
+ 		"models/gemini-3-flash-preview": true, "gemini-2.5-flash": false,
+ 		"claude-sonnet-4-6": false, "client-alias": false, "": false,
+ 	} {
+diff --git a/backend/internal/pkg/gemini/models.go b/backend/internal/pkg/gemini/models.go
+index 7e4066c00..0abb5a8b5 100644
+--- a/backend/internal/pkg/gemini/models.go
++++ b/backend/internal/pkg/gemini/models.go
+@@ -35,6 +35,7 @@ func DefaultModels() []Model {
+ 		{Name: "models/gemini-3.7-flash", SupportedGenerationMethods: methods},
+ 		{Name: "models/gemini-3.8-flash", SupportedGenerationMethods: methods},
+ 		{Name: "models/gemini-4-argon", SupportedGenerationMethods: methods},
++		{Name: "models/gemini-4-carbon", SupportedGenerationMethods: methods},
+ 	}
+ }
+ 
+diff --git a/backend/internal/pkg/gemini/models_test.go b/backend/internal/pkg/gemini/models_test.go
+index a85ecb20e..d410d1680 100644
+--- a/backend/internal/pkg/gemini/models_test.go
++++ b/backend/internal/pkg/gemini/models_test.go
+@@ -12,6 +12,7 @@ func TestDefaultModels_ContainsFallbackCatalogModels(t *testing.T) {
+ 	}
+ 
+ 	required := []string{
++		"models/gemini-4-carbon",
+ 		"models/gemini-3-pro-image",
+ 		"models/gemini-3.1-pro-preview-customtools",
+ 		"models/gemini-3.1-flash-image",
+@@ -41,3 +42,14 @@ func TestHasFallbackModel_RecognizesCustomtoolsModel(t *testing.T) {
+ 		t.Fatalf("did not expect unknown model to exist in fallback catalog")
+ 	}
+ }
++
++func TestHasFallbackModel_Carbon(t *testing.T) {
++	for _, model := range []string{"gemini-4-carbon", "models/gemini-4-carbon"} {
++		if !HasFallbackModel(model) {
++			t.Fatalf("expected Carbon fallback: %s", model)
++		}
++	}
++	if HasFallbackModel("gemini-4-carbon-preview") {
++		t.Fatal("must not invent a preview alias")
++	}
++}
+diff --git a/backend/internal/pkg/geminicli/models.go b/backend/internal/pkg/geminicli/models.go
+index 6fe3a5f36..a77a58d91 100644
+--- a/backend/internal/pkg/geminicli/models.go
++++ b/backend/internal/pkg/geminicli/models.go
+@@ -28,6 +28,7 @@ var DefaultModels = []Model{
+ 	{ID: "gemini-3.7-flash", Type: "model", DisplayName: "Gemini 3.7 Flash", CreatedAt: ""},
+ 	{ID: "gemini-3.8-flash", Type: "model", DisplayName: "Gemini 3.8 Flash", CreatedAt: ""},
+ 	{ID: "gemini-4-argon", Type: "model", DisplayName: "Gemini 4 Argon", CreatedAt: ""},
++	{ID: "gemini-4-carbon", Type: "model", DisplayName: "Gemini 4 Carbon", CreatedAt: ""},
+ }
+ 
+ // GoogleOneModels is the conservative model set exposed for legacy Google One
+diff --git a/backend/internal/pkg/geminicli/models_test.go b/backend/internal/pkg/geminicli/models_test.go
+index 7ef2647fa..a5098b1a9 100644
+--- a/backend/internal/pkg/geminicli/models_test.go
++++ b/backend/internal/pkg/geminicli/models_test.go
+@@ -11,6 +11,7 @@ func TestDefaultModels_ContainsImageModels(t *testing.T) {
+ 	}
+ 
+ 	required := []string{
++		"gemini-4-carbon",
+ 		"gemini-3.1-flash-image",
+ 		"gemini-3-pro-image",
+ 		DefaultTestModel,
+@@ -32,7 +33,7 @@ func TestGoogleOneModels_ExcludeUnsupportedNewAndImageModels(t *testing.T) {
+ 			t.Fatalf("expected Google One model %q to map to itself", id)
+ 		}
+ 	}
+-	for _, id := range []string{"gemini-2.5-flash-image", "gemini-3.1-flash-image", "gemini-3.5-flash"} {
++	for _, id := range []string{"gemini-2.5-flash-image", "gemini-3.1-flash-image", "gemini-3.5-flash", "gemini-4-carbon"} {
+ 		if _, ok := mapping[id]; ok {
+ 			t.Fatalf("did not expect unsupported Google One model %q", id)
+ 		}
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index 8e526ec48..9b6bf9222 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -536,6 +536,19 @@ func (s *BillingService) initFallbackPricing() {
+ 		SupportsCacheBreakdown: false,
+ 	}
+ 
++	// Gemini 4 Carbon: introductory Google AI rates through 2026-11-30.
++	// From 2026-12-01 the published $2/$10/$0.10 per MTok rates double
++	// to $4/$20/$0.20. Only implicit caching is supported (no storage fee).
++	s.fallbackPrices["gemini-4-carbon"] = &ModelPricing{
++		InputPricePerToken:             2e-6,
++		OutputPricePerToken:            10e-6,
++		CacheReadPricePerToken:         0.1e-6,
++		InputPricePerTokenPriority:     3.6e-6,
++		OutputPricePerTokenPriority:    18e-6,
++		CacheReadPricePerTokenPriority: 0.18e-6,
++		SupportsCacheBreakdown:         false,
++	}
++
+ 	// Gemini 4 Argon Cyber Permissive (Vertex AI pricing: $4 input / $20 output /
+ 	// $0.20 cached input per MTok). The Gemini 4 Argon promotion does not apply.
+ 	s.fallbackPrices["gemini-4-argon-cyber-permissive"] = &ModelPricing{
+@@ -1156,6 +1169,9 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+ 	if strings.Contains(modelLower, "gemini-3.8-flash") || strings.Contains(modelLower, "gemini-3-8-flash") {
+ 		return s.fallbackPrices["gemini-3.8-flash"]
+ 	}
++	if normalizeGeminiThinkingTierAlias(lastSegment(strings.TrimSpace(modelLower))) == "gemini-4-carbon" {
++		return s.fallbackPrices["gemini-4-carbon"]
++	}
+ 	// Cyber 变体不享受 Gemini 4 Argon 的优惠价，必须先于 "gemini-4-argon" 判。
+ 	if strings.Contains(modelLower, "gemini-4-argon-cyber") {
+ 		return s.fallbackPrices["gemini-4-argon-cyber-permissive"]
+diff --git a/backend/internal/service/gemini_cache_storage_pricing_test.go b/backend/internal/service/gemini_cache_storage_pricing_test.go
+index 49cddb508..c1d53a941 100644
+--- a/backend/internal/service/gemini_cache_storage_pricing_test.go
++++ b/backend/internal/service/gemini_cache_storage_pricing_test.go
+@@ -45,6 +45,8 @@ func TestBuiltinGeminiCacheStoragePrice(t *testing.T) {
+ 		{"gemini-pro-latest", 4.5e-6},
+ 		// 无存储价（Gemini 4 Argon / Hydrogen 仅支持隐式缓存）
+ 		{"gemini-4-argon", 0},
++		{"gemini-4-carbon", 0},
++		{"gemini-4-carbon-high", 0},
+ 		{"gemini-4-argon-high", 0},
+ 		{"gemini-4-argon-cyber-permissive", 0},
+ 		{"gemini-4-hydrogen", 0},
+diff --git a/backend/internal/service/gemini_carbon_pricing_test.go b/backend/internal/service/gemini_carbon_pricing_test.go
+new file mode 100644
+index 000000000..00cba21f2
+--- /dev/null
++++ b/backend/internal/service/gemini_carbon_pricing_test.go
+@@ -0,0 +1,75 @@
++package service
++
++import (
++	"encoding/json"
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/require"
++)
++
++func TestGeminiCarbonPricingAliases(t *testing.T) {
++	base := &LiteLLMModelPricing{InputCostPerToken: 2e-6, OutputCostPerToken: 10e-6, CacheReadInputTokenCost: 0.1e-6}
++	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{"gemini-4-carbon": base}}
++	for _, model := range []string{
++		"gemini-4-carbon", "gemini-4-carbon-high", "gemini-4-carbon-medium", "gemini-4-carbon-low", "gemini-4-carbon-tiered",
++		"models/gemini-4-carbon", "projects/p/locations/global/publishers/google/models/gemini-4-carbon-high",
++	} {
++		t.Run(model, func(t *testing.T) {
++			require.Same(t, base, svc.GetIdentifiedModelPricing(model))
++		})
++	}
++	// A separately published tier price must take precedence over base normalization.
++	tier := &LiteLLMModelPricing{InputCostPerToken: 3e-6}
++	svc.pricingData["gemini-4-carbon-high"] = tier
++	require.Same(t, tier, svc.GetIdentifiedModelPricing("gemini-4-carbon-high"))
++	require.Equal(t, "gemini-4-carbon-cyber", normalizeGeminiThinkingTierAlias("gemini-4-carbon-cyber"))
++}
++
++func TestGeminiCarbonFallbackBilling(t *testing.T) {
++	svc := NewBillingService(&config.Config{}, nil)
++	tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000}
++	for _, model := range []string{"gemini-4-carbon", "gemini-4-carbon-low", "gemini-4-carbon-medium", "gemini-4-carbon-high", "models/gemini-4-carbon", "projects/p/locations/global/publishers/google/models/gemini-4-carbon"} {
++		t.Run(model, func(t *testing.T) {
++			cost, err := svc.CalculateCost(model, tokens, 1)
++			require.NoError(t, err)
++			require.InDelta(t, 2, cost.InputCost, 1e-12)
++			require.InDelta(t, 10, cost.OutputCost, 1e-12)
++			require.InDelta(t, 0.1, cost.CacheReadCost, 1e-12)
++			require.InDelta(t, 12.1, cost.TotalCost, 1e-12)
++			priority, err := svc.CalculateCostWithServiceTier(model, tokens, 1, "priority")
++			require.NoError(t, err)
++			require.InDelta(t, 12.1*1.8, priority.TotalCost, 1e-12)
++			require.Zero(t, svc.CacheStoragePricePerTokenHour(model))
++		})
++	}
++}
++
++func TestDefaultPricingIncludesGeminiCarbon(t *testing.T) {
++	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
++	require.NoError(t, err)
++	svc := &PricingService{}
++	svc.pricingData, err = svc.parsePricingData(data)
++	require.NoError(t, err)
++	pricing := svc.GetIdentifiedModelPricing("gemini-4-carbon")
++	require.NotNil(t, pricing)
++	require.Equal(t, "gemini", pricing.LiteLLMProvider)
++	require.InDelta(t, 2e-6, pricing.InputCostPerToken, 1e-15)
++	require.InDelta(t, 10e-6, pricing.OutputCostPerToken, 1e-15)
++	require.InDelta(t, 0.1e-6, pricing.CacheReadInputTokenCost, 1e-15)
++	require.InDelta(t, 3.6e-6, pricing.InputCostPerTokenPriority, 1e-15)
++	require.InDelta(t, 18e-6, pricing.OutputCostPerTokenPriority, 1e-15)
++	require.InDelta(t, 0.18e-6, pricing.CacheReadInputTokenCostPriority, 1e-15)
++	require.Zero(t, pricing.LongContextInputTokenThreshold)
++	require.Zero(t, pricing.CacheStorageCostPerTokenPerHour)
++	require.Contains(t, svc.ListModelNamesByProvider("gemini"), "gemini-4-carbon")
++
++	var catalog map[string]map[string]any
++	require.NoError(t, json.Unmarshal(data, &catalog))
++	// The synchronous gateway must not advertise long-decode's separate 1M output limit.
++	require.Equal(t, float64(1048576), catalog["gemini-4-carbon"]["max_input_tokens"])
++	require.Equal(t, float64(65536), catalog["gemini-4-carbon"]["max_output_tokens"])
++	require.Equal(t, float64(65536), catalog["gemini-4-carbon"]["max_tokens"])
++}
+diff --git a/backend/internal/service/gemini_compat_thinking.go b/backend/internal/service/gemini_compat_thinking.go
+index 6c75dd919..56f60fa50 100644
+--- a/backend/internal/service/gemini_compat_thinking.go
++++ b/backend/internal/service/gemini_compat_thinking.go
+@@ -118,8 +118,8 @@ func claudeRequestEnablesThinking(claudeBody []byte) bool {
+ }
+ 
+ // geminiThinkingLevelFor 把思考意图映射为 thinkingLevel；返回空串表示交给模型默认档位。
+-// minimal 只发给 flash 系列，其余模型用 low；medium 只发给 flash 系列与 Gemini 3.1 Pro，
+-// 其余模型用 high（Gemini 3 及以上未指定档位时的默认档位）。
++// minimal 只发给 flash 系列，其余模型用 low；medium 只发给 flash 系列、Gemini 3.1 Pro
++// 与 Gemini 4 Carbon，其余模型用 high。未指定档位时保留上游默认值。
+ func geminiThinkingLevelFor(model string, intent claudeThinkingIntent) string {
+ 	tier := intent.tier
+ 	if tier == "" && intent.budgetTokens > 0 {
+@@ -137,7 +137,7 @@ func geminiThinkingLevelFor(model string, intent claudeThinkingIntent) string {
+ 	if tier == "minimal" && !isFlash {
+ 		tier = "low"
+ 	}
+-	if tier == "medium" && !isFlash && !strings.HasPrefix(name, "gemini-3.1-pro") {
++	if tier == "medium" && !isFlash && !strings.HasPrefix(name, "gemini-3.1-pro") && name != "gemini-4-carbon" {
+ 		tier = "high"
+ 	}
+ 	return tier
+diff --git a/backend/internal/service/gemini_compat_thinking_test.go b/backend/internal/service/gemini_compat_thinking_test.go
+index 5c68bec9e..3a447a49c 100644
+--- a/backend/internal/service/gemini_compat_thinking_test.go
++++ b/backend/internal/service/gemini_compat_thinking_test.go
+@@ -44,6 +44,12 @@ func TestApplyGeminiCompatThinkingConfig(t *testing.T) {
+ 		{name: "no thinking params streams thoughts only", model: "gemini-3.7-flash", claudeBody: `{}`, includeThoughts: true, wantThoughts: true},
+ 		{name: "unknown effort ignored", model: "gemini-3.7-flash", claudeBody: `{"output_config":{"effort":"turbo"}}`, wantNoConfig: true},
+ 		{name: "level with thoughts", model: "gemini-3.8-flash", claudeBody: `{"output_config":{"effort":"high"}}`, includeThoughts: true, wantLevel: "high", wantThoughts: true},
++		{name: "carbon low", model: "gemini-4-carbon", claudeBody: `{"output_config":{"effort":"low"}}`, wantLevel: "low"},
++		{name: "carbon medium", model: "models/gemini-4-carbon", claudeBody: `{"output_config":{"effort":"medium"}}`, wantLevel: "medium"},
++		{name: "carbon high", model: "gemini-4-carbon", claudeBody: `{"output_config":{"effort":"high"}}`, wantLevel: "high"},
++		{name: "carbon medium budget", model: "gemini-4-carbon", claudeBody: `{"thinking":{"type":"enabled","budget_tokens":4096}}`, wantLevel: "medium"},
++		{name: "carbon cannot disable thinking", model: "gemini-4-carbon", claudeBody: `{"thinking":{"type":"disabled"}}`, wantLevel: "low"},
++		{name: "carbon preserves upstream default", model: "gemini-4-carbon", claudeBody: `{}`, wantNoConfig: true},
+ 		{name: "gemini 4 uses level", model: "gemini-4-argon", claudeBody: `{"output_config":{"effort":"low"}}`, wantLevel: "low"},
+ 		{name: "medium outside verified models becomes high", model: "gemini-4-argon", claudeBody: `{"output_config":{"effort":"medium"}}`, wantLevel: "high"},
+ 		{name: "medium budget outside verified models becomes high", model: "gemini-4-argon", claudeBody: `{"thinking":{"type":"enabled","budget_tokens":4096}}`, wantLevel: "high"},
+diff --git a/backend/internal/service/pricing_service.go b/backend/internal/service/pricing_service.go
+index 3f362a496..71c0e2d68 100644
+--- a/backend/internal/service/pricing_service.go
++++ b/backend/internal/service/pricing_service.go
+@@ -1455,7 +1455,7 @@ func isAntigravityThinkingTierAlias(model string) bool {
+ // the published token rate, so this keeps -high/-low/-medium and -tiered
+ // requests on the corresponding base model's price card.
+ func normalizeGeminiThinkingTierAlias(model string) string {
+-	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon"} {
++	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon", "gemini-4-carbon"} {
+ 		for _, tier := range []string{"-high", "-low", "-medium", "-tiered"} {
+ 			if model == baseModel+tier {
+ 				return baseModel
+diff --git a/backend/resources/model-pricing/model_prices_and_context_window.json b/backend/resources/model-pricing/model_prices_and_context_window.json
+index 733cc0995..9127cee4a 100644
+--- a/backend/resources/model-pricing/model_prices_and_context_window.json
++++ b/backend/resources/model-pricing/model_prices_and_context_window.json
+@@ -2760,6 +2760,23 @@
+     "supports_reasoning": true,
+     "supports_service_tier": true
+   },
++  "gemini-4-carbon": {
++    "cache_read_input_token_cost": 1e-07,
++    "cache_read_input_token_cost_priority": 1.8e-07,
++    "input_cost_per_token": 2e-06,
++    "input_cost_per_token_priority": 3.6e-06,
++    "litellm_provider": "gemini",
++    "max_input_tokens": 1048576,
++    "max_output_tokens": 65536,
++    "max_tokens": 65536,
++    "mode": "chat",
++    "output_cost_per_token": 1e-05,
++    "output_cost_per_token_priority": 1.8e-05,
++    "source": "https://aistudio.google.com/docs/pricing#gemini-4-carbon",
++    "supports_prompt_caching": true,
++    "supports_reasoning": true,
++    "supports_service_tier": true
++  },
+   "gemini-4-argon-cyber-permissive": {
+     "cache_read_input_token_cost": 2e-07,
+     "cache_read_input_token_cost_priority": 3.6e-07,
+diff --git a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+index 2dbd1a894..2a54604be 100644
+--- a/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
++++ b/frontend/src/composables/__tests__/useModelWhitelist.spec.ts
+@@ -206,6 +206,19 @@ describe('useModelWhitelist', () => {
+     expect(models).toContain('gemini-3.1-pro')
+   })
+ 
++  it('Gemini 4 Carbon exposes the official API model without invented aliases', () => {
++    const models = getModelsByPlatform('gemini')
++    expect(models).toContain('gemini-4-carbon')
++    expect(models).not.toContain('gemini-4-carbon-preview')
++    expect(getModelsByPlatform('antigravity')).toContain('gemini-4-carbon')
++    expect(getPresetMappingsByPlatform('antigravity')).toEqual(expect.arrayContaining([
++      expect.objectContaining({ from: 'gemini-4-carbon', to: 'gemini-4-carbon' })
++    ]))
++    expect(buildModelMappingObject('whitelist', ['gemini-4-carbon'], [])).toEqual({
++      'gemini-4-carbon': 'gemini-4-carbon'
++    })
++  })
++
+   it('Gemini 4 Argon 在 gemini 与 antigravity 平台使用对应真实模型 ID 与预设映射', () => {
+     expect(getModelsByPlatform('gemini')).toContain('gemini-4-argon')
+     const agModels = getModelsByPlatform('antigravity')
+diff --git a/frontend/src/composables/useModelWhitelist.ts b/frontend/src/composables/useModelWhitelist.ts
+index 47399f411..62a7e6f35 100644
+--- a/frontend/src/composables/useModelWhitelist.ts
++++ b/frontend/src/composables/useModelWhitelist.ts
+@@ -70,7 +70,8 @@ const geminiModels = [
+   'gemini-3.6-flash',
+   'gemini-3.7-flash',
+   'gemini-3.8-flash',
+-  'gemini-4-argon'
++  'gemini-4-argon',
++  'gemini-4-carbon'
+ ]
+ 
+ // Antigravity 官方支持的模型（精确匹配）
+@@ -126,7 +127,8 @@ const antigravityModels = [
+   'gemini-3.8-flash-medium',
+   'gemini-3.8-flash-high',
+   'gemini-3.8-flash-tiered',
+-  // Gemini 4 Argon 系列
++  // Gemini 4 系列
++  'gemini-4-carbon',
+   'gemini-4-argon-low',
+   'gemini-4-argon-medium',
+   'gemini-4-argon-high',
+@@ -402,6 +404,7 @@ const grokPresetMappings = [
+ // Antigravity 预设映射（支持通配符）
+ const antigravityPresetMappings = [
+   // Claude 5.5 / Gemini 4 Argon / 3.8 Flash 推荐映射
++  { label: '4 Carbon', from: 'gemini-4-carbon', to: 'gemini-4-carbon', color: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400' },
+   { label: '4 Argon→High', from: 'gemini-4-argon', to: 'gemini-4-argon-high', color: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400' },
+   { label: '4 Argon High', from: 'gemini-4-argon-high', to: 'gemini-4-argon-high', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
+   { label: '4 Argon Medium', from: 'gemini-4-argon-medium', to: 'gemini-4-argon-medium', color: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400' },

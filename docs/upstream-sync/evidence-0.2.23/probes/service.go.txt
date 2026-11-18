@@ -1,0 +1,250 @@
+//go:build unit
+
+package service
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+)
+
+func intake023Context() (*gin.Context, *httptest.ResponseRecorder) {
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	return c, rec
+}
+
+func TestIntake023PerTurnBeta(t *testing.T) {
+	body := []byte("{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"system\",\"content\":[],\"output_config\":{\"effort\":\"high\"}}]}")
+	out, changed := stripAnthropicMessageOutputConfigUnlessBeta(body, "per-turn-control-2026-07-01")
+	require.False(t, changed)
+	require.Equal(t, body, out)
+}
+
+func TestIntake023PerTurnBetaControl(t *testing.T) {
+	body := []byte("{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"system\",\"content\":[],\"output_config\":{\"effort\":\"high\"}}]}")
+	out, changed := stripAnthropicMessageOutputConfigUnlessBeta(body, "mid-conversation-output-config-2026-07-01")
+	require.False(t, changed)
+	require.Equal(t, body, out)
+	_, changed = stripAnthropicMessageOutputConfigUnlessBeta(body, "")
+	require.True(t, changed)
+}
+
+func TestIntake023CountTokensHeaderDuplicates(t *testing.T) {
+	c, _ := intake023Context()
+	c.Request.Header = http.Header{"content-type": {"application/custom-json"}, "anthropic-version": {"2026-05-01"}}
+	account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}
+	req, err := (&GatewayService{cfg: &config.Config{}}).buildCountTokensRequestAnthropicAPIKeyPassthrough(context.Background(), c, account, []byte("{\"model\":\"claude-sonnet-4-6\",\"messages\":[]}"), "local-fixture-key")
+	require.NoError(t, err)
+	for _, name := range []string{"content-type", "anthropic-version"} {
+		count := 0
+		for k, values := range req.Header {
+			if strings.EqualFold(k, name) {
+				count += len(values)
+			}
+		}
+		require.Equal(t, 1, count, name)
+	}
+}
+
+func TestIntake023LoginNilIdentity(t *testing.T) {
+	require.NotPanics(t, func() {
+		require.False(t, (&AuthService{}).shouldApplyEmailFirstBindDefaults(context.Background(), 1, nil, false))
+	})
+}
+
+func TestIntake023LoginBackfillControl(t *testing.T) {
+	identity := &dbent.AuthIdentity{Metadata: map[string]any{"source": "auth_service_login_backfill"}}
+	require.False(t, (&AuthService{}).shouldApplyEmailFirstBindDefaults(context.Background(), 1, identity, true))
+}
+
+func TestIntake023CacheBillingRemainder(t *testing.T) {
+	pricing := &ModelPricing{SupportsCacheBreakdown: true, CacheCreation5mPrice: 1, CacheCreation1hPrice: 2}
+	tokens := UsageTokens{CacheCreationTokens: 100, CacheCreation5mTokens: 30, CacheCreation1hTokens: 20}
+	require.Equal(t, float64(120), (&BillingService{}).computeCacheCreationCost(pricing, tokens, 1, 1))
+}
+
+func TestIntake023CacheBillingControl(t *testing.T) {
+	pricing := &ModelPricing{SupportsCacheBreakdown: true, CacheCreation5mPrice: 1, CacheCreation1hPrice: 2}
+	tokens := UsageTokens{CacheCreationTokens: 50, CacheCreation5mTokens: 30, CacheCreation1hTokens: 20}
+	require.Equal(t, float64(70), (&BillingService{}).computeCacheCreationCost(pricing, tokens, 1, 1))
+	require.Equal(t, float64(100), (&BillingService{}).computeCacheCreationCost(pricing, UsageTokens{CacheCreationTokens: 100}, 1, 1))
+}
+
+func TestIntake023SpoolUnavailable(t *testing.T) {
+	stage := newOpenAIFirstOutputStage(128 * 1024)
+	stage.createTemp = func() (*os.File, error) { return nil, os.ErrPermission }
+	defer stage.Close()
+	data := bytes.Repeat([]byte("x"), openAIFirstOutputStageMemoryLimit+1)
+	_, err := stage.Write(data)
+	require.NoError(t, err, "unavailable spool must retain the same bounded memory fallback")
+	var out bytes.Buffer
+	require.NoError(t, stage.CommitTo(&out))
+	require.Equal(t, data, out.Bytes())
+}
+
+func TestIntake023SpoolLimitControl(t *testing.T) {
+	stage := newOpenAIFirstOutputStage(4)
+	defer stage.Close()
+	_, err := stage.WriteString("12345")
+	require.ErrorIs(t, err, errOpenAIFirstOutputStageLimit)
+}
+
+func TestIntake023GrokFlatMediaMessage(t *testing.T) {
+	body := []byte("{\"code\":\"ContentPolicyViolation\",\"error\":\"media rejected by a specific policy\"}")
+	require.Equal(t, "media rejected by a specific policy", grokContentPolicyClientMessage(body))
+}
+
+func TestIntake023GrokMediaMessageControl(t *testing.T) {
+	require.Equal(t, "nested policy message", grokContentPolicyClientMessage([]byte("{\"error\":{\"message\":\"nested policy message\"}}")))
+	require.Equal(t, "Request blocked by upstream content policy", grokContentPolicyClientMessage([]byte("{\"error\":{\"secret\":\"do not expose\"}}")))
+}
+
+func TestIntake023GrokServerSearchCount(t *testing.T) {
+	body := []byte("{\"output\":[{\"type\":\"custom_tool_call\",\"call_id\":\"xs_1\",\"name\":\"search_custom\",\"status\":\"completed\"},{\"type\":\"custom_tool_call\",\"call_id\":\"as_1\",\"name\":\"attachment_custom\",\"status\":\"completed\"}]}")
+	require.Equal(t, 2, countGrokNativeSearchCallsFromJSONBytes(body))
+}
+
+func TestIntake023GrokServerSearchControl(t *testing.T) {
+	require.Equal(t, 0, countGrokNativeSearchCallsFromJSONBytes([]byte("{\"output\":[{\"type\":\"custom_tool_call\",\"call_id\":\"call_client\",\"name\":\"local_tool\"}]}")))
+	require.Equal(t, 1, countGrokNativeSearchCallsFromJSONBytes([]byte("{\"output\":[{\"type\":\"web_search_call\",\"status\":\"completed\"}]}")))
+}
+
+func TestIntake023SolUltrafast(t *testing.T) {
+	in := &ModelPricing{InputPricePerToken: 1, OutputPricePerToken: 2}
+	out := (&BillingService{}).applyModelSpecificPricingPolicy("gpt-6.1-sol", in)
+	require.Equal(t, float64(6), out.UltrafastMultiplier)
+}
+
+func TestIntake023AstraUltrafastControl(t *testing.T) {
+	in := &ModelPricing{InputPricePerToken: 1, OutputPricePerToken: 2}
+	out := (&BillingService{}).applyModelSpecificPricingPolicy("gpt-6-astra", in)
+	require.Equal(t, float64(6), out.UltrafastMultiplier)
+}
+
+func TestIntake023SSEErrorAfterPing(t *testing.T) {
+	c, rec := intake023Context()
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	_, err := c.Writer.Write([]byte(": ping\n\n"))
+	require.NoError(t, err)
+	c.Writer.Flush()
+	before := rec.Body.Len()
+	writeAnthropicError(c, 400, "invalid_request_error", "rejected")
+	require.Contains(t, rec.Body.String()[before:], "event: error")
+}
+
+func TestIntake023JSONErrorControl(t *testing.T) {
+	c, rec := intake023Context()
+	writeAnthropicError(c, 400, "invalid_request_error", "rejected")
+	require.Equal(t, 400, rec.Code)
+	require.Contains(t, rec.Body.String(), "\"message\":\"rejected\"")
+}
+
+type intake023WindowRepo struct {
+	AccountRepository
+	extra map[string]any
+}
+
+func (r *intake023WindowRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
+	for k, v := range updates {
+		if v == nil {
+			delete(r.extra, k)
+		} else {
+			r.extra[k] = v
+		}
+	}
+	return nil
+}
+
+func (r *intake023WindowRepo) UpdateSessionWindow(context.Context, int64, *time.Time, *time.Time, string) error {
+	return nil
+}
+
+func TestIntake023WeeklySurvivesFiveHourRollover(t *testing.T) {
+	now := time.Now()
+	oldEnd := now.Add(-time.Minute)
+	extra := map[string]any{"passive_usage_7d_utilization": 0.9, "passive_usage_7d_reset": now.Add(24 * time.Hour).Unix(), "passive_usage_sampled_at": now.Format(time.RFC3339)}
+	repo := &intake023WindowRepo{extra: extra}
+	account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeSetupToken, SessionWindowEnd: &oldEnd, Extra: extra}
+	headers := http.Header{"Anthropic-Ratelimit-Unified-5h-Status": {"allowed"}, "Anthropic-Ratelimit-Unified-5h-Reset": {strconv.FormatInt(now.Add(5*time.Hour).Unix(), 10)}}
+	(&RateLimitService{accountRepo: repo}).UpdateSessionWindow(context.Background(), account, headers)
+	require.Equal(t, 0.9, repo.extra["passive_usage_7d_utilization"])
+}
+
+func TestIntake023RPMOtherGroupControl(t *testing.T) {
+	zero := 0
+	cache := &userRPMCacheStub{userGroupCounts: []int{1, 2, 3, 4, 5, 6}}
+	repo := &rpmOverrideRepoStub{}
+	svc := newBillingServiceForRPM(t, cache, repo)
+	user := &User{ID: 1, UserGroupRPMOverride: &zero, UserGroupRPMOverrideGroupID: 10}
+	group := &Group{ID: 11, RPMLimit: 5}
+	for i := 0; i < 5; i++ {
+		require.NoError(t, svc.checkRPM(context.Background(), user, group))
+	}
+	require.ErrorIs(t, svc.checkRPM(context.Background(), user, group), ErrGroupRPMExceeded)
+}
+
+func TestIntake023RPMCurrentGroupControl(t *testing.T) {
+	override := 2
+	cache := &userRPMCacheStub{userGroupCounts: []int{1, 2, 3}}
+	repo := &rpmOverrideRepoStub{err: errors.New("must not read repository")}
+	svc := newBillingServiceForRPM(t, cache, repo)
+	user := &User{ID: 1, UserGroupRPMOverride: &override, UserGroupRPMOverrideGroupID: 10}
+	group := &Group{ID: 10, RPMLimit: 100}
+	require.NoError(t, svc.checkRPM(context.Background(), user, group))
+	require.NoError(t, svc.checkRPM(context.Background(), user, group))
+	require.ErrorIs(t, svc.checkRPM(context.Background(), user, group), ErrGroupRPMExceeded)
+}
+
+func TestIntake023ChatFallbackResponseModel(t *testing.T) {
+	c, _ := intake023Context()
+	resp := &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("{\"id\":\"chat_1\",\"object\":\"chat.completion\",\"model\":\"gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":1,\"total_tokens\":11}}"))}
+	result, err := (&OpenAIGatewayService{}).bufferChatCompletionsAsAnthropic(c, resp, "public-alias", "gpt-6.1-sol", "gpt-6.1-sol", nil, nil, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, "gpt-6.1-sol", result.UpstreamResponseModel)
+}
+
+func TestIntake023AdditionalToolsDeclarationID(t *testing.T) {
+	input := []any{map[string]any{"type": "additional_tools", "id": "at_12345678-1234-1234-1234-123456789abc", "tools": []any{}}}
+	out := filterCodexInputWithOptions(input, codexInputFilterOptions{})
+	require.Equal(t, "at_12345678123412341234123456789abc", out[0].(map[string]any)["id"])
+}
+
+func TestIntake023DeepSeekOverrideControl(t *testing.T) {
+	for _, inputPrice := range []float64{0, 7e-6} {
+		cfg := &config.Config{}
+		cfg.Pricing.OverrideFile = filepath.Join(t.TempDir(), "override.json")
+		patch, err := json.Marshal(map[string]any{"deepseek-chat": map[string]any{
+			"input_cost_per_token": inputPrice,
+			"output_cost_per_token": 8e-6,
+			"cache_read_input_token_cost": 0,
+		}})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(cfg.Pricing.OverrideFile, patch, 0600))
+		pricing := &PricingService{cfg: cfg}
+		data, err := pricing.parsePricingData([]byte("{\"deepseek-chat\":{\"input_cost_per_token\":1e-6,\"output_cost_per_token\":2e-6,\"cache_read_input_token_cost\":1e-7}}"))
+		require.NoError(t, err)
+		pricing.pricingData = data
+		card, err := NewBillingService(cfg, pricing).GetModelPricing("deepseek-chat")
+		require.NoError(t, err)
+		require.Equal(t, inputPrice, card.InputPricePerToken)
+		require.Equal(t, 8e-6, card.OutputPricePerToken)
+		require.Zero(t, card.CacheReadPricePerToken)
+	}
+}

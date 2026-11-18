@@ -1,0 +1,785 @@
+diff --git a/backend/internal/repository/scheduler_cache.go b/backend/internal/repository/scheduler_cache.go
+index 1d1a8ae5a..b003ae10c 100644
+--- a/backend/internal/repository/scheduler_cache.go
++++ b/backend/internal/repository/scheduler_cache.go
+@@ -1556,6 +1556,8 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
+ 		// 走网关报 no available accounts"。
+ 		"openai_passthrough",
+ 		"openai_oauth_passthrough",
++		// 透传账号显式开启按模型筛选后，候选过滤同样依赖本投影里的开关判定白名单。
++		"openai_passthrough_model_filter",
+ 		// 生图尺寸档位在候选过滤阶段按本投影判定，裁掉后受限账号会接到不允许的档位。
+ 		service.AccountExtraOpenAIImageSizeTiers,
+ 		"codex_fingerprint_mode",
+diff --git a/backend/internal/repository/scheduler_cache_unit_test.go b/backend/internal/repository/scheduler_cache_unit_test.go
+index 0a81d5a3c..fde314835 100644
+--- a/backend/internal/repository/scheduler_cache_unit_test.go
++++ b/backend/internal/repository/scheduler_cache_unit_test.go
+@@ -1180,6 +1180,33 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIPassthroughForModelGate(t *tes
+ 	}
+ }
+ 
++// 透传账号显式开启"按模型筛选"后，候选过滤同样读的是本投影；裁掉
++// openai_passthrough_model_filter 会让账号在选号阶段退回"透传放行全部模型"，
++// 而模型列表等读完整账号的路径仍按白名单收窄，两边口径分裂。
++func TestBuildSchedulerMetadataAccount_KeepsOpenAIPassthroughModelFilter(t *testing.T) {
++	account := service.Account{
++		ID:       8748,
++		Platform: service.PlatformOpenAI,
++		Type:     service.AccountTypeAPIKey,
++		Credentials: map[string]any{
++			"model_mapping": map[string]any{"qwen3.8-max": "qwen3.8-max"},
++			"api_key":       "drop-me",
++		},
++		Extra: map[string]any{"openai_passthrough": true, "openai_passthrough_model_filter": true},
++	}
++	require.False(t, account.IsModelSupported("gpt-6.1-sol"), "前置条件：开启筛选的透传账号应拒绝白名单外模型")
++
++	payload, err := json.Marshal(buildSchedulerMetadataAccount(account))
++	require.NoError(t, err)
++	var restored service.Account
++	require.NoError(t, json.Unmarshal(payload, &restored))
++
++	require.Equal(t, true, restored.Extra["openai_passthrough_model_filter"])
++	require.True(t, restored.IsOpenAIPassthroughModelFilterEnabled())
++	require.False(t, restored.IsModelSupported("gpt-6.1-sol"))
++	require.True(t, restored.IsModelSupported("qwen3.8-max"))
++}
++
+ // 调度投影必须保留账号的 RPM 配置。
+ //
+ // 候选过滤走 ListSchedulableAccounts，读的是 buildSchedulerMetadataAccount 产出的精简投影；
+diff --git a/backend/internal/service/account.go b/backend/internal/service/account.go
+index 2fe64d9ee..51b253bca 100644
+--- a/backend/internal/service/account.go
++++ b/backend/internal/service/account.go
+@@ -976,7 +976,13 @@ func (a *Account) isModelMappingSupported(requestedModel string) bool {
+ 	// credentials 里常残留旧的非空 model_mapping，若不在此放行，透传账号会被
+ 	// model_mapping 白名单错误排除出候选集，导致 no available accounts / 404（issue #4936）。
+ 	if a.IsOpenAIPassthroughEnabled() {
+-		return true
++		if !a.IsOpenAIPassthroughModelFilterEnabled() {
++			return true
++		}
++		// Explicit opt-in filters candidates by source keys only. Forward still
++		// ignores mapping targets and preserves the passthrough request body.
++		mapping := a.GetModelMapping()
++		return len(mapping) == 0 || mappingSupportsRequestedModel(mapping, strings.TrimSpace(requestedModel))
+ 	}
+ 	mapping := a.GetModelMapping()
+ 	if len(mapping) == 0 {
+@@ -2203,6 +2209,13 @@ func (a *Account) IsOpenAIPassthroughEnabled() bool {
+ 	return false
+ }
+ 
++// IsOpenAIPassthroughModelFilterEnabled reports the explicit opt-in to model
++// filtering during passthrough account selection. Missing or invalid values
++// preserve the default behavior of ignoring leftover model_mapping entries.
++func (a *Account) IsOpenAIPassthroughModelFilterEnabled() bool {
++	return a.IsOpenAIPassthroughEnabled() && a.Extra["openai_passthrough_model_filter"] == true
++}
++
+ // IsOpenAIResponsesWebSocketV2Enabled 返回 OpenAI 账号是否开启 Responses WebSocket v2。
+ //
+ // 分类型新字段：
+diff --git a/backend/internal/service/gateway_scheduling.go b/backend/internal/service/gateway_scheduling.go
+index 1060bbd0e..146acb33a 100644
+--- a/backend/internal/service/gateway_scheduling.go
++++ b/backend/internal/service/gateway_scheduling.go
+@@ -2667,8 +2667,8 @@ func (s *GatewayService) isModelSupportedByAccount(account *Account, requestedMo
+ 		_, ok := ResolveBedrockModelID(account, requestedModel)
+ 		return ok
+ 	}
+-	// OpenAI 透传模式：仅替换认证，允许所有模型
+-	if account.Platform == PlatformOpenAI && account.IsOpenAIPassthroughEnabled() {
++	// Passthrough ignores leftover mappings unless model filtering is enabled.
++	if account.IsOpenAIPassthroughEnabled() && !account.IsOpenAIPassthroughModelFilterEnabled() {
+ 		return true
+ 	}
+ 	// OAuth/SetupToken 账号使用 Anthropic 标准映射（短ID → 长ID）
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index 82bee7f88..285632a57 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -1514,12 +1514,12 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
+ 	hasAnyMapping := false
+ 
+ 	for _, acc := range accounts {
+-		// Passthrough routing accepts models independently of model_mapping, so a
++		// Default passthrough accepts models independently of model_mapping, so a
+ 		// stale mapping on a passthrough account must not narrow the public list.
+ 		// Treat it like an unmapped account: skip its mapping here and let
+ 		// supplementUnmappedOpenAIModels contribute the default set. Mappings on
+ 		// the ordinary accounts in the same group still count.
+-		if platform == PlatformOpenAI && acc.IsOpenAIPassthroughEnabled() {
++		if platform == PlatformOpenAI && acc.IsOpenAIPassthroughEnabled() && !acc.IsOpenAIPassthroughModelFilterEnabled() {
+ 			continue
+ 		}
+ 
+diff --git a/backend/internal/service/group_model_allowlist.go b/backend/internal/service/group_model_allowlist.go
+index cac5be04e..4dd3ab5cf 100644
+--- a/backend/internal/service/group_model_allowlist.go
++++ b/backend/internal/service/group_model_allowlist.go
+@@ -29,9 +29,8 @@ func GroupModelAllowlistFromDomain(cfg domain.GroupModelAllowlist) GroupModelAll
+ }
+ 
+ // supplementUnmappedOpenAIModels ensures a partial mapping catalog does not
+-// hide models from unmapped or passthrough OpenAI accounts (passthrough routing
+-// ignores model_mapping, so it serves the same default set as an unmapped
+-// account). An empty catalog is left unchanged so callers retain their existing
++// hide models from unmapped or unrestricted passthrough OpenAI accounts.
++// An empty catalog is left unchanged so callers retain their existing
+ // discovery fallback.
+ func supplementUnmappedOpenAIModels(accounts []Account, models []string) []string {
+ 	if len(models) == 0 {
+@@ -39,7 +38,8 @@ func supplementUnmappedOpenAIModels(accounts []Account, models []string) []strin
+ 	}
+ 	for i := range accounts {
+ 		account := &accounts[i]
+-		if account.Platform == PlatformOpenAI && (account.IsOpenAIPassthroughEnabled() || len(account.GetModelMapping()) == 0) {
++		unrestrictedPassthrough := account.IsOpenAIPassthroughEnabled() && !account.IsOpenAIPassthroughModelFilterEnabled()
++		if account.Platform == PlatformOpenAI && (unrestrictedPassthrough || len(account.GetModelMapping()) == 0) {
+ 			return dedupeAndSortModelIDs(slices.Concat(models, openai.DefaultModelIDs()))
+ 		}
+ 	}
+diff --git a/backend/internal/service/openai_models_list.go b/backend/internal/service/openai_models_list.go
+index dedb9f559..7b2030dfa 100644
+--- a/backend/internal/service/openai_models_list.go
++++ b/backend/internal/service/openai_models_list.go
+@@ -177,7 +177,8 @@ func projectAccountModelsBody(body []byte, account *Account, group *Group, codex
+ // projectAccountModelAliases retains the source entry's metadata, never changes
+ // the shared response, and never synthesizes models absent from this account.
+ func projectAccountModelAliases(body []byte, account *Account, group *Group, codex bool) ([]byte, error) {
+-	if account.IsOpenAIPassthroughEnabled() || len(account.GetModelMapping()) == 0 {
++	passthrough := account.IsOpenAIPassthroughEnabled()
++	if (passthrough && !account.IsOpenAIPassthroughModelFilterEnabled()) || len(account.GetModelMapping()) == 0 {
+ 		return body, nil
+ 	}
+ 	field, idField := "data", "id"
+@@ -237,6 +238,10 @@ func projectAccountModelAliases(body []byte, account *Account, group *Group, cod
+ 			continue
+ 		}
+ 		target, matched := account.ResolveMappedModel(id)
++		if passthrough {
++			// Filtering changes eligibility, never the upstream/public model name.
++			target, matched = id, account.IsModelSupported(id)
++		}
+ 		raw, available := byID[strings.TrimSpace(target)]
+ 		if !matched || !available {
+ 			continue
+diff --git a/backend/internal/service/openai_models_list_test.go b/backend/internal/service/openai_models_list_test.go
+index edb50a569..bac0195bf 100644
+--- a/backend/internal/service/openai_models_list_test.go
++++ b/backend/internal/service/openai_models_list_test.go
+@@ -209,6 +209,27 @@ func TestProjectAccountModelsPassthroughIgnoresStaleMappings(t *testing.T) {
+ 	require.JSONEq(t, string(body), string(projected))
+ }
+ 
++func TestProjectAccountModelsPassthroughFilterKeepsSourceNames(t *testing.T) {
++	for _, codex := range []bool{false, true} {
++		t.Run(fmt.Sprint(codex), func(t *testing.T) {
++			account := newCodexModelsAPIKeyTestAccount("https://models.example/v1")
++			account.Extra = map[string]any{"openai_passthrough": true, "openai_passthrough_model_filter": true}
++			account.Credentials["model_mapping"] = map[string]any{
++				"qwen3.8-max": "must-not-rewrite", "qwen3.8-*": "also-not-a-model", "absent-alias": "gpt-6.1-sol",
++			}
++			body := `{"object":"list","data":[{"id":"qwen3.8-max","display_name":"Qwen Max"},{"id":"qwen3.8-plus"},{"id":"gpt-6.1-sol"}]}`
++			want := `{"object":"list","data":[{"id":"qwen3.8-max","display_name":"Qwen Max"},{"id":"qwen3.8-plus"}]}`
++			if codex {
++				body = strings.NewReplacer(`"data"`, `"models"`, `"id"`, `"slug"`).Replace(body)
++				want = strings.NewReplacer(`"data"`, `"models"`, `"id"`, `"slug"`).Replace(want)
++			}
++			projected, err := projectAccountModelsBody([]byte(body), account, nil, codex)
++			require.NoError(t, err)
++			require.JSONEq(t, want, string(projected))
++		})
++	}
++}
++
+ func TestFetchOpenAIModelsListEmptyAndMalformedResponses(t *testing.T) {
+ 	for _, body := range []string{`{"data":[]}`, `{"data":null}`, `{}`, `{"data":{}}`, `{"data":[{}]}`, `{"data":[null]}`} {
+ 		t.Run(body, func(t *testing.T) {
+diff --git a/backend/internal/service/openai_passthrough_model_filter_test.go b/backend/internal/service/openai_passthrough_model_filter_test.go
+new file mode 100644
+index 000000000..abf34145a
+--- /dev/null
++++ b/backend/internal/service/openai_passthrough_model_filter_test.go
+@@ -0,0 +1,166 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++// Synthetic accounts share an ordinary OpenAI group; no provider traffic is sent.
++func passthroughModelFilterAccounts(passthrough bool, oauthPriority int) []Account {
++	return []Account{
++		{
++			ID: 1, Name: "bailian-compatible", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
++			Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 1,
++			GroupIDs: []int64{17}, RateMultiplier: f64p(1),
++			Credentials: map[string]any{
++				"api_key": "synthetic-key", "base_url": "https://bailian.example",
++				"model_mapping": map[string]any{"qwen3.8-max": "qwen3.8-max"},
++			},
++			Extra: map[string]any{"openai_passthrough": passthrough},
++		},
++		{
++			ID: 2, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
++			Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: oauthPriority,
++			GroupIDs: []int64{17}, RateMultiplier: f64p(1),
++			Credentials: map[string]any{
++				"access_token":  "synthetic-token",
++				"model_mapping": map[string]any{"gpt-6.1-sol": "gpt-6.1-sol"},
++			},
++		},
++	}
++}
++
++func TestOpenAIPassthroughModelFilterEligibility(t *testing.T) {
++	for _, accountType := range []string{AccountTypeAPIKey, AccountTypeOAuth} {
++		t.Run(accountType, func(t *testing.T) {
++			for _, tc := range []struct {
++				name  string
++				flag  any
++				model string
++				want  bool
++			}{
++				{"default ignores leftover mapping", nil, "gpt-6.1-sol", true},
++				{"disabled ignores leftover mapping", false, "gpt-6.1-sol", true},
++				{"invalid flag does not opt in", "true", "gpt-6.1-sol", true},
++				{"opt in rejects other provider", true, "gpt-6.1-sol", false},
++				{"opt in accepts exact source key", true, "qwen3.8-max", true},
++				{"opt in accepts wildcard source key", true, "qwen3.8-plus", true},
++				{"mapping targets do not grant access", true, "upstream-only", false},
++			} {
++				t.Run(tc.name, func(t *testing.T) {
++					account := &Account{
++						Platform: PlatformOpenAI, Type: accountType,
++						Extra: map[string]any{"openai_passthrough": true, "openai_passthrough_model_filter": tc.flag},
++						Credentials: map[string]any{"model_mapping": map[string]any{
++							"qwen3.8-max": "upstream-only", "qwen3.8-*": "wildcard-target",
++						}},
++					}
++					require.Equal(t, tc.want, account.IsModelSupported(tc.model))
++					require.Equal(t, tc.want, (&GatewayService{}).isModelSupportedByAccount(account, tc.model))
++				})
++			}
++			account := &Account{Platform: PlatformOpenAI, Type: accountType,
++				Extra: map[string]any{"openai_passthrough": true, "openai_passthrough_model_filter": true}}
++			require.True(t, account.IsModelSupported("qwen3.8-max"), "empty restrictions still allow all models")
++		})
++	}
++}
++
++func TestOpenAIPassthroughModelFilterMixedPoolSelection(t *testing.T) {
++	groupID := int64(17)
++	for _, mode := range []string{"legacy", "load-batch"} {
++		t.Run(mode, func(t *testing.T) {
++			for _, tc := range []struct {
++				name     string
++				filter   bool
++				model    string
++				excluded map[int64]struct{}
++				wantID   int64
++			}{
++				{"default preserves passthrough", false, "gpt-6.1-sol", nil, 1},
++				{"filter chooses GPT account", true, "gpt-6.1-sol", nil, 2},
++				{"filter keeps Qwen account", true, "qwen3.8-max", nil, 1},
++				{"failover never leaks GPT to Qwen", true, "gpt-6.1-sol", map[int64]struct{}{2: {}}, 0},
++			} {
++				t.Run(tc.name, func(t *testing.T) {
++					accounts := passthroughModelFilterAccounts(true, 2)
++					accounts[0].Extra["openai_passthrough_model_filter"] = tc.filter
++					repo := schedulerTestOpenAIAccountRepo{accounts: accounts}
++					cfg := &config.Config{}
++					cfg.Gateway.Scheduling.LoadBatchEnabled = mode == "load-batch"
++					svc := &OpenAIGatewayService{accountRepo: repo, cfg: cfg}
++					var selected *Account
++					var err error
++					if mode == "legacy" {
++						selected, err = svc.SelectAccountForModelWithExclusions(context.Background(), &groupID, "", tc.model, tc.excluded)
++					} else {
++						svc.concurrencyService = NewConcurrencyService(stubConcurrencyCache{})
++						selection, selectErr := svc.SelectAccountWithLoadAwareness(context.Background(), &groupID, "", tc.model, tc.excluded)
++						err = selectErr
++						if selection != nil {
++							selected = selection.Account
++							if selection.ReleaseFunc != nil {
++								defer selection.ReleaseFunc()
++							}
++						}
++					}
++					if tc.wantID == 0 {
++						require.Error(t, err)
++						require.Nil(t, selected)
++						return
++					}
++					require.NoError(t, err)
++					require.NotNil(t, selected)
++					require.Equal(t, tc.wantID, selected.ID)
++				})
++			}
++		})
++	}
++}
++
++func TestOpenAIPassthroughModelFilterPreservesForwardBody(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	accounts := passthroughModelFilterAccounts(true, 2)
++	accounts[0].Extra["openai_passthrough_model_filter"] = true
++	accounts[0].Credentials["model_mapping"] = map[string]any{"qwen3.8-max": "must-not-rewrite"}
++	repo := schedulerTestOpenAIAccountRepo{accounts: accounts}
++	body := []byte(`{ "model": "qwen3.8-max", "input":"synthetic query", "tools":[{"type":"web_search"}], "stream":false }`)
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
++	upstream := &httpUpstreamRecorder{resp: &http.Response{
++		StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}},
++		Body: io.NopCloser(strings.NewReader(`{"output":[],"usage":{"input_tokens":1,"output_tokens":1}}`)),
++	}}
++	svc := &OpenAIGatewayService{accountRepo: repo, cfg: &config.Config{}, httpUpstream: upstream}
++	groupID := int64(17)
++	account, err := svc.SelectAccountForModelWithExclusions(context.Background(), &groupID, "", "qwen3.8-max", nil)
++	require.NoError(t, err)
++	require.Equal(t, int64(1), account.ID)
++	result, err := svc.Forward(context.Background(), c, account, body)
++	require.NoError(t, err)
++	require.NotNil(t, result)
++	require.NotNil(t, upstream.lastReq)
++	require.Equal(t, body, upstream.lastBody, "whitelist filtering must not activate model rewriting")
++	require.Equal(t, "https://bailian.example/v1/responses", upstream.lastReq.URL.String())
++}
++
++func TestOpenAIPassthroughModelFilterGroupCatalog(t *testing.T) {
++	accounts := passthroughModelFilterAccounts(true, 2)
++	accounts[0].Extra["openai_passthrough_model_filter"] = true
++	svc := &GatewayService{accountRepo: schedulerTestOpenAIAccountRepo{accounts: accounts}}
++	groupID := int64(17)
++	models := svc.GetAvailableModels(context.Background(), &groupID, PlatformOpenAI)
++	require.ElementsMatch(t, []string{"qwen3.8-max", "gpt-6.1-sol"}, models,
++		"a restricted passthrough account must not contribute the unrestricted default catalog")
++}
+diff --git a/frontend/src/components/account/BulkEditAccountModal.vue b/frontend/src/components/account/BulkEditAccountModal.vue
+index 6b839b1a0..d04af5f3f 100644
+--- a/frontend/src/components/account/BulkEditAccountModal.vue
++++ b/frontend/src/components/account/BulkEditAccountModal.vue
+@@ -79,6 +79,21 @@
+               ]"
+             />
+           </button>
++          <label v-if="openaiPassthroughEnabled" class="mt-3 flex items-start gap-2">
++            <input
++              v-model="openaiPassthroughModelFilterEnabled"
++              type="checkbox"
++              data-testid="bulk-openai-passthrough-model-filter"
++              :disabled="!enableOpenAIPassthrough"
++              class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
++            />
++            <span class="text-sm">
++              {{ t('admin.accounts.openai.passthroughModelFilter') }}
++              <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
++                {{ t('admin.accounts.openai.passthroughModelFilterDesc') }}
++              </span>
++            </span>
++          </label>
+         </div>
+       </div>
+ 
+@@ -1739,6 +1754,7 @@ const rateMultiplier = ref(1)
+ const status = ref<'active' | 'inactive'>('active')
+ const groupIds = ref<number[]>([])
+ const openaiPassthroughEnabled = ref(false)
++const openaiPassthroughModelFilterEnabled = ref(false)
+ // Codex namespace 工具摊平兼容开关（仅 OAuth），缺省关闭即原样保留
+ const openaiFlattenNamespacesEnabled = ref(false)
+ const openAILongContextBillingEnabled = ref(false)
+@@ -1798,7 +1814,8 @@ const isOpenAIModelRestrictionDisabled = computed(
+   () =>
+     allOpenAIPassthroughCapable.value &&
+     enableOpenAIPassthrough.value &&
+-    openaiPassthroughEnabled.value
++    openaiPassthroughEnabled.value &&
++    !openaiPassthroughModelFilterEnabled.value
+ )
+ 
+ const openAIWSModeOptions = computed(() => [
+@@ -2026,6 +2043,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
+   if (enableOpenAIPassthrough.value) {
+     const extra = ensureExtra()
+     extra.openai_passthrough = openaiPassthroughEnabled.value
++    extra.openai_passthrough_model_filter = openaiPassthroughEnabled.value && openaiPassthroughModelFilterEnabled.value
+     if (!openaiPassthroughEnabled.value) {
+       extra.openai_oauth_passthrough = false
+     }
+@@ -2437,6 +2455,7 @@ watch(
+       // Reset all values
+       baseUrl.value = ''
+       openaiPassthroughEnabled.value = false
++      openaiPassthroughModelFilterEnabled.value = false
+       openaiFlattenNamespacesEnabled.value = false
+       openAILongContextBillingEnabled.value = false
+       openAIImageSizeTiers.value = [...OPENAI_IMAGE_SIZE_TIERS]
+diff --git a/frontend/src/components/account/CreateAccountModal.vue b/frontend/src/components/account/CreateAccountModal.vue
+index aa27e6e84..34906ac3e 100644
+--- a/frontend/src/components/account/CreateAccountModal.vue
++++ b/frontend/src/components/account/CreateAccountModal.vue
+@@ -3299,6 +3299,7 @@
+           </div>
+           <button
+             type="button"
++            data-testid="create-openai-passthrough-toggle"
+             @click="openaiPassthroughEnabled = !openaiPassthroughEnabled"
+             :class="[
+               'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+@@ -3313,6 +3314,20 @@
+             />
+           </button>
+         </div>
++        <label v-if="openaiPassthroughEnabled" class="mt-3 flex items-start gap-2">
++          <input
++            v-model="openaiPassthroughModelFilterEnabled"
++            type="checkbox"
++            data-testid="create-openai-passthrough-model-filter"
++            class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
++          />
++          <span class="text-sm">
++            {{ t('admin.accounts.openai.passthroughModelFilter') }}
++            <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
++              {{ t('admin.accounts.openai.passthroughModelFilterDesc') }}
++            </span>
++          </span>
++        </label>
+       </div>
+ 
+       <!-- OpenAI Codex namespace 工具摊平（兼容开关，仅 OAuth） -->
+@@ -4715,6 +4730,7 @@ const applyGrokOAuthUpstreamConfig = (credentials: Record<string, unknown>) => {
+ const interceptWarmupRequests = ref(false)
+ const autoPauseOnExpired = ref(true)
+ const openaiPassthroughEnabled = ref(false)
++const openaiPassthroughModelFilterEnabled = ref(false)
+ // OpenAI Codex namespace 工具摊平兼容开关（仅 OAuth），缺省关闭即原样保留
+ const openaiFlattenNamespacesEnabled = ref(false)
+ const openAILongContextBillingEnabled = ref(false)
+@@ -4961,7 +4977,7 @@ const openAIWSModeHintKey = computed(() =>
+ )
+ 
+ const isOpenAIModelRestrictionDisabled = computed(() =>
+-  form.platform === 'openai' && openaiPassthroughEnabled.value
++  form.platform === 'openai' && openaiPassthroughEnabled.value && !openaiPassthroughModelFilterEnabled.value
+ )
+ 
+ const mixedChannelWarningMessageText = computed(() => {
+@@ -5225,6 +5241,7 @@ watch(
+     }
+     if (newPlatform !== 'openai') {
+       openaiPassthroughEnabled.value = false
++      openaiPassthroughModelFilterEnabled.value = false
+       openaiFlattenNamespacesEnabled.value = false
+       openAIEndpointCapabilities.value = ['chat_completions', 'embeddings']
+       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
+@@ -5685,6 +5702,7 @@ const resetForm = () => {
+   interceptWarmupRequests.value = false
+   autoPauseOnExpired.value = true
+   openaiPassthroughEnabled.value = false
++  openaiPassthroughModelFilterEnabled.value = false
+   openaiFlattenNamespacesEnabled.value = false
+   openAILongContextBillingEnabled.value = false
+   openAILongContextBillingTouched.value = false
+@@ -5774,6 +5792,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
+     delete extra.openai_passthrough
+     delete extra.openai_oauth_passthrough
+   }
++  if (openaiPassthroughEnabled.value && openaiPassthroughModelFilterEnabled.value) {
++    extra.openai_passthrough_model_filter = true
++  } else {
++    delete extra.openai_passthrough_model_filter
++  }
+   // 缺省即保留 namespace，不写空值，避免 extra 里堆积默认项
+   if (form.type === 'oauth' && openaiFlattenNamespacesEnabled.value) {
+     extra.openai_responses_flatten_namespaces = true
+diff --git a/frontend/src/components/account/EditAccountModal.vue b/frontend/src/components/account/EditAccountModal.vue
+index 8182d4d7b..dc992ab4b 100644
+--- a/frontend/src/components/account/EditAccountModal.vue
++++ b/frontend/src/components/account/EditAccountModal.vue
+@@ -2028,6 +2028,7 @@
+           </div>
+           <button
+             type="button"
++            data-testid="edit-openai-passthrough-toggle"
+             @click="openaiPassthroughEnabled = !openaiPassthroughEnabled"
+             :class="[
+               'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+@@ -2042,6 +2043,20 @@
+             />
+           </button>
+         </div>
++        <label v-if="openaiPassthroughEnabled" class="mt-3 flex items-start gap-2">
++          <input
++            v-model="openaiPassthroughModelFilterEnabled"
++            type="checkbox"
++            data-testid="edit-openai-passthrough-model-filter"
++            class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
++          />
++          <span class="text-sm">
++            {{ t('admin.accounts.openai.passthroughModelFilter') }}
++            <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
++              {{ t('admin.accounts.openai.passthroughModelFilterDesc') }}
++            </span>
++          </span>
++        </label>
+       </div>
+ 
+       <!-- OpenAI Codex namespace 工具摊平（兼容开关，仅 OAuth） -->
+@@ -4159,6 +4174,7 @@ const customBaseUrl = ref('')
+ 
+ // OpenAI 自动透传开关（OAuth/API Key）
+ const openaiPassthroughEnabled = ref(false)
++const openaiPassthroughModelFilterEnabled = ref(false)
+ // OpenAI Codex namespace 工具摊平兼容开关（仅 OAuth），缺省关闭即原样保留
+ const openaiFlattenNamespacesEnabled = ref(false)
+ const openAILongContextBillingEnabled = ref(false)
+@@ -4400,7 +4416,7 @@ const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
+   return 'auto'
+ }
+ const isOpenAIModelRestrictionDisabled = computed(() =>
+-  props.account?.platform === 'openai' && openaiPassthroughEnabled.value
++  props.account?.platform === 'openai' && openaiPassthroughEnabled.value && !openaiPassthroughModelFilterEnabled.value
+ )
+ const openAIResponsesStatusKey = computed(() => {
+   if (openAIResponsesMode.value === 'force_responses') {
+@@ -4575,7 +4591,7 @@ const buildModelRestrictionMapping = () =>
+   buildModelMappingObject('combined', allowedModels.value, modelMappings.value)
+ 
+ const applyOpenAIModelMappingCredentials = (credentials: Record<string, unknown>) => {
+-  const shouldApplyModelMapping = !openaiPassthroughEnabled.value
++  const shouldApplyModelMapping = !isOpenAIModelRestrictionDisabled.value
+ 
+   if (shouldApplyModelMapping) {
+     const modelMapping = buildModelRestrictionMapping()
+@@ -4662,6 +4678,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
+ 
+   // Load OpenAI passthrough toggle (OpenAI OAuth/SetupToken/API Key)
+   openaiPassthroughEnabled.value = false
++  openaiPassthroughModelFilterEnabled.value = false
+   openaiFlattenNamespacesEnabled.value = false
+   openAILongContextBillingEnabled.value = false
+   editPlanType.value = ''
+@@ -4680,6 +4697,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
+   webSearchEmulationMode.value = 'default'
+   if (newAccount.platform === 'openai' && (newAccount.type === 'oauth' || newAccount.type === 'setup-token' || newAccount.type === 'apikey')) {
+     openaiPassthroughEnabled.value = extra?.openai_passthrough === true || extra?.openai_oauth_passthrough === true
++    openaiPassthroughModelFilterEnabled.value = extra?.openai_passthrough_model_filter === true
+     openaiFlattenNamespacesEnabled.value =
+       newAccount.type === 'oauth' && extra?.openai_responses_flatten_namespaces === true
+     const longContextBillingValue = extra?.openai_long_context_billing_enabled
+@@ -5684,7 +5702,7 @@ const handleSubmit = async () => {
+     if (props.account.type === 'apikey') {
+       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
+       const newBaseUrl = editBaseUrl.value.trim() || defaultBaseUrl.value
+-      const shouldApplyModelMapping = !(props.account.platform === 'openai' && openaiPassthroughEnabled.value)
++      const shouldApplyModelMapping = !isOpenAIModelRestrictionDisabled.value
+ 
+       // Always update credentials for apikey type to handle model mapping changes
+       const newCredentials: Record<string, unknown> = {
+@@ -6226,6 +6244,11 @@ const handleSubmit = async () => {
+         delete newExtra.openai_passthrough
+         delete newExtra.openai_oauth_passthrough
+       }
++      if (openaiPassthroughEnabled.value && openaiPassthroughModelFilterEnabled.value) {
++        newExtra.openai_passthrough_model_filter = true
++      } else {
++        delete newExtra.openai_passthrough_model_filter
++      }
+       // 缺省即保留 namespace，不写空值，避免 extra 里堆积默认项
+       if (props.account.type === 'oauth' && openaiFlattenNamespacesEnabled.value) {
+         newExtra.openai_responses_flatten_namespaces = true
+diff --git a/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts b/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
+index dd23419db..504abb04f 100644
+--- a/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
++++ b/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
+@@ -287,7 +287,8 @@ describe('BulkEditAccountModal', () => {
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+       extra: {
+-        openai_passthrough: true
++        openai_passthrough: true,
++        openai_passthrough_model_filter: false
+       }
+     })
+   })
+@@ -906,6 +907,7 @@ describe('BulkEditAccountModal', () => {
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+       extra: {
+         openai_passthrough: false,
++        openai_passthrough_model_filter: false,
+         openai_oauth_passthrough: false
+       }
+     })
+@@ -926,12 +928,29 @@ describe('BulkEditAccountModal', () => {
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+       extra: {
+-        openai_passthrough: true
++        openai_passthrough: true,
++        openai_passthrough_model_filter: false
+       }
+     })
+     expect(wrapper.text()).toContain('admin.accounts.openai.modelRestrictionDisabledByPassthrough')
+   })
+ 
++  it('can bulk-enable passthrough model filtering and submit an explicit whitelist', async () => {
++    const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
++    await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
++    await wrapper.get('#bulk-edit-openai-passthrough-toggle').trigger('click')
++    await wrapper.get('[data-testid="bulk-openai-passthrough-model-filter"]').setValue(true)
++    await wrapper.get('#bulk-edit-model-restriction-enabled').setValue(true)
++    wrapper.findComponent({ name: 'ModelWhitelistSelector' }).vm.$emit('update:modelValue', ['qwen3.8-max'])
++    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
++      extra: { openai_passthrough: true, openai_passthrough_model_filter: true },
++      credentials: { model_mapping: { 'qwen3.8-max': 'qwen3.8-max' } }
++    })
++  })
++
+   it('filtered-results 模式下应提交 filters 而不是 account_ids', async () => {
+     const wrapper = mountModal({
+       accountIds: [],
+diff --git a/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts b/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts
+index 302c78829..936e07dff 100644
+--- a/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts
++++ b/frontend/src/components/account/__tests__/CreateAccountModal.spec.ts
+@@ -219,6 +219,25 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
+ 
+   afterEach(() => vi.useRealTimers())
+ 
++  it('can create a passthrough account with model filtering enabled', async () => {
++    const wrapper = mountModal()
++    await selectButtonByText(wrapper, 'OpenAI')
++    await selectButtonByText(wrapper, 'API Key')
++    await wrapper.get('form#create-account-form input[type="text"]').setValue('filtered passthrough')
++    await wrapper.get('form#create-account-form input[type="password"]').setValue('synthetic-key')
++    await wrapper.get('[data-testid="create-openai-passthrough-toggle"]').trigger('click')
++    await wrapper.get('[data-testid="create-openai-passthrough-model-filter"]').setValue(true)
++    wrapper.getComponent(ModelWhitelistSelectorStub).vm.$emit('update:modelValue', ['qwen3.8-max'])
++    await wrapper.get('form#create-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    const payload = createAccountMock.mock.calls[0]?.[0]
++    expect(payload.extra.openai_passthrough).toBe(true)
++    expect(payload.extra.openai_passthrough_model_filter).toBe(true)
++    expect(payload.credentials.model_mapping).toEqual({ 'qwen3.8-max': 'qwen3.8-max' })
++    wrapper.unmount()
++  })
++
+   it('sets month and year expiry presets without submitting the account form', async () => {
+     vi.useFakeTimers({ toFake: ['Date'] })
+     vi.setSystemTime(new Date('2026-01-31T12:34:00'))
+diff --git a/frontend/src/components/account/__tests__/EditAccountModal.spec.ts b/frontend/src/components/account/__tests__/EditAccountModal.spec.ts
+index 3e65714d5..1ce6c7f6f 100644
+--- a/frontend/src/components/account/__tests__/EditAccountModal.spec.ts
++++ b/frontend/src/components/account/__tests__/EditAccountModal.spec.ts
+@@ -336,6 +336,44 @@ describe('EditAccountModal', () => {
+ 
+   afterEach(() => vi.useRealTimers())
+ 
++  it.each(['apikey', 'oauth'])('can opt a passthrough %s account into model filtering without changing groups', async (type) => {
++    const account = buildAccount()
++    account.type = type
++    account.extra = { openai_passthrough: true }
++    account.group_ids = [17]
++    updateAccountMock.mockReset().mockResolvedValue(account)
++    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
++    const wrapper = mountModal(account)
++
++    expect(wrapper.findComponent(ModelWhitelistSelectorStub).exists()).toBe(false)
++    await wrapper.get('[data-testid="edit-openai-passthrough-model-filter"]').setValue(true)
++    await wrapper.get('[data-testid="rewrite-to-snapshot"]').trigger('click')
++    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
++
++    const payload = updateAccountMock.mock.calls[0]?.[1]
++    expect(payload.extra.openai_passthrough).toBe(true)
++    expect(payload.extra.openai_passthrough_model_filter).toBe(true)
++    expect(payload.credentials.model_mapping).toEqual({ 'gpt-5.2-2025-12-11': 'gpt-5.2-2025-12-11' })
++    expect(payload.group_ids).toEqual([17])
++    wrapper.unmount()
++  })
++
++  it('loads the saved model filter and removes it when passthrough is disabled', async () => {
++    const account = buildAccount()
++    account.extra = { openai_passthrough: true, openai_passthrough_model_filter: true }
++    updateAccountMock.mockReset().mockResolvedValue(account)
++    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
++    const wrapper = mountModal(account)
++
++    expect(wrapper.get<HTMLInputElement>('[data-testid="edit-openai-passthrough-model-filter"]').element.checked).toBe(true)
++    expect(wrapper.findComponent(ModelWhitelistSelectorStub).exists()).toBe(true)
++    await wrapper.get('[data-testid="edit-openai-passthrough-toggle"]').trigger('click')
++    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
++    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('openai_passthrough_model_filter')
++    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials.model_mapping).toEqual(account.credentials.model_mapping)
++    wrapper.unmount()
++  })
++
+   it('passes existing non-identity mappings to the whitelist selector and preserves them on save', async () => {
+     const account = buildAccount()
+     account.credentials.model_mapping = { 'gpt-5.2': 'gpt-5.2', 'gpt-latest': 'deepseek-chat' }
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index e851568a4..98eecb95a 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -644,6 +644,9 @@ export default {
+         oauthPassthrough: 'Auto passthrough (auth only)',
+         oauthPassthroughDesc:
+           'When enabled, this OpenAI account uses automatic passthrough: the gateway forwards request/response as-is and only swaps auth, while keeping billing/concurrency/audit and necessary safety filtering.',
++        passthroughModelFilter: 'Filter passthrough accounts by model',
++        passthroughModelFilterDesc:
++          'Use the account model whitelist and mapping source names to select this account. Mapping targets do not rename passthrough requests. An empty list allows all models. Disabled by default.',
+         flattenNamespaces: 'Flatten Codex namespace tools (compatibility)',
+         flattenNamespacesDesc:
+           'Disabled by default: Codex namespace tool declarations are forwarded as-is on /responses, which is what the ChatGPT Codex backend expects. Enable only when this OAuth account is routed to a relay that rejects namespace tools — flattening renames them to namespace__tool, which breaks models that address collaboration tools as functions.<namespace>.<tool>. Compaction requests always flatten regardless of this switch.',
+@@ -753,7 +756,7 @@ export default {
+         testMode: 'Test mode',
+         testModeDefault: 'Default request',
+         testModeCompact: 'Compact probe',
+-        modelRestrictionDisabledByPassthrough: 'Automatic passthrough is enabled: model whitelist/mapping will not take effect.',
++        modelRestrictionDisabledByPassthrough: 'Automatic passthrough ignores model restrictions by default. Enable "Filter passthrough accounts by model" to use them for account selection only.',
+       },
+       grok: {
+         baseUrlHint: 'Grok OAuth accounts forward to the official xAI API base URL.',
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index 4c93b0797..7b3ccb57c 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -768,6 +768,9 @@ export default {
+         oauthPassthrough: '自动透传（仅替换认证）',
+         oauthPassthroughDesc:
+           '开启后，该 OpenAI 账号将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。',
++        passthroughModelFilter: '透传时按账号模型筛选',
++        passthroughModelFilterDesc:
++          '使用账号模型白名单与映射的来源模型名筛选候选账号，映射目标不会改写透传请求的模型名。列表为空时允许所有模型。默认关闭。',
+         flattenNamespaces: '摊平 Codex namespace 工具（兼容）',
+         flattenNamespacesDesc:
+           '默认关闭：/responses 上的 namespace 工具声明原样转发，这正是 ChatGPT Codex 后端期望的形态。仅当该 OAuth 账号指向不认识 namespace 的兼容上游时才开启——摊平会把工具改名为 namespace__tool，使按 functions.<命名空间>.<工具> 寻址的模型（如 gpt-5.6 多智能体）无法调用。压缩（compact）请求不受该开关影响，始终摊平。',
+@@ -868,7 +871,7 @@ export default {
+         testMode: '测试模式',
+         testModeDefault: '常规请求',
+         testModeCompact: 'Compact 探测',
+-        modelRestrictionDisabledByPassthrough: '已开启自动透传：模型白名单/映射不会生效。',
++        modelRestrictionDisabledByPassthrough: '自动透传默认忽略模型限制；开启“透传时按账号模型筛选”后，模型限制仅用于筛选候选账号。',
+       },
+       grok: {
+         baseUrlHint: 'Grok OAuth 账号会转发到官方 xAI API Base URL。',

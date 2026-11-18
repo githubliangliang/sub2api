@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -18,20 +19,17 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const arguments = `{"message":"synthetic-sealed-message"}`
 	for _, marker := range []struct {
-		name string
-		raw  string
+		name             string
+		raw              string
+		encryptedContent string
 	}{
-		{name: "encrypted", raw: `["message"]`},
+		{name: "encrypted", raw: `["message"]`, encryptedContent: "synthetic-call-ciphertext"},
 		{name: "plaintext", raw: `[]`},
 		{name: "null", raw: `null`},
-		{name: "absent"},
+		{name: "absent", encryptedContent: "synthetic-call-ciphertext"},
 	} {
 		for _, shape := range []string{"terminal_output", "item_done", "delta_fallback"} {
-			for _, passthrough := range []bool{false, true} {
-				mode := "normal"
-				if passthrough {
-					mode = "passthrough"
-				}
+			for _, mode := range []string{"normal", "passthrough", "streaming"} {
 				t.Run(marker.name+"/"+shape+"/"+mode, func(t *testing.T) {
 					item := map[string]any{
 						"type": "function_call", "call_id": "call_sealed", "name": "send_message",
@@ -39,6 +37,9 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
 					}
 					if marker.raw != "" {
 						item["encrypted_function_args"] = json.RawMessage(marker.raw)
+					}
+					if marker.encryptedContent != "" {
+						item["encrypted_content"] = marker.encryptedContent
 					}
 					output := []any{}
 					var frames []string
@@ -75,20 +76,33 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
 					}
 					account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 					svc := newCompactBridgeTestService()
-					if passthrough {
+					switch mode {
+					case "streaming":
+						result, err := svc.handleStreamingResponse(context.Background(), resp, c, account, time.Now(), "test-model", "test-model")
+						require.NoError(t, err)
+						require.Equal(t, 7, result.usage.InputTokens)
+						require.Equal(t, 3, result.usage.OutputTokens)
+					case "passthrough":
 						result, err := svc.handleNonStreamingResponsePassthrough(context.Background(), resp, c, account, "test-model", "test-model")
 						require.NoError(t, err)
 						require.Equal(t, 7, result.usage.InputTokens)
 						require.Equal(t, 3, result.usage.OutputTokens)
-					} else {
+					default:
 						result, err := svc.handleNonStreamingResponse(context.Background(), resp, c, account, "test-model", "test-model")
 						require.NoError(t, err)
 						require.Equal(t, 7, result.usage.InputTokens)
 						require.Equal(t, 3, result.usage.OutputTokens)
 					}
 					require.Equal(t, http.StatusOK, rec.Code)
-					require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
 					body := rec.Body.Bytes()
+					if mode == "streaming" {
+						require.Contains(t, rec.Header().Get("Content-Type"), "text/event-stream")
+						_, terminal, ok := extractOpenAISSETerminalEvent(string(body))
+						require.True(t, ok)
+						body = []byte(gjson.GetBytes(terminal, "response").Raw)
+					} else {
+						require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+					}
 					require.Len(t, gjson.GetBytes(body, "output").Array(), 1)
 					call := gjson.GetBytes(body, "output.0")
 					require.Equal(t, "function_call", call.Get("type").String())
@@ -99,6 +113,11 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
 						require.False(t, call.Get("encrypted_function_args").Exists())
 					} else {
 						require.Equal(t, marker.raw, call.Get("encrypted_function_args").Raw)
+					}
+					if marker.encryptedContent == "" {
+						require.False(t, call.Get("encrypted_content").Exists())
+					} else {
+						require.Equal(t, marker.encryptedContent, call.Get("encrypted_content").String())
 					}
 					require.Equal(t, "collaboration", call.Get("namespace").String())
 				})

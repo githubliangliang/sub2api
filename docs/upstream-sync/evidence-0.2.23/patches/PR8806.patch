@@ -1,0 +1,373 @@
+diff --git a/backend/internal/handler/usage_handler.go b/backend/internal/handler/usage_handler.go
+index 987092ca4..eb212679c 100644
+--- a/backend/internal/handler/usage_handler.go
++++ b/backend/internal/handler/usage_handler.go
+@@ -417,6 +417,9 @@ func (h *UsageHandler) Stats(c *gin.Context) {
+ 		return
+ 	}
+ 	stats.TotalAccountCost = nil
++	for i := range stats.Endpoints {
++		stats.Endpoints[i].AccountCost = 0
++	}
+ 	stats.UpstreamEndpoints = nil
+ 	stats.EndpointPaths = nil
+ 
+diff --git a/backend/internal/pkg/usagestats/usage_log_types.go b/backend/internal/pkg/usagestats/usage_log_types.go
+index 9d651d85a..9b9c4cb66 100644
+--- a/backend/internal/pkg/usagestats/usage_log_types.go
++++ b/backend/internal/pkg/usagestats/usage_log_types.go
+@@ -111,8 +111,9 @@ type EndpointStat struct {
+ 	Endpoint    string  `json:"endpoint"`
+ 	Requests    int64   `json:"requests"`
+ 	TotalTokens int64   `json:"total_tokens"`
+-	Cost        float64 `json:"cost"`        // 标准计费
+-	ActualCost  float64 `json:"actual_cost"` // 实际扣除
++	Cost        float64 `json:"cost"`                   // 标准计费
++	ActualCost  float64 `json:"actual_cost"`            // 实际扣除
++	AccountCost float64 `json:"account_cost,omitempty"` // 账号成本（仅管理员接口返回）
+ }
+ 
+ // GroupUsageSummary represents today's, yesterday's, and cumulative cost for a single group.
+diff --git a/backend/internal/repository/usage_log_repo_integration_test.go b/backend/internal/repository/usage_log_repo_integration_test.go
+index 15b9df278..e0798b2fb 100644
+--- a/backend/internal/repository/usage_log_repo_integration_test.go
++++ b/backend/internal/repository/usage_log_repo_integration_test.go
+@@ -1477,16 +1477,18 @@ func (s *UsageLogRepoSuite) TestGetModelStatsWithFilters() {
+ 
+ 	base := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+ 
++	accountRate := 0.4
+ 	log1 := &service.UsageLog{
+-		UserID:       user.ID,
+-		APIKeyID:     apiKey.ID,
+-		AccountID:    account.ID,
+-		Model:        "claude-3-opus",
+-		InputTokens:  100,
+-		OutputTokens: 200,
+-		TotalCost:    0.5,
+-		ActualCost:   0.5,
+-		CreatedAt:    base,
++		UserID:                user.ID,
++		APIKeyID:              apiKey.ID,
++		AccountID:             account.ID,
++		Model:                 "claude-3-opus",
++		InputTokens:           100,
++		OutputTokens:          200,
++		TotalCost:             0.5,
++		ActualCost:            1.0,
++		AccountRateMultiplier: &accountRate,
++		CreatedAt:             base,
+ 	}
+ 	_, err := s.repo.Create(s.ctx, log1)
+ 	s.Require().NoError(err)
+@@ -1522,6 +1524,12 @@ func (s *UsageLogRepoSuite) TestGetModelStatsWithFilters() {
+ 	stats, err = s.repo.GetModelStatsWithFilters(s.ctx, startTime, endTime, 0, 0, account.ID, 0, nil, nil, nil)
+ 	s.Require().NoError(err, "GetModelStatsWithFilters account filter")
+ 	s.Require().Len(stats, 2)
++	for _, stat := range stats {
++		if stat.Model == "claude-3-opus" {
++			s.Require().InEpsilon(1.0, stat.ActualCost, 0.0001)
++			s.Require().InEpsilon(0.2, stat.AccountCost, 0.0001)
++		}
++	}
+ }
+ 
+ // --- GetAccountUsageStats ---
+diff --git a/backend/internal/repository/usage_log_repo_request_type_test.go b/backend/internal/repository/usage_log_repo_request_type_test.go
+index c8fb2f62a..b37a31685 100644
+--- a/backend/internal/repository/usage_log_repo_request_type_test.go
++++ b/backend/internal/repository/usage_log_repo_request_type_test.go
+@@ -1187,3 +1187,48 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
+ 	})
+ 
+ }
++
++func TestUsageLogRepositoryGetModelStatsAccountFilterKeepsActualCost(t *testing.T) {
++	db, mock := newSQLMock(t)
++	repo := &usageLogRepository{sql: db}
++
++	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
++	end := start.Add(24 * time.Hour)
++	accountID := int64(42)
++
++	mock.ExpectQuery("COALESCE\\(SUM\\(actual_cost\\), 0\\) as actual_cost,\\s+COALESCE\\(SUM\\(COALESCE\\(account_stats_cost, total_cost\\) \\* COALESCE\\(account_rate_multiplier, 1\\)\\), 0\\) as account_cost").
++		WithArgs(start, end, accountID).
++		WillReturnRows(sqlmock.NewRows([]string{
++			"model", "requests", "input_tokens", "output_tokens",
++			"cache_creation_tokens", "cache_read_tokens", "total_tokens",
++			"cost", "actual_cost", "account_cost",
++		}).AddRow("gemini-4-argon", int64(3), int64(10), int64(20), int64(0), int64(0), int64(30), 6.0, 2.4, 0.9))
++
++	results, err := repo.GetModelStatsWithUsageFiltersBySource(context.Background(), start, end, usagestats.UsageLogFilters{AccountID: accountID}, usagestats.ModelSourceRequested)
++	require.NoError(t, err)
++	require.Len(t, results, 1)
++	require.Equal(t, 2.4, results[0].ActualCost)
++	require.Equal(t, 0.9, results[0].AccountCost)
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestUsageLogRepositoryGetEndpointStatsAccountFilterKeepsActualCost(t *testing.T) {
++	db, mock := newSQLMock(t)
++	repo := &usageLogRepository{sql: db}
++
++	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
++	end := start.Add(24 * time.Hour)
++	accountID := int64(42)
++
++	mock.ExpectQuery("COALESCE\\(SUM\\(actual_cost\\), 0\\) as actual_cost,\\s+COALESCE\\(SUM\\(COALESCE\\(account_stats_cost, total_cost\\) \\* COALESCE\\(account_rate_multiplier, 1\\)\\), 0\\) as account_cost").
++		WithArgs(start, end, accountID).
++		WillReturnRows(sqlmock.NewRows([]string{"endpoint", "requests", "total_tokens", "cost", "actual_cost", "account_cost"}).
++			AddRow("/v1beta/models", int64(3), int64(30), 6.0, 2.4, 0.9))
++
++	results, err := repo.GetEndpointStatsWithFilters(context.Background(), start, end, 0, 0, accountID, 0, "", nil, nil, nil)
++	require.NoError(t, err)
++	require.Len(t, results, 1)
++	require.Equal(t, 2.4, results[0].ActualCost)
++	require.Equal(t, 0.9, results[0].AccountCost)
++	require.NoError(t, mock.ExpectationsWereMet())
++}
+diff --git a/backend/internal/repository/usage_log_repo_stats.go b/backend/internal/repository/usage_log_repo_stats.go
+index 91e0eaf77..5dfb74646 100644
+--- a/backend/internal/repository/usage_log_repo_stats.go
++++ b/backend/internal/repository/usage_log_repo_stats.go
+@@ -402,8 +402,8 @@ func (r *usageLogRepository) GetGeminiUsageTotalsBatch(ctx context.Context, acco
+ 			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE 1 END), 0) AS pro_requests,
+ 			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN (input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens) ELSE 0 END), 0) AS flash_tokens,
+ 			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE (input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens) END), 0) AS pro_tokens,
+-			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN actual_cost ELSE 0 END), 0) AS flash_cost,
+-			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE actual_cost END), 0) AS pro_cost
++			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1) ELSE 0 END), 0) AS flash_cost,
++			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1) END), 0) AS pro_cost
+ 		FROM usage_logs
+ 		WHERE account_id = ANY($1) AND created_at >= $2 AND created_at < $3
+ 		GROUP BY account_id
+@@ -736,7 +736,6 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
+ 
+ 	stats := &UsageStats{}
+ 	var totalAccountCost float64
+-	useAccountCostForEndpoint := filters.AccountID > 0 && filters.UserID == 0 && filters.APIKeyID == 0
+ 	rows, err := r.sql.QueryContext(ctx, query, args...)
+ 	if err != nil {
+ 		return nil, err
+@@ -769,10 +768,6 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
+ 		}
+ 
+ 		totalTokens := inputTokens + outputTokens + cacheCreationTokens + cacheReads
+-		endpointActualCost := actualCost
+-		if useAccountCostForEndpoint {
+-			endpointActualCost = accountCost
+-		}
+ 
+ 		switch {
+ 		case inboundGrouped == 1 && upstreamGrouped == 1:
+@@ -789,17 +784,17 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
+ 		case inboundGrouped == 0 && upstreamGrouped == 1:
+ 			stats.Endpoints = append(stats.Endpoints, EndpointStat{
+ 				Endpoint: inboundEndpoint.String, Requests: requests, TotalTokens: totalTokens,
+-				Cost: cost, ActualCost: endpointActualCost,
++				Cost: cost, ActualCost: actualCost, AccountCost: accountCost,
+ 			})
+ 		case inboundGrouped == 1 && upstreamGrouped == 0:
+ 			stats.UpstreamEndpoints = append(stats.UpstreamEndpoints, EndpointStat{
+ 				Endpoint: upstreamEndpoint.String, Requests: requests, TotalTokens: totalTokens,
+-				Cost: cost, ActualCost: endpointActualCost,
++				Cost: cost, ActualCost: actualCost, AccountCost: accountCost,
+ 			})
+ 		case inboundGrouped == 0 && upstreamGrouped == 0:
+ 			stats.EndpointPaths = append(stats.EndpointPaths, EndpointStat{
+ 				Endpoint: inboundEndpoint.String + " -> " + upstreamEndpoint.String,
+-				Requests: requests, TotalTokens: totalTokens, Cost: cost, ActualCost: endpointActualCost,
++				Requests: requests, TotalTokens: totalTokens, Cost: cost, ActualCost: actualCost, AccountCost: accountCost,
+ 			})
+ 		}
+ 	}
+@@ -838,21 +833,17 @@ type AccountUsageStatsResponse = usagestats.AccountUsageStatsResponse
+ type EndpointStat = usagestats.EndpointStat
+ 
+ func (r *usageLogRepository) getEndpointStatsByColumnWithFilters(ctx context.Context, endpointColumn string, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, model string, modelSource string, requestType *int16, stream *bool, billingType *int8, billingMode string) (results []EndpointStat, err error) {
+-	actualCostExpr := "COALESCE(SUM(actual_cost), 0) as actual_cost"
+-	if accountID > 0 && userID == 0 && apiKeyID == 0 {
+-		actualCostExpr = "COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as actual_cost"
+-	}
+-
+ 	query := fmt.Sprintf(`
+ 		SELECT
+ 			COALESCE(NULLIF(TRIM(%s), ''), 'unknown') AS endpoint,
+ 			COUNT(*) AS requests,
+ 			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS total_tokens,
+ 			COALESCE(SUM(total_cost), 0) as cost,
+-			%s
++			COALESCE(SUM(actual_cost), 0) as actual_cost,
++			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as account_cost
+ 		FROM usage_logs
+ 		WHERE created_at >= $1 AND created_at < $2
+-	`, endpointColumn, actualCostExpr)
++	`, endpointColumn)
+ 
+ 	args := []any{startTime, endTime}
+ 	if userID > 0 {
+@@ -894,7 +885,7 @@ func (r *usageLogRepository) getEndpointStatsByColumnWithFilters(ctx context.Con
+ 	results = make([]EndpointStat, 0)
+ 	for rows.Next() {
+ 		var row EndpointStat
+-		if err := rows.Scan(&row.Endpoint, &row.Requests, &row.TotalTokens, &row.Cost, &row.ActualCost); err != nil {
++		if err := rows.Scan(&row.Endpoint, &row.Requests, &row.TotalTokens, &row.Cost, &row.ActualCost, &row.AccountCost); err != nil {
+ 			return nil, err
+ 		}
+ 		results = append(results, row)
+diff --git a/backend/internal/repository/usage_log_repo_trend.go b/backend/internal/repository/usage_log_repo_trend.go
+index cc7a46ffb..dcc706115 100644
+--- a/backend/internal/repository/usage_log_repo_trend.go
++++ b/backend/internal/repository/usage_log_repo_trend.go
+@@ -449,12 +449,6 @@ func (r *usageLogRepository) GetModelStatsWithUsageFiltersBySource(ctx context.C
+ }
+ 
+ func (r *usageLogRepository) getModelStatsWithFiltersBySource(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8, source string, billingMode string, upstreamModelMismatch *bool, nativeCompactionV2 *bool) (results []ModelStat, err error) {
+-	actualCostExpr := "COALESCE(SUM(actual_cost), 0) as actual_cost"
+-	// 当仅按 account_id 聚合时，实际费用使用账号倍率（total_cost * account_rate_multiplier）。
+-	if accountID > 0 && userID == 0 && apiKeyID == 0 {
+-		actualCostExpr = "COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as actual_cost"
+-	}
+-	accountCostExpr := "COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as account_cost"
+ 	modelExpr := resolveModelDimensionExpression(source)
+ 
+ 	query := fmt.Sprintf(`
+@@ -467,11 +461,11 @@ func (r *usageLogRepository) getModelStatsWithFiltersBySource(ctx context.Contex
+ 			COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
+ 			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) as total_tokens,
+ 			COALESCE(SUM(total_cost), 0) as cost,
+-			%s,
+-			%s
++			COALESCE(SUM(actual_cost), 0) as actual_cost,
++			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as account_cost
+ 		FROM usage_logs
+ 		WHERE created_at >= $1 AND created_at < $2
+-	`, modelExpr, actualCostExpr, accountCostExpr)
++	`, modelExpr)
+ 
+ 	args := []any{startTime, endTime}
+ 	if userID > 0 {
+diff --git a/backend/internal/service/gemini_quota.go b/backend/internal/service/gemini_quota.go
+index be927754c..afe486998 100644
+--- a/backend/internal/service/gemini_quota.go
++++ b/backend/internal/service/gemini_quota.go
+@@ -416,11 +416,11 @@ func geminiAggregateUsage(stats []usagestats.ModelStat) GeminiUsageTotals {
+ 		case geminiModelFlash:
+ 			totals.FlashRequests += stat.Requests
+ 			totals.FlashTokens += stat.TotalTokens
+-			totals.FlashCost += stat.ActualCost
++			totals.FlashCost += stat.AccountCost
+ 		default:
+ 			totals.ProRequests += stat.Requests
+ 			totals.ProTokens += stat.TotalTokens
+-			totals.ProCost += stat.ActualCost
++			totals.ProCost += stat.AccountCost
+ 		}
+ 	}
+ 	return totals
+diff --git a/backend/internal/service/gemini_quota_test.go b/backend/internal/service/gemini_quota_test.go
+index 36e60f291..69df88ea1 100644
+--- a/backend/internal/service/gemini_quota_test.go
++++ b/backend/internal/service/gemini_quota_test.go
+@@ -7,6 +7,7 @@ import (
+ 	"testing"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
+@@ -78,3 +79,14 @@ func geminiQuotaAPIKeyAccount(baseURL string) *Account {
+ 	}
+ 	return &Account{Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: credentials}
+ }
++
++func TestGeminiAggregateUsageUsesAccountCost(t *testing.T) {
++	totals := geminiAggregateUsage([]usagestats.ModelStat{
++		{Model: "gemini-3.7-flash", Requests: 2, TotalTokens: 20, ActualCost: 5, AccountCost: 1.5},
++		{Model: "gemini-4-argon", Requests: 1, TotalTokens: 10, ActualCost: 8, AccountCost: 3},
++	})
++	require.Equal(t, int64(2), totals.FlashRequests)
++	require.Equal(t, 1.5, totals.FlashCost)
++	require.Equal(t, int64(1), totals.ProRequests)
++	require.Equal(t, 3.0, totals.ProCost)
++}
+diff --git a/frontend/src/components/charts/EndpointDistributionChart.vue b/frontend/src/components/charts/EndpointDistributionChart.vue
+index a813df19b..2cfc7f311 100644
+--- a/frontend/src/components/charts/EndpointDistributionChart.vue
++++ b/frontend/src/components/charts/EndpointDistributionChart.vue
+@@ -83,6 +83,7 @@
+               <th class="pb-2 text-right">{{ t('admin.dashboard.requests') }}</th>
+               <th class="pb-2 text-right">{{ t('admin.dashboard.tokens') }}</th>
+               <th class="pb-2 text-right">{{ t('admin.dashboard.actual') }}</th>
++              <th v-if="showAccountCost" class="pb-2 text-right">{{ t('admin.dashboard.accountCost') }}</th>
+               <th class="pb-2 text-right">{{ t('admin.dashboard.standard') }}</th>
+             </tr>
+           </thead>
+@@ -109,15 +110,19 @@
+                 <td class="py-1.5 text-right text-green-600 dark:text-green-400">
+                   ${{ formatCost(item.actual_cost) }}
+                 </td>
++                <td v-if="showAccountCost" class="py-1.5 text-right text-orange-500 dark:text-orange-400">
++                  ${{ formatCost(item.account_cost ?? 0) }}
++                </td>
+                 <td class="py-1.5 text-right text-gray-400 dark:text-gray-500">
+                   ${{ formatCost(item.cost) }}
+                 </td>
+               </tr>
+               <tr v-if="expandedKey === item.endpoint">
+-                <td colspan="5" class="p-0">
++                <td :colspan="showAccountCost ? 6 : 5" class="p-0">
+                   <UserBreakdownSubTable
+                     :items="breakdownItems"
+                     :loading="breakdownLoading"
++                    :show-account-cost="showAccountCost"
+                   />
+                 </td>
+               </tr>
+@@ -161,6 +166,7 @@ const props = withDefaults(
+     showMetricToggle?: boolean
+     showSourceToggle?: boolean
+     enableBreakdown?: boolean
++    showAccountCost?: boolean
+     startDate?: string
+     endDate?: string
+     filters?: Record<string, any>
+@@ -174,7 +180,8 @@ const props = withDefaults(
+     source: 'inbound',
+     showMetricToggle: false,
+     showSourceToggle: false,
+-    enableBreakdown: true
++    enableBreakdown: true,
++    showAccountCost: true
+   }
+ )
+ 
+diff --git a/frontend/src/types/index.ts b/frontend/src/types/index.ts
+index 1d3fd163d..f98a4b83a 100644
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -2089,8 +2089,9 @@ export interface EndpointStat {
+   endpoint: string
+   requests: number
+   total_tokens: number
+-  cost: number
+-  actual_cost: number
++  cost: number // 标准计费
++  actual_cost: number // 实际扣除
++  account_cost?: number // 账号成本（仅管理员接口返回）
+ }
+ 
+ export interface GroupStat {
+diff --git a/frontend/src/views/user/UsageView.vue b/frontend/src/views/user/UsageView.vue
+index 8ced36145..688bc1981 100644
+--- a/frontend/src/views/user/UsageView.vue
++++ b/frontend/src/views/user/UsageView.vue
+@@ -58,6 +58,7 @@
+             :show-source-toggle="false"
+             :show-metric-toggle="true"
+             :enable-breakdown="false"
++            :show-account-cost="false"
+             :title="t('usage.endpointDistribution')"
+             :start-date="startDate"
+             :end-date="endDate"

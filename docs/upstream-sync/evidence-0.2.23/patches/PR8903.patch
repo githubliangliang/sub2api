@@ -1,0 +1,176 @@
+diff --git a/backend/internal/service/openai_gateway_cc_pipeline.go b/backend/internal/service/openai_gateway_cc_pipeline.go
+index b7eadf7b4..baf13e1cf 100644
+--- a/backend/internal/service/openai_gateway_cc_pipeline.go
++++ b/backend/internal/service/openai_gateway_cc_pipeline.go
+@@ -31,6 +31,22 @@ import (
+ // （GLM effort 归一化、fast policy、Grok 分支、ClientDisconnect 语义等）仍留在
+ // 调用方，属于有意保留的行为差异，不在此强行统一。
+ 
++// flushBeforeUpstreamRead 在扫描器向上游读取新数据之前调用 flush。
++//
++// bufio.Scanner 只在缓冲里没有完整行时才调用 Read，所以 flush 恰好发生在
++// "要等上游下一批数据"之前：已经到达的行不会被延后写给客户端，而同一次读取里
++// 到达的多行（data 行与事件间空行、一次到达的多个事件）合并成一次 flush，
++// 不再每行一次写系统调用。
++type flushBeforeUpstreamRead struct {
++	r     io.Reader
++	flush func()
++}
++
++func (f *flushBeforeUpstreamRead) Read(p []byte) (int, error) {
++	f.flush()
++	return f.r.Read(p)
++}
++
+ // newUpstreamSSEScanner 构造读取上游 SSE 流的行扫描器，按配置放大单行上限。
+ func (s *OpenAIGatewayService) newUpstreamSSEScanner(r io.Reader) *bufio.Scanner {
+ 	scanner := bufio.NewScanner(r)
+diff --git a/backend/internal/service/openai_gateway_chat_completions_raw.go b/backend/internal/service/openai_gateway_chat_completions_raw.go
+index 2df4d8393..b94cd845c 100644
+--- a/backend/internal/service/openai_gateway_chat_completions_raw.go
++++ b/backend/internal/service/openai_gateway_chat_completions_raw.go
+@@ -315,12 +315,19 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
+ 	}
+ 	requestID := resp.Header.Get("x-request-id")
+ 	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
+-	scanner := s.newUpstreamSSEScanner(resp.Body)
+ 
+ 	var usage OpenAIUsage
+ 	var firstTokenMs *int
+ 	clientDisconnected := false
+ 	clientOutputStarted := false
++	flushPending := false
++	flushToClient := func() {
++		if flushPending && !clientDisconnected && clientOutputStarted {
++			c.Writer.Flush()
++		}
++		flushPending = false
++	}
++	scanner := s.newUpstreamSSEScanner(&flushBeforeUpstreamRead{r: resp.Body, flush: flushToClient})
+ 	pendingLines := make([]string, 0, 8)
+ 	refusalDetector := newOpenAIChatSilentRefusalDetector(requestBodyLen)
+ 	var terminal openAIRawStreamTerminalState
+@@ -380,16 +387,10 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
+ 
+ 		line = s.replaceModelInSSELine(line, upstreamModel, originalModel)
+ 		writeLine(line)
+-		if line == "" {
+-			if !clientDisconnected && clientOutputStarted {
+-				c.Writer.Flush()
+-			}
+-			continue
+-		}
+-		if !clientDisconnected && clientOutputStarted {
+-			c.Writer.Flush()
+-		}
++		// 不逐行 flush：scanner 下次向上游读取前统一 flush（见 flushBeforeUpstreamRead）。
++		flushPending = true
+ 	}
++	flushToClient()
+ 
+ 	resultWithUsage := func() *OpenAIForwardResult {
+ 		return &OpenAIForwardResult{
+diff --git a/backend/internal/service/openai_gateway_chat_completions_raw_test.go b/backend/internal/service/openai_gateway_chat_completions_raw_test.go
+index 433cb8cfa..a0235c43e 100644
+--- a/backend/internal/service/openai_gateway_chat_completions_raw_test.go
++++ b/backend/internal/service/openai_gateway_chat_completions_raw_test.go
+@@ -1280,3 +1280,99 @@ func TestForwardAsRawChatCompletions_RestoresMappedResponseModel(t *testing.T) {
+ 		}
+ 	}
+ }
++
++// flushCountingRecorder 记录 Flush 次数，并在每次 Flush 时回调当时已写出的内容。
++type flushCountingRecorder struct {
++	*httptest.ResponseRecorder
++	flushes int
++	onFlush func(written string)
++}
++
++func (w *flushCountingRecorder) Flush() {
++	w.flushes++
++	w.ResponseRecorder.Flush()
++	if w.onFlush != nil {
++		w.onFlush(w.Body.String())
++	}
++}
++
++func rawStreamFlushTestEvent(content string) string {
++	return `data: {"id":"chatcmpl_f","object":"chat.completion.chunk","model":"gpt-5.4","choices":[{"index":0,"delta":{"content":"` + content + `"}}]}` + "\n\n"
++}
++
++// 一次读取里到达的多行合并成一次 flush，写给客户端的内容不变。
++func TestStreamRawChatCompletions_CoalescesFlushesWithinOneUpstreamRead(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"hello"}],"stream":true}`)
++	w := &flushCountingRecorder{ResponseRecorder: httptest.NewRecorder()}
++	c, _ := gin.CreateTestContext(w)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
++
++	upstreamBody := rawStreamFlushTestEvent("a") + rawStreamFlushTestEvent("b") + rawStreamFlushTestEvent("c") +
++		`data: {"id":"chatcmpl_f","object":"chat.completion.chunk","model":"gpt-5.4","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":3,"total_tokens":6}}` + "\n\n" +
++		"data: [DONE]\n\n"
++	upstream := &httpUpstreamRecorder{resp: &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
++	}}
++	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
++
++	result, err := svc.forwardAsRawChatCompletions(context.Background(), c, rawChatCompletionsTestAccount(), body, "")
++	require.NoError(t, err)
++	require.Equal(t, 3, result.Usage.OutputTokens)
++	require.Equal(t, upstreamBody, w.Body.String())
++	// 之前每行（含事件间空行）flush 一次，这里是 10 次。
++	require.Equal(t, 1, w.flushes)
++}
++
++// 合并不能推迟已到达的数据：开始等待上游下一批数据之前，已到达的事件必须已经 flush 给客户端。
++func TestStreamRawChatCompletions_FlushesBeforeWaitingForUpstream(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"hello"}],"stream":true}`)
++	firstEventFlushed := make(chan struct{})
++	w := &flushCountingRecorder{ResponseRecorder: httptest.NewRecorder()}
++	w.onFlush = func(written string) {
++		if strings.Contains(written, `"content":"first"`) {
++			select {
++			case <-firstEventFlushed:
++			default:
++				close(firstEventFlushed)
++			}
++		}
++	}
++	c, _ := gin.CreateTestContext(w)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
++
++	pr, pw := io.Pipe()
++	writerErr := make(chan error, 1)
++	go func() {
++		defer func() { _ = pw.Close() }()
++		if _, err := io.WriteString(pw, rawStreamFlushTestEvent("first")); err != nil {
++			writerErr <- err
++			return
++		}
++		// 上游在客户端收到第一个事件之前不再发送任何数据。
++		select {
++		case <-firstEventFlushed:
++		case <-time.After(5 * time.Second):
++			writerErr <- errors.New("first event was not flushed before waiting for more upstream data")
++			return
++		}
++		_, err := io.WriteString(pw, rawStreamFlushTestEvent("second")+"data: [DONE]\n\n")
++		writerErr <- err
++	}()
++
++	upstream := &httpUpstreamRecorder{resp: &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++		Body:       pr,
++	}}
++	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
++
++	_, err := svc.forwardAsRawChatCompletions(context.Background(), c, rawChatCompletionsTestAccount(), body, "")
++	require.NoError(t, err)
++	require.NoError(t, <-writerErr)
++	require.Contains(t, w.Body.String(), `"content":"second"`)
++	require.Contains(t, w.Body.String(), "data: [DONE]")
++}

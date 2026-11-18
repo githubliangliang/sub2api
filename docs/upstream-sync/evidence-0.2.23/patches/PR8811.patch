@@ -1,0 +1,884 @@
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index 9e528c007..ec7ad12e3 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -1413,7 +1413,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+ 		defaultMappedModel := strings.TrimSpace(effectiveMappedModel)
+ 		// 应用渠道模型映射到请求体
+ 		forwardBody := mappedBodyForMessages(channelMappingMsg.Mapped, channelMappingMsg.MappedModel)
+-		writerSizeBeforeForward := c.Writer.Size()
++		writerSizeBeforeForward := service.OpenAICompactKeepaliveAdjustedWrittenSize(c)
+ 		result, err := func() (*service.OpenAIForwardResult, error) {
+ 			defer func() {
+ 				if accountReleaseFunc != nil {
+@@ -1501,11 +1501,16 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+ 						)
+ 						return
+ 					}
+-					if c.Writer.Size() != writerSizeBeforeForward {
++					if !openAIForwardMayFailover(c, writerSizeBeforeForward, failoverErr) {
+ 						h.gatewayService.ObserveOpenAIAccountHealthFailure(c.Request.Context(), account, err)
+ 						h.handleAnthropicFailoverExhausted(c, failoverErr, true)
+ 						return
+ 					}
++					// Only keepalive bytes were written, so failover may continue, but
++					// every later error must be written as an SSE event.
++					if c.Writer.Written() {
++						streamStarted = true
++					}
+ 					if failoverErr.ShouldReportAccountScheduleFailure() {
+ 						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, nil), false, nil, err)
+ 					}
+@@ -1663,16 +1668,24 @@ func (h *OpenAIGatewayHandler) handleAnthropicFailoverExhausted(c *gin.Context,
+ 		h.anthropicStreamingAwareError(c, status, "api_error", failoverErr.ClientMessage, streamStarted)
+ 		return
+ 	}
++	// A failed or error frame that triggered the failover no longer reaches the
++	// client in-band, so its error passthrough rule is applied here instead.
++	if status, errType, msg, ok := service.ApplyOpenAIStreamFailedFrameRule(c, failoverErr); ok {
++		h.anthropicStreamingAwareError(c, status, errType, msg, streamStarted)
++		return
++	}
+ 	status, errType, errMsg := h.mapUpstreamError(failoverErr.StatusCode)
+ 	h.anthropicStreamingAwareError(c, status, errType, errMsg, streamStarted)
+ }
+ 
+ // ensureAnthropicErrorResponse writes a fallback Anthropic error if no response was written.
+ func (h *OpenAIGatewayHandler) ensureAnthropicErrorResponse(c *gin.Context, streamStarted bool) bool {
+-	if c == nil || c.Writer == nil || c.Writer.Written() {
++	// Keepalive pings alone do not count as a written response, but they do
++	// commit the response as SSE, so the fallback must then be an SSE event.
++	if c == nil || c.Writer == nil || service.OpenAICompactKeepaliveAdjustedWrittenSize(c) >= 0 {
+ 		return false
+ 	}
+-	h.anthropicStreamingAwareError(c, http.StatusBadGateway, "api_error", "Upstream request failed", streamStarted)
++	h.anthropicStreamingAwareError(c, http.StatusBadGateway, "api_error", "Upstream request failed", streamStarted || c.Writer.Written())
+ 	return true
+ }
+ 
+diff --git a/backend/internal/handler/openai_gateway_messages_pre_content_failover_test.go b/backend/internal/handler/openai_gateway_messages_pre_content_failover_test.go
+new file mode 100644
+index 000000000..d20ea235b
+--- /dev/null
++++ b/backend/internal/handler/openai_gateway_messages_pre_content_failover_test.go
+@@ -0,0 +1,336 @@
++//go:build unit
++
++package handler
++
++import (
++	"bytes"
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/model"
++	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++	"go.uber.org/zap"
++)
++
++const (
++	preContentHandlerCreated = `data: {"type":"response.created","response":{"id":"resp_pc","object":"response","model":"gpt-5.4","status":"in_progress","output":[]}}` + "\n\n"
++	preContentHandlerFailed  = `data: {"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"An error occurred while processing your request."}}}` + "\n\n"
++	preContentHandlerSuccess = preContentHandlerCreated +
++		`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"msg_1","type":"message","role":"assistant","content":[]}}` + "\n\n" +
++		`data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"answer from second account"}` + "\n\n" +
++		`data: {"type":"response.completed","response":{"id":"resp_pc","object":"response","model":"gpt-5.4","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7}}}` + "\n\n"
++)
++
++// preContentFailoverUpstream hands each upstream request to respond, which
++// gets the 1-based call number.
++type preContentFailoverUpstream struct {
++	service.HTTPUpstream
++	mu      sync.Mutex
++	hits    []int64
++	respond func(call int) (*http.Response, error)
++}
++
++func (u *preContentFailoverUpstream) Do(req *http.Request, _ string, accountID int64, _ int) (*http.Response, error) {
++	if req.Body != nil {
++		_, _ = io.Copy(io.Discard, req.Body)
++	}
++	u.mu.Lock()
++	u.hits = append(u.hits, accountID)
++	call := len(u.hits)
++	u.mu.Unlock()
++	return u.respond(call)
++}
++
++func (u *preContentFailoverUpstream) calls() int {
++	u.mu.Lock()
++	defer u.mu.Unlock()
++	return len(u.hits)
++}
++
++func preContentSSEResponse(body io.ReadCloser) *http.Response {
++	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: body}
++}
++
++// preContentStallThenFail stalls past one keepalive tick after the first event
++// and then fails with failed.
++func preContentStallThenFail(failed string) *http.Response {
++	pr, pw := io.Pipe()
++	go func() {
++		_, _ = io.WriteString(pw, preContentHandlerCreated)
++		time.Sleep(1300 * time.Millisecond)
++		_, _ = io.WriteString(pw, failed)
++		_ = pw.Close()
++	}()
++	return preContentSSEResponse(pr)
++}
++
++type unexpectedEOFReader struct{}
++
++func (unexpectedEOFReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
++
++type preContentFailoverScenario struct {
++	accounts    []service.Account
++	respond     func(call int) (*http.Response, error)
++	passthrough *service.ErrorPassthroughService
++	requestBody string
++}
++
++func preContentAccounts(count int) []service.Account {
++	accounts := make([]service.Account, 0, count)
++	for i := 0; i < count; i++ {
++		accounts = append(accounts, service.Account{
++			ID: int64(9201 + i), Name: "openai-apikey", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
++			Status: service.StatusActive, Schedulable: true, Concurrency: 1, Priority: i + 1,
++			Credentials: map[string]any{"api_key": "sk-test", "base_url": "http://upstream.example"},
++		})
++	}
++	return accounts
++}
++
++func servePreContentFailoverMessages(t *testing.T, accountCount int) (*httptest.ResponseRecorder, *preContentFailoverUpstream) {
++	t.Helper()
++	return serveMessagesScenario(t, preContentFailoverScenario{
++		accounts: preContentAccounts(accountCount),
++		respond: func(call int) (*http.Response, error) {
++			if call == 1 {
++				return preContentStallThenFail(preContentHandlerFailed), nil
++			}
++			return preContentSSEResponse(io.NopCloser(strings.NewReader(preContentHandlerSuccess))), nil
++		},
++	})
++}
++
++func serveMessagesScenario(t *testing.T, sc preContentFailoverScenario) (*httptest.ResponseRecorder, *preContentFailoverUpstream) {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	groupID := int64(9101)
++	repo := &grokCredentialHandlerRepo{accounts: sc.accounts, missingOnGet: map[int64]bool{}}
++	upstream := &preContentFailoverUpstream{respond: sc.respond}
++	cfg := &config.Config{RunMode: config.RunModeSimple}
++	cfg.Gateway.MaxAccountSwitches = 3
++	cfg.Gateway.StreamKeepaliveInterval = 1
++	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
++	billingCache := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
++	t.Cleanup(billingCache.Stop)
++	gateway := service.NewOpenAIGatewayService(
++		repo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
++		service.NewBillingService(cfg, nil), nil, billingCache, upstream,
++		&service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
++	)
++	cache := &concurrencyCacheMock{
++		acquireUserSlotFn:    func(context.Context, int64, int, string) (bool, error) { return true, nil },
++		acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
++	}
++	h := NewOpenAIGatewayHandler(gateway, service.NewConcurrencyService(cache), billingCache, &service.APIKeyService{}, nil, sc.passthrough, nil, nil, cfg)
++	apiKey := &service.APIKey{
++		ID: 9102, GroupID: &groupID,
++		User:  &service.User{ID: 9103, Status: service.StatusActive},
++		Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowMessagesDispatch: true},
++	}
++	router := gin.New()
++	router.Use(func(c *gin.Context) {
++		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
++		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
++		service.BindErrorPassthroughService(c, sc.passthrough)
++		c.Next()
++	})
++	router.POST("/v1/messages", h.Messages)
++
++	rec := httptest.NewRecorder()
++	requestBody := sc.requestBody
++	if requestBody == "" {
++		requestBody = `{"model":"gpt-5.4","max_tokens":32,"messages":[{"role":"user","content":"hello"}],"stream":true}`
++	}
++	req := httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewBufferString(requestBody))
++	req.Header.Set("Content-Type", "application/json")
++	router.ServeHTTP(rec, req)
++	return rec, upstream
++}
++
++// requireEndsWithSSEError checks that a response already committed as SSE ends
++// with an Anthropic error event and never carries a bare JSON line.
++func requireEndsWithSSEError(t *testing.T, body string) {
++	t.Helper()
++	lastEvent := body[strings.LastIndex(strings.TrimRight(body, "\n"), "\n\n")+2:]
++	require.True(t, strings.HasPrefix(lastEvent, "event: error\ndata: {"), "last event: %q", lastEvent)
++	require.Contains(t, lastEvent, `"type":"error"`)
++	for _, line := range strings.Split(body, "\n") {
++		require.False(t, strings.HasPrefix(line, "{"), "bare JSON line in SSE body: %q", line)
++	}
++}
++
++func TestOpenAIMessagesFailsOverAfterKeepaliveOnlyWrite(t *testing.T) {
++	rec, upstream := servePreContentFailoverMessages(t, 2)
++
++	body := rec.Body.String()
++	require.Equal(t, 2, upstream.calls(), "body: %q", body)
++	require.Equal(t, 1, strings.Count(body, "event: message_start"), "body: %q", body)
++	require.Contains(t, body, "answer from second account")
++}
++
++func TestOpenAIMessagesKeepaliveThenFailoverExhaustedEndsWithSSEError(t *testing.T) {
++	rec, upstream := servePreContentFailoverMessages(t, 1)
++
++	body := rec.Body.String()
++	require.Equal(t, 1, upstream.calls(), "body: %q", body)
++	require.Contains(t, body, "event: ping")
++	requireEndsWithSSEError(t, body)
++}
++
++func TestOpenAIMessagesFailoverThenSecondAccountReadErrorEndsWithSSEError(t *testing.T) {
++	rec, upstream := serveMessagesScenario(t, preContentFailoverScenario{
++		accounts: preContentAccounts(2),
++		respond: func(call int) (*http.Response, error) {
++			if call == 1 {
++				return preContentStallThenFail(preContentHandlerFailed), nil
++			}
++			return preContentSSEResponse(io.NopCloser(unexpectedEOFReader{})), nil
++		},
++	})
++
++	body := rec.Body.String()
++	require.Equal(t, 2, upstream.calls(), "body: %q", body)
++	require.NotContains(t, body, "message_start")
++	requireEndsWithSSEError(t, body)
++}
++
++func TestOpenAIMessagesFailoverThenSecondAccountCredentialErrorEndsWithSSEError(t *testing.T) {
++	accounts := preContentAccounts(2)
++	accounts[1].Credentials = map[string]any{"base_url": "http://upstream.example"}
++	rec, upstream := serveMessagesScenario(t, preContentFailoverScenario{
++		accounts: accounts,
++		respond: func(call int) (*http.Response, error) {
++			return preContentStallThenFail(preContentHandlerFailed), nil
++		},
++	})
++
++	body := rec.Body.String()
++	require.Equal(t, 1, upstream.calls(), "body: %q", body)
++	require.NotContains(t, body, "message_start")
++	requireEndsWithSSEError(t, body)
++}
++
++func TestOpenAIMessagesSlotAcquireFailureAfterKeepaliveIsSSE(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
++	c.Header("Content-Type", "text/event-stream")
++	_, err := io.WriteString(c.Writer, "event: ping\ndata: {\"type\":\"ping\"}\n\n")
++	require.NoError(t, err)
++	streamStarted := true
++
++	h := &OpenAIGatewayHandler{}
++	selection := &service.AccountSelectionResult{Account: &service.Account{ID: 9201}}
++	_, result := h.acquireResponsesAccountSlot(c, nil, "", selection, true, &streamStarted, zap.NewNop())
++
++	require.Equal(t, openAISlotAcquireFailed, result)
++	body := rec.Body.String()
++	lastEvent := body[strings.LastIndex(strings.TrimRight(body, "\n"), "\n\n")+2:]
++	require.True(t, strings.HasPrefix(lastEvent, "event: error\ndata: {"), "last event: %q", lastEvent)
++}
++
++func newFailedFrameCodeRule(code string) *service.ErrorPassthroughService {
++	status := http.StatusTeapot
++	rule := &model.ErrorPassthroughRule{
++		ID: 1, Name: "frame code rule", Enabled: true, Priority: 1,
++		Keywords: []string{code}, MatchMode: model.MatchModeAny,
++		Platforms: []string{model.PlatformOpenAI}, ResponseCode: &status, PassthroughBody: true,
++	}
++	return service.NewErrorPassthroughService(&errorPassthroughRepoStub{rules: []*model.ErrorPassthroughRule{rule}}, nil)
++}
++
++// A failed frame that triggers a failover is no longer written in-band, so its
++// passthrough rule has to apply once the failover is exhausted. The rule is
++// keyed on the frame's own code, which the generic failover envelope lacks.
++func TestOpenAIMessagesFailoverExhaustedAppliesFailedFrameRule(t *testing.T) {
++	rec, upstream := serveMessagesScenario(t, preContentFailoverScenario{
++		accounts:    preContentAccounts(1),
++		passthrough: newFailedFrameCodeRule("rate_limit_exceeded"),
++		respond: func(call int) (*http.Response, error) {
++			failed := `data: {"type":"response.failed","response":{"status":"failed","error":{"code":"rate_limit_exceeded","message":"Rate limit reached for gpt-5.4"}}}` + "\n\n"
++			return preContentSSEResponse(io.NopCloser(strings.NewReader(preContentHandlerCreated + failed))), nil
++		},
++	})
++
++	body := rec.Body.String()
++	t.Logf("status=%d body=%q", rec.Code, body)
++	require.Equal(t, 1, upstream.calls(), "body: %q", body)
++	require.Equal(t, http.StatusTeapot, rec.Code, "body: %q", body)
++	require.Equal(t, "upstream_error", gjson.Get(body, "error.type").String(), "body: %q", body)
++	require.Equal(t, "Rate limit reached for gpt-5.4", gjson.Get(body, "error.message").String(), "body: %q", body)
++}
++
++const preContentRateLimitFailed = `data: {"type":"response.failed","response":{"status":"failed","error":{"code":"rate_limit_exceeded","message":"Rate limit reached for gpt-5.4"}}}` + "\n\n"
++
++func requireFailedFrameRuleJSON(t *testing.T, rec *httptest.ResponseRecorder) {
++	t.Helper()
++	body := rec.Body.String()
++	t.Logf("status=%d content-type=%q body=%q", rec.Code, rec.Header().Get("Content-Type"), body)
++	require.Equal(t, http.StatusTeapot, rec.Code, "body: %q", body)
++	require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
++	require.Equal(t, "upstream_error", gjson.Get(body, "error.type").String(), "body: %q", body)
++	require.Equal(t, "Rate limit reached for gpt-5.4", gjson.Get(body, "error.message").String(), "body: %q", body)
++}
++
++// The failed frame is the first event of the stream, so it triggers the
++// failover before any output and used to reach the generic mapping unchecked.
++func TestOpenAIMessagesFirstEventFailedFrameExhaustedAppliesRule(t *testing.T) {
++	rec, upstream := serveMessagesScenario(t, preContentFailoverScenario{
++		accounts:    preContentAccounts(1),
++		passthrough: newFailedFrameCodeRule("rate_limit_exceeded"),
++		respond: func(call int) (*http.Response, error) {
++			return preContentSSEResponse(io.NopCloser(strings.NewReader(preContentRateLimitFailed))), nil
++		},
++	})
++
++	require.Equal(t, 1, upstream.calls())
++	requireFailedFrameRuleJSON(t, rec)
++}
++
++func TestOpenAIMessagesNonStreamFailedFrameExhaustedAppliesRule(t *testing.T) {
++	rec, upstream := serveMessagesScenario(t, preContentFailoverScenario{
++		accounts:    preContentAccounts(1),
++		passthrough: newFailedFrameCodeRule("rate_limit_exceeded"),
++		requestBody: `{"model":"gpt-5.4","max_tokens":32,"messages":[{"role":"user","content":"hello"}],"stream":false}`,
++		respond: func(call int) (*http.Response, error) {
++			return preContentSSEResponse(io.NopCloser(strings.NewReader(preContentHandlerCreated + preContentRateLimitFailed))), nil
++		},
++	})
++
++	require.Equal(t, 1, upstream.calls())
++	requireFailedFrameRuleJSON(t, rec)
++}
++
++// A failover triggered by an HTTP status keeps the built-in exhaustion mapping:
++// no passthrough rule is looked up for it.
++func TestOpenAIMessagesHTTPStatusFailoverExhaustedIgnoresPassthroughRule(t *testing.T) {
++	rec, upstream := serveMessagesScenario(t, preContentFailoverScenario{
++		accounts:    preContentAccounts(1),
++		passthrough: newFailedFrameCodeRule("rate_limit_exceeded"),
++		respond: func(call int) (*http.Response, error) {
++			return &http.Response{
++				StatusCode: http.StatusBadGateway,
++				Header:     http.Header{"Content-Type": []string{"application/json"}},
++				Body:       io.NopCloser(strings.NewReader(`{"error":{"code":"rate_limit_exceeded","message":"Rate limit reached for gpt-5.4"}}`)),
++			}, nil
++		},
++	})
++
++	body := rec.Body.String()
++	t.Logf("status=%d body=%q", rec.Code, body)
++	require.Equal(t, 1, upstream.calls(), "body: %q", body)
++	require.NotEqual(t, http.StatusTeapot, rec.Code, "body: %q", body)
++	require.Equal(t, "Upstream service temporarily unavailable", gjson.Get(body, "error.message").String(), "body: %q", body)
++}
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index 842c68521..63858570e 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -771,6 +771,7 @@ type UpstreamFailoverError struct {
+ 	NextAccountAction        NextAccountAction
+ 	ClientStatusCode         int
+ 	ClientMessage            string
++	StreamFailedFrame        *OpenAIStreamFailedFrame // 触发本次 failover 的流内 failed/error 帧；耗尽时用于错误透传规则匹配
+ }
+ 
+ func (e *UpstreamFailoverError) Error() string {
+diff --git a/backend/internal/service/openai_compat_model_test.go b/backend/internal/service/openai_compat_model_test.go
+index 7bd000b4b..97d1c5fd2 100644
+--- a/backend/internal/service/openai_compat_model_test.go
++++ b/backend/internal/service/openai_compat_model_test.go
+@@ -2159,7 +2159,10 @@ func TestForwardAsAnthropic_MissingTerminalAfterClientDisconnectSkipsOpsAndFailo
+ 	c, _ := gin.CreateTestContext(rec)
+ 	c.Writer = &openAICompatFailingWriter{ResponseWriter: c.Writer, failAfter: 0}
+ 	body := []byte(`{"model":"gpt-5.4","max_tokens":16,"messages":[{"role":"user","content":"hello"}],"stream":true}`)
+-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
++	// A real disconnect also cancels the request context.
++	reqCtx, cancel := context.WithCancel(context.Background())
++	cancel()
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body)).WithContext(reqCtx)
+ 	c.Request.Header.Set("Content-Type", "application/json")
+ 
+ 	upstreamBody := strings.Join([]string{
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index 2284f2b3f..a0f3cca09 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -1077,6 +1077,34 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 		return out
+ 	}
+ 
++	// Until the first content_block_delta the translated prelude is held, so a
++	// failure before any content reaches the client still fails over and the
++	// next attempt starts a fresh message.
++	var held strings.Builder
++	emit := func(sse string, release bool) error {
++		if !clientOutputStarted && !release {
++			_, _ = held.WriteString(sse)
++			return nil
++		}
++		writeStreamHeaders()
++		if held.Len() > 0 {
++			sse = held.String() + sse
++			held.Reset()
++		}
++		if _, err := fmt.Fprint(c.Writer, sse); err != nil {
++			return err
++		}
++		clientOutputStarted = true
++		return nil
++	}
++	// A failure that does not fail over still shows the client the prelude it
++	// would have seen without holding.
++	releaseHeld := func() {
++		if held.Len() > 0 && !clientDisconnected && emit("", true) == nil {
++			c.Writer.Flush()
++		}
++	}
++
+ 	// processDataLine handles a single "data: ..." SSE line from upstream.
+ 	processDataLine := func(payload string) bool {
+ 		payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
+@@ -1130,12 +1158,11 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 						UpstreamOutTok: usage.OutputTokens,
+ 					})
+ 					if !clientDisconnected {
+-						writeStreamHeaders()
+ 						clientMsg := msg
+ 						if clientMsg == "" {
+ 							clientMsg = "Request blocked by upstream cyber-security policy"
+ 						}
+-						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE("invalid_request_error", clientMsg)); err == nil {
++						if emit(buildAnthropicStreamErrorSSE("invalid_request_error", clientMsg), true) == nil {
+ 							c.Writer.Flush()
+ 						}
+ 						clientDisconnected = true
+@@ -1168,14 +1195,11 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 					MarkResponseCommitted(c)
+ 				}
+ 				if !clientDisconnected {
+-					if !clientOutputStarted {
++					if !clientOutputStarted && held.Len() == 0 {
+ 						writeAnthropicError(c, errStatus, errType, errMsg)
+ 						clientOutputStarted = true
+-					} else {
+-						writeStreamHeaders()
+-						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(errType, errMsg)); err == nil {
+-							c.Writer.Flush()
+-						}
++					} else if emit(buildAnthropicStreamErrorSSE(errType, errMsg), true) == nil {
++						c.Writer.Flush()
+ 					}
+ 				}
+ 				streamNonFailoverErr = fmt.Errorf("upstream response failed: %s", errMsg)
+@@ -1195,18 +1219,18 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 					)
+ 					continue
+ 				}
+-				writeStreamHeaders()
+-				if _, err := fmt.Fprint(c.Writer, sse); err != nil {
++				if err := emit(sse, isTerminalEvent || evt.Type == "content_block_delta"); err != nil {
+ 					clientDisconnected = true
+ 					logger.L().Info("openai messages stream: client disconnected, continuing to drain upstream for billing",
+ 						zap.String("request_id", requestID),
+ 					)
+ 					break
+ 				}
+-				clientOutputStarted = true
+ 			}
+ 		}
+-		if len(events) > 0 && !clientDisconnected {
++		// gin's Flush commits the 200 header first; flushing while the prelude
++		// is held would make the attempt ineligible for failover.
++		if clientOutputStarted && len(events) > 0 && !clientDisconnected {
+ 			c.Writer.Flush()
+ 		}
+ 		return isTerminalEvent
+@@ -1226,15 +1250,13 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 				if err != nil {
+ 					continue
+ 				}
+-				writeStreamHeaders()
+-				if _, err := fmt.Fprint(c.Writer, sse); err != nil {
++				if err := emit(sse, true); err != nil {
+ 					clientDisconnected = true
+ 					logger.L().Info("openai messages stream: client disconnected during final flush",
+ 						zap.String("request_id", requestID),
+ 					)
+ 					break
+ 				}
+-				clientOutputStarted = true
+ 			}
+ 			if !clientDisconnected {
+ 				c.Writer.Flush()
+@@ -1254,6 +1276,9 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 		}
+ 	}
+ 	missingTerminalErr := func() (*OpenAIForwardResult, error) {
++		if !clientOutputStarted && c.Request.Context().Err() != nil {
++			clientDisconnected = true
++		}
+ 		result := resultWithUsage()
+ 		if clientDisconnected {
+ 			return result, fmt.Errorf("stream usage incomplete: missing terminal event")
+@@ -1294,6 +1319,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 		}
+ 		if err := scanner.Err(); err != nil {
+ 			handleScanErr(err)
++			releaseHeld()
+ 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", err)
+ 		}
+ 		if frame, ok := parser.Finish(); ok {
+@@ -1375,6 +1401,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 			}
+ 			if ev.err != nil {
+ 				handleScanErr(ev.err)
++				releaseHeld()
+ 				return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", ev.err)
+ 			}
+ 			lastDataAt = time.Now()
+@@ -1403,18 +1430,26 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 				zap.String("model", originalModel),
+ 				zap.Duration("interval", streamInterval),
+ 			)
++			releaseHeld()
+ 			return resultWithUsage(), fmt.Errorf("stream data interval timeout")
+ 
+ 		case <-keepaliveCh:
+ 			if clientDisconnected {
+ 				continue
+ 			}
+-			if time.Since(lastDataAt) < keepaliveInterval {
++			// While the prelude is held nothing else reaches the client, so every
++			// tick pings. Account headers stay private and the bytes count as
++			// keepalive: the attempt that finally answers may be another one.
++			if clientOutputStarted && time.Since(lastDataAt) < keepaliveInterval {
+ 				continue
+ 			}
+-			// Send Anthropic-format ping event
+-			writeStreamHeaders()
+-			if _, err := fmt.Fprint(c.Writer, "event: ping\ndata: {\"type\":\"ping\"}\n\n"); err != nil {
++			if clientOutputStarted {
++				writeStreamHeaders()
++			} else {
++				setSSEHeaders(c)
++			}
++			n, err := fmt.Fprint(c.Writer, "event: ping\ndata: {\"type\":\"ping\"}\n\n")
++			if err != nil {
+ 				// Client disconnected
+ 				logger.L().Info("openai messages stream: client disconnected during keepalive",
+ 					zap.String("request_id", requestID),
+@@ -1422,14 +1457,25 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 				clientDisconnected = true
+ 				continue
+ 			}
+-			clientOutputStarted = true
++			if !clientOutputStarted {
++				recordOpenAIStreamKeepaliveBytes(c, n)
++			}
+ 			c.Writer.Flush()
+ 		}
+ 	}
+ }
+ 
+ // writeAnthropicError writes an error response in Anthropic Messages API format.
++// Once the response is committed as SSE (keepalive pings went out), a bare JSON
++// body would be unreadable to the client's SSE parser, so the error is written
++// as an SSE error event instead.
+ func writeAnthropicError(c *gin.Context, statusCode int, errType, message string) {
++	if c.Writer.Written() && strings.HasPrefix(c.Writer.Header().Get("Content-Type"), "text/event-stream") {
++		if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(errType, message)); err == nil {
++			c.Writer.Flush()
++		}
++		return
++	}
+ 	c.JSON(statusCode, gin.H{
+ 		"type": "error",
+ 		"error": gin.H{
+diff --git a/backend/internal/service/openai_gateway_messages_pre_content_test.go b/backend/internal/service/openai_gateway_messages_pre_content_test.go
+new file mode 100644
+index 000000000..5c911ee68
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_messages_pre_content_test.go
+@@ -0,0 +1,188 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++const (
++	preContentCreatedFrame   = `data: {"type":"response.created","response":{"id":"resp_pre","object":"response","model":"gpt-5.4","status":"in_progress","output":[]}}` + "\n\n"
++	preContentFailoverFailed = `data: {"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"An error occurred while processing your request."}}}` + "\n\n"
++)
++
++func newPreContentContext() (*httptest.ResponseRecorder, *gin.Context, []byte) {
++	gin.SetMode(gin.TestMode)
++	body := []byte(`{"model":"gpt-5.4","max_tokens":32,"messages":[{"role":"user","content":"hello"}],"stream":true}`)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
++	c.Request.Header.Set("Content-Type", "application/json")
++	return rec, c, body
++}
++
++func forwardPreContent(t *testing.T, cfg *config.Config, header http.Header, upstreamBody io.ReadCloser) (*httptest.ResponseRecorder, *gin.Context, error) {
++	t.Helper()
++	rec, c, body := newPreContentContext()
++	if header == nil {
++		header = http.Header{}
++	}
++	header.Set("Content-Type", "text/event-stream")
++	upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: header, Body: upstreamBody}}
++	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream, responseHeaderFilter: compileResponseHeaderFilter(cfg)}
++	_, err := svc.ForwardAsAnthropic(context.Background(), c, rawChatCompletionsTestAccount(), body, "", "")
++	return rec, c, err
++}
++
++func TestForwardAsAnthropic_PreContentFailedFailsOver(t *testing.T) {
++	stream := preContentCreatedFrame +
++		`data: {"type":"response.in_progress","response":{"id":"resp_pre","object":"response","model":"gpt-5.4","status":"in_progress","output":[]}}` + "\n\n" +
++		`data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[]}}` + "\n\n" +
++		preContentFailoverFailed
++	rec, c, err := forwardPreContent(t, rawChatCompletionsTestConfig(), nil, io.NopCloser(strings.NewReader(stream)))
++
++	var failoverErr *UpstreamFailoverError
++	require.True(t, errors.As(err, &failoverErr), "failure before content must fail over: %T: %v", err, err)
++	require.Empty(t, rec.Body.String())
++	require.False(t, c.Writer.Written())
++}
++
++func TestForwardAsAnthropic_PreContentMissingTerminalFailsOver(t *testing.T) {
++	rec, c, err := forwardPreContent(t, rawChatCompletionsTestConfig(), nil, io.NopCloser(strings.NewReader(preContentCreatedFrame)))
++
++	var failoverErr *UpstreamFailoverError
++	require.True(t, errors.As(err, &failoverErr), "EOF without a terminal event before content must fail over: %T: %v", err, err)
++	require.Empty(t, rec.Body.String())
++	require.False(t, c.Writer.Written())
++}
++
++func TestForwardAsAnthropic_PreContentReadErrorDoesNotFailOver(t *testing.T) {
++	reader := &errAfterReader{data: strings.NewReader(preContentCreatedFrame), err: io.ErrUnexpectedEOF}
++	rec, _, err := forwardPreContent(t, rawChatCompletionsTestConfig(), nil, io.NopCloser(reader))
++
++	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
++	var failoverErr *UpstreamFailoverError
++	require.False(t, errors.As(err, &failoverErr), "a read error never fails over: %v", err)
++	require.Contains(t, rec.Body.String(), "message_start")
++}
++
++func TestForwardAsAnthropic_PreContentPingKeepsFailover(t *testing.T) {
++	cfg := rawChatCompletionsTestConfig()
++	cfg.Gateway.StreamKeepaliveInterval = 1
++	pr, pw := io.Pipe()
++	go func() {
++		_, _ = io.WriteString(pw, preContentCreatedFrame)
++		time.Sleep(1300 * time.Millisecond)
++		_, _ = io.WriteString(pw, preContentFailoverFailed)
++		_ = pw.Close()
++	}()
++	rec, c, err := forwardPreContent(t, cfg, http.Header{"X-Request-Id": []string{"attempt-1"}}, pr)
++
++	var failoverErr *UpstreamFailoverError
++	require.True(t, errors.As(err, &failoverErr), "ping-only output must keep failover: %T: %v", err, err)
++	body := rec.Body.String()
++	require.GreaterOrEqual(t, strings.Count(body, "event: ping"), 1)
++	require.NotContains(t, body, "message_start")
++	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
++	require.Empty(t, rec.Header().Get("X-Request-Id"), "account headers must stay private while the prelude is held")
++	require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c))
++}
++
++func TestForwardAsAnthropic_ContentReleasedNeverFailsOver(t *testing.T) {
++	stream := preContentCreatedFrame +
++		`data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"partial"}` + "\n\n" +
++		preContentFailoverFailed
++	rec, _, err := forwardPreContent(t, rawChatCompletionsTestConfig(), nil, io.NopCloser(strings.NewReader(stream)))
++
++	require.Error(t, err)
++	var failoverErr *UpstreamFailoverError
++	require.False(t, errors.As(err, &failoverErr), "released content must not fail over: %v", err)
++	body := rec.Body.String()
++	start := strings.Index(body, "event: message_start")
++	text := strings.Index(body, `"text":"partial"`)
++	errEvt := strings.Index(body, "event: error")
++	require.True(t, start >= 0 && text > start && errEvt > text, "body order: %q", body)
++}
++
++func TestForwardAsAnthropic_TerminalBeforeContentReleasesPrelude(t *testing.T) {
++	stream := preContentCreatedFrame +
++		`data: {"type":"response.completed","response":{"id":"resp_pre","object":"response","model":"gpt-5.4","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":0,"total_tokens":3}}}` + "\n\n"
++	rec, _, err := forwardPreContent(t, rawChatCompletionsTestConfig(), nil, io.NopCloser(strings.NewReader(stream)))
++
++	require.NoError(t, err)
++	body := rec.Body.String()
++	start := strings.Index(body, "event: message_start")
++	delta := strings.Index(body, "event: message_delta")
++	stop := strings.Index(body, "event: message_stop")
++	require.True(t, start >= 0 && delta > start && stop > delta, "body order: %q", body)
++}
++
++func TestForwardAsAnthropic_IntervalTimeoutReleasesPrelude(t *testing.T) {
++	cfg := rawChatCompletionsTestConfig()
++	cfg.Gateway.StreamDataIntervalTimeout = 1
++	pr, pw := io.Pipe()
++	defer func() { _ = pw.Close() }()
++	go func() {
++		_, _ = io.WriteString(pw, preContentCreatedFrame)
++	}()
++	rec, _, err := forwardPreContent(t, cfg, nil, pr)
++
++	require.Error(t, err)
++	require.Contains(t, err.Error(), "stream data interval timeout")
++	var failoverErr *UpstreamFailoverError
++	require.False(t, errors.As(err, &failoverErr))
++	require.Contains(t, rec.Body.String(), "message_start")
++}
++
++func TestWriteAnthropicErrorAfterCommittedSSE(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
++	setSSEHeaders(c)
++	_, err := io.WriteString(c.Writer, "event: ping\ndata: {\"type\":\"ping\"}\n\n")
++	require.NoError(t, err)
++
++	writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", "prompt is too long")
++
++	body := rec.Body.String()
++	require.True(t, strings.HasSuffix(body, "event: error\ndata: {\"error\":{\"message\":\"prompt is too long\",\"type\":\"invalid_request_error\"},\"type\":\"error\"}\n\n"), "body: %q", body)
++	for _, line := range strings.Split(body, "\n") {
++		require.False(t, strings.HasPrefix(line, "{"), "bare JSON line in SSE body: %q", line)
++	}
++}
++
++func TestForwardAsAnthropic_OpenCodeUnsupportedModelAfterCommittedSSEIsSSEError(t *testing.T) {
++	rec, c, body := newPreContentContext()
++	body = []byte(`{"model":"gemini-3-pro","max_tokens":32,"messages":[{"role":"user","content":"hello"}],"stream":true}`)
++	setSSEHeaders(c)
++	_, err := io.WriteString(c.Writer, "event: ping\ndata: {\"type\":\"ping\"}\n\n")
++	require.NoError(t, err)
++	account := &Account{
++		ID: 1, Platform: PlatformOpenCodeGo, Type: AccountTypeAPIKey,
++		Credentials: map[string]any{"api_key": "sk-test", "base_url": "http://upstream.example"},
++	}
++	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig()}
++
++	_, err = svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
++
++	require.Error(t, err)
++	out := rec.Body.String()
++	lastEvent := out[strings.LastIndex(strings.TrimRight(out, "\n"), "\n\n")+2:]
++	require.True(t, strings.HasPrefix(lastEvent, "event: error\ndata: {"), "last event: %q", lastEvent)
++	for _, line := range strings.Split(out, "\n") {
++		require.False(t, strings.HasPrefix(line, "{"), "bare JSON line in SSE body: %q", line)
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index 8cb506486..bf3993d1c 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -1557,6 +1557,33 @@ func applyOpenAIStreamFailedErrorPassthroughRule(
+ 	)
+ }
+ 
++// OpenAIStreamFailedFrame is the in-stream failed or error frame behind a
++// failover, kept so an exhausted failover can still apply the error
++// passthrough rules that would have matched the frame.
++type OpenAIStreamFailedFrame struct {
++	Platform string
++	Payload  []byte
++	Message  string
++}
++
++// ApplyOpenAIStreamFailedFrameRule applies the error passthrough rules to the
++// frame that triggered an exhausted failover, matching it the way
++// applyOpenAIStreamFailedErrorPassthroughRule does for an in-band frame.
++func ApplyOpenAIStreamFailedFrameRule(c *gin.Context, failoverErr *UpstreamFailoverError) (status int, errType string, errMsg string, matched bool) {
++	if failoverErr == nil || failoverErr.StreamFailedFrame == nil {
++		return 0, "", "", false
++	}
++	frame := failoverErr.StreamFailedFrame
++	status, errType, errMsg, matched = applyOpenAIStreamFailedErrorPassthroughRule(c, frame.Platform, frame.Payload, frame.Message)
++	if !matched {
++		return 0, "", "", false
++	}
++	if errMsg == "" {
++		errMsg = frame.Message
++	}
++	return status, errType, errMsg, true
++}
++
+ func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool {
+ 	if hit, _, _ := detectOpenAICyberPolicy(payload); hit {
+ 		return false
+@@ -1792,6 +1819,9 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverErrorWithModel(
+ 		classificationHeaders = nil
+ 	}
+ 	failoverErr := s.newOpenAIAccountFailoverErrorWithClassificationHeaders(account, statusCode, headers, classificationHeaders, payload, message, shouldDisable, retryableOnSameAccount)
++	if len(payload) > 0 && account != nil {
++		failoverErr.StreamFailedFrame = &OpenAIStreamFailedFrame{Platform: account.Platform, Payload: payload, Message: message}
++	}
+ 	if failoverErr.IsCredentialFailure() || failoverErr.RequestScopedTransient {
+ 		return failoverErr
+ 	}
+diff --git a/backend/internal/service/opencode_go.go b/backend/internal/service/opencode_go.go
+index 248ced958..7709cb55e 100644
+--- a/backend/internal/service/opencode_go.go
++++ b/backend/internal/service/opencode_go.go
+@@ -82,13 +82,7 @@ func writeOpenCodeUnsupportedModelError(c *gin.Context, isAnthropic bool, model
+ 	msg := fmt.Sprintf("Model '%s' is not supported on OpenCode standard gateway (gemini models require Google SDK endpoint, jev models require System One endpoint)", model)
+ 	if c != nil {
+ 		if isAnthropic {
+-			c.JSON(http.StatusBadRequest, gin.H{
+-				"type": "error",
+-				"error": gin.H{
+-					"type":    "invalid_request_error",
+-					"message": msg,
+-				},
+-			})
++			writeAnthropicError(c, http.StatusBadRequest, "invalid_request_error", msg)
+ 		} else {
+ 			c.JSON(http.StatusBadRequest, gin.H{
+ 				"error": gin.H{

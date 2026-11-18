@@ -1606,7 +1606,7 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 		return pricing
 	}
 	cloned := *pricing
-	if isOpenAIGPT6AstraModel(normalized) {
+	if isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6.1-sol" {
 		cloned.UltrafastMultiplier = 6
 	}
 	if fastRatio > 0 {

@@ -1,0 +1,59 @@
+package service
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+var intake023PerfSink []byte
+
+func intake023OllamaBody(n int) []byte {
+	messages := make([]map[string]any, 0, n)
+	for i := 0; i < n; i++ {
+		messages = append(messages, map[string]any{
+			"role":"assistant", "content":"answer", "reasoning_content":"history reasoning 世界",
+			"extra": "0123456789012345678901234567890123456789012345678901234567890123456789",
+		})
+	}
+	body, _ := json.Marshal(map[string]any{"model":"fixture-model","messages":messages})
+	return body
+}
+
+func TestIntake023PerfOllamaEquivalence(t *testing.T) {
+	for _, body := range [][]byte{
+		intake023OllamaBody(1), intake023OllamaBody(100),
+		[]byte("{ \"messages\": [ {\"role\":\"assistant\",\"reasoning_content\":\"quoted \\\\\"} ] }"),
+		[]byte("{\"messages\":[{\"role\":\"assistant\",\"reasoning_content\":\"new\",\"reasoning\":\"keep\"}]}"),
+		[]byte("{\"messages\":[{\"role\":\"assistant\",\"reasoning_content\":\"new\",\"thinking\":\"keep\"}]}"),
+		[]byte("{\"messages\":[{\"role\":\"assistant\",\"reasoning_content\":\"new\",\"reasoning\":null}]}"),
+		[]byte("{\"messages\":[{\"role\":\"user\",\"reasoning_content\":\"keep\"}]}"),
+		[]byte("{\"messages\":null}"),
+		[]byte("invalid JSON"),
+	} {
+		require.Equal(t, normalizeOllamaCloudChatCompletionsRequest(body), intake023CandidateOllama(body))
+	}
+}
+
+func TestIntake023PerfSourceSSEEscapedUsage(t *testing.T) {
+	body := []byte("{\"type\":\"content_block_delta\",\"\\u0075sage\":{\"output_tokens\":9}}")
+	require.True(t, intake023SourceSSEPredicate("content_block_delta",body,false,false),
+		"source fast path must not skip real usage hidden by JSON escapes")
+}
+
+func BenchmarkIntake023OllamaBaseline(b *testing.B) {
+	body := intake023OllamaBody(200)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(body)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ { intake023PerfSink = normalizeOllamaCloudChatCompletionsRequest(body) }
+}
+
+func BenchmarkIntake023OllamaCandidate(b *testing.B) {
+	body := intake023OllamaBody(200)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(body)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ { intake023PerfSink = intake023CandidateOllama(body) }
+}

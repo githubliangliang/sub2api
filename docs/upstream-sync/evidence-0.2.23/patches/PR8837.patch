@@ -1,0 +1,75 @@
+diff --git a/backend/internal/repository/scheduler_cache.go b/backend/internal/repository/scheduler_cache.go
+index f8a283d09..aa7959c7b 100644
+--- a/backend/internal/repository/scheduler_cache.go
++++ b/backend/internal/repository/scheduler_cache.go
+@@ -1249,6 +1249,11 @@ func filterSchedulerCredentials(credentials map[string]any) map[string]any {
+ 	// Candidate-list admission evaluates the account override before hydrating
+ 	// the full account. Dropping it silently falls back to the platform threshold.
+ 	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type", "account_scheduling_threshold",
++		// OpenAI 端点能力集必须进投影：候选过滤按 SupportsOpenAIEndpointCapability 判
++		// capability_mismatch，而 Seedance 分支直接读该键、不走「未配置即放行」。
++		// 裁掉后 Seedance 账号在选号阶段必然被剔除，表现为 /v1/models 能列出模型、
++		// 建任务恒定 503 seedance_no_eligible_account。
++		"openai_capabilities",
+ 		// Gemini 显式缓存的候选过滤（GeminiExplicitCacheExclusions）读本投影判定账号是否支持显式缓存：
+ 		// 官方地址、Vertex 认证方式与上游网关的显式缓存声明。缺这几个键时只能按类型粗筛，
+ 		// 不支持的账号要逐个选中后才被剔除。
+diff --git a/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go b/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go
+new file mode 100644
+index 000000000..9d2580e23
+--- /dev/null
++++ b/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go
+@@ -0,0 +1,53 @@
++//go:build unit
++
++package repository
++
++import (
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++)
++
++// buildSchedulerMetadataAccount 是调度候选的唯一投影出口，openAIAccountSkipReason
++// 按 SupportsOpenAIEndpointCapability 判 capability_mismatch。Seedance 分支直接读
++// credentials.openai_capabilities 且不走「未配置即放行」，所以该键一旦被裁掉，
++// Seedance 账号在选号阶段必然被剔除，而 /v1/models 走 DB 全量仍会列出模型。
++func TestSchedulerMetadataKeepsOpenAICapabilities(t *testing.T) {
++	account := service.Account{
++		ID:       1,
++		Platform: service.PlatformOpenAI,
++		Type:     service.AccountTypeAPIKey,
++		Credentials: map[string]any{
++			"api_key":             "sk-test",
++			"base_url":            "https://relay.example.com/api/v3",
++			"openai_capabilities": []string{"seedance"},
++		},
++	}
++
++	projected := buildSchedulerMetadataAccount(account)
++
++	require.Equal(t, []string{"seedance"}, projected.Credentials["openai_capabilities"])
++	require.Equal(t, "https://relay.example.com/api/v3", projected.Credentials["base_url"])
++	require.True(t, projected.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilitySeedance))
++}
++
++func TestSchedulerMetadataDropsUnlistedCredentials(t *testing.T) {
++	account := service.Account{
++		ID:       2,
++		Platform: service.PlatformOpenAI,
++		Type:     service.AccountTypeAPIKey,
++		Credentials: map[string]any{
++			"api_key":             "sk-test",
++			"base_url":            "https://relay.example.com/api/v3",
++			"openai_capabilities": []string{"seedance"},
++			"model_mapping":       map[string]string{"seedance-2-5": "doubao-seedance-2-5-260628"},
++			"unlisted_secret":     "drop-me",
++		},
++	}
++
++	projected := buildSchedulerMetadataAccount(account)
++
++	require.Equal(t, map[string]string{"seedance-2-5": "doubao-seedance-2-5-260628"}, projected.Credentials["model_mapping"])
++	require.NotContains(t, projected.Credentials, "unlisted_secret")
++}

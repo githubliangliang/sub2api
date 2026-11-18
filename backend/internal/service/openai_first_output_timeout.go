@@ -145,7 +145,9 @@ func (s *openAIFirstOutputStage) prepareWrite(incoming int) error {
 	}
 	file, err := s.createTemp()
 	if err != nil {
-		return fmt.Errorf("create first-output spool: %w", err)
+		// Keep the same bounded stage when temporary storage is unavailable.
+		s.memoryOnly = true
+		return nil
 	}
 	path := file.Name()
 	// Unlink before writing any request data. Unix keeps the file descriptor

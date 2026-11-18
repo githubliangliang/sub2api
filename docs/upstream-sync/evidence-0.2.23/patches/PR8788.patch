@@ -1,0 +1,126 @@
+diff --git a/backend/internal/service/gateway_count_tokens.go b/backend/internal/service/gateway_count_tokens.go
+index 9718ef3e0..4e1c843a9 100644
+--- a/backend/internal/service/gateway_count_tokens.go
++++ b/backend/internal/service/gateway_count_tokens.go
+@@ -448,11 +448,11 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
+ 	// targetURL 的 base 取值），其余保持 extra/default 行为。
+ 	setAnthropicAPIKeyAuthHeader(req.Header, account, token, baseURL)
+ 
+-	if req.Header.Get("content-type") == "" {
+-		req.Header.Set("content-type", "application/json")
++	if getHeaderRaw(req.Header, "content-type") == "" {
++		setHeaderRaw(req.Header, "content-type", "application/json")
+ 	}
+-	if req.Header.Get("anthropic-version") == "" {
+-		req.Header.Set("anthropic-version", "2023-06-01")
++	if getHeaderRaw(req.Header, "anthropic-version") == "" {
++		setHeaderRaw(req.Header, "anthropic-version", "2023-06-01")
+ 	}
+ 
+ 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+diff --git a/backend/internal/service/gateway_count_tokens_raw_headers_test.go b/backend/internal/service/gateway_count_tokens_raw_headers_test.go
+new file mode 100644
+index 000000000..04849c25a
+--- /dev/null
++++ b/backend/internal/service/gateway_count_tokens_raw_headers_test.go
+@@ -0,0 +1,87 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func headerKeysFold(h http.Header, name string) []string {
++	var keys []string
++	for k := range h {
++		if strings.EqualFold(k, name) {
++			keys = append(keys, k)
++		}
++	}
++	return keys
++}
++
++// The count_tokens passthrough builder copies client headers under their wire casing
++// (lowercase content-type / anthropic-version). It must look those up under the same
++// key before filling in defaults, so the upstream request carries exactly one of each.
++func TestCountTokensPassthroughSendsOneContentTypeAndVersion(t *testing.T) {
++	tests := []struct {
++		name        string
++		clientSends bool
++		wantType    string
++		wantVersion string
++	}{
++		{"client sent both", true, "application/json; charset=utf-8", "2024-01-01"},
++		{"client sent neither", false, "application/json", "2023-06-01"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			c, _ := gin.CreateTestContext(httptest.NewRecorder())
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", nil)
++			if tt.clientSends {
++				c.Request.Header.Set("Anthropic-Version", tt.wantVersion)
++				c.Request.Header.Set("Content-Type", tt.wantType)
++			}
++			account := &Account{
++				ID:          1,
++				Platform:    PlatformAnthropic,
++				Type:        AccountTypeAPIKey,
++				Credentials: map[string]any{"api_key": "test-key"},
++				Status:      StatusActive,
++				Schedulable: true,
++			}
++			svc := &GatewayService{cfg: &config.Config{}}
++			body := []byte(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}]}`)
++
++			req, err := svc.buildCountTokensRequestAnthropicAPIKeyPassthrough(context.Background(), c, account, body, "test-key")
++			require.NoError(t, err)
++
++			require.Equal(t, []string{"content-type"}, headerKeysFold(req.Header, "content-type"))
++			require.Equal(t, []string{tt.wantType}, req.Header["content-type"])
++			require.Equal(t, []string{"anthropic-version"}, headerKeysFold(req.Header, "anthropic-version"))
++			require.Equal(t, []string{tt.wantVersion}, req.Header["anthropic-version"])
++		})
++	}
++}
++
++// The Claude mimic debug line must report headers stored under their wire casing.
++func TestBuildClaudeMimicDebugLineReadsRawCasedHeaders(t *testing.T) {
++	req := httptest.NewRequest(http.MethodPost, "https://upstream.example/v1/messages", nil)
++	setHeaderRaw(req.Header, "anthropic-version", "2023-06-01")
++	setHeaderRaw(req.Header, "anthropic-beta", "beta-a")
++	setHeaderRaw(req.Header, "content-type", "application/json")
++	setHeaderRaw(req.Header, "x-app", "cli")
++	setHeaderRaw(req.Header, "X-Stainless-OS", "Linux")
++
++	line := buildClaudeMimicDebugLine(req, []byte(`{}`), nil, "oauth", true)
++
++	require.Contains(t, line, `anthropic-version="2023-06-01"`)
++	require.Contains(t, line, `anthropic-beta="beta-a"`)
++	require.Contains(t, line, `content-type="application/json"`)
++	require.Contains(t, line, `x-app="cli"`)
++	require.Contains(t, line, `x-stainless-os="Linux"`)
++}
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index 25467588a..842c68521 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -354,7 +354,7 @@ func buildClaudeMimicDebugLine(req *http.Request, body []byte, account *Account,
+ 
+ 	h := make([]string, 0, len(interesting))
+ 	for _, k := range interesting {
+-		if v := req.Header.Get(k); v != "" {
++		if v := getHeaderRaw(req.Header, k); v != "" {
+ 			h = append(h, fmt.Sprintf("%s=%q", k, safeHeaderValueForLog(k, v)))
+ 		}
+ 	}

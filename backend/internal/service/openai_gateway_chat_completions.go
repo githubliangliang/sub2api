@@ -890,7 +890,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 				usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 			}
 		}
-		if strings.TrimSpace(event.Type) == "response.failed" {
+		if eventType := strings.TrimSpace(event.Type); eventType == "response.failed" || eventType == "error" {
 			payloadBytes := []byte(payload)
 			message := extractOpenAISSEErrorMessage(payloadBytes)
 			if hit, code, msg := detectOpenAICyberPolicy(payloadBytes); hit {
@@ -924,10 +924,11 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 				}
 				return true
 			}
-			if openAIStreamFailedEventShouldFailover(payloadBytes, message) {
+			if !clientOutputStarted && openAIStreamFailedEventShouldFailover(payloadBytes, message) {
 				streamFailoverErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, requestID, payloadBytes, message, upstreamModel, resp.Header)
 				return true
 			}
+			s.handleOpenAIStreamTerminalAccountSideEffects(c, account, payloadBytes, message, resp.Header, upstreamModel)
 			message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)
 			defaultStatus, defaultErrType, defaultMsg := http.StatusBadGateway, "upstream_error", message
 			// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），

@@ -1,0 +1,212 @@
+diff --git a/backend/internal/repository/http_upstream.go b/backend/internal/repository/http_upstream.go
+index e830b4338..af965e15a 100644
+--- a/backend/internal/repository/http_upstream.go
++++ b/backend/internal/repository/http_upstream.go
+@@ -63,8 +63,6 @@ const (
+ 	// 上游域名被解析到 443 不可达的 IP 时（DNS 污染/路由异常），单个账号就要卡满
+ 	// 内核超时；而多账号故障转移是串行的，一次请求会阻塞数分钟且不写中间错误。
+ 	defaultUpstreamDialTimeout = 10 * time.Second
+-	// defaultUpstreamDialKeepAlive: TCP keepalive 探测间隔，与 Go 默认值保持一致
+-	defaultUpstreamDialKeepAlive = 30 * time.Second
+ 	// defaultUpstreamTLSHandshakeTimeout: TLS 握手超时（10秒）
+ 	// 与建连超时同量级，避免 TCP 已连通但对端不推进握手时无限等待
+ 	defaultUpstreamTLSHandshakeTimeout = 10 * time.Second
+@@ -1365,8 +1363,14 @@ func defaultPoolSettings(cfg *config.Config) poolSettings {
+ // 建连没有任何超时上限，只能等内核 TCP 重传耗尽（Linux 约 130 秒）。
+ func newUpstreamDialer() *net.Dialer {
+ 	return &net.Dialer{
+-		Timeout:   defaultUpstreamDialTimeout,
+-		KeepAlive: defaultUpstreamDialKeepAlive,
++		Timeout: defaultUpstreamDialTimeout,
++		KeepAliveConfig: net.KeepAliveConfig{
++			Enable:   true,
++			Idle:     upstreamKeepAliveIdle,
++			Interval: upstreamKeepAliveInterval,
++			Count:    upstreamKeepAliveCount,
++		},
++		Control: upstreamDialControl,
+ 	}
+ }
+ 
+diff --git a/backend/internal/repository/http_upstream_dial_timeout_test.go b/backend/internal/repository/http_upstream_dial_timeout_test.go
+index 00d6ce1a4..9660624f7 100644
+--- a/backend/internal/repository/http_upstream_dial_timeout_test.go
++++ b/backend/internal/repository/http_upstream_dial_timeout_test.go
+@@ -30,7 +30,7 @@ func TestNewUpstreamDialerHasBoundedTimeout(t *testing.T) {
+ 
+ 	require.Greater(t, dialer.Timeout, time.Duration(0), "建连超时必须有上限")
+ 	require.Equal(t, defaultUpstreamDialTimeout, dialer.Timeout)
+-	require.Equal(t, defaultUpstreamDialKeepAlive, dialer.KeepAlive)
++	require.Equal(t, net.KeepAliveConfig{Enable: true, Idle: 15 * time.Second, Interval: 5 * time.Second, Count: 3}, dialer.KeepAliveConfig)
+ }
+ 
+ // 建连超时对 HTTP 代理同样生效：Transport.Proxy 走的仍是 DialContext，
+diff --git a/backend/internal/repository/http_upstream_keepalive.go b/backend/internal/repository/http_upstream_keepalive.go
+new file mode 100644
+index 000000000..51fb8cb8c
+--- /dev/null
++++ b/backend/internal/repository/http_upstream_keepalive.go
+@@ -0,0 +1,23 @@
++package repository
++
++import "time"
++
++// TCP keep-alive of upstream connections (newUpstreamDialer). A connection
++// whose peer stops answering is aborted upstreamTCPUserTimeout after its last
++// received packet: idle 15 s, then 3 probes 5 s apart. With the previous
++// KeepAlive of 30 s and Go's default interval 15 s and count 9, the same case
++// took 165 s.
++//
++// TCP_USER_TIMEOUT (Linux only, see upstreamDialControl) is set to
++// idle + interval * count, as Cloudflare's "When TCP sockets refuse to die"
++// (2019) recommends when both are used: once it is set the kernel aborts on it
++// rather than on the probe count, so a larger value would add probes and a
++// smaller one would cut them. It also bounds request data the peer never
++// acknowledges, where keep-alive does not run. gRPC proposal A18 likewise sets
++// it only on Linux.
++const (
++	upstreamKeepAliveIdle     = 15 * time.Second
++	upstreamKeepAliveInterval = 5 * time.Second
++	upstreamKeepAliveCount    = 3
++	upstreamTCPUserTimeout    = upstreamKeepAliveIdle + upstreamKeepAliveInterval*upstreamKeepAliveCount
++)
+diff --git a/backend/internal/repository/http_upstream_keepalive_linux.go b/backend/internal/repository/http_upstream_keepalive_linux.go
+new file mode 100644
+index 000000000..68d7cd757
+--- /dev/null
++++ b/backend/internal/repository/http_upstream_keepalive_linux.go
+@@ -0,0 +1,28 @@
++//go:build linux
++
++package repository
++
++import (
++	"log/slog"
++	"syscall"
++)
++
++// tcpUserTimeout is TCP_USER_TIMEOUT from Linux include/uapi/linux/tcp.h; the
++// standard library's syscall package does not define it on linux/amd64.
++const tcpUserTimeout = 0x12
++
++// upstreamDialControl sets TCP_USER_TIMEOUT on each upstream socket
++// before it connects. A failure is logged and the dial goes on without the
++// option, like the standard library does for the keep-alive options.
++func upstreamDialControl(network, _ string, raw syscall.RawConn) error {
++	var sockErr error
++	if err := raw.Control(func(fd uintptr) {
++		sockErr = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, tcpUserTimeout, int(upstreamTCPUserTimeout.Milliseconds()))
++	}); err != nil {
++		sockErr = err
++	}
++	if sockErr != nil {
++		slog.Warn("upstream_tcp_user_timeout_not_set", "network", network, "error", sockErr)
++	}
++	return nil
++}
+diff --git a/backend/internal/repository/http_upstream_keepalive_linux_test.go b/backend/internal/repository/http_upstream_keepalive_linux_test.go
+new file mode 100644
+index 000000000..c25e7458f
+--- /dev/null
++++ b/backend/internal/repository/http_upstream_keepalive_linux_test.go
+@@ -0,0 +1,85 @@
++//go:build linux
++
++package repository
++
++import (
++	"context"
++	"net"
++	"syscall"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++// TCP_USER_TIMEOUT in Linux include/uapi/linux/tcp.h.
++const testTCPUserTimeoutOpt = 0x12
++
++// A socket dialed by the upstream dialer carries the keep-alive configuration
++// and TCP_USER_TIMEOUT, read back from the kernel.
++func TestUpstreamDialerSetsKeepAliveAndUserTimeoutOnTheSocket(t *testing.T) {
++	listener, err := net.Listen("tcp", "127.0.0.1:0")
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = listener.Close() })
++	accepted := make(chan net.Conn, 1)
++	go func() {
++		server, err := listener.Accept()
++		if err != nil {
++			close(accepted)
++			return
++		}
++		accepted <- server
++	}()
++
++	conn, err := newUpstreamDialer().DialContext(context.Background(), "tcp", listener.Addr().String())
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = conn.Close() })
++	if server, ok := <-accepted; ok {
++		t.Cleanup(func() { _ = server.Close() })
++	}
++	tcpConn, ok := conn.(*net.TCPConn)
++	require.True(t, ok, "%T", conn)
++	raw, err := tcpConn.SyscallConn()
++	require.NoError(t, err)
++
++	got := map[string]int{}
++	var readErr error
++	require.NoError(t, raw.Control(func(fd uintptr) {
++		for _, opt := range []struct {
++			name         string
++			level, which int
++		}{
++			{"SO_KEEPALIVE", syscall.SOL_SOCKET, syscall.SO_KEEPALIVE},
++			{"TCP_KEEPIDLE", syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE},
++			{"TCP_KEEPINTVL", syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL},
++			{"TCP_KEEPCNT", syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT},
++			{"TCP_USER_TIMEOUT", syscall.IPPROTO_TCP, testTCPUserTimeoutOpt},
++		} {
++			value, err := syscall.GetsockoptInt(int(fd), opt.level, opt.which)
++			if err != nil {
++				readErr = err
++				return
++			}
++			got[opt.name] = value
++		}
++	}))
++	require.NoError(t, readErr)
++	require.Equal(t, map[string]int{
++		"SO_KEEPALIVE":     1,
++		"TCP_KEEPIDLE":     15,
++		"TCP_KEEPINTVL":    5,
++		"TCP_KEEPCNT":      3,
++		"TCP_USER_TIMEOUT": 30000,
++	}, got)
++}
++
++// A socket option the kernel refuses must not fail the dial: TCP_USER_TIMEOUT
++// does not apply to a UDP socket, so setting it there returns an error.
++func TestUpstreamDialerIgnoresUserTimeoutFailure(t *testing.T) {
++	packetConn, err := net.ListenPacket("udp", "127.0.0.1:0")
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = packetConn.Close() })
++
++	conn, err := newUpstreamDialer().DialContext(context.Background(), "udp", packetConn.LocalAddr().String())
++	require.NoError(t, err)
++	require.NoError(t, conn.Close())
++}
+diff --git a/backend/internal/repository/http_upstream_keepalive_other.go b/backend/internal/repository/http_upstream_keepalive_other.go
+new file mode 100644
+index 000000000..f7f61b203
+--- /dev/null
++++ b/backend/internal/repository/http_upstream_keepalive_other.go
+@@ -0,0 +1,9 @@
++//go:build !linux
++
++package repository
++
++import "syscall"
++
++// upstreamDialControl is nil off Linux: TCP_USER_TIMEOUT is a Linux socket
++// option, and the keep-alive configuration alone bounds idle connections.
++var upstreamDialControl func(network, address string, c syscall.RawConn) error

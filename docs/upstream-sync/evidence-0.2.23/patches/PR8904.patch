@@ -1,0 +1,373 @@
+diff --git a/backend/internal/service/openai_gateway_ollama_cloud_cc_reasoning.go b/backend/internal/service/openai_gateway_ollama_cloud_cc_reasoning.go
+index 4fd1c317b..d5fecb426 100644
+--- a/backend/internal/service/openai_gateway_ollama_cloud_cc_reasoning.go
++++ b/backend/internal/service/openai_gateway_ollama_cloud_cc_reasoning.go
+@@ -78,8 +78,8 @@ func normalizeOllamaCloudChatCompletionsRequest(body []byte) []byte {
+ 	if !messages.IsArray() {
+ 		return body
+ 	}
+-	updated := body
+-	changed := false
++	var edits []jsonObjectStringFieldEdit
++	var indexes []int
+ 	for i, msg := range messages.Array() {
+ 		if msg.Get("role").String() != "assistant" {
+ 			continue
+@@ -94,15 +94,23 @@ func normalizeOllamaCloudChatCompletionsRequest(body []byte) []byte {
+ 		if _, has := jsonNonEmptyString(msg.Get("thinking")); has {
+ 			continue
+ 		}
+-		next, err := sjson.SetBytes(updated, "messages."+strconv.Itoa(i)+".reasoning", reasoningContent)
++		edits = append(edits, jsonObjectStringFieldEdit{object: msg, value: reasoningContent})
++		indexes = append(indexes, i)
++	}
++	if len(edits) == 0 {
++		return body
++	}
++	if updated, ok := setStringFieldInJSONObjects(body, "reasoning", edits); ok {
++		return updated
++	}
++	// 无法可靠定位时逐条改写（输出相同，只是每条都复制一次请求体）。
++	updated := body
++	for k, i := range indexes {
++		next, err := sjson.SetBytes(updated, "messages."+strconv.Itoa(i)+".reasoning", edits[k].value)
+ 		if err != nil {
+ 			return body
+ 		}
+ 		updated = next
+-		changed = true
+-	}
+-	if !changed {
+-		return body
+ 	}
+ 	return updated
+ }
+diff --git a/backend/internal/service/openai_gateway_responses_chat_fallback.go b/backend/internal/service/openai_gateway_responses_chat_fallback.go
+index ff44721e7..fa9f249e8 100644
+--- a/backend/internal/service/openai_gateway_responses_chat_fallback.go
++++ b/backend/internal/service/openai_gateway_responses_chat_fallback.go
+@@ -505,8 +505,8 @@ func ensureDeepSeekChatReasoningPlaceholders(account *Account, body []byte) []by
+ 	if !messages.IsArray() {
+ 		return body
+ 	}
+-	updated := body
+-	changed := false
++	var edits []jsonObjectStringFieldEdit
++	var indexes []int
+ 	for i, msg := range messages.Array() {
+ 		if strings.TrimSpace(msg.Get("role").String()) != "assistant" {
+ 			continue
+@@ -514,15 +514,23 @@ func ensureDeepSeekChatReasoningPlaceholders(account *Account, body []byte) []by
+ 		if msg.Get("reasoning_content").String() != "" {
+ 			continue
+ 		}
++		edits = append(edits, jsonObjectStringFieldEdit{object: msg, value: deepSeekChatReasoningPlaceholderText})
++		indexes = append(indexes, i)
++	}
++	if len(edits) == 0 {
++		return body
++	}
++	if updated, ok := setStringFieldInJSONObjects(body, "reasoning_content", edits); ok {
++		return updated
++	}
++	// 无法可靠定位时逐条改写（输出相同，只是每条都复制一次请求体）。
++	updated := body
++	for _, i := range indexes {
+ 		next, err := sjson.SetBytes(updated, "messages."+strconv.Itoa(i)+".reasoning_content", deepSeekChatReasoningPlaceholderText)
+ 		if err != nil {
+ 			return body
+ 		}
+ 		updated = next
+-		changed = true
+-	}
+-	if !changed {
+-		return body
+ 	}
+ 	return updated
+ }
+diff --git a/backend/internal/service/openai_json_object_field_edit.go b/backend/internal/service/openai_json_object_field_edit.go
+new file mode 100644
+index 000000000..7071b7471
+--- /dev/null
++++ b/backend/internal/service/openai_json_object_field_edit.go
+@@ -0,0 +1,88 @@
++package service
++
++import (
++	"encoding/json"
++
++	"github.com/tidwall/gjson"
++)
++
++// jsonObjectStringFieldEdit 把 object（请求体 JSON 数组里的一个对象元素）的字符串字段设为 value。
++type jsonObjectStringFieldEdit struct {
++	object gjson.Result
++	value  string
++}
++
++// setStringFieldInJSONObjects 只复制一次 body，完成多处"给数组里的对象设置字符串字段"，
++// 结果与按顺序逐个调用 sjson.SetBytes(body, "<数组路径>.<i>.<field>", value) 逐字节相同。
++//
++// 逐个 sjson.SetBytes 每次都复制整个 body 并从头定位路径，k 处修改、body 长 n 时是
++// O(k·n)：几百轮的 agent 对话有几百条 assistant 消息、请求体几百 KB，一个请求就要
++// 复制上百 MB。
++//
++// edits 必须按 object 在 body 中的位置升序排列；object 必须直接取自对 body 的 gjson
++// 解析，其 Index 才是在 body 中的绝对偏移。field 必须是不含 gjson 路径特殊字符的普通键名。
++// 任何一处无法可靠定位时返回 ok=false，调用方应回退到逐个 sjson.SetBytes。
++func setStringFieldInJSONObjects(body []byte, field string, edits []jsonObjectStringFieldEdit) ([]byte, bool) {
++	if len(edits) == 0 {
++		return body, true
++	}
++	out := make([]byte, 0, len(body)+len(edits)*(len(field)+8))
++	last := 0
++	for _, edit := range edits {
++		obj := edit.object
++		start, end := obj.Index, obj.Index+len(obj.Raw)
++		if start <= 0 || start < last || end > len(body) || len(obj.Raw) < 2 ||
++			obj.Raw[0] != '{' || obj.Raw[len(obj.Raw)-1] != '}' || string(body[start:end]) != obj.Raw {
++			return nil, false
++		}
++		if existing := obj.Get(field); existing.Exists() {
++			// 与 sjson 相同：替换第一个同名键的值。Result.Get 返回的 Index 已加上
++			// obj.Index，是在 body 中的绝对偏移。
++			valueStart := existing.Index
++			valueEnd := valueStart + len(existing.Raw)
++			if valueStart <= start || valueEnd > end || string(body[valueStart:valueEnd]) != existing.Raw {
++				return nil, false
++			}
++			out = append(out, body[last:valueStart]...)
++			out = appendSJSONString(out, edit.value)
++			last = valueEnd
++			continue
++		}
++		// 与 sjson 相同：在最后一个 '}' 之前追加 `,"field":value`（空对象不加逗号）。
++		out = append(out, body[last:end-1]...)
++		if jsonObjectHasMembers(obj.Raw) {
++			out = append(out, ',')
++		}
++		out = appendSJSONString(out, field)
++		out = append(out, ':')
++		out = appendSJSONString(out, edit.value)
++		out = append(out, '}')
++		last = end
++	}
++	return append(out, body[last:]...), true
++}
++
++// jsonObjectHasMembers 与 sjson 判断是否需要逗号的方式相同：'{' 之后第一个非空白字符不是 '}'。
++func jsonObjectHasMembers(raw string) bool {
++	for i := 1; i < len(raw); i++ {
++		if raw[i] <= ' ' {
++			continue
++		}
++		return raw[i] != '}'
++	}
++	return false
++}
++
++// appendSJSONString 与 sjson 写字符串值的编码完全相同：含控制字符、非 ASCII、
++// 引号或反斜杠时用 encoding/json 编码，否则直接加引号。
++func appendSJSONString(buf []byte, s string) []byte {
++	for i := 0; i < len(s); i++ {
++		if s[i] < ' ' || s[i] > 0x7f || s[i] == '"' || s[i] == '\\' {
++			encoded, _ := json.Marshal(s)
++			return append(buf, encoded...)
++		}
++	}
++	buf = append(buf, '"')
++	buf = append(buf, s...)
++	return append(buf, '"')
++}
+diff --git a/backend/internal/service/openai_json_object_field_edit_test.go b/backend/internal/service/openai_json_object_field_edit_test.go
+new file mode 100644
+index 000000000..e4ba4ed50
+--- /dev/null
++++ b/backend/internal/service/openai_json_object_field_edit_test.go
+@@ -0,0 +1,186 @@
++//go:build unit
++
++package service
++
++import (
++	"fmt"
++	"math/rand"
++	"strconv"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// setStringFieldBySJSONLoop 是原先的写法：每处修改调用一次 sjson.SetBytes。用作参照。
++func setStringFieldBySJSONLoop(t testing.TB, body []byte, arrayPath, field string, indexes []int, values []string) []byte {
++	t.Helper()
++	updated := body
++	for k, i := range indexes {
++		next, err := sjson.SetBytes(updated, arrayPath+"."+strconv.Itoa(i)+"."+field, values[k])
++		require.NoError(t, err)
++		updated = next
++	}
++	return updated
++}
++
++// assistantEdits 选出 messages 里 role=assistant 且 field 为空的对象，与两个调用方的选择方式一致。
++func assistantEdits(body []byte, field string, value func(i int) string) ([]jsonObjectStringFieldEdit, []int, []string) {
++	var edits []jsonObjectStringFieldEdit
++	var indexes []int
++	var values []string
++	for i, msg := range gjson.GetBytes(body, "messages").Array() {
++		if strings.TrimSpace(msg.Get("role").String()) != "assistant" || msg.Get(field).String() != "" {
++			continue
++		}
++		v := value(i)
++		edits = append(edits, jsonObjectStringFieldEdit{object: msg, value: v})
++		indexes = append(indexes, i)
++		values = append(values, v)
++	}
++	return edits, indexes, values
++}
++
++func requireSameAsSJSONLoop(t *testing.T, body []byte, field string, value func(i int) string) {
++	t.Helper()
++	edits, indexes, values := assistantEdits(body, field, value)
++	got, ok := setStringFieldInJSONObjects(body, field, edits)
++	require.True(t, ok, "single pass must handle body: %s", body)
++	want := setStringFieldBySJSONLoop(t, body, "messages", field, indexes, values)
++	require.Equal(t, string(want), string(got))
++}
++
++func TestSetStringFieldInJSONObjectsMatchesSJSON(t *testing.T) {
++	cases := map[string]string{
++		"compact": `{"model":"m","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"a"},` +
++			`{"role":"assistant","content":"b","reasoning_content":""},{"role":"assistant","reasoning_content":null},` +
++			`{"role":"assistant","reasoning_content":"keep"},{"role":"assistant","reasoning_content":false},{}]}`,
++		"pretty": "{\n  \"messages\": [\n    { \"role\" : \"assistant\" ,\n      \"content\" : \"x\"\n    } ,\n" +
++			"    {\"role\":\"assistant\"   }\t,\n    { \"role\": \"assistant\", \"reasoning_content\" :  \"\"  }\n  ],\n  \"stream\": true\n}",
++		"nested field is not top-level": `{"messages":[{"role":"assistant","content":[{"type":"text","reasoning_content":"nested"}]}]}`,
++		"duplicate key replaces first":  `{"messages":[{"role":"assistant","reasoning_content":"","reasoning_content":"x"}]}`,
++		"unicode and escapes":           `{"messages":[{"role":"assistant","content":"中文 \"q\" \\ <"},{"role":"assistant","content":"é"}]}`,
++		"no assistant":                  `{"messages":[{"role":"user","content":"hi"}]}`,
++	}
++	values := []string{" ", "", "plain", `quote " and \ backslash`, "line\nbreak\ttab", "中文", "<tag>&amp;"}
++	for name, body := range cases {
++		for _, v := range values {
++			t.Run(fmt.Sprintf("%s/%q", name, v), func(t *testing.T) {
++				requireSameAsSJSONLoop(t, []byte(body), "reasoning_content", func(int) string { return v })
++			})
++		}
++	}
++}
++
++func TestSetStringFieldInJSONObjectsMatchesSJSONRandomized(t *testing.T) {
++	rng := rand.New(rand.NewSource(20261117))
++	ws := []string{"", " ", "\n", "\t", "  \n  "}
++	pick := func(xs []string) string { return xs[rng.Intn(len(xs))] }
++	states := []string{"", `"reasoning_content":""`, `"reasoning_content":null`, `"reasoning_content":"r"`, `"reasoning_content":1`}
++	roles := []string{"assistant", "user", "tool", " assistant "}
++	contents := []string{`"x"`, `""`, `null`, `"中文"`, `"a \"b\" \\ c"`, `[{"type":"text","text":"t"}]`}
++	for n := 0; n < 300; n++ {
++		var b strings.Builder
++		b.WriteString("{" + pick(ws) + `"model":"m",` + pick(ws) + `"messages":` + pick(ws) + "[")
++		count := rng.Intn(30)
++		for i := 0; i < count; i++ {
++			if i > 0 {
++				b.WriteString(pick(ws) + "," + pick(ws))
++			}
++			members := []string{
++				`"role"` + pick(ws) + ":" + pick(ws) + `"` + pick(roles) + `"`,
++				`"content":` + pick(ws) + pick(contents),
++			}
++			if s := pick(states); s != "" {
++				members = append(members, s)
++			}
++			rng.Shuffle(len(members), func(a, c int) { members[a], members[c] = members[c], members[a] })
++			if rng.Intn(10) == 0 {
++				members = nil // 空对象
++			}
++			b.WriteString("{" + pick(ws) + strings.Join(members, pick(ws)+","+pick(ws)) + pick(ws) + "}")
++		}
++		b.WriteString(pick(ws) + "]" + pick(ws) + "}")
++		body := []byte(b.String())
++		require.True(t, gjson.ValidBytes(body), "generated invalid JSON: %s", body)
++		requireSameAsSJSONLoop(t, body, "reasoning_content", func(i int) string { return "v" + strconv.Itoa(i) + pick([]string{"", "\"", "中"}) })
++	}
++}
++
++func TestSetStringFieldInJSONObjectsRejectsUnreliableEdits(t *testing.T) {
++	body := []byte(`{"messages":[{"role":"assistant"},{"role":"assistant"}]}`)
++	msgs := gjson.GetBytes(body, "messages").Array()
++
++	// 不是直接取自 body 的结果（Index 未知）。
++	_, ok := setStringFieldInJSONObjects(body, "f", []jsonObjectStringFieldEdit{{object: gjson.Parse(`{"role":"assistant"}`), value: "v"}})
++	require.False(t, ok)
++	// 顺序颠倒。
++	_, ok = setStringFieldInJSONObjects(body, "f", []jsonObjectStringFieldEdit{{object: msgs[1], value: "v"}, {object: msgs[0], value: "v"}})
++	require.False(t, ok)
++	// 不是对象。
++	_, ok = setStringFieldInJSONObjects(body, "f", []jsonObjectStringFieldEdit{{object: gjson.GetBytes(body, "messages.0.role"), value: "v"}})
++	require.False(t, ok)
++	// 没有修改时原样返回。
++	got, ok := setStringFieldInJSONObjects(body, "f", nil)
++	require.True(t, ok)
++	require.Equal(t, string(body), string(got))
++}
++
++func TestEnsureDeepSeekChatReasoningPlaceholdersLargeConversation(t *testing.T) {
++	body := deepSeekAgentConversation(200)
++	got := ensureDeepSeekChatReasoningPlaceholders(openaiPlatformDeepSeekAccount(), body)
++	_, indexes, values := assistantEdits(body, "reasoning_content", func(int) string { return deepSeekChatReasoningPlaceholderText })
++	require.Len(t, indexes, 200)
++	require.Equal(t, string(setStringFieldBySJSONLoop(t, body, "messages", "reasoning_content", indexes, values)), string(got))
++}
++
++func TestNormalizeOllamaCloudChatCompletionsRequestMatchesSJSON(t *testing.T) {
++	body := []byte(`{"messages":[{"role":"user","content":"q"},` +
++		`{"role":"assistant","content":"a","reasoning_content":"think \"1\""},` +
++		`{"role":"assistant","content":"b","reasoning_content":"think 2","reasoning":""},` +
++		`{"role":"assistant","content":"c","reasoning_content":"think 3","thinking":"t"},` +
++		`{"role":"assistant","content":"d"}]}`)
++	got := normalizeOllamaCloudChatCompletionsRequest(body)
++	want := setStringFieldBySJSONLoop(t, body, "messages", "reasoning", []int{1, 2}, []string{`think "1"`, "think 2"})
++	require.Equal(t, string(want), string(got))
++}
++
++// deepSeekAgentConversation 构造 n 轮 agent 对话：每轮 user + 没有 reasoning_content 的 assistant
++// 工具调用 + tool 结果，每条约 1 KB。
++func deepSeekAgentConversation(n int) []byte {
++	filler := strings.Repeat("lorem ipsum dolor sit amet ", 40)
++	var b strings.Builder
++	b.WriteString(`{"model":"deepseek-chat","stream":true,"messages":[`)
++	for i := 0; i < n; i++ {
++		if i > 0 {
++			b.WriteByte(',')
++		}
++		fmt.Fprintf(&b, `{"role":"user","content":"step %d %s"},`, i, filler)
++		fmt.Fprintf(&b, `{"role":"assistant","content":"","tool_calls":[{"id":"call_%d","type":"function","function":{"name":"exec","arguments":"{\"cmd\":\"%s\"}"}}]},`, i, filler)
++		fmt.Fprintf(&b, `{"role":"tool","tool_call_id":"call_%d","content":"%s"}`, i, filler)
++	}
++	b.WriteString(`]}`)
++	return []byte(b.String())
++}
++
++func BenchmarkEnsureDeepSeekChatReasoningPlaceholders(b *testing.B) {
++	body := deepSeekAgentConversation(300)
++	account := openaiPlatformDeepSeekAccount()
++	b.Run("single_pass", func(b *testing.B) {
++		b.SetBytes(int64(len(body)))
++		b.ReportAllocs()
++		for i := 0; i < b.N; i++ {
++			_ = ensureDeepSeekChatReasoningPlaceholders(account, body)
++		}
++	})
++	b.Run("sjson_per_message", func(b *testing.B) {
++		_, indexes, values := assistantEdits(body, "reasoning_content", func(int) string { return deepSeekChatReasoningPlaceholderText })
++		b.SetBytes(int64(len(body)))
++		b.ReportAllocs()
++		for i := 0; i < b.N; i++ {
++			_ = setStringFieldBySJSONLoop(b, body, "messages", "reasoning_content", indexes, values)
++		}
++	})
++}

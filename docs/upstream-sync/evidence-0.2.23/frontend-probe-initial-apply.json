@@ -1,0 +1,9 @@
+{
+  "exit_code": 1,
+  "scope": "source tests only in a temporary frontend copy",
+  "error": "PR8736 test hunk at source line 165 does not apply because the fork moved mapping tests to the beginning of the describe block. No product was changed.",
+  "correction": "Insert the exact added wildcard test cases before the existing mapping test; preserve the fork fixtures. PR8740 has no source tests and is assessed by its literal condition and the passing baseline UI suite.",
+  "pnpm_fixture_error": "pnpm tried to verify/install dependencies in the temporary copy; its unsafe_modules guard rejected removal of the linked modules directory before any tests ran.",
+  "pnpm_fixture_correction": "Use the installed pnpm --no-verify-deps-before-run option. No installation, lockfile change, or bypass of the modules-removal guard.",
+  "runner": "The negative CLI option is not accepted by pnpm exec in this installed version. Run the existing pnpm-installed Vitest entry with node directly; no package manager installation or module-directory removal."
+}

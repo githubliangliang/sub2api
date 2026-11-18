@@ -1,0 +1,542 @@
+diff --git a/backend/internal/repository/scheduler_snapshot_membership_integration_test.go b/backend/internal/repository/scheduler_snapshot_membership_integration_test.go
+new file mode 100644
+index 000000000..457fcce5a
+--- /dev/null
++++ b/backend/internal/repository/scheduler_snapshot_membership_integration_test.go
+@@ -0,0 +1,125 @@
++//go:build integration
++
++package repository
++
++import (
++	"context"
++	"fmt"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++)
++
++func TestSchedulerSnapshotConfiguredMembership(t *testing.T) {
++	for _, platform := range []string{service.PlatformOpenAI, service.PlatformAnthropic, service.PlatformGemini} {
++		t.Run(platform, func(t *testing.T) {
++			ctx := context.Background()
++			tx := testEntTx(t)
++			client := tx.Client()
++			repo := newAccountRepositoryWithSQL(client, tx, nil)
++			group := mustCreateGroup(t, client, &service.Group{Name: "snapshot-pool", Platform: platform})
++			other := mustCreateGroup(t, client, &service.Group{Name: "snapshot-other", Platform: platform})
++			future, past := time.Now().Add(time.Hour), time.Now().Add(-time.Hour)
++			ids := make(map[int64]map[string]int64)
++			for _, gid := range []int64{0, group.ID, other.ID} {
++				ids[gid] = make(map[string]int64)
++				for _, kind := range []string{"ready", "cooling", "expired", "manual", "disabled", "deleted", "other_platform", "mixed_on", "mixed_off"} {
++					accountPlatform := platform
++					if kind == "mixed_on" || kind == "mixed_off" {
++						accountPlatform = service.PlatformAntigravity
++					}
++					if kind == "other_platform" {
++						accountPlatform = service.PlatformGrok
++						if platform == accountPlatform {
++							accountPlatform = service.PlatformOpenAI
++						}
++					}
++					create := client.Account.Create().SetName(fmt.Sprintf("%s-%d", kind, gid)).
++						SetPlatform(accountPlatform).SetType(service.AccountTypeAPIKey).
++						SetCredentials(map[string]any{}).SetExtra(map[string]any{"mixed_scheduling": kind == "mixed_on"}).
++						SetStatus(service.StatusActive).SetSchedulable(kind != "manual")
++					switch kind {
++					case "cooling":
++						create.SetRateLimitResetAt(future).SetOverloadUntil(future).SetTempUnschedulableUntil(future)
++					case "expired":
++						create.SetExpiresAt(past).SetAutoPauseOnExpired(true)
++					case "disabled":
++						create.SetStatus(service.StatusDisabled)
++					case "deleted":
++						create.SetDeletedAt(past)
++					}
++					account, err := create.Save(ctx)
++					require.NoError(t, err)
++					ids[gid][kind] = account.ID
++					if gid > 0 {
++						_, err = client.AccountGroup.Create().SetAccountID(account.ID).SetGroupID(gid).Save(ctx)
++						require.NoError(t, err)
++					}
++				}
++			}
++
++			for _, scope := range []string{"simple", "group", "ungrouped"} {
++				for _, forced := range []bool{false, true} {
++					t.Run(fmt.Sprintf("%s/forced=%t", scope, forced), func(t *testing.T) {
++						cfg := &config.Config{RunMode: config.RunModeStandard}
++						cfg.Gateway.Scheduling.DbFallbackEnabled = true
++						var groupID *int64
++						groups := []int64{0}
++						if scope == "group" {
++							groupID, groups = &group.ID, []int64{group.ID}
++						}
++						if scope == "simple" {
++							cfg.RunMode = config.RunModeSimple
++							groupID, groups = &group.ID, []int64{0, group.ID, other.ID}
++						}
++						mixed := platform != service.PlatformOpenAI && !forced
++						var wantReady, wantMembers []int64
++						for _, gid := range groups {
++							wantReady = append(wantReady, ids[gid]["ready"])
++							wantMembers = append(wantMembers, ids[gid]["ready"], ids[gid]["cooling"], ids[gid]["expired"])
++							if mixed {
++								wantReady = append(wantReady, ids[gid]["mixed_on"])
++								wantMembers = append(wantMembers, ids[gid]["mixed_on"])
++							}
++						}
++						cache := NewSchedulerCache(testRedis(t))
++						svc := service.NewSchedulerSnapshotService(cache, nil, repo, nil, cfg)
++						accountIDs := func(accounts []service.Account) []int64 {
++							out := make([]int64, len(accounts))
++							for i := range accounts {
++								out[i] = accounts[i].ID
++							}
++							return out
++						}
++						for range 2 {
++							accounts, useMixed, err := svc.ListSchedulableAccounts(ctx, groupID, platform, forced)
++							require.NoError(t, err)
++							require.Equal(t, mixed, useMixed)
++							require.ElementsMatch(t, wantReady, accountIDs(accounts), "both DB fallback and cache hit enforce current eligibility")
++						}
++						bucket := service.SchedulerBucket{Platform: platform, Mode: service.SchedulerModeSingle}
++						if scope == "group" {
++							bucket.GroupID = group.ID
++						}
++						if forced {
++							bucket.Mode = service.SchedulerModeForced
++						} else if mixed {
++							bucket.Mode = service.SchedulerModeMixed
++						}
++						members, hit, err := cache.GetSnapshot(ctx, bucket)
++						require.NoError(t, err)
++						require.True(t, hit)
++						memberIDs := make([]int64, len(members))
++						for i := range members {
++							memberIDs[i] = members[i].ID
++						}
++						require.ElementsMatch(t, wantMembers, memberIDs, "the stored pool retains timed blocks without widening platform/group or manual eligibility")
++					})
++				}
++			}
++		})
++	}
++}
+diff --git a/backend/internal/service/account_service.go b/backend/internal/service/account_service.go
+index 7980a5c44..e2fa3ed08 100644
+--- a/backend/internal/service/account_service.go
++++ b/backend/internal/service/account_service.go
+@@ -94,8 +94,8 @@ type AccountRepository interface {
+ 	ListSchedulableUngroupedByPlatforms(ctx context.Context, platforms []string) ([]Account, error)
+ 	// ListModelAvailabilityCandidates returns accounts that are enabled by
+ 	// persistent configuration (active + schedulable) for model-support
+-	// diagnosis. It deliberately does not filter transient runtime state such
+-	// as rate-limit, overload, temporary-unschedulable, or expiry windows.
++	// diagnosis and scheduler snapshot membership. It deliberately does not
++	// filter rate-limit, overload, temporary-unschedulable, or expiry windows.
+ 	// When groupID is nil, includeGrouped controls whether the query scans all
+ 	// matching accounts or only accounts without a group binding.
+ 	ListModelAvailabilityCandidates(ctx context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error)
+diff --git a/backend/internal/service/billing_inflight_reservation_test.go b/backend/internal/service/billing_inflight_reservation_test.go
+index fa9281823..501865261 100644
+--- a/backend/internal/service/billing_inflight_reservation_test.go
++++ b/backend/internal/service/billing_inflight_reservation_test.go
+@@ -359,8 +359,8 @@ func TestInflightEstimate_AccountLevelMappingFallsBackLikeBilling(t *testing.T)
+ 	groupID := int64(31)
+ 	svc := newInflightEstimateGateway(t, nil)
+ 	snap := &inflightSnapshotCacheStub{byBucket: map[string][]Account{inflightBucketKey(groupID, PlatformAnthropic): {
+-		{ID: 1, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-31": "claude-sonnet-4-5"}}},
+-		{ID: 2, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-31": "claude-opus-4-1"}}},
++		{ID: 1, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-31": "claude-sonnet-4-5"}}},
++		{ID: 2, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-31": "claude-opus-4-1"}}},
+ 	}}}
+ 	attachInflightSnapshot(svc, snap)
+ 	apiKey := &APIKey{User: &User{ID: 1}, GroupID: &groupID, Group: &Group{ID: groupID, Platform: PlatformAnthropic, RateMultiplier: 1}}
+@@ -468,7 +468,7 @@ func TestInflightEstimate_AccountMappingNoDBAndBoundedMemory(t *testing.T) {
+ func TestInflightEstimate_NoGroupKeyUsesUngroupedAccountMapping(t *testing.T) {
+ 	svc := newInflightEstimateGateway(t, nil)
+ 	snap := &inflightSnapshotCacheStub{byBucket: map[string][]Account{inflightBucketKey(0, PlatformAnthropic): {
+-		{ID: 1, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-nog": "claude-opus-4-1"}}},
++		{ID: 1, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"acct-alias-nog": "claude-opus-4-1"}}},
+ 	}}}
+ 	attachInflightSnapshot(svc, snap)
+ 	apiKey := &APIKey{User: &User{ID: 1}}
+@@ -493,7 +493,7 @@ func TestInflightEstimate_AccountMappingNoNegativeCaching(t *testing.T) {
+ 
+ 	_, priced := svc.EstimateInflightReservation(ctx, apiKey, req)
+ 	require.False(t, priced)
+-	snap.set(groupID, PlatformAnthropic, []Account{{ID: 9, Platform: PlatformAnthropic, Credentials: map[string]any{"model_mapping": map[string]any{"acct-*": "claude-sonnet-4-5"}}}})
++	snap.set(groupID, PlatformAnthropic, []Account{{ID: 9, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"acct-*": "claude-sonnet-4-5"}}}})
+ 	est, priced := svc.EstimateInflightReservation(ctx, apiKey, req)
+ 	require.True(t, priced, "new mapping (incl. wildcard) visible on next request")
+ 	require.Greater(t, est, 0.0)
+diff --git a/backend/internal/service/gateway_multiplatform_test.go b/backend/internal/service/gateway_multiplatform_test.go
+index badb2427c..05b7f2f85 100644
+--- a/backend/internal/service/gateway_multiplatform_test.go
++++ b/backend/internal/service/gateway_multiplatform_test.go
+@@ -156,7 +156,10 @@ func (m *mockAccountRepoForPlatform) ListSchedulableUngroupedByPlatform(ctx cont
+ func (m *mockAccountRepoForPlatform) ListSchedulableUngroupedByPlatforms(ctx context.Context, platforms []string) ([]Account, error) {
+ 	return m.ListSchedulableByPlatforms(ctx, platforms)
+ }
+-func (m *mockAccountRepoForPlatform) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error) {
++func (m *mockAccountRepoForPlatform) ListModelAvailabilityCandidates(ctx context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]Account, error) {
++	if m.listPlatformFunc != nil {
++		return m.listPlatformFunc(ctx, firstPlatform(platforms))
++	}
+ 	platformSet := make(map[string]struct{}, len(platforms))
+ 	for _, platform := range platforms {
+ 		platformSet[platform] = struct{}{}
+diff --git a/backend/internal/service/scheduler_snapshot_batch_query_test.go b/backend/internal/service/scheduler_snapshot_batch_query_test.go
+index b957891d3..f40384db1 100644
+--- a/backend/internal/service/scheduler_snapshot_batch_query_test.go
++++ b/backend/internal/service/scheduler_snapshot_batch_query_test.go
+@@ -56,8 +56,12 @@ func (r *batchAccountQueryRepo) ListSchedulableUngroupedByPlatforms(_ context.Co
+ 	return r.run(batchAccountQueryKey{platform: platforms[0], mixed: true})
+ }
+ 
+-func (r *batchAccountQueryRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
+-	panic("unexpected ListModelAvailabilityCandidates call")
++func (r *batchAccountQueryRepo) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, _ bool) ([]Account, error) {
++	key := batchAccountQueryKey{platform: platforms[0], mixed: len(platforms) > 1}
++	if groupID != nil {
++		key.groupID = *groupID
++	}
++	return r.run(key)
+ }
+ 
+ func (r *batchAccountQueryRepo) ListSchedulableByPlatform(_ context.Context, platform string) ([]Account, error) {
+@@ -725,7 +729,7 @@ type batchQueryBenchmarkRepo struct {
+ 	accounts []Account
+ }
+ 
+-func (r *batchQueryBenchmarkRepo) ListSchedulableByGroupIDAndPlatform(context.Context, int64, string) ([]Account, error) {
++func (r *batchQueryBenchmarkRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
+ 	return r.accounts, nil
+ }
+ 
+diff --git a/backend/internal/service/scheduler_snapshot_cancellation_test.go b/backend/internal/service/scheduler_snapshot_cancellation_test.go
+index 3f46cb14a..7205624e1 100644
+--- a/backend/internal/service/scheduler_snapshot_cancellation_test.go
++++ b/backend/internal/service/scheduler_snapshot_cancellation_test.go
+@@ -36,7 +36,7 @@ type schedulerCancellationAccountRepo struct {
+ 	getByIDCalls int
+ }
+ 
+-func (r *schedulerCancellationAccountRepo) ListSchedulableUngroupedByPlatform(ctx context.Context, _ string) ([]Account, error) {
++func (r *schedulerCancellationAccountRepo) ListModelAvailabilityCandidates(ctx context.Context, _ *int64, _ []string, _ bool) ([]Account, error) {
+ 	r.listCalls++
+ 	return nil, ctx.Err()
+ }
+diff --git a/backend/internal/service/scheduler_snapshot_full_rebuild_lifecycle_test.go b/backend/internal/service/scheduler_snapshot_full_rebuild_lifecycle_test.go
+index e4489b81c..229d29d88 100644
+--- a/backend/internal/service/scheduler_snapshot_full_rebuild_lifecycle_test.go
++++ b/backend/internal/service/scheduler_snapshot_full_rebuild_lifecycle_test.go
+@@ -214,8 +214,12 @@ func (r *fullRebuildAccountRepo) ListSchedulableUngroupedByPlatforms(_ context.C
+ 	return r.record(0, firstPlatform(platforms))
+ }
+ 
+-func (r *fullRebuildAccountRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
+-	panic("unexpected ListModelAvailabilityCandidates call")
++func (r *fullRebuildAccountRepo) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, _ bool) ([]Account, error) {
++	var id int64
++	if groupID != nil {
++		id = *groupID
++	}
++	return r.record(id, firstPlatform(platforms))
+ }
+ 
+ func (r *fullRebuildAccountRepo) ListSchedulableByPlatform(_ context.Context, platform string) ([]Account, error) {
+diff --git a/backend/internal/service/scheduler_snapshot_group_lifecycle_test.go b/backend/internal/service/scheduler_snapshot_group_lifecycle_test.go
+index 7eda02f73..bba40e41a 100644
+--- a/backend/internal/service/scheduler_snapshot_group_lifecycle_test.go
++++ b/backend/internal/service/scheduler_snapshot_group_lifecycle_test.go
+@@ -296,11 +296,7 @@ func (r *groupLifecycleTestAccountRepo) load(ctx context.Context, platform strin
+ 	return []Account{{ID: 9001, Platform: platform, Status: StatusActive, Schedulable: true}}, nil
+ }
+ 
+-func (r *groupLifecycleTestAccountRepo) ListSchedulableByGroupIDAndPlatform(ctx context.Context, _ int64, platform string) ([]Account, error) {
+-	return r.load(ctx, platform)
+-}
+-
+-func (r *groupLifecycleTestAccountRepo) ListSchedulableByGroupIDAndPlatforms(ctx context.Context, _ int64, platforms []string) ([]Account, error) {
++func (r *groupLifecycleTestAccountRepo) ListModelAvailabilityCandidates(ctx context.Context, _ *int64, platforms []string, _ bool) ([]Account, error) {
+ 	platform := "mixed"
+ 	if len(platforms) > 0 {
+ 		platform = platforms[0]
+diff --git a/backend/internal/service/scheduler_snapshot_outbox_cleanup_test.go b/backend/internal/service/scheduler_snapshot_outbox_cleanup_test.go
+index 2a476ff07..e4ae7cbb5 100644
+--- a/backend/internal/service/scheduler_snapshot_outbox_cleanup_test.go
++++ b/backend/internal/service/scheduler_snapshot_outbox_cleanup_test.go
+@@ -108,7 +108,7 @@ type outboxCleanupAccountRepo struct {
+ 	AccountRepository
+ }
+ 
+-func (r *outboxCleanupAccountRepo) ListSchedulableUngroupedByPlatform(context.Context, string) ([]Account, error) {
++func (r *outboxCleanupAccountRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
+ 	return nil, nil
+ }
+ 
+diff --git a/backend/internal/service/scheduler_snapshot_retirement_test.go b/backend/internal/service/scheduler_snapshot_retirement_test.go
+index 7b5a8368d..5ccc49d52 100644
+--- a/backend/internal/service/scheduler_snapshot_retirement_test.go
++++ b/backend/internal/service/scheduler_snapshot_retirement_test.go
+@@ -243,7 +243,8 @@ func TestSchedulerFallbackReturnsDBAccountsWhenBucketRetired(t *testing.T) {
+ 	cache := newRetirementRaceCache()
+ 	require.NoError(t, cache.RetireBucket(context.Background(), bucket))
+ 	repo := &mockAccountRepoForPlatform{
+-		accounts: []Account{{ID: 6301, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true}},
++		accounts: []Account{{ID: 6301, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true,
++			AccountGroups: []AccountGroup{{GroupID: bucket.GroupID}}}},
+ 	}
+ 	svc := NewSchedulerSnapshotService(cache, nil, repo, nil, &config.Config{
+ 		RunMode: config.RunModeStandard,
+diff --git a/backend/internal/service/scheduler_snapshot_service.go b/backend/internal/service/scheduler_snapshot_service.go
+index 2073ad0f5..f49caaa6c 100644
+--- a/backend/internal/service/scheduler_snapshot_service.go
++++ b/backend/internal/service/scheduler_snapshot_service.go
+@@ -226,7 +226,7 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context,
+ 		if err != nil {
+ 			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] cache read failed: bucket=%s err=%v", bucket.String(), err)
+ 		} else if hit {
+-			return derefAccounts(cached), useMixed, nil
++			return derefSchedulableAccounts(cached), useMixed, nil
+ 		}
+ 		token, err := s.cache.CaptureBucketWriteToken(ctx, bucket)
+ 		if ctxErr := ctx.Err(); ctxErr != nil {
+@@ -269,7 +269,13 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context,
+ 		}
+ 	}
+ 
+-	return accounts, useMixed, nil
++	eligible := make([]Account, 0, len(accounts))
++	for _, account := range accounts {
++		if account.IsSchedulable() {
++			eligible = append(eligible, account)
++		}
++	}
++	return eligible, useMixed, nil
+ }
+ 
+ func (s *SchedulerSnapshotService) GetAccount(ctx context.Context, accountID int64) (*Account, error) {
+@@ -1472,42 +1478,28 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
+ 	if s.accountRepo == nil {
+ 		return nil, ErrSchedulerCacheNotReady
+ 	}
+-	groupID := bucket.GroupID
+-	if s.isRunModeSimple() {
+-		groupID = 0
++	var groupID *int64
++	if !s.isRunModeSimple() && bucket.GroupID > 0 {
++		groupID = &bucket.GroupID
+ 	}
+-
++	platforms := []string{bucket.Platform}
+ 	if useMixed {
+-		platforms := []string{bucket.Platform, PlatformAntigravity}
+-		var accounts []Account
+-		var err error
+-		if groupID > 0 {
+-			accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, groupID, platforms)
+-		} else if s.isRunModeSimple() {
+-			accounts, err = s.accountRepo.ListSchedulableByPlatforms(ctx, platforms)
+-		} else {
+-			accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
+-		}
+-		if err != nil {
+-			return nil, err
+-		}
+-		filtered := make([]Account, 0, len(accounts))
+-		for _, acc := range accounts {
+-			if acc.Platform == PlatformAntigravity && !acc.IsMixedSchedulingEnabled() {
+-				continue
+-			}
+-			filtered = append(filtered, acc)
+-		}
+-		return filtered, nil
++		platforms = append(platforms, PlatformAntigravity)
+ 	}
+-
+-	if groupID > 0 {
+-		return s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, bucket.Platform)
++	// Cache the configured pool, as model availability does. Time-based blocks
++	// must be checked on each read so expiry needs no write or outbox event.
++	accounts, err := s.accountRepo.ListModelAvailabilityCandidates(ctx, groupID, platforms, s.isRunModeSimple())
++	if err != nil || !useMixed {
++		return accounts, err
+ 	}
+-	if s.isRunModeSimple() {
+-		return s.accountRepo.ListSchedulableByPlatform(ctx, bucket.Platform)
++	filtered := make([]Account, 0, len(accounts))
++	for _, acc := range accounts {
++		if acc.Platform == PlatformAntigravity && !acc.IsMixedSchedulingEnabled() {
++			continue
++		}
++		filtered = append(filtered, acc)
+ 	}
+-	return s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, bucket.Platform)
++	return filtered, nil
+ }
+ 
+ func (s *SchedulerSnapshotService) loadAccountsForRebuild(
+@@ -1654,13 +1646,13 @@ func dedupeBuckets(in []SchedulerBucket) []SchedulerBucket {
+ 	return out
+ }
+ 
+-func derefAccounts(accounts []*Account) []Account {
++func derefSchedulableAccounts(accounts []*Account) []Account {
+ 	if len(accounts) == 0 {
+ 		return []Account{}
+ 	}
+ 	out := make([]Account, 0, len(accounts))
+ 	for _, account := range accounts {
+-		if account == nil {
++		if account == nil || !account.IsSchedulable() {
+ 			continue
+ 		}
+ 		out = append(out, *account)
+diff --git a/backend/internal/service/scheduler_snapshot_transient_expiry_test.go b/backend/internal/service/scheduler_snapshot_transient_expiry_test.go
+new file mode 100644
+index 000000000..888fd013d
+--- /dev/null
++++ b/backend/internal/service/scheduler_snapshot_transient_expiry_test.go
+@@ -0,0 +1,133 @@
++package service
++
++import (
++	"context"
++	"testing"
++	"testing/synctest"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++type transientExpirySnapshotCache struct {
++	SchedulerCache
++	accounts []*Account
++	hit      bool
++}
++
++func (c *transientExpirySnapshotCache) GetSnapshot(context.Context, SchedulerBucket) ([]*Account, bool, error) {
++	return c.accounts, c.hit, nil
++}
++
++func (c *transientExpirySnapshotCache) CaptureBucketWriteToken(_ context.Context, bucket SchedulerBucket) (SchedulerBucketWriteToken, error) {
++	return SchedulerBucketWriteToken{Bucket: bucket, Epoch: 1}, nil
++}
++
++func (c *transientExpirySnapshotCache) SetSnapshot(_ context.Context, _ SchedulerBucket, _ SchedulerBucketWriteToken, accounts []Account) error {
++	c.accounts = nil
++	for _, account := range accounts {
++		copy := account
++		c.accounts = append(c.accounts, &copy)
++	}
++	c.hit = true
++	return nil
++}
++
++type transientExpiryAccountRepo struct {
++	AccountRepository
++	accounts []Account
++	calls    int
++}
++
++func (r *transientExpiryAccountRepo) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]Account, error) {
++	r.calls++
++	var accounts []Account
++	for _, account := range r.accounts {
++		if account.IsActive() && account.Schedulable {
++			accounts = append(accounts, account)
++		}
++	}
++	return accounts, nil
++}
++
++// Match the current repository contract: the source query excludes accounts
++// while any transient cooldown is in the future.
++func (r *transientExpiryAccountRepo) ListSchedulableByPlatform(context.Context, string) ([]Account, error) {
++	r.calls++
++	var accounts []Account
++	for _, account := range r.accounts {
++		if account.IsSchedulable() {
++			accounts = append(accounts, account)
++		}
++	}
++	return accounts, nil
++}
++
++func TestSchedulerSnapshotRecoversTransientCooldownWithoutIntervalRebuild(t *testing.T) {
++	for _, field := range []string{"rate_limit_reset_at", "overload_until", "temp_unschedulable_until"} {
++		t.Run(field, func(t *testing.T) {
++			synctest.Test(t, func(t *testing.T) {
++				until := time.Now().Add(30 * time.Second)
++				past := time.Now().Add(-time.Second)
++				ready := Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true}
++				cooling := ready
++				cooling.ID = 2
++				switch field {
++				case "rate_limit_reset_at":
++					cooling.RateLimitResetAt = &until
++				case "overload_until":
++					cooling.OverloadUntil = &until
++				case "temp_unschedulable_until":
++					cooling.TempUnschedulableUntil = &until
++				}
++				disabled := ready
++				disabled.ID, disabled.Status = 3, StatusDisabled
++				manual := ready
++				manual.ID, manual.Schedulable = 4, false
++				expired := ready
++				expired.ID, expired.AutoPauseOnExpired, expired.ExpiresAt = 5, true, &past
++				expiring := ready
++				expiring.ID, expiring.AutoPauseOnExpired, expiring.ExpiresAt = 6, true, &until
++				repo := &transientExpiryAccountRepo{accounts: []Account{ready, cooling, disabled, manual, expired, expiring}}
++				cache := &transientExpirySnapshotCache{}
++				cfg := &config.Config{RunMode: config.RunModeSimple}
++				cfg.Gateway.Scheduling.DbFallbackEnabled = true
++				svc := NewSchedulerSnapshotService(cache, nil, repo, nil, cfg)
++				eligible := func(accounts []Account) []int64 {
++					var ids []int64
++					for _, account := range accounts {
++						if account.IsSchedulable() {
++							ids = append(ids, account.ID)
++						}
++					}
++					return ids
++				}
++
++				accounts, _, err := svc.ListSchedulableAccounts(context.Background(), nil, PlatformOpenAI, false)
++				require.NoError(t, err)
++				require.Equal(t, []int64{1, 6}, eligible(accounts))
++				require.Len(t, accounts, 2, "the DB fallback returns only currently eligible accounts")
++				require.True(t, cache.hit)
++				require.Len(t, cache.accounts, 4, "the stored pool retains cooling and expired configured members")
++				require.Equal(t, 1, repo.calls)
++
++				time.Sleep(31 * time.Second)
++				require.True(t, cooling.IsSchedulable(), "the account's own cooldown has expired")
++				accounts, _, err = svc.ListSchedulableAccounts(context.Background(), nil, PlatformOpenAI, false)
++				require.NoError(t, err)
++				t.Logf("after expiry: eligible=%v cached_members=%d source_calls=%d", eligible(accounts), len(cache.accounts), repo.calls)
++				assert.ElementsMatch(t, []int64{1, 2}, eligible(accounts), "an expired cooldown must not wait for the interval rebuild")
++				require.Len(t, accounts, 2, "the cache hit excludes disabled, manually paused and expired accounts")
++				require.Equal(t, 1, repo.calls, "expiry must not require a database read")
++
++				// Positive control: a fresh source read immediately restores the account.
++				cache.hit = false
++				accounts, _, err = svc.ListSchedulableAccounts(context.Background(), nil, PlatformOpenAI, false)
++				require.NoError(t, err)
++				require.ElementsMatch(t, []int64{1, 2}, eligible(accounts))
++			})
++		})
++	}
++}

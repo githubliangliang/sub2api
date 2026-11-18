@@ -1,0 +1,710 @@
+diff --git a/backend/internal/service/account_usage_service.go b/backend/internal/service/account_usage_service.go
+index 9e30d64ee..6999daa2a 100644
+--- a/backend/internal/service/account_usage_service.go
++++ b/backend/internal/service/account_usage_service.go
+@@ -147,12 +147,13 @@ type WindowStats struct {
+ 
+ // UsageProgress 使用量进度
+ type UsageProgress struct {
+-	Utilization      float64      `json:"utilization"`            // 使用率百分比 (0-100+，100表示100%)
+-	ResetsAt         *time.Time   `json:"resets_at"`              // 重置时间
+-	RemainingSeconds int          `json:"remaining_seconds"`      // 距重置剩余秒数
+-	WindowStats      *WindowStats `json:"window_stats,omitempty"` // 窗口期统计（从窗口开始到当前的使用量）
+-	UsedRequests     int64        `json:"used_requests,omitempty"`
+-	LimitRequests    int64        `json:"limit_requests,omitempty"`
++	Utilization        float64      `json:"utilization"`                   // 使用率百分比 (0-100+，100表示100%)
++	UtilizationUnknown bool         `json:"utilization_unknown,omitempty"` // 仅有本地统计，上游使用率未知
++	ResetsAt           *time.Time   `json:"resets_at"`                     // 重置时间
++	RemainingSeconds   int          `json:"remaining_seconds"`             // 距重置剩余秒数
++	WindowStats        *WindowStats `json:"window_stats,omitempty"`        // 窗口期统计（从窗口开始到当前的使用量）
++	UsedRequests       int64        `json:"used_requests,omitempty"`
++	LimitRequests      int64        `json:"limit_requests,omitempty"`
+ }
+ 
+ // AntigravityQuotaGroup is a group of Antigravity models that share their quota windows.
+@@ -777,7 +778,7 @@ func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, account *
+ 
+ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {
+ 	now := time.Now()
+-	usage := &UsageInfo{UpdatedAt: &now}
++	usage := &UsageInfo{Source: "passive"}
+ 
+ 	if account == nil {
+ 		return usage, nil
+@@ -794,10 +795,11 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
+ 					if account.IsShadow() {
+ 						updates = buildCodexSparkWindowExtraUpdates(quotaUsage, now)
+ 					}
+-					if len(updates) > 0 {
++					if hasOpenAIQuotaObservation(updates) {
+ 						mergeAccountExtra(account, updates)
+ 						s.persistOpenAICodexProbeSnapshotContext(ctx, account.ID, updates)
+ 						applyExtraToUsage(usage, account.Extra, now)
++						usage.Source = "active"
+ 					}
+ 				}
+ 			}
+@@ -808,28 +810,30 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
+ 			// Extra keys and immediately reflected in the returned UsageInfo.
+ 			if s.openAIQuotaService != nil {
+ 				if quotaUsage, err := s.openAIQuotaService.QueryUsage(WithScopedAdminAccountOperation(ctx, "accounts.usage.read"), account.ID); err == nil {
+-					if updates := buildCodexSparkWindowExtraUpdates(quotaUsage, now); len(updates) > 0 {
++					if updates := buildCodexSparkWindowExtraUpdates(quotaUsage, now); hasOpenAIQuotaObservation(updates) {
+ 						mergeAccountExtra(account, updates)
+ 						s.persistOpenAICodexProbeSnapshotContext(ctx, account.ID, updates)
+ 						if account.ParentAccountID != nil && adminaccess.RestrictedFromContext(ctx) == nil {
+ 							notifyOpenAIAutoReset(*account.ParentAccountID)
+ 						}
+-						if usage.UpdatedAt == nil {
+-							usage.UpdatedAt = &now
+-						}
+ 						applyExtraToUsage(usage, account.Extra, now)
++						usage.Source = "active"
+ 					}
+ 				}
+ 			}
+ 		} else {
+-			if updates, err := s.probeOpenAICodexSnapshot(ctx, account); err == nil && len(updates) > 0 {
++			if updates, err := s.probeOpenAICodexSnapshot(ctx, account); err == nil && hasOpenAIQuotaObservation(updates) {
+ 				mergeAccountExtra(account, updates)
+-				if usage.UpdatedAt == nil {
+-					usage.UpdatedAt = &now
+-				}
+ 				applyExtraToUsage(usage, account.Extra, now)
++				usage.Source = "active"
+ 			}
+ 		}
++		if usage.Source != "active" {
++			// Keep the last observation available, but never turn a failed probe
++			// (or a response without quota data) into a fresh successful read.
++			usage.ErrorCode = errorCodeQuotaRefreshFailed
++			usage.Error = "Unable to refresh OpenAI quota; displayed values may be from an earlier observation"
++		}
+ 	}
+ 
+ 	if s.usageLogRepo == nil {
+@@ -838,14 +842,14 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
+ 
+ 	if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, codexWindowStatsStart(usage.FiveHour, 5*time.Hour, now)); err == nil {
+ 		if usage.FiveHour == nil {
+-			usage.FiveHour = &UsageProgress{Utilization: 0}
++			usage.FiveHour = &UsageProgress{UtilizationUnknown: true}
+ 		}
+ 		usage.FiveHour.WindowStats = windowStatsFromAccountStats(stats)
+ 	}
+ 
+ 	if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, codexWindowStatsStart(usage.SevenDay, 7*24*time.Hour, now)); err == nil {
+ 		if usage.SevenDay == nil {
+-			usage.SevenDay = &UsageProgress{Utilization: 0}
++			usage.SevenDay = &UsageProgress{UtilizationUnknown: true}
+ 		}
+ 		usage.SevenDay.WindowStats = windowStatsFromAccountStats(stats)
+ 	}
+@@ -988,7 +992,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	if len(updates) > 0 {
++	if hasOpenAIQuotaObservation(updates) {
+ 		s.persistOpenAICodexProbeSnapshotContext(ctx, account.ID, updates)
+ 		return updates, nil
+ 	}
+@@ -1051,6 +1055,14 @@ func applyExtraToUsage(usage *UsageInfo, extra map[string]any, now time.Time) {
+ 	if usage == nil {
+ 		return
+ 	}
++	// updated_at is the upstream observation time, not the time the UI read
++	// this cache. Legacy snapshots without a timestamp have unknown freshness.
++	usage.UpdatedAt = nil
++	if raw, ok := extra["codex_usage_updated_at"]; ok {
++		if observedAt, err := parseTime(fmt.Sprint(raw)); err == nil && !observedAt.IsZero() {
++			usage.UpdatedAt = &observedAt
++		}
++	}
+ 	if progress := buildCodexUsageProgressFromExtra(extra, "5h", now); progress != nil {
+ 		usage.FiveHour = progress
+ 	}
+@@ -1059,6 +1071,16 @@ func applyExtraToUsage(usage *UsageInfo, extra map[string]any, now time.Time) {
+ 	}
+ }
+ 
++// errorCodeQuotaRefreshFailed 标记 OpenAI OAuth 额度主动刷新失败：返回值仍是上次
++// 观测（或未知），只说明额度数据可能陈旧，不代表账号不可用。
++const errorCodeQuotaRefreshFailed = "quota_refresh_failed"
++
++func hasOpenAIQuotaObservation(updates map[string]any) bool {
++	_, has5h := updates["codex_5h_used_percent"]
++	_, has7d := updates["codex_7d_used_percent"]
++	return has5h || has7d
++}
++
+ func (s *AccountUsageService) getGeminiUsage(ctx context.Context, account *Account) (*UsageInfo, error) {
+ 	now := time.Now()
+ 	usage := &UsageInfo{
+diff --git a/backend/internal/service/account_usage_service_spark_shadow_test.go b/backend/internal/service/account_usage_service_spark_shadow_test.go
+index 442ac6b4b..fc2c00b0e 100644
+--- a/backend/internal/service/account_usage_service_spark_shadow_test.go
++++ b/backend/internal/service/account_usage_service_spark_shadow_test.go
+@@ -148,4 +148,71 @@ func TestGetOpenAIUsage_SparkShadow_WritesExtraAndReturnsNonEmptyWindows(t *test
+ 		"returned UsageInfo.FiveHour must be non-nil (rebuild from merged Extra must happen)")
+ 	require.NotNil(t, usage.SevenDay,
+ 		"returned UsageInfo.SevenDay must be non-nil (rebuild from merged Extra must happen)")
++	require.Equal(t, "active", usage.Source)
++	require.Empty(t, usage.Error)
++	require.NotNil(t, usage.UpdatedAt)
++	stamp, ok := shadow.Extra["codex_usage_updated_at"].(string)
++	require.True(t, ok, "snapshot observation time must be stored as a string")
++	observedAt, err := time.Parse(time.RFC3339, stamp)
++	require.NoError(t, err)
++	require.True(t, usage.UpdatedAt.Equal(observedAt))
++}
++
++func TestGetOpenAIUsage_SparkShadow_FailedOrEmptyQueryDoesNotRefreshSnapshot(t *testing.T) {
++	t.Parallel()
++	for _, tc := range []struct {
++		name   string
++		status int
++		body   string
++	}{
++		{"expired token", http.StatusUnauthorized, `{"error":{"code":"token_expired"}}`},
++		{"empty quota", http.StatusOK, `{}`},
++		{"empty windows", http.StatusOK, `{"additional_rate_limits":[{"metered_feature":"codex_bengalfox","rate_limit":{}}]}`},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			t.Parallel()
++			observedAt := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
++			parentID := int64(100)
++			parent := &Account{ID: parentID, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive}
++			shadow := &Account{
++				ID: 200, ParentAccountID: &parentID,
++				Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
++				QuotaDimension: QuotaDimensionSpark,
++				Extra: map[string]any{
++					"codex_7d_used_percent":  100.0,
++					"codex_usage_updated_at": observedAt.Format(time.RFC3339),
++				},
++			}
++			repo := &sparkShadowUsageTestRepo{
++				accounts:      map[int64]*Account{100: parent, 200: shadow},
++				updateExtraCh: make(chan map[string]any, 1),
++			}
++			tokens := &stubQuotaTokenCache{tokens: map[string]string{OpenAITokenCacheKey(parent): "fake-access-token"}}
++			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++				w.Header().Set("Content-Type", "application/json")
++				w.WriteHeader(tc.status)
++				_, _ = w.Write([]byte(tc.body))
++			}))
++			defer srv.Close()
++			svc := &AccountUsageService{
++				accountRepo:        repo,
++				openAIQuotaService: NewOpenAIQuotaService(repo, nil, NewOpenAITokenProvider(repo, tokens, nil), newQuotaRedirectingFactory(srv), nil),
++			}
++			usage, err := svc.getOpenAIUsage(context.Background(), shadow, true)
++			require.NoError(t, err)
++			require.Equal(t, "quota_refresh_failed", usage.ErrorCode)
++			require.NotEmpty(t, usage.Error)
++			require.Equal(t, "passive", usage.Source)
++			require.NotNil(t, usage.UpdatedAt)
++			require.True(t, usage.UpdatedAt.Equal(observedAt))
++			require.NotNil(t, usage.SevenDay)
++			require.Equal(t, 100.0, usage.SevenDay.Utilization)
++			require.Equal(t, observedAt.Format(time.RFC3339), shadow.Extra["codex_usage_updated_at"])
++			select {
++			case <-repo.updateExtraCh:
++				t.Fatal("failed or empty queries must not persist a fresh snapshot")
++			case <-time.After(100 * time.Millisecond):
++			}
++		})
++	}
+ }
+diff --git a/backend/internal/service/account_usage_service_test.go b/backend/internal/service/account_usage_service_test.go
+index ca153a3c4..7fded934d 100644
+--- a/backend/internal/service/account_usage_service_test.go
++++ b/backend/internal/service/account_usage_service_test.go
+@@ -206,6 +206,96 @@ func TestAccountUsageService_GetOpenAIUsage_DoesNotPromoteCodexExtraToRateLimit(
+ 	}
+ }
+ 
++func TestAccountUsageService_GetOpenAIUsage_PreservesSnapshotObservationTime(t *testing.T) {
++	t.Parallel()
++	observedAt := time.Now().Add(-48 * time.Hour).UTC().Truncate(time.Second)
++	for _, stamp := range []string{observedAt.Format(time.RFC3339), "", "invalid"} {
++		t.Run(stamp, func(t *testing.T) {
++			account := &Account{
++				Platform: PlatformOpenAI,
++				Type:     AccountTypeOAuth,
++				Extra: map[string]any{
++					"codex_5h_used_percent":  10.0,
++					"codex_7d_used_percent":  100.0,
++					"codex_usage_updated_at": stamp,
++				},
++			}
++			usage, err := (&AccountUsageService{}).getOpenAIUsage(context.Background(), account, false)
++			if err != nil {
++				t.Fatal(err)
++			}
++			if stamp == observedAt.Format(time.RFC3339) {
++				if usage.UpdatedAt == nil || !usage.UpdatedAt.Equal(observedAt) {
++					t.Fatalf("cached snapshot must keep its observation time %v, got %v", observedAt, usage.UpdatedAt)
++				}
++			} else if usage.UpdatedAt != nil {
++				t.Fatalf("unknown observation time must not become the request time: %v", usage.UpdatedAt)
++			}
++			if usage.Source != "passive" || usage.Error != "" {
++				t.Fatalf("snapshot read should be passive, not a failed refresh: %#v", usage)
++			}
++		})
++	}
++}
++
++func TestAccountUsageService_GetOpenAIUsage_RefreshFailureKeepsCachedDataAndReportsError(t *testing.T) {
++	t.Parallel()
++	observedAt := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
++	for _, shadow := range []bool{false, true} {
++		account := &Account{
++			Platform: PlatformOpenAI,
++			Type:     AccountTypeOAuth,
++			Extra: map[string]any{
++				"codex_7d_used_percent":  100.0,
++				"codex_usage_updated_at": observedAt.Format(time.RFC3339),
++			},
++		}
++		if shadow {
++			parentID := int64(10)
++			account.ParentAccountID = &parentID
++			account.QuotaDimension = QuotaDimensionSpark
++		}
++		// Ordinary accounts have no token; shadow accounts have no quota service.
++		// Neither case may turn a failed query into a fresh, successful snapshot.
++		usage, err := (&AccountUsageService{}).getOpenAIUsage(context.Background(), account, true)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if usage.ErrorCode != "quota_refresh_failed" || usage.Error == "" {
++			t.Fatalf("refresh failure was hidden (shadow=%v): %#v", shadow, usage)
++		}
++		if usage.SevenDay == nil || usage.SevenDay.Utilization != 100 {
++			t.Fatalf("last known quota should remain available: %#v", usage.SevenDay)
++		}
++		if usage.UpdatedAt == nil || !usage.UpdatedAt.Equal(observedAt) || usage.Source != "passive" {
++			t.Fatalf("failed refresh must not advance snapshot freshness: %#v", usage)
++		}
++		if account.RateLimitResetAt != nil || account.Extra["codex_usage_updated_at"] != observedAt.Format(time.RFC3339) {
++			t.Fatal("failed refresh must not mutate the snapshot or scheduler state")
++		}
++	}
++}
++
++func TestAccountUsageService_GetOpenAIUsage_RefreshFailureWithoutSnapshot(t *testing.T) {
++	t.Parallel()
++	svc := &AccountUsageService{usageLogRepo: &usageBatchLogRepoStub{}}
++	usage, err := svc.getOpenAIUsage(context.Background(), &Account{
++		Platform: PlatformOpenAI,
++		Type:     AccountTypeOAuth,
++	}, true)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if usage.ErrorCode != "quota_refresh_failed" || usage.UpdatedAt != nil {
++		t.Fatalf("missing upstream quota must remain unknown after failure: %#v", usage)
++	}
++	for name, window := range map[string]*UsageProgress{"5h": usage.FiveHour, "7d": usage.SevenDay} {
++		if window == nil || window.WindowStats == nil || !window.UtilizationUnknown {
++			t.Errorf("%s should keep local stats while marking quota unknown: %#v", name, window)
++		}
++	}
++}
++
+ func TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow(t *testing.T) {
+ 	t.Parallel()
+ 	now := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+diff --git a/backend/internal/service/channel_monitor_quota_fetcher.go b/backend/internal/service/channel_monitor_quota_fetcher.go
+index 868def18d..8a3659f01 100644
+--- a/backend/internal/service/channel_monitor_quota_fetcher.go
++++ b/backend/internal/service/channel_monitor_quota_fetcher.go
+@@ -309,7 +309,7 @@ func usageQuotaTiers(usage *UsageInfo) []domain.MonitorQuotaTier {
+ }
+ 
+ func appendProgressTier(tiers *[]domain.MonitorQuotaTier, window, label string, p *UsageProgress) {
+-	if p == nil {
++	if p == nil || p.UtilizationUnknown {
+ 		return
+ 	}
+ 	tier := domain.MonitorQuotaTier{
+@@ -484,11 +484,16 @@ func isCredentialErrorMessage(msg string) bool {
+ //
+ // grok 的 ErrorCode=quota_unknown 是「尚未观测到计费快照/限流头」的已知未知态，
+ // 不是失败（严格按 ErrorCode 判会把健康 grok 账号永久判 error），显式豁免。
++//
++// OpenAI OAuth 的 quota_refresh_failed 同理豁免：它只说明本次主动刷新没拿到新额度、
++// 返回的是上次观测，账号本身未必不可用；且探测受 openAIProbeCacheTTL 节流，只有真正
++// 发起探测的那次读取会带该码，若判 error，监控会在 error/operational 间周期性跳动。
++// 状态按缓存观测（未知窗口已在 appendProgressTier 跳过）推导。
+ func usageFailureInfo(usage *UsageInfo) (failed, credentialInvalid bool, msg string) {
+ 	if usage == nil {
+ 		return false, false, ""
+ 	}
+-	if usage.ErrorCode == "quota_unknown" {
++	if usage.ErrorCode == "quota_unknown" || usage.ErrorCode == errorCodeQuotaRefreshFailed {
+ 		return false, false, ""
+ 	}
+ 	failed = usage.Error != "" || usage.NeedsReauth || usage.IsBanned ||
+diff --git a/backend/internal/service/channel_monitor_quota_fetcher_test.go b/backend/internal/service/channel_monitor_quota_fetcher_test.go
+index b03b9fe33..0f6223d3a 100644
+--- a/backend/internal/service/channel_monitor_quota_fetcher_test.go
++++ b/backend/internal/service/channel_monitor_quota_fetcher_test.go
+@@ -348,6 +348,7 @@ func TestUsageFailureInfo_ClassificationMatrix(t *testing.T) {
+ 		{name: "error code rate limited", usage: &UsageInfo{ErrorCode: errorCodeRateLimited}, failed: true, msg: errorCodeRateLimited},
+ 		{name: "error code network error", usage: &UsageInfo{ErrorCode: errorCodeNetworkError}, failed: true, msg: errorCodeNetworkError},
+ 		{name: "grok quota unknown exempted", usage: &UsageInfo{ErrorCode: "quota_unknown", Error: "Grok quota is unknown until billing is probed"}},
++		{name: "openai quota refresh failed exempted", usage: &UsageInfo{ErrorCode: errorCodeQuotaRefreshFailed, Error: "Unable to refresh OpenAI quota"}},
+ 	}
+ 	for _, tc := range cases {
+ 		t.Run(tc.name, func(t *testing.T) {
+@@ -694,6 +695,9 @@ func TestUsageQuotaTiers_MapsAllWindowKinds(t *testing.T) {
+ func TestUsageQuotaTiers_NilAndEmptyInputs(t *testing.T) {
+ 	require.Nil(t, usageQuotaTiers(nil))
+ 	require.Nil(t, usageQuotaTiers(&UsageInfo{}))
++	require.Nil(t, usageQuotaTiers(&UsageInfo{
++		FiveHour: &UsageProgress{UtilizationUnknown: true, WindowStats: &WindowStats{Requests: 2}},
++	}))
+ 
+ 	// Grok 窗口 limit<=0 时跳过，避免除零。
+ 	var zero int64
+@@ -745,3 +749,38 @@ func TestDeriveQuotaCheckResult_StatusMatrix(t *testing.T) {
+ 	res = deriveQuotaCheckResult(nil, "quota", now)
+ 	require.Equal(t, MonitorStatusError, res.Status)
+ }
++
++// OpenAI OAuth 额度刷新失败（探测被 10 分钟节流）不能让配额监控在 error 与
++// operational 间来回跳：失败只出现在真正发起探测的那一次读取上，节流窗口内的
++// 后续读取不带错误。刷新失败只说明额度数据可能陈旧，不代表账号不可用，
++// 监控须与 #8747 之前一致按缓存观测推导状态。
++func TestQuotaFetcher_OpenAIQuotaRefreshFailureDoesNotFlap(t *testing.T) {
++	observedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
++	account := &Account{
++		ID:       77,
++		Platform: PlatformOpenAI,
++		Type:     AccountTypeOAuth,
++		Status:   StatusActive,
++		// 只有 7d 窗口 → shouldRefreshOpenAICodexSnapshot 恒为 true；无 access token → 探测必失败。
++		Extra: map[string]any{
++			"codex_7d_used_percent":  95.0,
++			"codex_usage_updated_at": observedAt.Format(time.RFC3339),
++		},
++	}
++	fetcher := &ChannelMonitorQuotaFetcher{
++		usage:            &AccountUsageService{cache: NewUsageCache()},
++		accounts:         &stubMonitorAccountSource{accounts: map[int64]*Account{77: account}},
++		balanceThreshold: monitorBalanceThreshold(nil),
++		cache:            make(map[int64]monitorQuotaCacheEntry),
++	}
++
++	var statuses []string
++	for i := 0; i < 3; i++ {
++		snapshot := fetcher.fetchUncached(context.Background(), 77, time.Now())
++		res := deriveQuotaCheckResult(snapshot, "quota", time.Now())
++		statuses = append(statuses, res.Status)
++		require.True(t, snapshot.Success, "round %d: refresh failure must not be a failed snapshot: %s", i, snapshot.Error)
++		require.Len(t, snapshot.Tiers, 1, "round %d: cached 7d observation stays visible", i)
++	}
++	require.Equal(t, []string{MonitorStatusDegraded, MonitorStatusDegraded, MonitorStatusDegraded}, statuses)
++}
+diff --git a/frontend/src/components/account/AccountUsageCell.vue b/frontend/src/components/account/AccountUsageCell.vue
+index 8ccc43370..ff73bde66 100644
+--- a/frontend/src/components/account/AccountUsageCell.vue
++++ b/frontend/src/components/account/AccountUsageCell.vue
+@@ -124,11 +124,21 @@
+ 
+     <!-- OpenAI OAuth accounts: single source from /usage API -->
+     <template v-else-if="account.platform === 'openai' && account.type === 'oauth'">
++      <div
++        v-if="error || usageInfo?.error || usageInfo?.error_code"
++        role="alert"
++        class="mb-1 text-[10px] text-amber-700 dark:text-amber-300"
++      >
++        {{ t(hasOpenAIQuotaObservation
++          ? 'admin.accounts.usageWindow.quotaRefreshFailedCached'
++          : 'admin.accounts.usageWindow.quotaRefreshFailedUnknown') }}
++      </div>
+       <div v-if="hasOpenAIUsageFallback" class="space-y-1">
+         <UsageProgressBar
+           v-if="usageInfo?.five_hour"
+           label="5h"
+           :utilization="usageInfo.five_hour.utilization"
++          :utilization-unknown="usageInfo.five_hour.utilization_unknown"
+           :resets-at="usageInfo.five_hour.resets_at"
+           :window-stats="usageInfo.five_hour.window_stats"
+           :show-now-when-idle="true"
+@@ -138,12 +148,20 @@
+           v-if="usageInfo?.seven_day"
+           label="7d"
+           :utilization="usageInfo.seven_day.utilization"
++          :utilization-unknown="usageInfo.seven_day.utilization_unknown"
+           :resets-at="usageInfo.seven_day.resets_at"
+           :window-stats="usageInfo.seven_day.window_stats"
+           :estimated-total-cost="openAISevenDayEstimatedTotalCost"
+           :show-now-when-idle="true"
+           color="emerald"
+         />
++        <div v-if="hasOpenAIQuotaObservation" class="text-[10px] text-gray-500 dark:text-gray-400">
++          {{ t('admin.accounts.usageWindow.quotaObservedAt') }}
++          <time v-if="usageInfo?.updated_at" :datetime="usageInfo.updated_at">
++            {{ formatDateTime(usageInfo.updated_at) }}
++          </time>
++          <span v-else>{{ t('admin.accounts.usageWindow.quotaObservationUnknown') }}</span>
++        </div>
+         <!--
+           Upstream codex /wham/usage quota query + reset. The local active-sampling
+           refresh button is rendered via the pre-actions slot so the user sees a
+@@ -753,7 +771,7 @@ import { adminAPI } from '@/api/admin'
+ import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
+ import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
+ import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
+-import { formatCompactNumber } from '@/utils/format'
++import { formatCompactNumber, formatDateTime } from '@/utils/format'
+ import { isOfficialGeminiBaseUrl } from '@/utils/geminiExplicitCache'
+ import { supportsAccountQuota } from '@/utils/accountQuota'
+ import UsageProgressBar from './UsageProgressBar.vue'
+@@ -898,11 +916,17 @@ const hasOpenAIUsageFallback = computed(() => {
+   return !!usageInfo.value?.five_hour || !!usageInfo.value?.seven_day
+ })
+ 
++const hasOpenAIQuotaObservation = computed(() => {
++  const windows = [usageInfo.value?.five_hour, usageInfo.value?.seven_day]
++  return windows.some(window => window && !window.utilization_unknown)
++})
++
+ const openAISevenDayEstimatedTotalCost = computed(() => {
+   const sevenDay = usageInfo.value?.seven_day
+   const utilization = sevenDay?.utilization
+   const currentCost = sevenDay?.window_stats?.cost
+   if (
++    sevenDay?.utilization_unknown ||
+     typeof utilization !== 'number' ||
+     typeof currentCost !== 'number' ||
+     !Number.isFinite(utilization) ||
+@@ -1625,13 +1649,22 @@ const attachVisibilityObserver = () => {
+ }
+ 
+ const loadActiveUsage = async () => {
++  const accountID = props.account.id
+   activeQueryLoading.value = true
++  error.value = null
+   try {
+-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
++    const result = await adminAPI.accounts.getUsage(accountID, 'active', true)
++    if (!unmounted.value && props.account.id === accountID) {
++      usageInfo.value = result
++      _usageCache.set(accountID, { data: result, ts: Date.now() })
++    }
+   } catch (e: any) {
+-    console.error('Failed to load active usage:', e)
++    if (!unmounted.value && props.account.id === accountID) {
++      error.value = t('common.error')
++      console.error('Failed to load active usage:', e)
++    }
+   } finally {
+-    activeQueryLoading.value = false
++    if (!unmounted.value) activeQueryLoading.value = false
+   }
+ }
+ 
+diff --git a/frontend/src/components/account/UsageProgressBar.vue b/frontend/src/components/account/UsageProgressBar.vue
+index bf0812718..ea7f0ae52 100644
+--- a/frontend/src/components/account/UsageProgressBar.vue
++++ b/frontend/src/components/account/UsageProgressBar.vue
+@@ -72,6 +72,7 @@ const props = withDefaults(
+   defineProps<{
+     label: string
+     utilization: number // Percentage (0-100+)
++    utilizationUnknown?: boolean
+     resetsAt?: string | null
+     color: 'indigo' | 'emerald' | 'purple' | 'amber'
+     windowStats?: WindowStats | null
+@@ -173,11 +174,13 @@ const textClass = computed(() => {
+ 
+ // Bar width (capped at 100%)
+ const barWidth = computed(() => {
++  if (props.utilizationUnknown) return '0%'
+   return `${Math.min(Math.max(props.utilization, 0), 100)}%`
+ })
+ 
+ // Display percentage (cap at 999% for readability)
+ const displayPercent = computed(() => {
++  if (props.utilizationUnknown) return '—'
+   const percent = Math.round(
+     props.remainingCapacity
+       ? Math.min(Math.max(props.utilization, 0), 100)
+@@ -187,6 +190,7 @@ const displayPercent = computed(() => {
+ })
+ 
+ const shouldShowResetTime = computed(() => {
++  if (props.utilizationUnknown) return false
+   if (props.resetsAt) return true
+   return Boolean(props.showNowWhenIdle && props.utilization <= 0)
+ })
+diff --git a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+index 76423ed2d..38b7918cc 100644
+--- a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
++++ b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+@@ -1,7 +1,7 @@
+ import { describe, expect, it, vi, beforeEach } from 'vitest'
+ import { flushPromises, mount } from '@vue/test-utils'
+ import AccountUsageCell from '../AccountUsageCell.vue'
+-import type { Account } from '@/types'
++import type { Account, AccountUsageInfo } from '@/types'
+ 
+ const { getUsage } = vi.hoisted(() => ({
+   getUsage: vi.fn()
+@@ -606,6 +606,108 @@ describe('AccountUsageCell', () => {
+   })
+ 
+ 
++  describe('OpenAI quota freshness', () => {
++    const observedAt = '2026-11-11T03:33:55Z'
++    const snapshot = (): AccountUsageInfo => ({
++      source: 'passive',
++      updated_at: observedAt,
++      five_hour: null,
++      seven_day: { utilization: 100, resets_at: null, remaining_seconds: 0 },
++      seven_day_sonnet: null
++    })
++    const stubs = {
++      UsageProgressBar: {
++        props: ['label', 'utilization'],
++        template: '<div class="usage-bar">{{ label }}|{{ utilization }}</div>'
++      },
++      OpenAIQuotaResetCell: { template: '<div><slot name="pre-actions" /></div>' }
++    }
++
++    it('marks a degraded HTTP 200 response as failed without hiding the last observation', async () => {
++      getUsage.mockResolvedValue({
++        ...snapshot(),
++        error_code: 'quota_refresh_failed',
++        error: 'Could not refresh quota'
++      })
++      const wrapper = mount(AccountUsageCell, {
++        props: { account: makeAccount({ id: 8101, platform: 'openai', type: 'oauth' }) },
++        global: { stubs }
++      })
++      await flushPromises()
++      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedCached')
++      expect(wrapper.text()).toContain('7d|100')
++      expect(wrapper.get('time').attributes('datetime')).toBe(observedAt)
++      wrapper.unmount()
++    })
++
++    it('shows a failed manual refresh and clears the warning only after a successful retry', async () => {
++      getUsage.mockResolvedValueOnce(snapshot()).mockRejectedValueOnce(new Error('401'))
++      const wrapper = mount(AccountUsageCell, {
++        props: { account: makeAccount({ id: 8102, platform: 'openai', type: 'oauth' }) },
++        global: { stubs }
++      })
++      await flushPromises()
++      await wrapper.get('button').trigger('click')
++      await flushPromises()
++      expect(getUsage).toHaveBeenLastCalledWith(8102, 'active', true)
++      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedCached')
++      expect(wrapper.text()).toContain('7d|100')
++      expect(wrapper.get('time').attributes('datetime')).toBe(observedAt)
++
++      const refreshedAt = '2026-11-12T15:08:56Z'
++      getUsage.mockResolvedValueOnce({
++        ...snapshot(), source: 'active', updated_at: refreshedAt,
++        seven_day: { utilization: 0, resets_at: null, remaining_seconds: 0 }
++      })
++      await wrapper.get('button').trigger('click')
++      await flushPromises()
++      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
++      expect(wrapper.text()).toContain('7d|0')
++      expect(wrapper.get('time').attributes('datetime')).toBe(refreshedAt)
++      wrapper.unmount()
++    })
++
++    it('shows batch refresh failure alongside the retained snapshot', async () => {
++      const wrapper = mount(AccountUsageCell, {
++        props: {
++          account: makeAccount({ id: 8103, platform: 'openai', type: 'oauth' }),
++          batchedUsage: snapshot(), batchedUsageError: 'Failed', requestBatchedUsage: vi.fn()
++        },
++        global: { stubs }
++      })
++      await flushPromises()
++      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedCached')
++      expect(wrapper.get('time').attributes('datetime')).toBe(observedAt)
++      wrapper.unmount()
++    })
++
++    it('shows local usage with an unknown percentage when no quota has been fetched', async () => {
++      getUsage.mockResolvedValue({
++        ...snapshot(), updated_at: null,
++        seven_day: {
++          utilization: 0,
++          utilization_unknown: true,
++          resets_at: null,
++          remaining_seconds: 0,
++          window_stats: { requests: 2, tokens: 100, cost: 0, standard_cost: 0, user_cost: 0 }
++        },
++        error_code: 'quota_refresh_failed', error: 'Could not refresh quota'
++      })
++      const wrapper = mount(AccountUsageCell, {
++        props: { account: makeAccount({ id: 8104, platform: 'openai', type: 'oauth' }) },
++        global: { stubs: { OpenAIQuotaResetCell: stubs.OpenAIQuotaResetCell } }
++      })
++      await flushPromises()
++      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedUnknown')
++      expect(wrapper.find('time').exists()).toBe(false)
++      expect(wrapper.text()).toContain('2 req')
++      expect(wrapper.text()).toContain('—')
++      expect(wrapper.text()).not.toContain('0%')
++      expect(wrapper.text()).not.toContain('usage.resetNow')
++      wrapper.unmount()
++    })
++  })
++
+   it('OpenAI OAuth 快照已过期时首屏会重新请求 usage', async () => {
+     getUsage.mockResolvedValue({
+       five_hour: {
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index 98eecb95a..1dbb8658d 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -1751,6 +1751,10 @@ export default {
+         grokLastHeadersSeen: 'Headers {time}',
+         passiveSampled: 'Passive',
+         activeQuery: 'Query',
++        quotaRefreshFailedCached: 'Refresh failed. Showing a previous observation; remaining quota is unconfirmed.',
++        quotaRefreshFailedUnknown: 'Refresh failed. Current quota is unknown.',
++        quotaObservedAt: 'Quota observed: ',
++        quotaObservationUnknown: 'Unknown (cached)',
+         estimatedTotalCost: 'Est. total ${cost}',
+         estimatedTotalCostTooltip: 'Estimated total cost at 100% utilization, based on current window cost and utilization'
+       },
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index 7b3ccb57c..a3e16a3f3 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -548,6 +548,10 @@ export default {
+         grokLastHeadersSeen: '响应头 {time}',
+         passiveSampled: '被动采样',
+         activeQuery: '查询',
++        quotaRefreshFailedCached: '刷新失败，当前显示历史额度，不能确认剩余额度。',
++        quotaRefreshFailedUnknown: '刷新失败，当前额度未知。',
++        quotaObservedAt: '额度采样时间：',
++        quotaObservationUnknown: '未知（历史缓存）',
+         estimatedTotalCost: '预计总费用 ${cost}',
+         estimatedTotalCostTooltip: '根据当前窗口费用和使用率估算达到 100% 使用率时的总费用'
+       },
+diff --git a/frontend/src/types/index.ts b/frontend/src/types/index.ts
+index f98a4b83a..71dea09b8 100644
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -1434,6 +1434,7 @@ export interface WindowStats {
+ 
+ export interface UsageProgress {
+   utilization: number // Percentage (0-100+, 100 = 100%)
++  utilization_unknown?: boolean
+   resets_at: string | null
+   remaining_seconds: number
+   window_stats?: WindowStats | null // 窗口期统计（从窗口开始到当前的使用量）

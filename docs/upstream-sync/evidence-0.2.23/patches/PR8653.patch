@@ -1,0 +1,382 @@
+diff --git a/backend/internal/service/gateway_anthropic_passthrough.go b/backend/internal/service/gateway_anthropic_passthrough.go
+index e7c99cb07..a1f792282 100644
+--- a/backend/internal/service/gateway_anthropic_passthrough.go
++++ b/backend/internal/service/gateway_anthropic_passthrough.go
+@@ -561,7 +561,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
+ 			}
+ 
+ 			if !clientDisconnected {
+-				restored := string(reverseToolNamesIfPresent(c, []byte(line)))
++				restored := reverseToolNamesIfPresentString(c, line)
+ 				if _, err := io.WriteString(w, restored); err != nil {
+ 					clientDisconnected = true
+ 					logger.LegacyPrintf("service.gateway", "[Anthropic passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
+diff --git a/backend/internal/service/gateway_forward_as_chat_completions.go b/backend/internal/service/gateway_forward_as_chat_completions.go
+index a1f978671..a96b2bae6 100644
+--- a/backend/internal/service/gateway_forward_as_chat_completions.go
++++ b/backend/internal/service/gateway_forward_as_chat_completions.go
+@@ -435,7 +435,7 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
+ 		}
+ 		// Reverse tool name mapping: fake → real, per-chunk bytes.Replace.
+ 		// c 可能持有请求侧注入的 ToolNameRewrite；无则仅做静态前缀还原。
+-		out := string(reverseToolNamesIfPresent(c, []byte(sse)))
++		out := reverseToolNamesIfPresentString(c, sse)
+ 		if _, err := fmt.Fprint(c.Writer, out); err != nil {
+ 			return true // client disconnected
+ 		}
+diff --git a/backend/internal/service/gateway_forward_as_responses.go b/backend/internal/service/gateway_forward_as_responses.go
+index db10be256..dfbf0bb99 100644
+--- a/backend/internal/service/gateway_forward_as_responses.go
++++ b/backend/internal/service/gateway_forward_as_responses.go
+@@ -666,7 +666,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
+ 				if err != nil {
+ 					continue
+ 				}
+-				out := string(reverseToolNamesIfPresent(c, []byte(sse)))
++				out := reverseToolNamesIfPresentString(c, sse)
+ 				fmt.Fprint(c.Writer, out) //nolint:errcheck
+ 			}
+ 			c.Writer.Flush()
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index e6e813100..9186ddffb 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -402,10 +402,7 @@ func isClaudeCodeCredentialScopeError(msg string) bool {
+ 		strings.Contains(m, "cannot be used for other api requests")
+ }
+ 
+-// sseDataRe matches SSE data lines with optional whitespace after colon.
+-// Some upstream APIs return non-standard "data:" without space (should be "data: ").
+ var (
+-	sseDataRe            = regexp.MustCompile(`^data:\s*`)
+ 	claudeCliUserAgentRe = regexp.MustCompile(`(?i)^claude-cli/\d+\.\d+\.\d+`)
+ 
+ 	// claudeCodePromptPrefixes 用于检测 Claude Code 系统提示词的前缀列表
+diff --git a/backend/internal/service/gateway_streaming_test.go b/backend/internal/service/gateway_streaming_test.go
+index cf0adfaa2..e5a2ccab4 100644
+--- a/backend/internal/service/gateway_streaming_test.go
++++ b/backend/internal/service/gateway_streaming_test.go
+@@ -532,3 +532,104 @@ func TestHandleStreamingResponse_SSEErrorEvent_NonJSONDataLine(t *testing.T) {
+ 	})
+ 	require.Equal(t, "", ExtractUpstreamErrorMessage([]byte(sseErr.RawData)))
+ }
++
++func TestSSEEventNeedsJSONParse(t *testing.T) {
++	t.Parallel()
++
++	tests := []struct {
++		name         string
++		eventName    string
++		data         string
++		keepalive    bool
++		modelReplace bool
++		want         bool
++	}{
++		{
++			name:      "content_block_delta is forwarded verbatim",
++			eventName: "content_block_delta",
++			data:      `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`,
++			want:      false,
++		},
++		{
++			name:      "ping is forwarded verbatim",
++			eventName: "ping",
++			data:      `{"type":"ping"}`,
++			want:      false,
++		},
++		{
++			name:      "message_start needs usage parsing",
++			eventName: "message_start",
++			data:      `{"type":"message_start","message":{"usage":{"input_tokens":1}}}`,
++			want:      true,
++		},
++		{
++			name:      "message_delta needs usage parsing",
++			eventName: "message_delta",
++			data:      `{"type":"message_delta","usage":{"output_tokens":1}}`,
++			want:      true,
++		},
++		{
++			name:      "missing event name falls back to parsing",
++			eventName: "",
++			data:      `{"type":"content_block_delta"}`,
++			want:      true,
++		},
++		{
++			name:      "keepalive needs block fields",
++			eventName: "content_block_delta",
++			data:      `{"type":"content_block_delta","index":0}`,
++			keepalive: true,
++			want:      true,
++		},
++		{
++			name:         "model replace needs message parsing",
++			eventName:    "content_block_start",
++			data:         `{"type":"content_block_start","message":{"model":"x"}}`,
++			modelReplace: true,
++			want:         true,
++		},
++		{
++			name:      "unknown event with usage must be parsed",
++			eventName: "custom_event",
++			data:      `{"usage":{"input_tokens":1}}`,
++			want:      true,
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, sseEventNeedsJSONParse(tt.eventName, []byte(tt.data), tt.keepalive, tt.modelReplace))
++		})
++	}
++}
++
++// 快路径必须原样转发 content_block_delta，不能重新序列化改变 key 顺序/空格/转义；
++// message_stop 在没有 keepalive 的情况下也要能被识别为终态。
++func TestHandleStreamingResponse_FastPathForwardsDeltaBytesVerbatim(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	svc := newMinimalGatewayService()
++
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
++
++	pr, pw := io.Pipe()
++	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: pr}
++
++	delta := `{"delta":{"text":"你好","type":"text_delta"},"type":"content_block_delta","index":0,"extra":"a  b"}`
++	go func() {
++		defer func() { _ = pw.Close() }()
++		_, _ = pw.Write([]byte("event: content_block_delta\ndata: " + delta + "\n\n"))
++		_, _ = pw.Write([]byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
++	}()
++
++	result, err := svc.handleStreamingResponse(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "model", "model", false)
++	_ = pr.Close()
++	require.NoError(t, err)
++	require.NotNil(t, result)
++
++	body := rec.Body.String()
++	require.Contains(t, body, "event: content_block_delta\ndata: "+delta+"\n\n",
++		"网关必须逐字节转发不需要改写的 delta")
++	require.Contains(t, body, "event: message_stop")
++}
+diff --git a/backend/internal/service/gateway_tool_rewrite.go b/backend/internal/service/gateway_tool_rewrite.go
+index c3e1d8da7..31991fd9d 100644
+--- a/backend/internal/service/gateway_tool_rewrite.go
++++ b/backend/internal/service/gateway_tool_rewrite.go
+@@ -351,10 +351,14 @@ func restoreToolNamesInBytes(data []byte, rw *ToolNameRewrite) []byte {
+ 
+ // replaceAllBytes 是 bytes.ReplaceAll 的便捷封装，避免每个调用点各自做 []byte 转换。
+ func replaceAllBytes(data []byte, from, to string) []byte {
+-	if len(data) == 0 || from == to || !strings.Contains(string(data), from) {
++	if len(data) == 0 || from == to {
+ 		return data
+ 	}
+-	return []byte(strings.ReplaceAll(string(data), from, to))
++	fromBytes := []byte(from)
++	if !bytes.Contains(data, fromBytes) {
++		return data
++	}
++	return bytes.ReplaceAll(data, fromBytes, []byte(to))
+ }
+ 
+ // toolNameRewriteFromContext 从 gin.Context 取出请求阶段保存的工具名映射。
+@@ -384,3 +388,30 @@ func reverseToolNamesIfPresent(c interface {
+ 	}
+ 	return restoreToolNamesInBytes(chunk, rw)
+ }
++
++// reverseToolNamesIfPresentString is the string-typed variant for streaming
++// writers. The common case (no tool names in the chunk) returns the original
++// string without any []byte/string copy.
++func reverseToolNamesIfPresentString(c interface {
++	Get(string) (any, bool)
++}, chunk string) string {
++	rw := toolNameRewriteFromContext(c)
++	if rw == nil && len(staticToolNameRewrites) == 0 {
++		return chunk
++	}
++	if rw != nil {
++		for _, pair := range rw.ReverseOrdered {
++			fake, real := pair[0], pair[1]
++			if fake == "" || fake == real || !strings.Contains(chunk, fake) {
++				continue
++			}
++			chunk = strings.ReplaceAll(chunk, fake, real)
++		}
++	}
++	for prefix, replacement := range staticToolNameRewrites {
++		if strings.Contains(chunk, replacement) {
++			chunk = strings.ReplaceAll(chunk, replacement, prefix)
++		}
++	}
++	return chunk
++}
+diff --git a/backend/internal/service/gateway_tool_rewrite_test.go b/backend/internal/service/gateway_tool_rewrite_test.go
+index 04f405b12..d34fd0e54 100644
+--- a/backend/internal/service/gateway_tool_rewrite_test.go
++++ b/backend/internal/service/gateway_tool_rewrite_test.go
+@@ -358,3 +358,43 @@ func BenchmarkApplyToolNameRewriteToBody_LongHistory(b *testing.B) {
+ 		_ = applyToolNameRewriteToBody(body, rw)
+ 	}
+ }
++
++type toolRewriteCtxStub struct {
++	rw *ToolNameRewrite
++}
++
++func (c toolRewriteCtxStub) Get(key string) (any, bool) {
++	if key == toolNameRewriteKey && c.rw != nil {
++		return c.rw, true
++	}
++	return nil, false
++}
++
++// 字符串版本和 bytes 版本的还原结果必须完全一致，流式路径才能安全替换。
++func TestReverseToolNamesStringMatchesBytes(t *testing.T) {
++	rw := &ToolNameRewrite{
++		ReverseOrdered: [][2]string{
++			{"sessions_abc", "session_abc"},
++			{"sessions_x", "sessions_x"},
++		},
++	}
++	cases := []string{
++		"plain chunk",
++		`{"name":"sessions_x"}`,
++		`{"name":"sessions_abc"}`,
++		`{"name":"sessions_abc","x":"session_y"}`,
++		`{"name":"sessions_x","y":"sessions_abc","z":"session_y"}`,
++	}
++	for _, in := range cases {
++		got := reverseToolNamesIfPresentString(toolRewriteCtxStub{rw: rw}, in)
++		want := string(reverseToolNamesIfPresent(toolRewriteCtxStub{rw: rw}, []byte(in)))
++		require.Equal(t, want, got, "input=%q", in)
++	}
++
++	// mapping 为 nil 时仍要做静态前缀还原。
++	for _, in := range []string{`sessions_a`, `session_b`, `plain`} {
++		got := reverseToolNamesIfPresentString(toolRewriteCtxStub{}, in)
++		want := string(reverseToolNamesIfPresent(toolRewriteCtxStub{}, []byte(in)))
++		require.Equal(t, want, got, "input=%q", in)
++	}
++}
+diff --git a/backend/internal/service/gateway_upstream_response.go b/backend/internal/service/gateway_upstream_response.go
+index 85b415e5c..86900cbe3 100644
+--- a/backend/internal/service/gateway_upstream_response.go
++++ b/backend/internal/service/gateway_upstream_response.go
+@@ -706,6 +706,36 @@ func partialStreamUsageResult(c *gin.Context, resp *http.Response, streamResult
+ 	}
+ }
+ 
++// SSE fast-path predicates. Package-level byte slices keep the per-event
++// checks allocation-free.
++var (
++	sseUsageFieldBytes       = []byte(`"usage"`)
++	sseMessageFieldBytes     = []byte(`"message"`)
++	sseModelFieldBytes       = []byte(`"model"`)
++	sseMessageStopValueBytes = []byte(`"message_stop"`)
++)
++
++// sseEventNeedsJSONParse reports whether an Anthropic SSE data line must be
++// decoded into map[string]any. Most stream events (content_block_delta, ping,
++// etc.) are forwarded verbatim; decoding them only adds allocations and GC
++// pressure on the hot path.
++func sseEventNeedsJSONParse(eventName string, data []byte, useNoopDeltaKeepalive, needModelReplace bool) bool {
++	eventName = strings.ToLower(strings.TrimSpace(eventName))
++	if eventName == "" || eventName == "message_start" || eventName == "message_delta" {
++		return true
++	}
++	if useNoopDeltaKeepalive {
++		switch eventName {
++		case "content_block_start", "content_block_delta", "content_block_stop", "message_stop":
++			return true
++		}
++	}
++	if needModelReplace && bytes.Contains(data, sseMessageFieldBytes) {
++		return true
++	}
++	return bytes.Contains(data, sseUsageFieldBytes)
++}
++
+ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string, mimicClaudeCode bool) (*streamingResult, error) {
+ 	observer := upstreamResponseModelObserverFromContext(c)
+ 	if observer == nil {
+@@ -877,8 +907,8 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+ 				eventName = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+ 				continue
+ 			}
+-			if dataLine == "" && sseDataRe.MatchString(trimmed) {
+-				dataLine = sseDataRe.ReplaceAllString(trimmed, "")
++			if dataLine == "" && strings.HasPrefix(trimmed, "data:") {
++				dataLine = strings.TrimLeft(strings.TrimPrefix(trimmed, "data:"), " \t\n\f\r")
+ 			}
+ 		}
+ 
+@@ -900,8 +930,28 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+ 			return []string{block}, dataLine, nil, nil
+ 		}
+ 
++		dataLineBytes := []byte(dataLine)
++		if !sseEventNeedsJSONParse(eventName, dataLineBytes, useNoopDeltaKeepalive, needModelReplace) {
++			// Fast path: the event is forwarded verbatim. Skip the map decode and
++			// only do the cheap observations that still need the raw payload.
++			if bytes.Contains(dataLineBytes, sseModelFieldBytes) {
++				observer.ObserveAnthropic(dataLineBytes)
++			}
++			if strings.EqualFold(eventName, "message_stop") || bytes.Contains(dataLineBytes, sseMessageStopValueBytes) {
++				if anthropicStreamEventIsTerminal(eventName, dataLine) {
++					sawTerminalEvent = true
++				}
++			}
++			block := ""
++			if eventName != "" {
++				block = "event: " + eventName + "\n"
++			}
++			block += "data: " + dataLine + "\n\n"
++			return []string{block}, dataLine, nil, nil
++		}
++
+ 		var event map[string]any
+-		if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
++		if err := json.Unmarshal(dataLineBytes, &event); err != nil {
+ 			// JSON 解析失败，直接透传原始数据
+ 			block := ""
+ 			if eventName != "" {
+@@ -1101,8 +1151,8 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+ 
+ 				for _, block := range outputBlocks {
+ 					if !clientDisconnected {
+-						restored := reverseToolNamesIfPresent(c, []byte(block))
+-						if _, werr := fmt.Fprint(w, string(restored)); werr != nil {
++						restored := reverseToolNamesIfPresentString(c, block)
++						if _, werr := io.WriteString(w, restored); werr != nil {
+ 							clientDisconnected = true
+ 							logger.LegacyPrintf("service.gateway", "Client disconnected during streaming, continuing to drain upstream for billing")
+ 							// 不 break：客户端断开后仍需继续合并本事件及后续事件的 usage，
+diff --git a/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go b/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go
+index 5c2d86b87..8c6b68b22 100644
+--- a/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go
++++ b/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go
+@@ -410,7 +410,7 @@ func (s *OpenAIGatewayService) handleCCStreamingFromNativeAnthropic(
+ 		if err != nil {
+ 			return false
+ 		}
+-		out := string(reverseToolNamesIfPresent(c, []byte(sse)))
++		out := reverseToolNamesIfPresentString(c, sse)
+ 		if _, err := fmt.Fprint(c.Writer, out); err != nil {
+ 			clientDisconnected = true
+ 			return false
+diff --git a/backend/internal/service/openai_gateway_messages_anthropic_native.go b/backend/internal/service/openai_gateway_messages_anthropic_native.go
+index 3156aa854..a2978fc5c 100644
+--- a/backend/internal/service/openai_gateway_messages_anthropic_native.go
++++ b/backend/internal/service/openai_gateway_messages_anthropic_native.go
+@@ -483,7 +483,7 @@ func (s *OpenAIGatewayService) handleNativeAnthropicStreamingResponse(
+ 			}
+ 
+ 			if !clientDisconnected {
+-				restored := string(reverseToolNamesIfPresent(c, []byte(line)))
++				restored := reverseToolNamesIfPresentString(c, line)
+ 				if _, err := io.WriteString(w, restored); err != nil {
+ 					clientDisconnected = true
+ 					logger.LegacyPrintf("service.gateway", "[CN Anthropic 直通] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)

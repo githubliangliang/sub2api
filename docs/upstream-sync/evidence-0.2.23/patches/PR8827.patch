@@ -1,0 +1,1137 @@
+diff --git a/backend/internal/handler/gemini_cached_contents_handler.go b/backend/internal/handler/gemini_cached_contents_handler.go
+index e160f8cef..3f14e3704 100644
+--- a/backend/internal/handler/gemini_cached_contents_handler.go
++++ b/backend/internal/handler/gemini_cached_contents_handler.go
+@@ -275,6 +275,7 @@ func (h *GatewayHandler) GeminiCachedContentsCreate(c *gin.Context) {
+ 			Result: &service.ForwardResult{
+ 				Model: modelName, UpstreamModel: mappedModel,
+ 				Usage: service.ClaudeUsage{InputTokens: int(tokens)}, CacheStorageTokenHours: storageTokenHours,
++				UpstreamPriceMultiplier: service.VertexUpstreamPriceMultiplier(account, mappedModel, ""),
+ 			},
+ 			APIKey: apiKey, User: apiKey.User, Subscription: subscription, PricingAt: pricingAt, ChannelUsageFields: usageFields,
+ 		})
+@@ -674,15 +675,17 @@ func (h *GatewayHandler) submitGeminiCachedContentUsage(
+ 	if inputTokens <= 0 && storageTokenHours <= 0 {
+ 		return
+ 	}
++	priceMultiplier := service.VertexUpstreamPriceMultiplier(account, upstreamModel, "")
+ 	if upstreamModel == model {
+ 		upstreamModel = ""
+ 	}
+ 	result := &service.ForwardResult{
+-		RequestID:              requestID,
+-		Model:                  model,
+-		UpstreamModel:          upstreamModel,
+-		Usage:                  service.ClaudeUsage{InputTokens: inputTokens},
+-		CacheStorageTokenHours: storageTokenHours,
++		RequestID:               requestID,
++		Model:                   model,
++		UpstreamModel:           upstreamModel,
++		Usage:                   service.ClaudeUsage{InputTokens: inputTokens},
++		CacheStorageTokenHours:  storageTokenHours,
++		UpstreamPriceMultiplier: priceMultiplier,
+ 	}
+ 	inboundEndpoint := GetInboundEndpoint(c)
+ 	upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+diff --git a/backend/internal/service/account_stats_pricing.go b/backend/internal/service/account_stats_pricing.go
+index 5cf8971d5..4bb1d7f5d 100644
+--- a/backend/internal/service/account_stats_pricing.go
++++ b/backend/internal/service/account_stats_pricing.go
+@@ -21,6 +21,7 @@ import (
+ // pricingAt 与本次客户计费使用同一时刻，避免跨峰谷请求的成本与售价错位。
+ // longContextPricingEnabled 表示上游是否对本次请求收取长上下文费率，用于优先级 3；
+ // 由 accountStatsLongContextPricingEnabled 按账号开关得出，不受分组售价开关影响。
++// upstreamPriceFactor 是上游按实际请求端点计价的倍数（见 ForwardResult.UpstreamPriceMultiplier），用于优先级 3。
+ // reasoningEffort 是最终转发等级；按账号统计定价中配置的等级倍率计费。
+ func resolveAccountStatsCost(
+ 	ctx context.Context,
+@@ -35,6 +36,7 @@ func resolveAccountStatsCost(
+ 	serviceTier string,
+ 	pricingAt time.Time,
+ 	longContextPricingEnabled bool,
++	upstreamPriceFactor float64,
+ 	reasoningEfforts ...string,
+ ) *float64 {
+ 	reasoningEffort := ""
+@@ -67,7 +69,11 @@ func resolveAccountStatsCost(
+ 
+ 	// 优先级 3：模型定价文件（LiteLLM）默认价格
+ 	if billingService != nil {
+-		return tryModelFilePricing(billingService, upstreamModel, tokens, serviceTier, pricingAt, longContextPricingEnabled, reasoningEffort)
++		cost := tryModelFilePricing(billingService, upstreamModel, tokens, serviceTier, pricingAt, longContextPricingEnabled, reasoningEffort)
++		if cost != nil && upstreamPriceFactor > 0 {
++			*cost *= upstreamPriceFactor
++		}
++		return cost
+ 	}
+ 
+ 	return nil
+@@ -277,6 +283,7 @@ func applyAccountStatsCost(
+ 	totalCost float64,
+ 	pricingAt time.Time,
+ 	longContextPricingEnabled bool,
++	upstreamPriceFactor float64,
+ ) {
+ 	model := upstreamModel
+ 	if model == "" {
+@@ -295,7 +302,7 @@ func applyAccountStatsCost(
+ 		reasoningEffort = *usageLog.ReasoningEffort
+ 	}
+ 	usageLog.AccountStatsCost = resolveAccountStatsCost(
+-		ctx, cs, bs, accountID, groupID, model, tokens, requestCount, totalCost, serviceTier, pricingAt, longContextPricingEnabled, reasoningEffort,
++		ctx, cs, bs, accountID, groupID, model, tokens, requestCount, totalCost, serviceTier, pricingAt, longContextPricingEnabled, upstreamPriceFactor, reasoningEffort,
+ 	)
+ }
+ 
+diff --git a/backend/internal/service/account_stats_pricing_test.go b/backend/internal/service/account_stats_pricing_test.go
+index 0f5d236ca..1c21d32ae 100644
+--- a/backend/internal/service/account_stats_pricing_test.go
++++ b/backend/internal/service/account_stats_pricing_test.go
+@@ -738,7 +738,7 @@ func TestResolveAccountStatsCost_DeepSeekPricingPriority(t *testing.T) {
+ 				groupID = 99
+ 			}
+ 			cost := resolveAccountStatsCost(context.Background(), cs, newTestBillingService(),
+-				1, groupID, "deepseek-v4-flash", UsageTokens{InputTokens: 1000}, 1, 0.75, "", peak, true)
++				1, groupID, "deepseek-v4-flash", UsageTokens{InputTokens: 1000}, 1, 0.75, "", peak, true, 1)
+ 			if tt.noChannel {
+ 				require.Nil(t, cost)
+ 				return
+@@ -759,7 +759,7 @@ func TestResolveAccountStatsCost_NilChannelService(t *testing.T) {
+ 		nil, // channelService is nil
+ 		newTestBillingServiceWithPrices(map[string]*ModelPricing{}),
+ 		1, 1, "claude-sonnet-4",
+-		UsageTokens{InputTokens: 100}, 1, 0.5, "", time.Time{}, true,
++		UsageTokens{InputTokens: 100}, 1, 0.5, "", time.Time{}, true, 1,
+ 	)
+ 	require.Nil(t, result)
+ }
+@@ -775,7 +775,7 @@ func TestResolveAccountStatsCost_EmptyUpstreamModel(t *testing.T) {
+ 		cs,
+ 		newTestBillingServiceWithPrices(map[string]*ModelPricing{}),
+ 		1, 1, "", // empty upstream model
+-		UsageTokens{InputTokens: 100}, 1, 0.5, "", time.Time{}, true,
++		UsageTokens{InputTokens: 100}, 1, 0.5, "", time.Time{}, true, 1,
+ 	)
+ 	require.Nil(t, result)
+ }
+@@ -792,7 +792,7 @@ func TestResolveAccountStatsCost_GetChannelForGroupReturnsNil(t *testing.T) {
+ 		cs,
+ 		newTestBillingServiceWithPrices(map[string]*ModelPricing{}),
+ 		1, 99, "claude-sonnet-4", // groupID 99 has no channel
+-		UsageTokens{InputTokens: 100}, 1, 0.5, "", time.Time{}, true,
++		UsageTokens{InputTokens: 100}, 1, 0.5, "", time.Time{}, true, 1,
+ 	)
+ 	require.Nil(t, result)
+ }
+@@ -823,7 +823,7 @@ func TestResolveAccountStatsCost_HitsCustomRule(t *testing.T) {
+ 		context.Background(),
+ 		cs, nil, // billingService not needed when custom rule hits
+ 		1, 10, "claude-sonnet-4",
+-		tokens, 1, 999.0, "priority", time.Time{}, true, // 自定义账号价格不叠加服务层级倍率
++		tokens, 1, 999.0, "priority", time.Time{}, true, 1, // 自定义账号价格不叠加服务层级倍率
+ 	)
+ 	require.NotNil(t, result)
+ 	// 100*0.01 + 50*0.02 = 1.0 + 1.0 = 2.0
+@@ -845,7 +845,7 @@ func TestResolveAccountStatsCost_ApplyPricingToAccountStats_UsesTotalCost(t *tes
+ 		context.Background(),
+ 		cs, nil,
+ 		1, 10, "claude-sonnet-4",
+-		tokens, 1, 0.75, "priority", time.Time{}, true, // 已完成用户计费，不再重复应用服务层级倍率
++		tokens, 1, 0.75, "priority", time.Time{}, true, 1, // 已完成用户计费，不再重复应用服务层级倍率
+ 	)
+ 	require.NotNil(t, result)
+ 	require.InDelta(t, 0.75, *result, 1e-12)
+@@ -863,7 +863,7 @@ func TestResolveAccountStatsCost_ApplyPricingToAccountStats_ZeroTotalCost_Return
+ 		context.Background(),
+ 		cs, nil,
+ 		1, 10, "claude-sonnet-4",
+-		UsageTokens{}, 1, 0.0, "", time.Time{}, true, // totalCost = 0
++		UsageTokens{}, 1, 0.0, "", time.Time{}, true, 1, // totalCost = 0
+ 	)
+ 	require.Nil(t, result)
+ }
+@@ -890,13 +890,31 @@ func TestResolveAccountStatsCost_FallsBackToLiteLLM(t *testing.T) {
+ 		context.Background(),
+ 		cs, bs,
+ 		1, 10, "claude-sonnet-4",
+-		tokens, 1, 999.0, "", time.Time{}, true, // totalCost ignored
++		tokens, 1, 999.0, "", time.Time{}, true, 1, // totalCost ignored
+ 	)
+ 	require.NotNil(t, result)
+ 	// 100*0.001 + 50*0.002 = 0.1 + 0.1 = 0.2
+ 	require.InDelta(t, 0.2, *result, 1e-12)
+ }
+ 
++// Scenario: 上游端点价格倍数只放大模型定价文件档，渠道计费档保持原值。
++func TestResolveAccountStatsCost_UpstreamPriceFactorScalesModelFilePricingOnly(t *testing.T) {
++	bs := newTestBillingServiceWithPrices(map[string]*ModelPricing{
++		"claude-sonnet-4": {InputPricePerToken: 0.001, OutputPricePerToken: 0.002},
++	})
++	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50}
++
++	modelFile := newTestChannelServiceForStats(t, &Channel{ID: 1, Status: StatusActive}, 10, "anthropic")
++	result := resolveAccountStatsCost(context.Background(), modelFile, bs, 1, 10, "claude-sonnet-4", tokens, 1, 999.0, "", time.Time{}, true, 1.1)
++	require.NotNil(t, result)
++	require.InDelta(t, 0.22, *result, 1e-12)
++
++	applyPricing := newTestChannelServiceForStats(t, &Channel{ID: 1, Status: StatusActive, ApplyPricingToAccountStats: true}, 10, "anthropic")
++	result = resolveAccountStatsCost(context.Background(), applyPricing, bs, 1, 10, "claude-sonnet-4", tokens, 1, 0.75, "", time.Time{}, true, 1.1)
++	require.NotNil(t, result)
++	require.InDelta(t, 0.75, *result, 1e-12)
++}
++
+ func TestResolveAccountStatsCost_FallbackHonorsAnthropicFast(t *testing.T) {
+ 	channel := &Channel{ID: 1, Status: StatusActive}
+ 	cs := newTestChannelServiceForStats(t, channel, 10, "anthropic")
+@@ -911,7 +929,7 @@ func TestResolveAccountStatsCost_FallbackHonorsAnthropicFast(t *testing.T) {
+ 		context.Background(), cs, bs,
+ 		1, 10, "claude-opus-5",
+ 		UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000},
+-		1, 0, "fast", time.Time{}, true,
++		1, 0, "fast", time.Time{}, true, 1,
+ 	)
+ 	require.NotNil(t, result)
+ 	require.InDelta(t, 60, *result, 1e-12)
+@@ -930,7 +948,7 @@ func TestResolveAccountStatsCost_Gemini36FlashTierUsesFallbackPricing(t *testing
+ 		context.Background(),
+ 		cs, bs,
+ 		1, 10, "gemini-3.6-flash-low",
+-		UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000}, 1, 0, "", time.Time{}, true,
++		UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000}, 1, 0, "", time.Time{}, true, 1,
+ 	)
+ 	require.NotNil(t, result)
+ 	require.InDelta(t, 4.575, *result, 1e-12)
+@@ -954,7 +972,7 @@ func TestResolveAccountStatsCost_AllMiss_ReturnsNil(t *testing.T) {
+ 		context.Background(),
+ 		cs, bs,
+ 		1, 10, "totally-unknown-model",
+-		tokens, 1, 0.0, "", time.Time{}, true,
++		tokens, 1, 0.0, "", time.Time{}, true, 1,
+ 	)
+ 	require.Nil(t, result)
+ }
+@@ -971,7 +989,7 @@ func TestResolveAccountStatsCost_NilBillingService_SkipsLiteLLM(t *testing.T) {
+ 		context.Background(),
+ 		cs, nil, // billingService is nil
+ 		1, 10, "claude-sonnet-4",
+-		UsageTokens{InputTokens: 100}, 1, 0.0, "", time.Time{}, true,
++		UsageTokens{InputTokens: 100}, 1, 0.0, "", time.Time{}, true, 1,
+ 	)
+ 	require.Nil(t, result)
+ }
+@@ -1004,7 +1022,7 @@ func TestResolveAccountStatsCost_CustomRulePriorityOverApplyPricing(t *testing.T
+ 		context.Background(),
+ 		cs, nil,
+ 		1, 10, "claude-sonnet-4",
+-		tokens, 1, 99.0, "", time.Time{}, true, // totalCost = 99.0 (would be used if ApplyPricing wins)
++		tokens, 1, 99.0, "", time.Time{}, true, 1, // totalCost = 99.0 (would be used if ApplyPricing wins)
+ 	)
+ 	require.NotNil(t, result)
+ 	// Custom rule: 100*0.05 = 5.0 (NOT 99.0 from totalCost)
+@@ -1032,7 +1050,7 @@ func TestApplyAccountStatsCost_UsesUsageLogServiceTier(t *testing.T) {
+ 	applyAccountStatsCost(
+ 		context.Background(), usageLog, cs, bs,
+ 		1, 10, "gpt-5.6-sol", "gpt-5.6-sol",
+-		UsageTokens{InputTokens: 100, OutputTokens: 50}, 999, time.Time{}, true,
++		UsageTokens{InputTokens: 100, OutputTokens: 50}, 999, time.Time{}, true, 1,
+ 	)
+ 
+ 	require.NotNil(t, usageLog.AccountStatsCost)
+@@ -1081,7 +1099,7 @@ func TestApplyAccountStatsCost_LongContextFollowsAccountGate(t *testing.T) {
+ 			usageLog := &UsageLog{ServiceTier: &tt.tier}
+ 			applyAccountStatsCost(context.Background(), usageLog, cs, bs,
+ 				1, 10, "gpt-5.6-sol", "gpt-5.6-sol", tokens, 999, time.Time{},
+-				accountStatsLongContextPricingEnabled(tt.gate))
++				accountStatsLongContextPricingEnabled(tt.gate), 1)
+ 			require.NotNil(t, usageLog.AccountStatsCost)
+ 			require.InDelta(t, tt.wantCost, *usageLog.AccountStatsCost, 1e-12)
+ 		})
+diff --git a/backend/internal/service/account_test_service.go b/backend/internal/service/account_test_service.go
+index fb1a40baf..b195356fa 100644
+--- a/backend/internal/service/account_test_service.go
++++ b/backend/internal/service/account_test_service.go
+@@ -2600,7 +2600,7 @@ func (s *AccountTestService) buildGeminiOAuthRequest(ctx context.Context, accoun
+ }
+ 
+ func (s *AccountTestService) buildGeminiServiceAccountRequest(ctx context.Context, account *Account, modelID string, payload []byte) (*http.Request, error) {
+-	fullURL, err := buildVertexGeminiAccountURL(account, modelID, "streamGenerateContent", true)
++	fullURL, err := buildVertexGeminiAccountURL(account, modelID, "streamGenerateContent", true, "")
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/backend/internal/service/batch_image_provider_vertex.go b/backend/internal/service/batch_image_provider_vertex.go
+index bb3363dfe..a877c41dd 100644
+--- a/backend/internal/service/batch_image_provider_vertex.go
++++ b/backend/internal/service/batch_image_provider_vertex.go
+@@ -569,10 +569,7 @@ func BuildVertexBatchPredictionJobsEndpoint(baseURL, projectID, location string)
+ 	if strings.TrimSpace(baseURL) != "" {
+ 		return strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/v1/projects/" + url.PathEscape(projectID) + "/locations/" + url.PathEscape(location) + "/batchPredictionJobs", nil
+ 	}
+-	host := fmt.Sprintf("%s-aiplatform.googleapis.com", location)
+-	if location == "global" {
+-		host = "aiplatform.googleapis.com"
+-	}
++	host := vertexAPIHost(location)
+ 	return fmt.Sprintf("https://%s/v1/projects/%s/locations/%s/batchPredictionJobs", host, url.PathEscape(projectID), url.PathEscape(location)), nil
+ }
+ 
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index 63858570e..82bee7f88 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -717,6 +717,17 @@ type ForwardResult struct {
+ 	// CacheStorageTokenHours 显式上下文缓存的存储量（缓存 token 数 × 存储小时数），按计费模型的
+ 	// 存储单价折算为费用后叠加在 token 费用之上。
+ 	CacheStorageTokenHours float64
++	// UpstreamPriceMultiplier 是上游按实际请求端点计价相对计费模型价格的倍数（见 VertexUpstreamPriceMultiplier），
++	// 只作用于 token 费用；0 按 1 处理。
++	UpstreamPriceMultiplier float64
++}
++
++// upstreamPriceFactor 返回 UpstreamPriceMultiplier，未设置时为 1。
++func (r *ForwardResult) upstreamPriceFactor() float64 {
++	if r == nil || r.UpstreamPriceMultiplier <= 0 {
++		return 1
++	}
++	return r.UpstreamPriceMultiplier
+ }
+ 
+ // GatewayFailureStage identifies which request stage failed. The zero value is
+diff --git a/backend/internal/service/gateway_usage_billing.go b/backend/internal/service/gateway_usage_billing.go
+index 10e0992c9..232436bb8 100644
+--- a/backend/internal/service/gateway_usage_billing.go
++++ b/backend/internal/service/gateway_usage_billing.go
+@@ -857,7 +857,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
+ 				ImageOutputTokens:   result.Usage.ImageOutputTokens,
+ 			},
+ 			cost.TotalCost-cacheStorageCost, pricingAt,
+-			accountStatsLongContextPricingEnabled(nil),
++			accountStatsLongContextPricingEnabled(nil), result.upstreamPriceFactor(),
+ 		)
+ 		addCacheStorageToAccountStatsCost(usageLog, cacheStorageCost)
+ 	}
+@@ -1011,6 +1011,23 @@ func addCacheStorageToAccountStatsCost(usageLog *UsageLog, storageCost float64)
+ 	usageLog.AccountStatsCost = &cost
+ }
+ 
++// upstreamPriceFactorApplies 判断上游端点价格倍数是否作用于本次 token 费用：只作用于默认模型价（LiteLLM/fallback）。
++// 管理员配置的分组价、渠道价视为最终价，不再叠加倍数，与账号统计成本只在默认价档位加价的口径一致。
++func (s *GatewayService) upstreamPriceFactorApplies(ctx context.Context, result *ForwardResult, apiKey *APIKey, billingModel string) bool {
++	if result.upstreamPriceFactor() == 1 {
++		return false
++	}
++	return s.resolveChannelPricing(ctx, billingModel, apiKey) == nil
++}
++
++// applyUpstreamPriceFactor 把上游端点价格倍数作用于按 token 计费的费用，按次等其他计费模式不受影响。
++func applyUpstreamPriceFactor(cost *CostBreakdown, result *ForwardResult) {
++	if cost == nil || (cost.BillingMode != "" && cost.BillingMode != string(BillingModeToken)) {
++		return
++	}
++	applyCostBreakdownMultiplier(cost, result.upstreamPriceFactor())
++}
++
+ // calculateRecordUsageCost 根据请求类型计算费用。
+ func (s *GatewayService) calculateRecordUsageCost(
+ 	ctx context.Context,
+@@ -1026,6 +1043,7 @@ func (s *GatewayService) calculateRecordUsageCost(
+ 	if result.ImageCount > 0 {
+ 		if !imageCountBillingApplies(apiKey, result.ImageEndpoint) {
+ 			if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
++				// resolved 来自分组价或渠道价，是管理员配置的最终价，不叠加上游端点价格倍数。
+ 				return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt)
+ 			}
+ 		}
+@@ -1057,6 +1075,9 @@ func (s *GatewayService) calculateRecordUsageCost(
+ 		tokenCost = &CostBreakdown{}
+ 	} else {
+ 		tokenCost = s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt)
++		if s.upstreamPriceFactorApplies(ctx, result, apiKey, billingModel) {
++			applyUpstreamPriceFactor(tokenCost, result)
++		}
+ 	}
+ 	if result.SearchCount > 0 {
+ 		price := groupSearchPricePer1kFromAPIKey(apiKey)
+diff --git a/backend/internal/service/gemini_cached_content.go b/backend/internal/service/gemini_cached_content.go
+index 95264148d..2295a80ef 100644
+--- a/backend/internal/service/gemini_cached_content.go
++++ b/backend/internal/service/gemini_cached_content.go
+@@ -331,6 +331,20 @@ func FindGeminiCachedContentReference(body []byte) (*GeminiCachedContentReferenc
+ 	return ref, nil
+ }
+ 
++// geminiCachedContentLocationInBody 返回请求体引用的 Vertex 显式缓存所在区域；未引用 Vertex 缓存时返回空串。
++func geminiCachedContentLocationInBody(body []byte) string {
++	if !bytes.Contains(body, []byte("/cachedContents/")) {
++		return ""
++	}
++	for _, path := range geminiCachedContentReferencePaths {
++		name := strings.TrimSpace(gjson.GetBytes(body, path).String())
++		if m := geminiCachedContentVertexName.FindStringSubmatch(name); m != nil {
++			return m[1]
++		}
++	}
++	return ""
++}
++
+ // checkGeminiCachedContentReferenceKeys 拒绝对象中重复出现的 uniqueKeys 与 snake_case 写法的缓存引用键。
+ func checkGeminiCachedContentReferenceKeys(obj gjson.Result, uniqueKeys ...string) error {
+ 	seen := make(map[string]bool, len(uniqueKeys))
+@@ -1151,7 +1165,7 @@ func geminiCachedContentCollectionURL(account *Account, base, mappedModel string
+ 			return "", fmt.Errorf("invalid vertex location: %s", location)
+ 		}
+ 		return fmt.Sprintf("https://%s/v1/projects/%s/locations/%s/cachedContents",
+-			geminiCachedContentVertexHost(location), url.PathEscape(projectID), url.PathEscape(location)), nil
++			vertexAPIHost(location), url.PathEscape(projectID), url.PathEscape(location)), nil
+ 	default:
+ 		return "", fmt.Errorf("account type %s does not support explicit context caching", account.Type)
+ 	}
+@@ -1173,19 +1187,12 @@ func geminiCachedContentResourceURL(account *Account, base, upstreamName string)
+ 		if m == nil {
+ 			return "", fmt.Errorf("invalid upstream cached content name: %s", upstreamName)
+ 		}
+-		return fmt.Sprintf("https://%s/v1/%s", geminiCachedContentVertexHost(m[1]), upstreamName), nil
++		return fmt.Sprintf("https://%s/v1/%s", vertexAPIHost(m[1]), upstreamName), nil
+ 	default:
+ 		return "", fmt.Errorf("account type %s does not support explicit context caching", account.Type)
+ 	}
+ }
+ 
+-func geminiCachedContentVertexHost(location string) string {
+-	if location == "global" {
+-		return "aiplatform.googleapis.com"
+-	}
+-	return location + "-aiplatform.googleapis.com"
+-}
+-
+ // GeminiCachedContentView 返回客户端可见的缓存元数据。
+ func GeminiCachedContentView(record *GeminiCachedContent) map[string]any {
+ 	view := map[string]any{
+diff --git a/backend/internal/service/gemini_cached_content_test.go b/backend/internal/service/gemini_cached_content_test.go
+index e3afbdd5e..1a28a2a52 100644
+--- a/backend/internal/service/gemini_cached_content_test.go
++++ b/backend/internal/service/gemini_cached_content_test.go
+@@ -387,6 +387,99 @@ func TestGeminiCachedContentStoragePricingAndSurcharge(t *testing.T) {
+ 	require.InDelta(t, storage*1.5, storageOnly.ActualCost, 1e-12)
+ }
+ 
++// Scenario: 上游端点价格倍数只放大 token 费用，显式缓存存储费按原价叠加。
++func TestUpstreamPriceMultiplierScalesTokenCostOnly(t *testing.T) {
++	pricing := &PricingService{}
++	data, err := pricing.parsePricingData([]byte(`{"gemini-3.7-flash":{"litellm_provider":"gemini","input_cost_per_token":0.00000075,
++		"output_cost_per_token":0.00000375,"cache_read_input_token_cost":0.000000075,"cache_storage_cost_per_token_per_hour":0.000001}}`))
++	require.NoError(t, err)
++	pricing.pricingData = data
++	gateway := &GatewayService{billingService: NewBillingService(&config.Config{}, pricing)}
++	groupID := int64(3)
++	apiKey := &APIKey{GroupID: &groupID, Group: &Group{ID: groupID, Hydrated: true}}
++
++	const (
++		inputTokens  = 10000
++		outputTokens = 1000
++		cacheTokens  = 5000
++		tokenHours   = 20000.0
++	)
++	baseInput := inputTokens * 0.00000075
++	baseOutput := outputTokens * 0.00000375
++	baseCacheRead := cacheTokens * 0.000000075
++	storage := tokenHours * 0.000001
++
++	cost := gateway.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model:                   "gemini-3.7-flash",
++		Usage:                   ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens, CacheReadInputTokens: cacheTokens},
++		CacheStorageTokenHours:  tokenHours,
++		UpstreamPriceMultiplier: 1.1,
++	}, apiKey, "gemini-3.7-flash", 2, 2, time.Now())
++	require.InDelta(t, baseInput*1.1, cost.InputCost, 1e-12)
++	require.InDelta(t, baseOutput*1.1, cost.OutputCost, 1e-12)
++	require.InDelta(t, baseCacheRead*1.1, cost.CacheReadCost, 1e-12)
++	tokenTotal := (baseInput + baseOutput + baseCacheRead) * 1.1
++	require.InDelta(t, tokenTotal+storage, cost.TotalCost, 1e-12)
++	require.InDelta(t, (tokenTotal+storage)*2, cost.ActualCost, 1e-12)
++
++	unset := gateway.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model: "gemini-3.7-flash",
++		Usage: ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens, CacheReadInputTokens: cacheTokens},
++	}, apiKey, "gemini-3.7-flash", 1, 1, time.Now())
++	require.InDelta(t, baseInput+baseOutput+baseCacheRead, unset.TotalCost, 1e-12)
++
++	storageOnly := gateway.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model:                   "gemini-3.7-flash",
++		CacheStorageTokenHours:  tokenHours,
++		UpstreamPriceMultiplier: 1.1,
++	}, apiKey, "gemini-3.7-flash", 1, 1, time.Now())
++	require.InDelta(t, storage, storageOnly.TotalCost, 1e-12)
++}
++
++// 管理员配置的分组价/渠道价是最终价，多区域端点倍数只作用于默认模型价。
++func TestUpstreamPriceMultiplierSkipsConfiguredPricing(t *testing.T) {
++	pricing := &PricingService{}
++	data, err := pricing.parsePricingData([]byte(`{"gemini-3.7-flash":{"litellm_provider":"gemini","input_cost_per_token":0.00000075,
++		"output_cost_per_token":0.00000375,"cache_read_input_token_cost":0.000000075}}`))
++	require.NoError(t, err)
++	pricing.pricingData = data
++	billing := NewBillingService(&config.Config{}, pricing)
++	gateway := &GatewayService{billingService: billing, resolver: NewModelPricingResolver(nil, billing)}
++
++	const (
++		inputTokens  = 10000
++		outputTokens = 1000
++	)
++	usage := ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens}
++	groupInput, groupOutput := 0.000002, 0.000008
++	groupID := int64(5)
++	configured := &APIKey{GroupID: &groupID, Group: &Group{ID: groupID, Hydrated: true, ModelPricing: []ChannelModelPricing{{
++		Models: []string{"gemini-3.7-flash"}, BillingMode: BillingModeToken, InputPrice: &groupInput, OutputPrice: &groupOutput,
++	}}}}
++	cost := gateway.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model: "gemini-3.7-flash", Usage: usage, UpstreamPriceMultiplier: 1.1,
++	}, configured, "gemini-3.7-flash", 1, 1, time.Now())
++	require.InDelta(t, inputTokens*groupInput+outputTokens*groupOutput, cost.TotalCost, 1e-12)
++
++	defaultGroupID := int64(6)
++	defaultPriced := &APIKey{GroupID: &defaultGroupID, Group: &Group{ID: defaultGroupID, Hydrated: true}}
++	cost = gateway.calculateRecordUsageCost(context.Background(), &ForwardResult{
++		Model: "gemini-3.7-flash", Usage: usage, UpstreamPriceMultiplier: 1.1,
++	}, defaultPriced, "gemini-3.7-flash", 1, 1, time.Now())
++	require.InDelta(t, (inputTokens*0.00000075+outputTokens*0.00000375)*1.1, cost.TotalCost, 1e-12)
++}
++
++func TestApplyUpstreamPriceFactorTokenModeOnly(t *testing.T) {
++	result := &ForwardResult{UpstreamPriceMultiplier: 1.1}
++	for mode, want := range map[string]float64{"": 1.1, string(BillingModeToken): 1.1, string(BillingModePerRequest): 1, string(BillingModeImage): 1} {
++		cost := &CostBreakdown{InputCost: 1, TotalCost: 1, ActualCost: 1, BillingMode: mode}
++		applyUpstreamPriceFactor(cost, result)
++		require.InDelta(t, want, cost.TotalCost, 1e-12, mode)
++		require.InDelta(t, want, cost.ActualCost, 1e-12, mode)
++	}
++	applyUpstreamPriceFactor(nil, result)
++}
++
+ func TestGeminiCachedContentStorageCostInAccountStats(t *testing.T) {
+ 	const (
+ 		model       = "gemini-3.8-flash"
+diff --git a/backend/internal/service/gemini_chat_completions_compat_service.go b/backend/internal/service/gemini_chat_completions_compat_service.go
+index 4b236dcd0..8a64bcaef 100644
+--- a/backend/internal/service/gemini_chat_completions_compat_service.go
++++ b/backend/internal/service/gemini_chat_completions_compat_service.go
+@@ -317,6 +317,8 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
+ 		ImageSize:        imageSize,
+ 		ImageInputSize:   imageInputSize,
+ 		ClientDisconnect: clientDisconnect,
++
++		UpstreamPriceMultiplier: VertexUpstreamPriceMultiplier(account, mappedModel, ""),
+ 	}, nil
+ }
+ 
+@@ -439,7 +441,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
+ 			if clientStream {
+ 				action = "streamGenerateContent"
+ 			}
+-			fullURL, err := buildVertexGeminiAccountURL(account, mappedModel, action, clientStream)
++			fullURL, err := buildVertexGeminiAccountURL(account, mappedModel, action, clientStream, "")
+ 			if err != nil {
+ 				return nil, "", err
+ 			}
+diff --git a/backend/internal/service/gemini_messages_compat_service.go b/backend/internal/service/gemini_messages_compat_service.go
+index 4aee3e384..74b537b37 100644
+--- a/backend/internal/service/gemini_messages_compat_service.go
++++ b/backend/internal/service/gemini_messages_compat_service.go
+@@ -692,7 +692,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+ 			if req.Stream {
+ 				action = "streamGenerateContent"
+ 			}
+-			fullURL, err := buildVertexGeminiAccountURL(account, mappedModel, action, req.Stream)
++			fullURL, err := buildVertexGeminiAccountURL(account, mappedModel, action, req.Stream, "")
+ 			if err != nil {
+ 				return nil, "", err
+ 			}
+@@ -1081,6 +1081,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
+ 		ImageCount:                    imageCount,
+ 		ImageSize:                     imageSize,
+ 		ImageInputSize:                imageInputSize,
++		UpstreamPriceMultiplier:       VertexUpstreamPriceMultiplier(account, mappedModel, ""),
+ 	}, nil
+ }
+ 
+@@ -1147,6 +1148,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+ 
+ 	var requestIDHeader string
+ 	var buildReq func(ctx context.Context) (*http.Request, string, error)
++	// cachedContentLocation 是 Vertex 账号请求引用的显式缓存所在区域，未引用时为空。
++	var cachedContentLocation string
+ 
+ 	switch account.Type {
+ 	case AccountTypeAPIKey:
+@@ -1247,8 +1250,9 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+ 		requestIDHeader = "x-request-id"
+ 
+ 	case AccountTypeServiceAccount:
++		cachedContentLocation = geminiCachedContentLocationInBody(body)
+ 		buildReq = func(ctx context.Context) (*http.Request, string, error) {
+-			fullURL, err := buildVertexGeminiAccountURL(account, mappedModel, upstreamAction, useUpstreamStream)
++			fullURL, err := buildVertexGeminiAccountURL(account, mappedModel, upstreamAction, useUpstreamStream, cachedContentLocation)
+ 			if err != nil {
+ 				return nil, "", err
+ 			}
+@@ -1618,6 +1622,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
+ 		ImageCount:                    imageCount,
+ 		ImageSize:                     imageSize,
+ 		ImageInputSize:                imageInputSize,
++		UpstreamPriceMultiplier:       VertexUpstreamPriceMultiplier(account, mappedModel, cachedContentLocation),
+ 	}, nil
+ }
+ 
+diff --git a/backend/internal/service/gemini_models_endpoints.go b/backend/internal/service/gemini_models_endpoints.go
+index 34a86444d..f7a311d6a 100644
+--- a/backend/internal/service/gemini_models_endpoints.go
++++ b/backend/internal/service/gemini_models_endpoints.go
+@@ -188,7 +188,8 @@ func (s *GeminiMessagesCompatService) ForwardListModels(ctx context.Context, acc
+ }
+ 
+ // ForwardGetModel 读取账号上游的单个模型信息，返回 AI Studio 格式的响应（GET /v1beta/models/{model}）。
+-// Vertex 服务账号在该模型生成请求所用区域的模型列表中查找，找不到时返回 404；Vertex API Key 账号返回内置信息。
++// Vertex 服务账号在该模型生成请求所用区域的模型列表中查找，找不到时返回 404；该区域为多区域（us/eu）时
++// 查 global 列表，多区域可用性以 vertexModelLocations 为准。Vertex API Key 账号返回内置信息。
+ func (s *GeminiMessagesCompatService) ForwardGetModel(ctx context.Context, account *Account, model string) (*UpstreamHTTPResult, error) {
+ 	if account == nil {
+ 		return nil, errors.New("account is nil")
+@@ -200,7 +201,11 @@ func (s *GeminiMessagesCompatService) ForwardGetModel(ctx context.Context, accou
+ 		return geminiModelsJSONResult(http.StatusOK, gemini.FallbackModel(model))
+ 	}
+ 
+-	modelIDs, failure, err := s.listVertexGeminiModels(ctx, account, account.VertexLocation(model))
++	location := account.VertexLocation(model)
++	if isVertexMultiRegion(location) {
++		location = vertexGlobalLocation
++	}
++	modelIDs, failure, err := s.listVertexGeminiModels(ctx, account, location)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/backend/internal/service/gemini_models_endpoints_test.go b/backend/internal/service/gemini_models_endpoints_test.go
+index e33b85d80..962f64277 100644
+--- a/backend/internal/service/gemini_models_endpoints_test.go
++++ b/backend/internal/service/gemini_models_endpoints_test.go
+@@ -206,3 +206,26 @@ func TestForwardListModels_ResponseOverReadLimitFails(t *testing.T) {
+ 	_, err := svc.ForwardListModels(context.Background(), account)
+ 	require.ErrorContains(t, err, "exceeds 16 bytes")
+ }
++
++// Scenario: 多区域账号查单个模型与列模型都读 global 发布方列表。
++func TestForwardModels_VertexMultiRegionAccountReadsGlobalList(t *testing.T) {
++	account := vertexModelSyncTestAccount(map[string]any{"location": "us"})
++	listBody := `{"publisherModels":[{"name":"publishers/google/models/gemini-3.6-flash"},{"name":"publishers/google/models/gemini-3.1-pro-preview"}]}`
++	const globalList = "https://aiplatform.googleapis.com/v1beta1/publishers/google/models?pageSize=300"
++
++	for _, model := range []string{"gemini-3.6-flash", "gemini-3.1-pro-preview"} {
++		upstream := &httpUpstreamRecorder{resp: vertexModelsJSONResponse(http.StatusOK, listBody)}
++		svc := newGeminiModelsEndpointsTestService(nil, upstream)
++		res, err := svc.ForwardGetModel(context.Background(), account, model)
++		require.NoError(t, err)
++		require.Equal(t, http.StatusOK, res.StatusCode, model)
++		require.Equal(t, globalList, upstream.lastReq.URL.String())
++	}
++
++	upstream := &httpUpstreamRecorder{resp: vertexModelsJSONResponse(http.StatusOK, listBody)}
++	svc := newGeminiModelsEndpointsTestService(nil, upstream)
++	res, err := svc.ForwardListModels(context.Background(), account)
++	require.NoError(t, err)
++	require.Equal(t, http.StatusOK, res.StatusCode)
++	require.Equal(t, globalList, upstream.lastReq.URL.String())
++}
+diff --git a/backend/internal/service/gemini_vertex_api_key_forward_test.go b/backend/internal/service/gemini_vertex_api_key_forward_test.go
+index 1b57bbb1f..6fa8f8db8 100644
+--- a/backend/internal/service/gemini_vertex_api_key_forward_test.go
++++ b/backend/internal/service/gemini_vertex_api_key_forward_test.go
+@@ -163,3 +163,107 @@ func TestGeminiForwardNative_VertexSharedCapacity429RetriesSameAccountWithoutCoo
+ 		})
+ 	}
+ }
++
++// Scenario: 多区域账号按模型支持的区域发送，不支持的模型走 global；引用显式缓存时按缓存所在区域发送；
++// 无 project_id 的 API Key 账号始终走 Express 全局端点。
++func TestGeminiForwardNative_VertexMultiRegionAccountRoutesByModelAndCachedContent(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const contents = `"contents":[{"role":"user","parts":[{"text":"hi"}]}]`
++	cases := []struct {
++		name      string
++		projectID string
++		location  string
++		model     string
++		body      string
++		want      string
++		wantPrice float64
++	}{
++		{
++			name:      "supported model uses multi-region endpoint",
++			projectID: "my-project",
++			location:  "us",
++			model:     "gemini-3.7-flash",
++			body:      `{` + contents + `}`,
++			want:      "https://aiplatform.us.rep.googleapis.com/v1/projects/my-project/locations/us/publishers/google/models/gemini-3.7-flash:generateContent",
++			wantPrice: 1.1,
++		},
++		{
++			name:      "unsupported model falls back to global",
++			projectID: "my-project",
++			location:  "us",
++			model:     "gemini-3.1-pro-preview",
++			body:      `{` + contents + `}`,
++			want:      "https://aiplatform.googleapis.com/v1/projects/my-project/locations/global/publishers/google/models/gemini-3.1-pro-preview:generateContent",
++			wantPrice: 1,
++		},
++		{
++			name:      "global cached content on multi-region account stays on global",
++			projectID: "my-project",
++			location:  "us",
++			model:     "gemini-3.7-flash",
++			body:      `{"cachedContent":"projects/my-project/locations/global/cachedContents/42",` + contents + `}`,
++			want:      "https://aiplatform.googleapis.com/v1/projects/my-project/locations/global/publishers/google/models/gemini-3.7-flash:generateContent",
++			wantPrice: 1,
++		},
++		{
++			name:      "multi-region cached content on global account uses its region",
++			projectID: "my-project",
++			location:  "global",
++			model:     "gemini-3.7-flash",
++			body:      `{"cachedContent":"projects/my-project/locations/us/cachedContents/42",` + contents + `}`,
++			want:      "https://aiplatform.us.rep.googleapis.com/v1/projects/my-project/locations/us/publishers/google/models/gemini-3.7-flash:generateContent",
++			wantPrice: 1.1,
++		},
++		{
++			name:      "express mode ignores cached content region",
++			location:  "us",
++			model:     "gemini-3.7-flash",
++			body:      `{"cachedContent":"projects/my-project/locations/us/cachedContents/42",` + contents + `}`,
++			want:      "https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.7-flash:generateContent",
++			wantPrice: 1,
++		},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			svc, httpStub := newGeminiVertexAPIKeyTestService()
++			c, _ := newGeminiNativeTestContext(t)
++			account := geminiVertexAPIKeyTestAccount(tc.projectID)
++			account.Credentials["location"] = tc.location
++
++			result, err := svc.ForwardNative(context.Background(), c, account, tc.model, "generateContent", false, []byte(tc.body))
++			require.NoError(t, err)
++			require.Equal(t, 1, httpStub.calls)
++			require.Equal(t, tc.want, httpStub.lastReq.URL.String())
++			require.InDelta(t, tc.wantPrice, result.UpstreamPriceMultiplier, 1e-12)
++		})
++	}
++}
++
++// Scenario: Claude 兼容与 Chat 兼容入口经多区域账号发往 us 端点时，转发结果带多区域价格倍数。
++func TestGeminiCompatForwards_VertexMultiRegionSetsUpstreamPriceMultiplier(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const want = "https://aiplatform.us.rep.googleapis.com/v1/projects/my-project/locations/us/publishers/google/models/gemini-3.7-flash:generateContent"
++	usAccount := func() *Account {
++		account := geminiVertexAPIKeyTestAccount("my-project")
++		account.Credentials["location"] = "us"
++		return account
++	}
++
++	svc, httpStub := newGeminiVertexAPIKeyTestService()
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
++	result, err := svc.Forward(context.Background(), c, usAccount(),
++		[]byte(`{"model":"gemini-3.7-flash","max_tokens":16,"messages":[{"role":"user","content":"hello"}]}`))
++	require.NoError(t, err)
++	require.Equal(t, want, httpStub.lastReq.URL.String())
++	require.InDelta(t, 1.1, result.UpstreamPriceMultiplier, 1e-12)
++
++	svc, httpStub = newGeminiVertexAPIKeyTestService()
++	body := []byte(`{"model":"gemini-3.7-flash","messages":[{"role":"user","content":"hi"}]}`)
++	c, _ = gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
++	result, err = svc.ForwardAsChatCompletions(context.Background(), c, usAccount(), body)
++	require.NoError(t, err)
++	require.Equal(t, want, httpStub.lastReq.URL.String())
++	require.InDelta(t, 1.1, result.UpstreamPriceMultiplier, 1e-12)
++}
+diff --git a/backend/internal/service/openai_gateway_usage.go b/backend/internal/service/openai_gateway_usage.go
+index f3516aad1..e77efee7e 100644
+--- a/backend/internal/service/openai_gateway_usage.go
++++ b/backend/internal/service/openai_gateway_usage.go
+@@ -492,7 +492,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
+ 		applyAccountStatsCost(ctx, usageLog, s.channelService, s.billingService,
+ 			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
+ 			tokens, cost.TotalCost, pricingAt,
+-			accountStatsLongContextPricingEnabled(longContextBillingGate) && !modelLongContextExempt,
++			accountStatsLongContextPricingEnabled(longContextBillingGate) && !modelLongContextExempt, 1,
+ 		)
+ 	}
+ 
+diff --git a/backend/internal/service/upstream_models.go b/backend/internal/service/upstream_models.go
+index 3d04d8ccb..c6587cee5 100644
+--- a/backend/internal/service/upstream_models.go
++++ b/backend/internal/service/upstream_models.go
+@@ -1434,10 +1434,7 @@ func buildVertexPublisherModelsURL(location, pageToken string) (string, error) {
+ 	if !vertexLocationPattern.MatchString(location) {
+ 		return "", fmt.Errorf("invalid vertex location: %s", location)
+ 	}
+-	host := location + "-aiplatform.googleapis.com"
+-	if location == "global" {
+-		host = vertexGlobalHost
+-	}
++	host := vertexAPIHost(location)
+ 	query := url.Values{"pageSize": []string{strconv.Itoa(vertexPublisherModelsPageSize)}}
+ 	if pageToken != "" {
+ 		query.Set("pageToken", pageToken)
+diff --git a/backend/internal/service/vertex_locations.go b/backend/internal/service/vertex_locations.go
+new file mode 100644
+index 000000000..fa8034823
+--- /dev/null
++++ b/backend/internal/service/vertex_locations.go
+@@ -0,0 +1,91 @@
++package service
++
++import (
++	"slices"
++	"strings"
++)
++
++const (
++	vertexGlobalLocation = "global"
++	vertexLocationUS     = "us"
++	vertexLocationEU     = "eu"
++
++	// vertexMultiRegionPriceMultiplier 是 vertexModelLocations 内的模型走多区域端点时相对 global 价的倍数。
++	vertexMultiRegionPriceMultiplier = 1.1
++)
++
++// vertexModelLocations 列出 Vertex Gemini 模型可用的区域。Gemini 账号区域配置为多区域（us/eu）时，
++// 表内声明支持该多区域的模型走对应多区域端点，其余模型（含未列出的模型）走 global。
++// 账号区域为 global 或单区域时、以及非 Gemini 平台账号不查此表。
++var vertexModelLocations = map[string][]string{
++	"gemini-3.1-flash-image": {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++	"gemini-3.1-flash-lite":  {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++	"gemini-3.5-flash":       {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++	"gemini-3.5-flash-lite":  {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++	"gemini-3.6-flash":       {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++	"gemini-3.7-flash":       {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++	"gemini-3.8-flash":       {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++	"gemini-4-argon":         {vertexGlobalLocation, vertexLocationUS, vertexLocationEU},
++}
++
++// isVertexMultiRegion 判断区域是否为 Vertex 多区域（us/eu）。
++func isVertexMultiRegion(location string) bool {
++	return location == vertexLocationUS || location == vertexLocationEU
++}
++
++// vertexAPIHost 返回区域对应的 Vertex AI API 主机：global 用全局主机，多区域用 aiplatform.{loc}.rep 主机，
++// 单区域用 {loc}-aiplatform 主机。
++func vertexAPIHost(location string) string {
++	switch {
++	case location == vertexGlobalLocation:
++		return vertexGlobalHost
++	case isVertexMultiRegion(location):
++		return "aiplatform." + location + ".rep.googleapis.com"
++	default:
++		return location + "-aiplatform.googleapis.com"
++	}
++}
++
++// vertexModelSupportsMultiRegion 判断模型是否在 vertexModelLocations 中声明支持该多区域。
++func vertexModelSupportsMultiRegion(model, location string) bool {
++	if !isVertexMultiRegion(location) {
++		return false
++	}
++	if i := strings.LastIndex(model, "/"); i >= 0 {
++		model = model[i+1:]
++	}
++	return slices.Contains(vertexModelLocations[strings.TrimSpace(model)], location)
++}
++
++// resolveVertexModelLocation 返回模型在账号区域下实际使用的区域：账号为多区域而模型不支持该多区域时用 global。
++func resolveVertexModelLocation(accountLocation, model string) string {
++	if isVertexMultiRegion(accountLocation) && !vertexModelSupportsMultiRegion(model, accountLocation) {
++		return vertexGlobalLocation
++	}
++	return accountLocation
++}
++
++// vertexGeminiRequestLocation 返回 Vertex Gemini 请求实际发往的区域：未配置 project_id 的 API Key 账号
++// 走 Express mode 全局端点；引用显式缓存时为缓存所在区域；其余按 VertexLocation(model)。
++func vertexGeminiRequestLocation(account *Account, model, cachedContentLocation string) string {
++	if account.IsVertexAPIKey() && account.VertexProjectID() == "" {
++		return vertexGlobalLocation
++	}
++	if cachedContentLocation != "" {
++		return cachedContentLocation
++	}
++	return account.VertexLocation(model)
++}
++
++// VertexUpstreamPriceMultiplier 返回 Vertex Gemini 账号请求 model 时相对 global 价的倍数：请求发往多区域端点
++// 且模型在 vertexModelLocations 中声明支持该多区域时为 vertexMultiRegionPriceMultiplier，其余为 1。
++// cachedContentLocation 为请求引用的显式缓存所在区域，未引用时为空。
++func VertexUpstreamPriceMultiplier(account *Account, model, cachedContentLocation string) float64 {
++	if account == nil || account.Platform != PlatformGemini || !account.IsVertexServiceAccount() {
++		return 1
++	}
++	if vertexModelSupportsMultiRegion(model, vertexGeminiRequestLocation(account, model, cachedContentLocation)) {
++		return vertexMultiRegionPriceMultiplier
++	}
++	return 1
++}
+diff --git a/backend/internal/service/vertex_locations_test.go b/backend/internal/service/vertex_locations_test.go
+new file mode 100644
+index 000000000..bff46974f
+--- /dev/null
++++ b/backend/internal/service/vertex_locations_test.go
+@@ -0,0 +1,159 @@
++package service
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestVertexAPIHost(t *testing.T) {
++	require.Equal(t, "aiplatform.googleapis.com", vertexAPIHost("global"))
++	require.Equal(t, "aiplatform.us.rep.googleapis.com", vertexAPIHost("us"))
++	require.Equal(t, "aiplatform.eu.rep.googleapis.com", vertexAPIHost("eu"))
++	require.Equal(t, "us-central1-aiplatform.googleapis.com", vertexAPIHost("us-central1"))
++}
++
++func TestAccountVertexLocationResolvesMultiRegionPerModel(t *testing.T) {
++	account := func(creds map[string]any) *Account {
++		return &Account{Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: creds}
++	}
++	us := account(map[string]any{"location": "us"})
++	require.Equal(t, "us", us.VertexLocation("gemini-3.7-flash"))
++	require.Equal(t, "us", us.VertexLocation("publishers/google/models/gemini-3.8-flash"))
++	require.Equal(t, "global", us.VertexLocation("gemini-3.1-pro-preview"))
++	require.Equal(t, "global", us.VertexLocation("gemini-2.5-flash"))
++	require.Equal(t, "global", us.VertexLocation(""))
++
++	eu := account(map[string]any{"vertex_location": "eu"})
++	require.Equal(t, "eu", eu.VertexLocation("gemini-3.1-flash-lite"))
++	require.Equal(t, "global", eu.VertexLocation("gemini-3-pro-image"))
++
++	regional := account(map[string]any{"location": "us-central1"})
++	require.Equal(t, "us-central1", regional.VertexLocation("gemini-3.1-pro-preview"))
++	require.Equal(t, "us-central1", regional.VertexLocation(""))
++
++	global := account(map[string]any{"location": "global"})
++	require.Equal(t, "global", global.VertexLocation("gemini-3.7-flash"))
++
++	override := account(map[string]any{"location": "us", "vertex_model_locations": map[string]any{"gemini-3.7-flash": "global", "gemini-2.5-flash": "us"}})
++	require.Equal(t, "global", override.VertexLocation("gemini-3.7-flash"))
++	require.Equal(t, "us", override.VertexLocation("gemini-2.5-flash"))
++	require.Equal(t, "us", override.VertexLocation("gemini-3.8-flash"))
++
++	require.Equal(t, vertexDefaultLocation, account(nil).VertexLocation("gemini-3.7-flash"))
++
++	anthropic := &Account{Platform: PlatformAnthropic, Type: AccountTypeServiceAccount, Credentials: map[string]any{"location": "us"}}
++	require.Equal(t, "us", anthropic.VertexLocation("claude-sonnet-4-5@20250929"))
++}
++
++func TestBuildVertexGeminiAccountURLMultiRegion(t *testing.T) {
++	account := &Account{Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: map[string]any{"project_id": "p1", "location": "us"}}
++
++	got, err := buildVertexGeminiAccountURL(account, "gemini-3.7-flash", "streamGenerateContent", true, "")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.us.rep.googleapis.com/v1/projects/p1/locations/us/publishers/google/models/gemini-3.7-flash:streamGenerateContent?alt=sse", got)
++
++	got, err = buildVertexGeminiAccountURL(account, "gemini-3.1-pro-preview", "generateContent", false, "")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.googleapis.com/v1/projects/p1/locations/global/publishers/google/models/gemini-3.1-pro-preview:generateContent", got)
++
++	got, err = buildVertexGeminiAccountURL(account, "gemini-3.7-flash", "generateContent", false, "global")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.googleapis.com/v1/projects/p1/locations/global/publishers/google/models/gemini-3.7-flash:generateContent", got)
++
++	global := &Account{Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: map[string]any{"project_id": "p1", "location": "global"}}
++	got, err = buildVertexGeminiAccountURL(global, "gemini-3.7-flash", "countTokens", false, "us")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.us.rep.googleapis.com/v1/projects/p1/locations/us/publishers/google/models/gemini-3.7-flash:countTokens", got)
++}
++
++func TestBuildVertexAnthropicURLMultiRegionHost(t *testing.T) {
++	got, err := buildVertexAnthropicURL("my-project", "us", "claude-sonnet-4-5@20250929", true)
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.us.rep.googleapis.com/v1/projects/my-project/locations/us/publishers/anthropic/models/claude-sonnet-4-5@20250929:streamRawPredict", got)
++}
++
++func TestGeminiCachedContentLocationInBody(t *testing.T) {
++	cases := map[string]string{
++		`{"cachedContent":"projects/123/locations/us/cachedContents/456","contents":[]}`:               "us",
++		`{"contents":[],"cachedContent":"projects/p-1/locations/global/cachedContents/456"}`:           "global",
++		`{"generateContentRequest":{"cachedContent":"projects/123/locations/eu/cachedContents/9"}}`:    "eu",
++		`{"cachedContent":"cachedContents/abc","contents":[]}`:                                         "",
++		`{"contents":[{"role":"user","parts":[{"text":"projects/1/locations/us/cachedContents/2"}]}]}`: "",
++		`{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`:                                       "",
++		`{"cachedContent":"projects/123/locations/us/cachedContents/../x","contents":[]}`:              "",
++	}
++	for body, want := range cases {
++		require.Equal(t, want, geminiCachedContentLocationInBody([]byte(body)), body)
++	}
++}
++
++func TestGeminiCachedContentVertexURLsMultiRegion(t *testing.T) {
++	account := &Account{Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: map[string]any{"project_id": "proj-1", "location": "us"}}
++
++	model, err := GeminiCachedContentUpstreamModelResource(account, "gemini-3.7-flash")
++	require.NoError(t, err)
++	require.Equal(t, "projects/proj-1/locations/us/publishers/google/models/gemini-3.7-flash", model)
++
++	collection, err := geminiCachedContentCollectionURL(account, "", "gemini-3.7-flash")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.us.rep.googleapis.com/v1/projects/proj-1/locations/us/cachedContents", collection)
++
++	model, err = GeminiCachedContentUpstreamModelResource(account, "gemini-3.1-pro-preview")
++	require.NoError(t, err)
++	require.Equal(t, "projects/proj-1/locations/global/publishers/google/models/gemini-3.1-pro-preview", model)
++
++	collection, err = geminiCachedContentCollectionURL(account, "", "gemini-3.1-pro-preview")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.googleapis.com/v1/projects/proj-1/locations/global/cachedContents", collection)
++
++	resource, err := geminiCachedContentResourceURL(account, "", "projects/123/locations/us/cachedContents/456")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.us.rep.googleapis.com/v1/projects/123/locations/us/cachedContents/456", resource)
++
++	resource, err = geminiCachedContentResourceURL(account, "", "projects/123/locations/global/cachedContents/456")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.googleapis.com/v1/projects/123/locations/global/cachedContents/456", resource)
++}
++
++func TestBuildVertexPublisherModelsURLMultiRegionHost(t *testing.T) {
++	u, err := buildVertexPublisherModelsURL("eu", "")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.eu.rep.googleapis.com/v1beta1/publishers/google/models?pageSize=300", u)
++}
++
++func TestBuildVertexBatchPredictionJobsEndpointMultiRegionHost(t *testing.T) {
++	got, err := BuildVertexBatchPredictionJobsEndpoint("", "my-project", "us")
++	require.NoError(t, err)
++	require.Equal(t, "https://aiplatform.us.rep.googleapis.com/v1/projects/my-project/locations/us/batchPredictionJobs", got)
++}
++
++func TestVertexUpstreamPriceMultiplier(t *testing.T) {
++	gemini := func(creds map[string]any) *Account {
++		return &Account{Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: creds}
++	}
++	us := gemini(map[string]any{"project_id": "p1", "location": "us"})
++	require.InDelta(t, 1.1, VertexUpstreamPriceMultiplier(us, "gemini-3.7-flash", ""), 1e-12)
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(us, "gemini-3.1-pro-preview", ""), 1e-12)
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(us, "gemini-3.7-flash", "global"), 1e-12)
++
++	eu := gemini(map[string]any{"project_id": "p1", "location": "eu"})
++	require.InDelta(t, 1.1, VertexUpstreamPriceMultiplier(eu, "gemini-3.5-flash-lite", ""), 1e-12)
++
++	global := gemini(map[string]any{"project_id": "p1", "location": "global"})
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(global, "gemini-3.7-flash", ""), 1e-12)
++	require.InDelta(t, 1.1, VertexUpstreamPriceMultiplier(global, "gemini-3.7-flash", "us"), 1e-12)
++
++	regional := gemini(map[string]any{"project_id": "p1", "location": "us-central1"})
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(regional, "gemini-3.7-flash", ""), 1e-12)
++
++	express := gemini(map[string]any{"auth_mode": "apikey", "api_key": "k", "location": "us"})
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(express, "gemini-3.7-flash", ""), 1e-12)
++
++	aiStudio := &Account{Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"location": "us"}}
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(aiStudio, "gemini-3.7-flash", ""), 1e-12)
++
++	anthropic := &Account{Platform: PlatformAnthropic, Type: AccountTypeServiceAccount, Credentials: map[string]any{"location": "us"}}
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(anthropic, "gemini-3.7-flash", ""), 1e-12)
++	require.InDelta(t, 1.0, VertexUpstreamPriceMultiplier(nil, "gemini-3.7-flash", ""), 1e-12)
++}
+diff --git a/backend/internal/service/vertex_service_account.go b/backend/internal/service/vertex_service_account.go
+index fdc7d41e4..cd373afc1 100644
+--- a/backend/internal/service/vertex_service_account.go
++++ b/backend/internal/service/vertex_service_account.go
+@@ -84,6 +84,8 @@ func (a *Account) VertexProjectID() string {
+ 	return ""
+ }
+ 
++// VertexLocation 返回模型请求使用的区域：vertex_model_locations 显式指定优先；否则取账号区域，
++// Gemini 账号区域为多区域（us/eu）时按 vertexModelLocations 判断模型是否支持，不支持的走 global。
+ func (a *Account) VertexLocation(model string) string {
+ 	if a == nil {
+ 		return vertexDefaultLocation
+@@ -95,6 +97,15 @@ func (a *Account) VertexLocation(model string) string {
+ 			}
+ 		}
+ 	}
++	location := a.vertexAccountLocation()
++	if a.Platform != PlatformGemini {
++		return location
++	}
++	return resolveVertexModelLocation(location, model)
++}
++
++// vertexAccountLocation 返回账号配置的区域，未配置时为 vertexDefaultLocation。
++func (a *Account) vertexAccountLocation() string {
+ 	if v := strings.TrimSpace(a.GetCredential("location")); v != "" {
+ 		return v
+ 	}
+@@ -328,12 +339,14 @@ func vertexServiceAccountNotFoundError(err error) (*vertexTokenRequestError, boo
+ }
+ 
+ // buildVertexGeminiAccountURL 按账号构造 Vertex Gemini 请求地址：未配置 project_id 的 API Key 账号
+-// 走 Express mode 全局端点，其余账号走项目级端点。
+-func buildVertexGeminiAccountURL(account *Account, model, action string, stream bool) (string, error) {
++// 走 Express mode 全局端点，其余账号走项目级端点。cachedContentLocation 是请求引用的显式缓存所在区域，
++// 非空时按该区域发送（缓存只能在其所在区域的端点上引用），为空时按 VertexLocation 选区域。
++func buildVertexGeminiAccountURL(account *Account, model, action string, stream bool, cachedContentLocation string) (string, error) {
+ 	if account.IsVertexAPIKey() && account.VertexProjectID() == "" {
+ 		return buildVertexGeminiExpressURL(model, action, stream)
+ 	}
+-	return buildVertexGeminiURL(account.VertexProjectID(), account.VertexLocation(model), model, action, stream)
++	location := vertexGeminiRequestLocation(account, model, cachedContentLocation)
++	return buildVertexGeminiURL(account.VertexProjectID(), location, model, action, stream)
+ }
+ 
+ // buildVertexGeminiExpressURL 构造不带项目与区域的全局端点地址，仅 API Key 认证可用。
+@@ -404,10 +417,7 @@ func buildVertexGeminiURL(projectID, location, model, action string, stream bool
+ 	if err := validateVertexGeminiAction(action); err != nil {
+ 		return "", err
+ 	}
+-	host := fmt.Sprintf("%s-aiplatform.googleapis.com", location)
+-	if location == "global" {
+-		host = vertexGlobalHost
+-	}
++	host := vertexAPIHost(location)
+ 	u := fmt.Sprintf(
+ 		"https://%s/v1/projects/%s/locations/%s/publishers/google/models/%s:%s",
+ 		host,
+@@ -442,10 +452,7 @@ func buildVertexAnthropicURL(projectID, location, model string, stream bool) (st
+ 	if stream {
+ 		action = "streamRawPredict"
+ 	}
+-	host := fmt.Sprintf("%s-aiplatform.googleapis.com", location)
+-	if location == "global" {
+-		host = "aiplatform.googleapis.com"
+-	}
++	host := vertexAPIHost(location)
+ 	escapedModel := strings.ReplaceAll(url.PathEscape(model), "%40", "@")
+ 	return fmt.Sprintf(
+ 		"https://%s/v1/projects/%s/locations/%s/publishers/anthropic/models/%s:%s",
+diff --git a/backend/internal/service/vertex_service_account_test.go b/backend/internal/service/vertex_service_account_test.go
+index 77cb6617c..f8cf6e797 100644
+--- a/backend/internal/service/vertex_service_account_test.go
++++ b/backend/internal/service/vertex_service_account_test.go
+@@ -63,14 +63,14 @@ func TestBuildVertexGeminiAccountURL(t *testing.T) {
+ 	for _, tc := range cases {
+ 		t.Run(tc.name, func(t *testing.T) {
+ 			account := &Account{Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: tc.credentials}
+-			got, err := buildVertexGeminiAccountURL(account, "gemini-3-flash-preview", "streamGenerateContent", true)
++			got, err := buildVertexGeminiAccountURL(account, "gemini-3-flash-preview", "streamGenerateContent", true, "")
+ 			require.NoError(t, err)
+ 			require.Equal(t, tc.want, got)
+ 		})
+ 	}
+ 
+ 	account := &Account{Platform: PlatformGemini, Type: AccountTypeServiceAccount, Credentials: map[string]any{"auth_mode": "apikey", "api_key": "k"}}
+-	_, err := buildVertexGeminiAccountURL(account, "gemini-3-flash-preview", "rawPredict", false)
++	_, err := buildVertexGeminiAccountURL(account, "gemini-3-flash-preview", "rawPredict", false, "")
+ 	require.ErrorContains(t, err, "unsupported vertex gemini action")
+ }
+ 

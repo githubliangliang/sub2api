@@ -1,0 +1,286 @@
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index b97e8226d..139ecffdc 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -966,6 +966,52 @@ func (s *BillingService) initFallbackPricing() {
+ 		SupportsCacheBreakdown: false,
+ 	}
+ 
++	// ---- 硅基流动 Qwen3-Embedding 系列（纯文本向量化）----
++	// /v1/embeddings 只按输入计费，无 output，OutputPricePerToken 置 0。
++	// 国际站 USD 官方价（https://www.siliconflow.com/models/qwen3-embedding-8b 及同站
++	// 4B / 0.6B 模型页，2026-09-23 读取）：8B $0.04/MTok、4B $0.02/MTok、0.6B $0.01/MTok，
++	// ×1e-6 换算为 USD per token。
++	// 国内站 CNY 参考价（https://www.siliconflow.cn/pricing）：8B ¥0.28/MTok、
++	// 4B ¥0.14/MTok、0.6B ¥0.07/MTok，输出 ¥0。
++	s.fallbackPrices["qwen3-embedding-8b"] = &ModelPricing{
++		InputPricePerToken:     0.04e-6, // $0.04/MTok
++		OutputPricePerToken:    0,
++		SupportsCacheBreakdown: false,
++	}
++	s.fallbackPrices["qwen3-embedding-4b"] = &ModelPricing{
++		InputPricePerToken:     0.02e-6, // $0.02/MTok
++		OutputPricePerToken:    0,
++		SupportsCacheBreakdown: false,
++	}
++	s.fallbackPrices["qwen3-embedding-0.6b"] = &ModelPricing{
++		InputPricePerToken:     0.01e-6, // $0.01/MTok
++		OutputPricePerToken:    0,
++		SupportsCacheBreakdown: false,
++	}
++
++	// ---- 硅基流动 Qwen3-Reranker 系列（文本重排序）----
++	// /v1/rerank 仅按输入计费，无 output，OutputPricePerToken 置 0。
++	// 国际站 USD 官方价（https://www.siliconflow.com/models?q=Reranker，2026-09-25 读取）：
++	// 8B $0.04/MTok、0.6B $0.01/MTok；4B 国际站未上架，取国内站 ¥0.14/MTok 按家族
++	// 隐含汇率（¥7≈$1，与 8B / 0.6B 两档一致）折算 $0.02/MTok，×1e-6 换算为 USD per token。
++	// 国内站 CNY 参考价（https://www.siliconflow.cn/models?q=reranker）：
++	// 8B ¥0.28/MTok、4B ¥0.14/MTok、0.6B ¥0.07/MTok，输出 ¥0。
++	s.fallbackPrices["qwen3-reranker-8b"] = &ModelPricing{
++		InputPricePerToken:     0.04e-6, // $0.04/MTok
++		OutputPricePerToken:    0,
++		SupportsCacheBreakdown: false,
++	}
++	s.fallbackPrices["qwen3-reranker-4b"] = &ModelPricing{
++		InputPricePerToken:     0.02e-6, // $0.02/MTok（国内站 ¥0.14 折算）
++		OutputPricePerToken:    0,
++		SupportsCacheBreakdown: false,
++	}
++	s.fallbackPrices["qwen3-reranker-0.6b"] = &ModelPricing{
++		InputPricePerToken:     0.01e-6, // $0.01/MTok
++		OutputPricePerToken:    0,
++		SupportsCacheBreakdown: false,
++	}
++
+ 	// ---- 火山方舟 豆包 Embedding（多模态向量化）----
+ 	// doubao-embedding-vision 图文向量化：上游 usage 回传 prompt_tokens_details.{text_tokens,image_tokens}，
+ 	// 按量付费官方价 文本 ¥0.7/MTok、图片 ¥1.8/MTok；汇率口径 ÷7.14（与本表其他国产模型一致，¥1≈$0.14）。
+@@ -1304,6 +1350,33 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+ 		return s.fallbackPrices["minimax-m2"]
+ 	}
+ 
++	// 硅基流动 Qwen3-Embedding 系列（纯文本向量化）。
++	// most-specific-first：8b → 4b → 0.6b。仅白名单这三个已知档位，未知档位
++	//（如 qwen3-embedding-2b）不回退，符合本表「未知型号不猜测计价」的语义。
++	if strings.Contains(modelLower, "qwen3-embedding-8b") {
++		return s.fallbackPrices["qwen3-embedding-8b"]
++	}
++	if strings.Contains(modelLower, "qwen3-embedding-4b") {
++		return s.fallbackPrices["qwen3-embedding-4b"]
++	}
++	if strings.Contains(modelLower, "qwen3-embedding-0.6b") || strings.Contains(modelLower, "qwen3-embedding-0-6b") {
++		return s.fallbackPrices["qwen3-embedding-0.6b"]
++	}
++
++	// 硅基流动 Qwen3-Reranker 系列（文本重排序）。
++	// most-specific-first：8b → 4b → 0.6b。仅白名单这三个已知档位，未知档位
++	//（如 qwen3-reranker-2b）不回退；qwen3-vl-reranker-8b 不含 qwen3-reranker-8b
++	// 子串，不会被误命中。
++	if strings.Contains(modelLower, "qwen3-reranker-8b") {
++		return s.fallbackPrices["qwen3-reranker-8b"]
++	}
++	if strings.Contains(modelLower, "qwen3-reranker-4b") {
++		return s.fallbackPrices["qwen3-reranker-4b"]
++	}
++	if strings.Contains(modelLower, "qwen3-reranker-0.6b") || strings.Contains(modelLower, "qwen3-reranker-0-6b") {
++		return s.fallbackPrices["qwen3-reranker-0.6b"]
++	}
++
+ 	// 火山方舟 豆包 Embedding（多模态向量化）。
+ 	// most-specific-first：放在未来任何 doubao-embedding / doubao 宽匹配之前。
+ 	// 覆盖带版本后缀的别名（如 doubao-embedding-vision-251215）。
+diff --git a/backend/internal/service/billing_service_test.go b/backend/internal/service/billing_service_test.go
+index 2ac79d6da..504a95b26 100644
+--- a/backend/internal/service/billing_service_test.go
++++ b/backend/internal/service/billing_service_test.go
+@@ -844,6 +844,70 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
+ 			expectedCacheRead: floatPtr(0.03e-6),
+ 		},
+ 
++		// ---- 硅基流动 Qwen3-Embedding 系列（纯文本向量化，仅输入计费）----
++		{
++			name:           "qwen3 embedding 8b vendor prefix",
++			model:          "Qwen/Qwen3-Embedding-8B",
++			expectedInput:  0.04e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 embedding 8b bare",
++			model:          "qwen3-embedding-8b",
++			expectedInput:  0.04e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 embedding 4b vendor prefix",
++			model:          "Qwen/Qwen3-Embedding-4B",
++			expectedInput:  0.02e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 embedding 0.6b vendor prefix",
++			model:          "Qwen/Qwen3-Embedding-0.6B",
++			expectedInput:  0.01e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 embedding 0.6b dash alias",
++			model:          "qwen3-embedding-0-6b",
++			expectedInput:  0.01e-6,
++			expectedOutput: floatPtr(0),
++		},
++
++		// ---- 硅基流动 Qwen3-Reranker 系列（文本重排序，仅输入计费）----
++		{
++			name:           "qwen3 reranker 8b vendor prefix",
++			model:          "Qwen/Qwen3-Reranker-8B",
++			expectedInput:  0.04e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 reranker 8b bare",
++			model:          "qwen3-reranker-8b",
++			expectedInput:  0.04e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 reranker 4b vendor prefix",
++			model:          "Qwen/Qwen3-Reranker-4B",
++			expectedInput:  0.02e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 reranker 0.6b vendor prefix",
++			model:          "Qwen/Qwen3-Reranker-0.6B",
++			expectedInput:  0.01e-6,
++			expectedOutput: floatPtr(0),
++		},
++		{
++			name:           "qwen3 reranker 0.6b dash alias",
++			model:          "qwen3-reranker-0-6b",
++			expectedInput:  0.01e-6,
++			expectedOutput: floatPtr(0),
++		},
++
+ 		// ---- 火山方舟 豆包 Embedding（多模态向量化）----
+ 		{
+ 			name:           "doubao embedding vision text rate",
+@@ -859,6 +923,10 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
+ 
+ 		// ---- 负向用例 ----
+ 		{name: "qwen unknown no fallback", model: "qwen-max", expectNilPricing: true},
++		// qwen3-embedding 仅白名单 8b / 4b / 0.6b 三个官方档位；未知档位不回退。
++		{name: "qwen3 embedding unknown size no fallback", model: "Qwen/Qwen3-Embedding-2B", expectNilPricing: true},
++		// qwen3-reranker 同样仅白名单 8b / 4b / 0.6b；qwen3-vl-reranker-8b 与 bge-reranker 不在白名单，不回退。
++		{name: "qwen3 reranker unknown size no fallback", model: "Qwen/Qwen3-Reranker-2B", expectNilPricing: true},
+ 		// doubao-pro / doubao-embedding（纯文本）不在白名单，不回退；仅 doubao-embedding-vision 显式命中。
+ 		{name: "doubao unknown no fallback", model: "doubao-pro", expectNilPricing: true},
+ 		{name: "doubao text embedding no fallback", model: "doubao-embedding-text-240515", expectNilPricing: true},
+@@ -906,6 +974,58 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
+ 	}
+ }
+ 
++// 硅基流动 Qwen3-Embedding 系列（纯文本向量化）：只按输入计费，输出价为 0。
++// 验证 GetModelPricing 能解出带厂商前缀 / 裸名 / 0.6B 连字符别名的拼法。
++func TestGetModelPricing_Qwen3EmbeddingFallback(t *testing.T) {
++	svc := newTestBillingService()
++
++	tests := []struct {
++		model string
++		input float64
++	}{
++		{model: "Qwen/Qwen3-Embedding-8B", input: 0.04e-6},
++		{model: "qwen3-embedding-8b", input: 0.04e-6},
++		{model: "Qwen/Qwen3-Embedding-4B", input: 0.02e-6},
++		{model: "Qwen/Qwen3-Embedding-0.6B", input: 0.01e-6},
++		{model: "qwen3-embedding-0-6b", input: 0.01e-6},
++	}
++	for _, tt := range tests {
++		t.Run(tt.model, func(t *testing.T) {
++			pricing, err := svc.GetModelPricing(tt.model)
++			require.NoError(t, err, "model %s should resolve fallback pricing", tt.model)
++			require.NotNil(t, pricing)
++			require.InDelta(t, tt.input, pricing.InputPricePerToken, 1e-12, "input rate for %s", tt.model)
++			require.Zero(t, pricing.OutputPricePerToken, "embedding has no output cost for %s", tt.model)
++		})
++	}
++}
++
++// 硅基流动 Qwen3-Reranker 系列（文本重排序）：只按输入计费，输出价为 0。
++// 验证 GetModelPricing 能解出带厂商前缀 / 裸名 / 0.6B 连字符别名的拼法。
++func TestGetModelPricing_Qwen3RerankerFallback(t *testing.T) {
++	svc := newTestBillingService()
++
++	tests := []struct {
++		model string
++		input float64
++	}{
++		{model: "Qwen/Qwen3-Reranker-8B", input: 0.04e-6},
++		{model: "qwen3-reranker-8b", input: 0.04e-6},
++		{model: "Qwen/Qwen3-Reranker-4B", input: 0.02e-6},
++		{model: "Qwen/Qwen3-Reranker-0.6B", input: 0.01e-6},
++		{model: "qwen3-reranker-0-6b", input: 0.01e-6},
++	}
++	for _, tt := range tests {
++		t.Run(tt.model, func(t *testing.T) {
++			pricing, err := svc.GetModelPricing(tt.model)
++			require.NoError(t, err, "model %s should resolve fallback pricing", tt.model)
++			require.NotNil(t, pricing)
++			require.InDelta(t, tt.input, pricing.InputPricePerToken, 1e-12, "input rate for %s", tt.model)
++			require.Zero(t, pricing.OutputPricePerToken, "rerank has no output cost for %s", tt.model)
++		})
++	}
++}
++
+ // doubao-embedding-vision 是首个图文不同价的 embedding：文本 ¥0.7/MTok、图片 ¥1.8/MTok。
+ // 验证回退表同时携带文本与图片两档单价，且能被带版本后缀 / 大小写别名命中。
+ func TestGetModelPricing_DoubaoEmbeddingVisionImageInputRate(t *testing.T) {
+diff --git a/backend/internal/service/openai_gateway_cn_fixes_test.go b/backend/internal/service/openai_gateway_cn_fixes_test.go
+index dbbed21ef..0e70803a4 100644
+--- a/backend/internal/service/openai_gateway_cn_fixes_test.go
++++ b/backend/internal/service/openai_gateway_cn_fixes_test.go
+@@ -80,6 +80,45 @@ func TestCalculateOpenAIRecordUsageCost_EmptyCandidatesIsPricingUnavailable(t *t
+ 		"空候选必须按无价可循处理（上层零成本落账），而不是丢弃整条 usage 记录: %v", err)
+ }
+ 
++// 硅基流动 Qwen3-Embedding-8B 走 /v1/embeddings：修前无兜底价 → 生产
++// WARN openai_usage.pricing_missing_record_zero_cost 按 0 成本记账。
++// 补兜底价后必须能算出 token 成本（$0.04/MTok），且不再是 pricing unavailable。
++func TestCalculateOpenAIRecordUsageCost_Qwen3EmbeddingFallback(t *testing.T) {
++	svc := &OpenAIGatewayService{billingService: newTestBillingService()}
++	apiKey := &APIKey{Group: &Group{ID: 1, Platform: PlatformOpenAI}}
++	result := &OpenAIForwardResult{Model: "Qwen/Qwen3-Embedding-8B"}
++
++	cost, err := svc.calculateOpenAIRecordUsageCost(
++		context.Background(), result, apiKey, []string{"Qwen/Qwen3-Embedding-8B"},
++		1.0, 1.0, 1.0, 1.0, UsageTokens{InputTokens: 1000}, "", nil, false, time.Time{},
++	)
++	require.NoError(t, err)
++	require.False(t, isUsagePricingUnavailableError(err),
++		"补兜底价后不得再按无价可循处理: %v", err)
++	require.NotNil(t, cost)
++	require.InDelta(t, 1000*0.04e-6, cost.TotalCost, 1e-12)
++}
++
++// 硅基流动 Qwen3-Reranker-8B 走 /v1/rerank（OpenAI 兼容 reranker，用量仅输入
++// token）：修前无兜底价 → 生产 WARN openai_usage.pricing_missing_record_zero_cost
++// 按 0 成本记账。补兜底价后必须能算出 token 成本（$0.04/MTok），且不再是
++// pricing unavailable。
++func TestCalculateOpenAIRecordUsageCost_Qwen3RerankerFallback(t *testing.T) {
++	svc := &OpenAIGatewayService{billingService: newTestBillingService()}
++	apiKey := &APIKey{Group: &Group{ID: 1, Platform: PlatformOpenAI}}
++	result := &OpenAIForwardResult{Model: "Qwen/Qwen3-Reranker-8B"}
++
++	cost, err := svc.calculateOpenAIRecordUsageCost(
++		context.Background(), result, apiKey, []string{"Qwen/Qwen3-Reranker-8B"},
++		1.0, 1.0, 1.0, 1.0, UsageTokens{InputTokens: 1000}, "", nil, false, time.Time{},
++	)
++	require.NoError(t, err)
++	require.False(t, isUsagePricingUnavailableError(err),
++		"补兜底价后不得再按无价可循处理: %v", err)
++	require.NotNil(t, cost)
++	require.InDelta(t, 1000*0.04e-6, cost.TotalCost, 1e-12)
++}
++
+ func TestResponsesStreamingFromNativeAnthropic_ClientDisconnectDrainsUsage(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	svc := newNativeAnthropicHangTestService(5)

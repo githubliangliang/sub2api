@@ -1,0 +1,484 @@
+diff --git a/backend/internal/handler/grok_media_errors_test.go b/backend/internal/handler/grok_media_errors_test.go
+new file mode 100644
+index 000000000..234f37d5b
+--- /dev/null
++++ b/backend/internal/handler/grok_media_errors_test.go
+@@ -0,0 +1,87 @@
++//go:build unit
++
++package handler
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestGrokImagesPreservesUpstreamErrorOnSyncAndAsyncRoutes(t *testing.T) {
++	for _, oauth := range []bool{false, true} {
++		accountType := "api-key"
++		if oauth {
++			accountType = "oauth"
++		}
++		for _, async := range []bool{false, true} {
++			route := "sync"
++			if async {
++				route = "async"
++			}
++			t.Run(accountType+"/"+route, func(t *testing.T) {
++				h, slots, _, upstream := newGrokMediaSlotHandler(t, oauth, false)
++				h.grokMediaEligibilityProber = grokMediaSlotProber(func(context.Context, int64) (bool, string, error) {
++					return true, "test account is eligible", nil
++				})
++				upstream.call = func(req *http.Request, _ int64) (*http.Response, error) {
++					assert.Equal(t, "/v1/images/edits", req.URL.Path)
++					return &http.Response{
++						StatusCode: http.StatusBadRequest,
++						Header:     http.Header{"Content-Type": {"application/json"}},
++						Body:       io.NopCloser(strings.NewReader(`{"code":"invalid_image","error":"Image could not be decoded: https://example.test/image?access_token=secret&size=1","debug":"private upstream diagnostic"}`)),
++					}, nil
++				}
++				c, recorder := grokMediaSlotContext(context.Background(), true)
++				path := "/v1/images/edits"
++				if async {
++					path += "/async"
++				}
++				c.Request = httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"grok-imagine-image","prompt":"test","image":{"url":"https://example.test/input.png"}}`))
++				c.Request.Header.Set("Content-Type", "application/json")
++
++				var responseBody []byte
++				if async {
++					store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
++					tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
++					asyncHandler := NewAsyncImageHandler(tasks, h)
++					asyncHandler.Submit(c)
++					require.Equal(t, http.StatusAccepted, recorder.Code, recorder.Body.String())
++					taskID := gjson.GetBytes(recorder.Body.Bytes(), "task_id").String()
++					owner := service.ImageTaskOwner{UserID: 10, APIKeyID: 20}
++					require.Eventually(t, func() bool {
++						task, err := tasks.Get(context.Background(), owner, taskID)
++						return err == nil && task.Status != service.ImageTaskStatusProcessing
++					}, time.Second, 10*time.Millisecond)
++					poll, pollRecorder := grokMediaSlotContext(context.Background(), false)
++					poll.Params[0].Key, poll.Params[0].Value = "task_id", taskID
++					asyncHandler.Get(poll)
++					require.Equal(t, http.StatusOK, pollRecorder.Code)
++					responseBody = pollRecorder.Body.Bytes()
++					require.Equal(t, service.ImageTaskStatusFailed, gjson.GetBytes(responseBody, "status").String())
++					require.Equal(t, int64(http.StatusBadRequest), gjson.GetBytes(responseBody, "http_status").Int())
++				} else {
++					h.GrokImages(c)
++					require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
++					responseBody = recorder.Body.Bytes()
++				}
++				require.Equal(t, "Image could not be decoded: https://example.test/image?access_token=***&size=1", gjson.GetBytes(responseBody, "error.message").String())
++				require.Equal(t, "invalid_image", gjson.GetBytes(responseBody, "error.code").String())
++				require.Equal(t, "invalid_request_error", gjson.GetBytes(responseBody, "error.type").String())
++				require.NotContains(t, string(responseBody), "secret")
++				require.NotContains(t, string(responseBody), "private upstream diagnostic")
++				require.Equal(t, 1, upstream.calls, "deterministic image errors must not retry another account")
++				slots.assertReleased(t)
++			})
++		}
++	}
++}
+diff --git a/backend/internal/service/error_passthrough_runtime.go b/backend/internal/service/error_passthrough_runtime.go
+index 011c3ce4d..b5df10d3d 100644
+--- a/backend/internal/service/error_passthrough_runtime.go
++++ b/backend/internal/service/error_passthrough_runtime.go
+@@ -36,6 +36,23 @@ func applyErrorPassthroughRule(
+ 	defaultStatus int,
+ 	defaultErrType string,
+ 	defaultErrMsg string,
++) (status int, errType string, errMsg string, matched bool) {
++	return applyErrorPassthroughRuleWithMessage(
++		c, platform, upstreamStatus, responseBody, defaultStatus, defaultErrType, defaultErrMsg, ExtractUpstreamErrorMessage,
++	)
++}
++
++// applyErrorPassthroughRuleWithMessage 同 applyErrorPassthroughRule，但由调用方提供
++// 上游消息提取器（如 Grok 媒体路径需识别 xAI 扁平错误体）。
++func applyErrorPassthroughRuleWithMessage(
++	c *gin.Context,
++	platform string,
++	upstreamStatus int,
++	responseBody []byte,
++	defaultStatus int,
++	defaultErrType string,
++	defaultErrMsg string,
++	extractMessage func([]byte) string,
+ ) (status int, errType string, errMsg string, matched bool) {
+ 	status = defaultStatus
+ 	errType = defaultErrType
+@@ -56,7 +73,7 @@ func applyErrorPassthroughRule(
+ 		status = *rule.ResponseCode
+ 	}
+ 
+-	errMsg = ExtractUpstreamErrorMessage(responseBody)
++	errMsg = extractMessage(responseBody)
+ 	if !rule.PassthroughBody && rule.CustomMessage != nil {
+ 		errMsg = *rule.CustomMessage
+ 	}
+diff --git a/backend/internal/service/grok_media.go b/backend/internal/service/grok_media.go
+index b9c95747a..b95c0975f 100644
+--- a/backend/internal/service/grok_media.go
++++ b/backend/internal/service/grok_media.go
+@@ -1266,7 +1266,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 	// Reconcile readiness before configurable passthrough branches can return;
+ 	// otherwise a Grok 429 can remain schedulable.
+ 	s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
+-	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(body)))
++	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokUpstreamErrorMessage(body)))
+ 	if upstreamMsg == "" {
+ 		upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
+ 	}
+@@ -1295,11 +1295,11 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 			Detail:             upstreamDetail,
+ 		})
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, http.StatusForbidden, "invalid_request_error", clientMsg)
++		writeGrokMediaErrorResponse(c, http.StatusForbidden, "invalid_request_error", clientMsg, grokUpstreamErrorCode(body))
+ 		return nil, fmt.Errorf("grok content policy rejection: %s", clientMsg)
+ 	}
+ 
+-	if status, errType, errMsg, matched := applyErrorPassthroughRule(
++	if status, errType, errMsg, matched := applyErrorPassthroughRuleWithMessage(
+ 		c,
+ 		account.Platform,
+ 		resp.StatusCode,
+@@ -1307,9 +1307,10 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 		http.StatusBadGateway,
+ 		"upstream_error",
+ 		"Upstream request failed",
++		grokUpstreamErrorMessage,
+ 	); matched {
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, status, errType, errMsg)
++		writeGrokMediaErrorResponse(c, status, errType, errMsg, "")
+ 		return nil, fmt.Errorf("upstream error: %d (passthrough rule matched) message=%s", resp.StatusCode, upstreamMsg)
+ 	}
+ 
+@@ -1327,7 +1328,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 			Detail:             upstreamDetail,
+ 		})
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, http.StatusInternalServerError, "upstream_error", "Upstream gateway error")
++		writeGrokMediaErrorResponse(c, http.StatusInternalServerError, "upstream_error", "Upstream gateway error", "")
+ 		return nil, fmt.Errorf("upstream error: %d (not in custom error codes) message=%s", resp.StatusCode, upstreamMsg)
+ 	}
+ 
+@@ -1362,7 +1363,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 	}
+ 
+ 	MarkResponseCommitted(c)
+-	writeGrokMediaErrorResponse(c, resp.StatusCode, grokMediaErrorType(resp.StatusCode), upstreamMsg)
++	writeGrokMediaErrorResponse(c, resp.StatusCode, grokMediaErrorType(resp.StatusCode), upstreamMsg, grokUpstreamErrorCode(body))
+ 	return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
+ }
+ 
+@@ -1379,16 +1380,18 @@ func grokMediaErrorType(statusCode int) string {
+ 	}
+ }
+ 
+-func writeGrokMediaErrorResponse(c *gin.Context, statusCode int, errType, message string) {
++func writeGrokMediaErrorResponse(c *gin.Context, statusCode int, errType, message, code string) {
+ 	if c == nil || c.Writer == nil || c.Writer.Written() {
+ 		return
+ 	}
+-	c.JSON(statusCode, gin.H{
+-		"error": gin.H{
+-			"type":    strings.TrimSpace(errType),
+-			"message": strings.TrimSpace(message),
+-		},
+-	})
++	payload := gin.H{
++		"type":    strings.TrimSpace(errType),
++		"message": sanitizeUpstreamErrorMessage(strings.TrimSpace(message)),
++	}
++	if code = sanitizeUpstreamErrorMessage(strings.TrimSpace(code)); code != "" {
++		payload["code"] = code
++	}
++	c.JSON(statusCode, gin.H{"error": payload})
+ }
+ 
+ func writeGrokMediaResponse(c *gin.Context, resp *http.Response, body []byte, filter *responseheaders.CompiledHeaderFilter) {
+diff --git a/backend/internal/service/grok_media_errors_test.go b/backend/internal/service/grok_media_errors_test.go
+new file mode 100644
+index 000000000..d02bdc6f8
+--- /dev/null
++++ b/backend/internal/service/grok_media_errors_test.go
+@@ -0,0 +1,127 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/model"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestGrokMediaUpstreamErrorFields(t *testing.T) {
++	for _, tt := range []struct {
++		name        string
++		status      int
++		body        string
++		wantMessage string
++		wantCode    string
++	}{
++		{"flat error", 400, `{"code":"invalid_image","error":"Image could not be decoded."}`, "Image could not be decoded.", "invalid_image"},
++		{"nested error", 400, `{"code":"outer","error":{"code":"invalid_size","message":"Invalid size."}}`, "Invalid size.", "invalid_size"},
++		{"message without code", 400, `{"error":"Invalid size."}`, "Invalid size.", ""},
++		{"redact code query", 400, `{"error":"Invalid size.","code":"https://example.test?key=secret&n=1"}`, "Invalid size.", "https://example.test?key=***&n=1"},
++		{"unknown object", 400, `{"error":{"debug":"private diagnostic"},"code":{"debug":"private code"}}`, "xAI upstream returned status 400", ""},
++		{"content refusal", 403, `{"code":"permission-denied","error":"Content violates usage guidelines."}`, "Content violates usage guidelines.", "permission-denied"},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			recorder := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(recorder)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
++			repo := &grokQuotaAccountRepo{}
++			svc := &OpenAIGatewayService{accountRepo: repo}
++			account := &Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeOAuth}
++			_, err := svc.handleGrokMediaErrorResponse(context.Background(), &http.Response{
++				StatusCode: tt.status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(tt.body)),
++			}, c, account, "request-id", "grok-imagine-image")
++			require.Error(t, err)
++			var failover *UpstreamFailoverError
++			require.False(t, errors.As(err, &failover))
++			require.True(t, IsResponseCommitted(c))
++			require.Equal(t, tt.status, recorder.Code)
++			require.Equal(t, tt.wantMessage, gjson.GetBytes(recorder.Body.Bytes(), "error.message").String())
++			require.Equal(t, tt.wantCode, gjson.GetBytes(recorder.Body.Bytes(), "error.code").String())
++			if tt.wantCode == "" {
++				require.False(t, gjson.GetBytes(recorder.Body.Bytes(), "error.code").Exists())
++			}
++			require.NotContains(t, recorder.Body.String(), "secret")
++			require.NotContains(t, recorder.Body.String(), "private")
++			require.Zero(t, repo.tempUnschedCalls)
++			require.Zero(t, repo.rateLimitedCalls)
++			require.Zero(t, repo.updateCalls)
++		})
++	}
++}
++
++func TestGrokMediaErrorRewritesKeepPriority(t *testing.T) {
++	for _, tt := range []struct {
++		name            string
++		passthroughRule bool
++		passthroughBody bool
++	}{
++		{name: "account error code filter"},
++		{name: "configured response rule", passthroughRule: true},
++		{name: "configured message passthrough", passthroughRule: true, passthroughBody: true},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			recorder := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(recorder)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
++			account := &Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{
++				"custom_error_codes_enabled": true, "custom_error_codes": []any{float64(http.StatusTooManyRequests)},
++			}}
++			wantStatus, wantMessage := http.StatusInternalServerError, "Upstream gateway error"
++			if tt.passthroughRule {
++				rules := &ErrorPassthroughService{}
++				rule := newNonFailoverPassthroughRule(http.StatusBadRequest, "invalid_image", http.StatusUnprocessableEntity, "Configured error")
++				rule.PassthroughBody = tt.passthroughBody
++				rules.setLocalCache([]*model.ErrorPassthroughRule{rule})
++				BindErrorPassthroughService(c, rules)
++				wantStatus, wantMessage = http.StatusUnprocessableEntity, "Configured error"
++				if tt.passthroughBody {
++					wantMessage = "Original error: https://example.test?access_token=***"
++				}
++			}
++			svc := &OpenAIGatewayService{accountRepo: &grokQuotaAccountRepo{}}
++			_, err := svc.handleGrokMediaErrorResponse(context.Background(), &http.Response{
++				StatusCode: http.StatusBadRequest, Header: http.Header{},
++				Body: io.NopCloser(strings.NewReader(`{"code":"invalid_image","error":"Original error: https://example.test?access_token=secret"}`)),
++			}, c, account, "request-id", "grok-imagine-image")
++			require.Error(t, err)
++			require.Equal(t, wantStatus, recorder.Code)
++			require.Equal(t, wantMessage, gjson.GetBytes(recorder.Body.Bytes(), "error.message").String())
++			require.False(t, gjson.GetBytes(recorder.Body.Bytes(), "error.code").Exists())
++		})
++	}
++}
++
++func TestGrokMediaRetryableErrorKeepsOriginalBody(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	recorder := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(recorder)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
++	body := `{"code":"temporarily_unavailable","error":"Try again later"}`
++	svc := &OpenAIGatewayService{accountRepo: &grokQuotaAccountRepo{}}
++	_, err := svc.handleGrokMediaErrorResponse(context.Background(), &http.Response{
++		StatusCode: http.StatusServiceUnavailable, Header: http.Header{"X-Request-Id": {"request-id"}},
++		Body: io.NopCloser(strings.NewReader(body)),
++	}, c, &Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeOAuth}, "request-id", "grok-imagine-image")
++	var failover *UpstreamFailoverError
++	require.ErrorAs(t, err, &failover)
++	require.Equal(t, http.StatusServiceUnavailable, failover.StatusCode)
++	require.Equal(t, body, string(failover.ResponseBody))
++	require.Equal(t, "request-id", failover.ResponseHeaders.Get("X-Request-Id"))
++	require.False(t, IsResponseCommitted(c))
++	require.False(t, c.Writer.Written())
++	require.Empty(t, recorder.Body.String())
++}
+diff --git a/backend/internal/service/grok_upstream_error_fields_test.go b/backend/internal/service/grok_upstream_error_fields_test.go
+new file mode 100644
+index 000000000..dc3559fdb
+--- /dev/null
++++ b/backend/internal/service/grok_upstream_error_fields_test.go
+@@ -0,0 +1,83 @@
++//go:build unit
++
++package service
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestGrokUpstreamErrorMessageFormats(t *testing.T) {
++	for _, tt := range []struct {
++		name string
++		body string
++		want string
++	}{
++		{"xai string error", `{"code":"invalid_image","error":"Image could not be decoded."}`, "Image could not be decoded."},
++		{"nested message", `{"error":{"message":"nested"},"detail":"detail","message":"message"}`, "nested"},
++		{"embedded nested message", `{"error":{"message":"{\"error\":{\"message\":\"embedded\"}}"}}`, "embedded"},
++		{"detail retains priority", `{"error":"xai","detail":"detail","message":"message"}`, "detail"},
++		{"message retains priority", `{"error":"xai","message":"message"}`, "message"},
++		{"blank legacy fields", `{"error":"xai","detail":" ","message":" "}`, "xai"},
++		{"unknown error object", `{"error":{"debug":"private diagnostic"}}`, ""},
++		{"error array", `{"error":["private diagnostic"]}`, ""},
++		{"numeric error", `{"error":400}`, ""},
++		{"null error", `{"error":null}`, ""},
++		{"plain text", `upstream internal diagnostic`, ""},
++		{"empty", ``, ""},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, grokUpstreamErrorMessage([]byte(tt.body)))
++		})
++	}
++}
++
++func TestGrokUpstreamErrorCodeFormats(t *testing.T) {
++	for _, tt := range []struct {
++		name string
++		body string
++		want string
++	}{
++		{"xai string code", `{"code":" invalid_image ","error":"Image could not be decoded."}`, "invalid_image"},
++		{"numeric code", `{"code":400,"error":"Bad input"}`, "400"},
++		{"nested code retains priority", `{"error":{"code":"nested"},"code":"top"}`, "nested"},
++		{"embedded code retains priority", `{"error":{"message":"{\"error\":{\"code\":\"embedded\"}}"},"code":"top"}`, "embedded"},
++		{"embedded code with suffix", `{"error":{"message":"{\"error\":{\"code\":\"embedded\"}} (upstream)"},"code":"top"}`, "embedded"},
++		{"embedded message without code", `{"error":{"message":"{\"error\":{\"message\":\"reason\"}}"},"code":"top"}`, "top"},
++		{"blank nested code", `{"error":{"code":" "},"code":"top"}`, "top"},
++		{"object code", `{"code":{"private":"diagnostic"}}`, ""},
++		{"array code", `{"code":["diagnostic"]}`, ""},
++		{"boolean code", `{"code":true}`, ""},
++		{"null code", `{"code":null}`, ""},
++		{"no code", `{"error":{"message":"reason"}}`, ""},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, grokUpstreamErrorCode([]byte(tt.body)))
++		})
++	}
++}
++
++// The shared extractors drive failover, model-not-found cooldown and account
++// disable decisions on every platform; xAI's flat shape must stay Grok-only.
++func TestSharedUpstreamErrorExtractorsIgnoreXAIFlatShape(t *testing.T) {
++	flat := []byte(`{"code":"invalid_image","error":"Image could not be decoded."}`)
++	require.Empty(t, extractUpstreamErrorMessage(flat))
++	require.Empty(t, extractUpstreamErrorCode(flat))
++
++	require.Empty(t, extractUpstreamErrorCode([]byte(`{"object":"error","message":"m","code":400}`)))
++	require.Empty(t, extractUpstreamErrorCode([]byte(`{"error":{"message":"m"},"code":"token_revoked"}`)))
++}
++
++func TestOpenAICompatibleModelNotFoundIgnoresTopLevelCode(t *testing.T) {
++	for _, body := range []string{
++		`{"object":"error","message":"model not found: foo","type":"BadRequestError","param":null,"code":400}`,
++		`{"code":"invalid_argument","message":"Unknown model: foo"}`,
++		`{"error":{"message":"The model is not supported"},"code":"bad_request"}`,
++	} {
++		t.Run(body, func(t *testing.T) {
++			require.True(t, isOpenAICompatibleModelNotFoundBody([]byte(body)))
++			require.True(t, IsOpenAICompatibleModelNotFound400([]byte(body)))
++		})
++	}
++}
+diff --git a/backend/internal/service/grok_upstream_errors.go b/backend/internal/service/grok_upstream_errors.go
+index 816ac2fb9..a21837256 100644
+--- a/backend/internal/service/grok_upstream_errors.go
++++ b/backend/internal/service/grok_upstream_errors.go
+@@ -185,13 +185,43 @@ func grokContentPolicyMessage(value string) bool {
+ }
+ 
+ func grokContentPolicyClientMessage(responseBody []byte) string {
+-	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)))
++	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokUpstreamErrorMessage(responseBody)))
+ 	if message == "" {
+ 		return "Request blocked by upstream content policy"
+ 	}
+ 	return message
+ }
+ 
++// grokUpstreamErrorMessage extends the shared extractor with xAI's flat error
++// body {"code":"...","error":"..."}. It is Grok-only on purpose: the shared
++// extractUpstreamErrorMessage feeds failover, model-not-found and account
++// disable decisions on every platform and must not drift with xAI's format.
++// Non-string error values are never surfaced so unknown objects cannot leak.
++func grokUpstreamErrorMessage(body []byte) string {
++	if message := extractUpstreamErrorMessage(body); strings.TrimSpace(message) != "" {
++		return message
++	}
++	if errValue := gjson.GetBytes(body, "error"); errValue.Type == gjson.String {
++		return errValue.String()
++	}
++	return ""
++}
++
++// grokUpstreamErrorCode extends the shared extractor with xAI's top-level code.
++// Nested error.code keeps priority. Like grokUpstreamErrorMessage it stays
++// Grok-only: a top-level code would otherwise short-circuit the OpenAI-
++// compatible model-not-found failover for bodies such as
++// {"object":"error","message":"model not found","code":400}.
++func grokUpstreamErrorCode(body []byte) string {
++	if code := strings.TrimSpace(extractUpstreamErrorCode(body)); code != "" {
++		return code
++	}
++	if code := gjson.GetBytes(body, "code"); code.Type == gjson.String || code.Type == gjson.Number {
++		return strings.TrimSpace(code.String())
++	}
++	return ""
++}
++
+ // shouldFailoverGrokUpstreamError is the body-aware counterpart of the
+ // status-only failover helper. Grok content refusals must stay on the current
+ // account and be returned to the caller instead of consuming the account pool.

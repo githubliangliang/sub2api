@@ -1,0 +1,173 @@
+2026/11/18 05:19:55 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestIntake023PerTurnBeta
+    intake023_release_test.go:36: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:36
+        	Error:      	Should be false
+        	Test:       	TestIntake023PerTurnBeta
+--- FAIL: TestIntake023PerTurnBeta (0.00s)
+=== RUN   TestIntake023PerTurnBetaControl
+--- PASS: TestIntake023PerTurnBetaControl (0.00s)
+=== RUN   TestIntake023CountTokensHeaderDuplicates
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    intake023_release_test.go:62: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:62
+        	Error:      	Not equal: 
+        	            	expected: 1
+        	            	actual  : 2
+        	Test:       	TestIntake023CountTokensHeaderDuplicates
+        	Messages:   	content-type
+--- FAIL: TestIntake023CountTokensHeaderDuplicates (0.00s)
+=== RUN   TestIntake023LoginNilIdentity
+    intake023_release_test.go:67: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:67
+        	Error:      	func (assert.PanicTestFunc)(0x348a400) should not panic
+        	            		Panic value:	runtime error: invalid memory address or nil pointer dereference
+        	            		Panic stack:	goroutine 40 [running]:
+        	            	runtime/debug.Stack()
+        	            		/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/debug/stack.go:26 +0x5e
+        	            	github.com/stretchr/testify/assert.didPanic.func1()
+        	            		/home/liang/go/pkg/mod/github.com/stretchr/testify@v1.11.1/assert/assertions.go:1286 +0x67
+        	            	panic({0x7477600?, 0x7a3eba0?})
+        	            		/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/panic.go:859 +0x125
+        	            	github.com/Wei-Shaw/sub2api/internal/service.(*AuthService).shouldApplyEmailFirstBindDefaults(0xfbf4be25568, {0x788b020, 0x7b24440}, 0x1, 0x0, 0x0)
+        	            		/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/auth_service.go:1053 +0x47
+        	            	github.com/Wei-Shaw/sub2api/internal/service.TestIntake023LoginNilIdentity.func1()
+        	            		/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:68 +0x7c
+        	            	github.com/stretchr/testify/assert.didPanic(0x7a581d0?)
+        	            		/home/liang/go/pkg/mod/github.com/stretchr/testify@v1.11.1/assert/assertions.go:1291 +0x70
+        	            	github.com/stretchr/testify/assert.NotPanics({0x7871e08, 0xfbf4bf7f208}, 0xfbf4c256160, {0x0, 0x0, 0x0})
+        	            		/home/liang/go/pkg/mod/github.com/stretchr/testify@v1.11.1/assert/assertions.go:1362 +0x7e
+        	            	github.com/stretchr/testify/require.NotPanics({0x7881978, 0xfbf4bf7f208}, 0xfbf4c256160, {0x0, 0x0, 0x0})
+        	            		/home/liang/go/pkg/mod/github.com/stretchr/testify@v1.11.1/require/require.go:1711 +0xa5
+        	            	github.com/Wei-Shaw/sub2api/internal/service.TestIntake023LoginNilIdentity(0xfbf4bf7f208)
+        	            		/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:67 +0x6a
+        	            	testing.tRunner(0xfbf4bf7f208, 0x78bcdd8)
+        	            		/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195 +0xea
+        	            	created by testing.(*T).Run in goroutine 1
+        	            		/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x4d4
+        	Test:       	TestIntake023LoginNilIdentity
+--- FAIL: TestIntake023LoginNilIdentity (0.00s)
+=== RUN   TestIntake023LoginBackfillControl
+--- PASS: TestIntake023LoginBackfillControl (0.00s)
+=== RUN   TestIntake023CacheBillingRemainder
+    intake023_release_test.go:80: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:80
+        	Error:      	Not equal: 
+        	            	expected: 120
+        	            	actual  : 70
+        	Test:       	TestIntake023CacheBillingRemainder
+--- FAIL: TestIntake023CacheBillingRemainder (0.00s)
+=== RUN   TestIntake023CacheBillingControl
+--- PASS: TestIntake023CacheBillingControl (0.00s)
+=== RUN   TestIntake023SpoolUnavailable
+    intake023_release_test.go:96: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:96
+        	Error:      	Received unexpected error:
+        	            	create first-output spool: permission denied
+        	Test:       	TestIntake023SpoolUnavailable
+        	Messages:   	unavailable spool must retain the same bounded memory fallback
+--- FAIL: TestIntake023SpoolUnavailable (0.00s)
+=== RUN   TestIntake023SpoolLimitControl
+--- PASS: TestIntake023SpoolLimitControl (0.00s)
+=== RUN   TestIntake023GrokFlatMediaMessage
+    intake023_release_test.go:111: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:111
+        	Error:      	Not equal: 
+        	            	expected: "media rejected by a specific policy"
+        	            	actual  : "Request blocked by upstream content policy"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-media rejected by a specific policy
+        	            	+Request blocked by upstream content policy
+        	Test:       	TestIntake023GrokFlatMediaMessage
+--- FAIL: TestIntake023GrokFlatMediaMessage (0.00s)
+=== RUN   TestIntake023GrokMediaMessageControl
+--- PASS: TestIntake023GrokMediaMessageControl (0.00s)
+=== RUN   TestIntake023GrokServerSearchCount
+    intake023_release_test.go:121: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:121
+        	Error:      	Not equal: 
+        	            	expected: 2
+        	            	actual  : 0
+        	Test:       	TestIntake023GrokServerSearchCount
+--- FAIL: TestIntake023GrokServerSearchCount (0.00s)
+=== RUN   TestIntake023GrokServerSearchControl
+--- PASS: TestIntake023GrokServerSearchControl (0.00s)
+=== RUN   TestIntake023SolUltrafast
+    intake023_release_test.go:132: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:132
+        	Error:      	Not equal: 
+        	            	expected: 6
+        	            	actual  : 0
+        	Test:       	TestIntake023SolUltrafast
+--- FAIL: TestIntake023SolUltrafast (0.00s)
+=== RUN   TestIntake023AstraUltrafastControl
+--- PASS: TestIntake023AstraUltrafastControl (0.00s)
+=== RUN   TestIntake023SSEErrorAfterPing
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] [WARNING] Headers were already written. Wanted to override status code 200 with 400
+    intake023_release_test.go:149: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:149
+        	Error:      	"{\"error\":{\"message\":\"rejected\",\"type\":\"invalid_request_error\"},\"type\":\"error\"}" does not contain "event: error"
+        	Test:       	TestIntake023SSEErrorAfterPing
+--- FAIL: TestIntake023SSEErrorAfterPing (0.00s)
+=== RUN   TestIntake023JSONErrorControl
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+--- PASS: TestIntake023JSONErrorControl (0.00s)
+=== RUN   TestIntake023WeeklySurvivesFiveHourRollover
+2026/11/18 05:19:55 INFO account_session_window_from_header account_id=1 window_start=2026-11-18T05:19:55.000Z window_end=2026-11-18T10:19:55.000Z status=allowed
+    intake023_release_test.go:187: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:187
+        	Error:      	Not equal: 
+        	            	expected: float64(0.9)
+        	            	actual  : <nil>(<nil>)
+        	Test:       	TestIntake023WeeklySurvivesFiveHourRollover
+--- FAIL: TestIntake023WeeklySurvivesFiveHourRollover (0.00s)
+=== RUN   TestIntake023RPMOtherGroupControl
+--- PASS: TestIntake023RPMOtherGroupControl (0.00s)
+=== RUN   TestIntake023RPMCurrentGroupControl
+--- PASS: TestIntake023RPMCurrentGroupControl (0.00s)
+=== RUN   TestIntake023ChatFallbackResponseModel
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    intake023_release_test.go:220: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:220
+        	Error:      	Not equal: 
+        	            	expected: "gpt-6.1-sol"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-gpt-6.1-sol
+        	            	+
+        	Test:       	TestIntake023ChatFallbackResponseModel
+--- FAIL: TestIntake023ChatFallbackResponseModel (0.00s)
+=== RUN   TestIntake023AdditionalToolsDeclarationID
+    intake023_release_test.go:226: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:226
+        	Error:      	Not equal: 
+        	            	expected: string("at_12345678123412341234123456789abc")
+        	            	actual  : <nil>(<nil>)
+        	Test:       	TestIntake023AdditionalToolsDeclarationID
+--- FAIL: TestIntake023AdditionalToolsDeclarationID (0.00s)
+=== RUN   TestIntake023DeepSeekOverrideControl
+--- PASS: TestIntake023DeepSeekOverrideControl (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.016s
+FAIL

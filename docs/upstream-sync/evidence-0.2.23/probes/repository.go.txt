@@ -1,0 +1,91 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite"
+)
+
+func TestIntake023SchedulerCapabilityProjection(t *testing.T) {
+	in := map[string]any{"api_key": "fixture", "openai_capabilities": map[string]any{"chat_completions":true,"embeddings":false}}
+	out := filterSchedulerCredentials(in)
+	require.Equal(t, in["openai_capabilities"], out["openai_capabilities"])
+}
+
+func TestIntake023SchedulerCapabilityConsumer(t *testing.T) {
+	in := map[string]any{"api_key": "fixture", "openai_capabilities": map[string]any{"chat_completions":true,"embeddings":false}}
+	before := &service.Account{Platform:service.PlatformOpenAI, Type:service.AccountTypeAPIKey, Credentials:in}
+	require.False(t, before.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityEmbeddings))
+	after := &service.Account{Platform:service.PlatformOpenAI, Type:service.AccountTypeAPIKey, Credentials:filterSchedulerCredentials(in)}
+	require.False(t, after.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityEmbeddings))
+}
+
+func intake023RatesDB(t *testing.T, abortInsert bool) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "rates.db")+"?_time_format=sqlite")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	db.SetMaxOpenConns(1)
+	_, err = db.Exec("CREATE TABLE user_group_rate_multipliers(user_id INTEGER,group_id INTEGER,rate_multiplier REAL,rpm_override INTEGER,created_at DATETIME,updated_at DATETIME,PRIMARY KEY(user_id,group_id))")
+	require.NoError(t, err)
+	_, err = db.Exec("INSERT INTO user_group_rate_multipliers VALUES(1,7,2,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),(3,7,3,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)")
+	require.NoError(t, err)
+	if abortInsert {
+		_, err = db.Exec("CREATE TRIGGER intake_abort BEFORE INSERT ON user_group_rate_multipliers WHEN NEW.user_id=2 BEGIN SELECT RAISE(ABORT,'intake insert failure'); END")
+		require.NoError(t, err)
+	}
+	return db
+}
+
+func TestIntake023SQLiteRateSyncRollback(t *testing.T) {
+	db := intake023RatesDB(t, true)
+	repo := NewUserGroupRateRepository(db)
+	err := repo.SyncGroupRateMultipliers(context.Background(), 7, []service.GroupRateMultiplierInput{{UserID: 2, RateMultiplier: 4}})
+	require.ErrorContains(t, err, "intake insert failure")
+	var count int
+	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM user_group_rate_multipliers WHERE rate_multiplier IN (2,3)").Scan(&count))
+	require.Equal(t, 2, count, "failed sync must preserve the original rows")
+}
+
+func TestIntake023SQLiteRPMSyncRollback(t *testing.T) {
+	db := intake023RatesDB(t, true)
+	_, err := db.Exec("UPDATE user_group_rate_multipliers SET rate_multiplier=NULL,rpm_override=10")
+	require.NoError(t, err)
+	limit := 20
+	err = NewUserGroupRateRepository(db).SyncGroupRPMOverrides(context.Background(), 7, []service.GroupRPMOverrideInput{{UserID: 2, RPMOverride: &limit}})
+	require.ErrorContains(t, err, "intake insert failure")
+	var count int
+	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM user_group_rate_multipliers WHERE rpm_override=10").Scan(&count))
+	require.Equal(t, 2, count)
+}
+
+func TestIntake023SQLiteRateSyncControl(t *testing.T) {
+	db := intake023RatesDB(t, false)
+	err := NewUserGroupRateRepository(db).SyncGroupRateMultipliers(context.Background(), 7, []service.GroupRateMultiplierInput{{UserID: 2, RateMultiplier: 0}})
+	require.NoError(t, err)
+	var rate float64
+	require.NoError(t, db.QueryRow("SELECT rate_multiplier FROM user_group_rate_multipliers WHERE user_id=2 AND group_id=7").Scan(&rate))
+	require.Zero(t, rate)
+}
+
+func TestIntake023SQLiteFiveHourWindowBounds(t *testing.T) {
+	repo, client := newGrokCatalogSQLiteTestRepository(t)
+	ctx := context.Background()
+	oldStart := time.Now().Add(-10 * time.Hour).Truncate(time.Second)
+	oldEnd := oldStart.Add(5 * time.Hour)
+	account, err := client.Account.Create().SetName("window probe").SetPlatform(service.PlatformAnthropic).
+		SetType(service.AccountTypeOAuth).SetCredentials(map[string]any{}).
+		SetSessionWindowStart(oldStart).SetSessionWindowEnd(oldEnd).Save(ctx)
+	require.NoError(t, err)
+	nextEnd := oldEnd.Add(5 * time.Hour)
+	require.NoError(t, repo.UpdateSessionWindowEnd(ctx, account.ID, nextEnd))
+	current, err := client.Account.Get(ctx, account.ID)
+	require.NoError(t, err)
+	require.True(t, current.SessionWindowStart.Equal(nextEnd.Add(-5*time.Hour)), "new end must advance the five-hour window start")
+}

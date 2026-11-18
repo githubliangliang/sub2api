@@ -1,0 +1,100 @@
+package apicompat
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
+)
+
+func TestIntake023SealedContent(t *testing.T) {
+	acc := NewBufferedResponseAccumulator()
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_item.added", Item: &ResponsesOutput{
+		Type: "function_call", CallID: "call_1", Name: "run", EncryptedContent: "sealed-content",
+	}})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.function_call_arguments.delta", Delta: "{}"})
+	require.Equal(t, "sealed-content", acc.BuildOutput()[0].EncryptedContent)
+}
+
+func TestIntake023SealedControl(t *testing.T) {
+	acc := NewBufferedResponseAccumulator()
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.output_item.added", Item: &ResponsesOutput{
+		Type: "function_call", CallID: "call_1", Name: "run", Namespace: "tools",
+		EncryptedFunctionArgs: json.RawMessage("[\"sealed-args\"]"),
+	}})
+	acc.ProcessEvent(&ResponsesStreamEvent{Type: "response.function_call_arguments.delta", Delta: "{}"})
+	out := acc.BuildOutput()[0]
+	require.Equal(t, "tools", out.Namespace)
+	require.JSONEq(t, "[\"sealed-args\"]", string(out.EncryptedFunctionArgs))
+	require.Equal(t, "{}", out.Arguments)
+}
+
+func TestIntake023MidSystemAuthority(t *testing.T) {
+	var req AnthropicRequest
+	require.NoError(t, json.Unmarshal([]byte("{\"model\":\"gpt-6.1-sol\",\"messages\":[{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"content\":\"reply\"},{\"role\":\"system\",\"content\":\"hook\"}]}"), &req))
+	out, err := AnthropicToResponses(&req)
+	require.NoError(t, err)
+	body, err := json.Marshal(out)
+	require.NoError(t, err)
+	require.Equal(t, "developer", gjson.GetBytes(body, "input.2.role").String())
+	require.Equal(t, "user", gjson.GetBytes(body, "input.0.role").String())
+}
+
+func TestIntake023StrictDefault(t *testing.T) {
+	raw := json.RawMessage("{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"answer\",\"schema\":{\"type\":\"object\"}}}")
+	out := chatResponseFormatToResponsesTextFormat(raw)
+	strict := gjson.GetBytes(out, "strict")
+	require.True(t, strict.Exists(), "Chat's omitted strict must become explicit false")
+	require.False(t, strict.Bool())
+}
+
+func TestIntake023StrictControl(t *testing.T) {
+	raw := json.RawMessage("{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"answer\",\"strict\":true,\"schema\":{\"type\":\"object\"}}}")
+	require.True(t, gjson.GetBytes(chatResponseFormatToResponsesTextFormat(raw), "strict").Bool())
+}
+
+func TestIntake023CacheTTLRoundTrip(t *testing.T) {
+	var in AnthropicResponse
+	require.NoError(t, json.Unmarshal([]byte("{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-6\",\"content\":[],\"usage\":{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":4,\"cache_creation_input_tokens\":6,\"cache_creation\":{\"ephemeral_5m_input_tokens\":2,\"ephemeral_1h_input_tokens\":4}}}"), &in))
+	out := ResponsesToAnthropic(AnthropicToResponsesResponse(&in), in.Model)
+	body, err := json.Marshal(out)
+	require.NoError(t, err)
+	require.Equal(t, int64(4), gjson.GetBytes(body, "usage.cache_creation.ephemeral_1h_input_tokens").Int())
+	require.Equal(t, int64(2), gjson.GetBytes(body, "usage.cache_creation.ephemeral_5m_input_tokens").Int())
+	require.Equal(t, 10, out.Usage.InputTokens)
+	require.Equal(t, 6, out.Usage.CacheCreationInputTokens)
+}
+
+func TestIntake023CacheAggregateControl(t *testing.T) {
+	in := &ResponsesUsage{InputTokens: 20, OutputTokens: 1, CacheCreationInputTokens: 6,
+		InputTokensDetails: &ResponsesInputTokensDetails{CachedTokens: 4}}
+	out := anthropicUsageFromResponsesUsage(in)
+	require.Equal(t, 10, out.InputTokens)
+	require.Equal(t, 6, out.CacheCreationInputTokens)
+	require.Equal(t, 4, out.CacheReadInputTokens)
+}
+
+func TestIntake023CacheAggregatePresence(t *testing.T) {
+	for _, raw := range []string{
+		"{\"input_tokens\":7,\"output_tokens\":1}",
+		"{\"input_tokens\":7,\"output_tokens\":1,\"cache_creation_input_tokens\":null}",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			var usage AnthropicUsage
+			require.NoError(t, json.Unmarshal([]byte(raw), &usage))
+			out, err := json.Marshal(usage)
+			require.NoError(t, err)
+			require.False(t, gjson.GetBytes(out, "cache_creation_input_tokens").Exists())
+		})
+	}
+}
+
+func TestIntake023CacheExplicitZeroControl(t *testing.T) {
+	var usage AnthropicUsage
+	require.NoError(t, json.Unmarshal([]byte("{\"input_tokens\":7,\"cache_creation_input_tokens\":0}"), &usage))
+	out, err := json.Marshal(usage)
+	require.NoError(t, err)
+	require.True(t, gjson.GetBytes(out, "cache_creation_input_tokens").Exists())
+	require.Zero(t, gjson.GetBytes(out, "cache_creation_input_tokens").Int())
+}

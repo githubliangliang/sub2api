@@ -1,0 +1,70 @@
+diff --git a/backend/internal/service/openai_gateway_response_handling.go b/backend/internal/service/openai_gateway_response_handling.go
+index a295fe76a..b9e1bd852 100644
+--- a/backend/internal/service/openai_gateway_response_handling.go
++++ b/backend/internal/service/openai_gateway_response_handling.go
+@@ -999,10 +999,16 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
+ 			if account != nil && account.Platform == PlatformOpenAI &&
+ 				!openAIStreamClientOutputStarted(c, clientOutputStarted) && !eventShouldFlush {
+ 				_ = resp.Body.Close()
+-				return resultWithUsage(), s.newOpenAIStreamFailoverErrorWithModel(
++				failoverErr := s.newOpenAIStreamFailoverErrorWithModel(
+ 					c, account, false, upstreamRequestID, nil,
+ 					"OpenAI upstream stream idle timeout before model output", mappedModel, resp.Header,
+ 				)
++				// Only keepalive comments can have reached the client. Joining the
++				// first-output failover budget also bounds the replay to one account
++				// switch, so one stalled request cannot walk the whole pool and apply
++				// HandleStreamTimeout to every account it touches.
++				failoverErr.SafeToFailoverAfterWrite = true
++				return resultWithUsage(), failoverErr
+ 			}
+ 			// Grok: short cool + account failover when no client-visible bytes
+ 			// were committed yet (pre-commit). After output started we keep the
+diff --git a/backend/internal/service/openai_stream_idle_timeout_test.go b/backend/internal/service/openai_stream_idle_timeout_test.go
+index 6338c2504..f928f62aa 100644
+--- a/backend/internal/service/openai_stream_idle_timeout_test.go
++++ b/backend/internal/service/openai_stream_idle_timeout_test.go
+@@ -5,6 +5,7 @@ import (
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+@@ -77,8 +78,35 @@ func TestRelayStallsIdleFailoverBoundary(t *testing.T) {
+ 				require.Contains(t, rec.Body.String(), "stream_timeout")
+ 			} else {
+ 				require.ErrorAs(t, err, &failover)
++				require.True(t, failover.SafeToFailoverAfterWrite, "idle failover must share the one-switch first-output budget")
+ 				require.Empty(t, rec.Body.String())
+ 			}
+ 		})
+ 	}
+ }
++
++func TestRelayStallsIdleFailoverAfterKeepaliveOnly(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{
++		MaxLineSize: defaultMaxLineSize, StreamDataIntervalTimeout: 2, StreamKeepaliveInterval: 1,
++	}}}
++	pr, pw := io.Pipe()
++	defer func() { _ = pr.Close() }()
++	defer func() { _ = pw.Close() }()
++	go func() {
++		_, _ = io.WriteString(pw, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"r\"}}\n\n")
++	}()
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: pr}
++	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
++	var failover *UpstreamFailoverError
++	require.ErrorAs(t, err, &failover)
++	require.True(t, failover.SafeToFailoverAfterWrite)
++	body := rec.Body.String()
++	require.NotEmpty(t, body, "keepalive comments should have committed the stream")
++	require.Empty(t, strings.ReplaceAll(body, ":\n\n", ""), "only keepalive comments may precede the failover")
++	require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c), "keepalive bytes must not count as client output")
++}

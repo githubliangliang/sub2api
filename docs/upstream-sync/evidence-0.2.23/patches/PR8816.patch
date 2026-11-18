@@ -1,0 +1,3132 @@
+diff --git a/backend/cmd/server/wire.go b/backend/cmd/server/wire.go
+index 05c3334f1..b70b810a2 100644
+--- a/backend/cmd/server/wire.go
++++ b/backend/cmd/server/wire.go
+@@ -111,6 +111,7 @@ func provideCleanup(
+ 	emailQueue *service.EmailQueueService,
+ 	billingCache *service.BillingCacheService,
+ 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
++	usageBillingLanes *service.UsageBillingLaneCombiner,
+ 	balanceNotify *service.BalanceNotifyService,
+ 	digestSessions *service.DigestSessionStore,
+ 	subscriptionService *service.SubscriptionService,
+@@ -331,6 +332,10 @@ func provideCleanup(
+ 				}
+ 				return nil
+ 			}},
++			{"UsageBillingLaneCombiner", func() error {
++				usageBillingLanes.Stop()
++				return nil
++			}},
+ 			{"OAuthService", func() error {
+ 				oauth.Stop()
+ 				return nil
+diff --git a/backend/cmd/server/wire_gen.go b/backend/cmd/server/wire_gen.go
+index 1356765b7..b8d8e2897 100644
+--- a/backend/cmd/server/wire_gen.go
++++ b/backend/cmd/server/wire_gen.go
+@@ -105,7 +105,9 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+ 	usageLogRepository := repository.NewUsageLogRepository(client, db)
+ 	usageService := service.NewUsageService(usageLogRepository, userRepository, client, apiKeyAuthCacheInvalidator)
+ 	opsRepository := repository.NewOpsRepository(db)
+-	usageBillingRepository := repository.NewUsageBillingRepository(client, db)
++	usageBillingBatchRepository := repository.NewUsageBillingRepository(client, db)
++	usageBillingLaneCombiner := service.NewUsageBillingLaneCombiner(usageBillingBatchRepository)
++	usageBillingRepository := service.ProvideUsageBillingRepository(usageBillingLaneCombiner)
+ 	gatewayCache := repository.NewGatewayCache(redisClient)
+ 	schedulerOutboxRepository := repository.NewSchedulerOutboxRepository(db)
+ 	schedulerSnapshotService := service.ProvideSchedulerSnapshotService(schedulerCache, schedulerOutboxRepository, accountRepository, groupRepository, configConfig)
+@@ -359,7 +361,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+ 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService, channelMonitorQuotaFetcher)
+ 	channelMonitorV2Aggregator := service.ProvideChannelMonitorV2Aggregator(channelMonitorV2Repository, db, settingService)
+ 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
+-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, cnProviderBalanceCheckService, openAICodexVersionSyncService, claudeCodeVersionSyncService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, geminiCachedContentService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, balanceNotifyService, digestSessionStore, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, channelMonitorV2Aggregator, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, ollamaCloudUsageService, openCodeGoUsageService, auditLogService, openAIQuotaAutoResetService, promptService, pluginManager)
++	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, accountExpiryService, cnProviderBalanceCheckService, openAICodexVersionSyncService, claudeCodeVersionSyncService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, geminiCachedContentService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, usageBillingLaneCombiner, balanceNotifyService, digestSessionStore, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, channelMonitorV2Aggregator, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, ollamaCloudUsageService, openCodeGoUsageService, auditLogService, openAIQuotaAutoResetService, promptService, pluginManager)
+ 	application := &Application{
+ 		Server:        httpServer,
+ 		PromptAudit:   promptService,
+@@ -426,6 +428,7 @@ func provideCleanup(
+ 	emailQueue *service.EmailQueueService,
+ 	billingCache *service.BillingCacheService,
+ 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
++	usageBillingLanes *service.UsageBillingLaneCombiner,
+ 	balanceNotify *service.BalanceNotifyService,
+ 	digestSessions *service.DigestSessionStore,
+ 	subscriptionService *service.SubscriptionService,
+@@ -645,6 +648,10 @@ func provideCleanup(
+ 				}
+ 				return nil
+ 			}},
++			{"UsageBillingLaneCombiner", func() error {
++				usageBillingLanes.Stop()
++				return nil
++			}},
+ 			{"OAuthService", func() error {
+ 				oauth.Stop()
+ 				return nil
+diff --git a/backend/cmd/server/wire_gen_test.go b/backend/cmd/server/wire_gen_test.go
+index b8e601a50..4d7eb8c99 100644
+--- a/backend/cmd/server/wire_gen_test.go
++++ b/backend/cmd/server/wire_gen_test.go
+@@ -81,6 +81,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
+ 		emailQueueSvc,
+ 		billingCacheSvc,
+ 		&service.UsageRecordWorkerPool{},
++		nil, // usageBillingLanes
+ 		service.ProvideBalanceNotifyService(nil, nil, nil, nil),
+ 		service.NewDigestSessionStore(),
+ 		&service.SubscriptionService{},
+diff --git a/backend/internal/handler/openai_codex_call_output_gate_test.go b/backend/internal/handler/openai_codex_call_output_gate_test.go
+new file mode 100644
+index 000000000..6a7a7decb
+--- /dev/null
++++ b/backend/internal/handler/openai_codex_call_output_gate_test.go
+@@ -0,0 +1,63 @@
++//go:build unit
++
++package handler
++
++import (
++	"math/rand"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestCodexCallOutputGateSkipsDeclaredToolsWithoutCandidate(t *testing.T) {
++	body := []byte(`{"model":"gpt-5","tools":[{"type":"function","name":"automation_update"},{"type":"function","name":"create_thread"}],` +
++		`"input":[{"type":"function_call","call_id":"c1","name":"shell"},{"type":"function_call_output","call_id":"c1","output":"ok"}]}`)
++	require.False(t, mayContainCodexCallOutputCandidate(body, "automation_update"))
++	require.False(t, mayContainCodexCallOutputCandidate(body, "create_thread", "send_message_to_thread"))
++	for name, normalize := range map[string]func([]byte) ([]byte, bool){
++		"untrusted":  normalizeCodexUntrustedContext,
++		"automation": normalizeCodexAutomationBootstrap,
++		"delegation": normalizeCodexDelegationBootstrap,
++	} {
++		t.Run(name, func(t *testing.T) {
++			allocs := testing.AllocsPerRun(10, func() {
++				got, changed := normalize(body)
++				if changed || &got[0] != &body[0] {
++					t.Fatal("non-candidate body must be returned unchanged")
++				}
++			})
++			require.Zero(t, allocs)
++		})
++	}
++}
++
++// Whenever the ungated bootstrap path rewrites a body, the gate must admit it.
++func TestCodexCallOutputGateAdmitsEveryRewrite(t *testing.T) {
++	u := func(hex string) string { return `\` + "u" + hex }
++	output := mustJSON(t, codexAutomationBootstrap("wiki", "never", automationBootstrapPrompt))
++	items := []string{
++		`{"type":"function_call_output","namespace":"codex_app","name":"automation_update","output":` + output + `}`,
++		`{"type":"function_call_output","namespace":"codex_app","name":"` + u("0061") + `utomation_update","output":` + output + `}`,
++		`{"` + u("0074") + `ype":"function_call_output","namespace":"codex_app","name":"automation_update","output":` + output + `}`,
++		`{"type":"function_call_output","namespace":"codex_app","name":"automation_update","name":"other","output":` + output + `}`,
++		`{"type":"function_call_output","call_id":"c","output":"ok"}`,
++		`{"type":"message","role":"user","content":"automation_update function_call_output caf` + u("00e9") + `"}`,
++		`{"type":"function_call","call_id":"c","name":"automation_update"}`,
++	}
++	rng := rand.New(rand.NewSource(11))
++	rewrites := 0
++	for i := 0; i < 3000; i++ {
++		var parts []string
++		for n := rng.Intn(3); n >= 0; n-- {
++			parts = append(parts, items[rng.Intn(len(items))])
++		}
++		body := []byte(`{"model":"gpt-5","tools":[{"type":"function","name":"automation_update"}],"input":[` + strings.Join(parts, ",") + `]}`)
++		_, rewritten := normalizeCodexCallOutputBootstrap(body, isCodexAutomationCandidate, false)
++		if rewritten {
++			rewrites++
++			require.True(t, mayContainCodexCallOutputCandidate(body, "automation_update"), "%s", body)
++		}
++	}
++	require.Positive(t, rewrites)
++}
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index ec7ad12e3..d2d5448bd 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -1742,11 +1742,23 @@ func normalizeCodexAutomationBootstrap(body []byte) ([]byte, bool) {
+ // mayContainCodexCallOutputCandidate is a necessary condition for a bootstrap
+ // candidate, checked before the full uniqueness scan and decode. Its type and
+ // tool name are JSON strings, which appear literally unless a \u escape spells
+-// their letters; without either, normalization cannot change the body.
++// their letters; without either, normalization cannot change the body. Escapes
++// that real clients emit (control characters, HTML-safe and non-ASCII runes)
++// cannot spell those letters and must not force the full decode.
++//
++// Tool declarations carry the same names, so a literal hit is confirmed by a
++// zero-copy scan for an input item of type function_call_output whose name
++// starts with one of toolNames. The full path rejects bodies with duplicate
++// members, and without duplicates the scan reads the same values as the
++// decoder.
+ func mayContainCodexCallOutputCandidate(body []byte, toolNames ...string) bool {
+-	if bytes.Contains(body, []byte(`\u`)) {
+-		return true
++	if !service.JSONMayEscapePlainASCII(body) && !containsCodexCallOutputLiterals(body, toolNames) {
++		return false
+ 	}
++	return service.ResponsesInputHasFunctionCallOutputNamed(body, toolNames...)
++}
++
++func containsCodexCallOutputLiterals(body []byte, toolNames []string) bool {
+ 	if !bytes.Contains(body, []byte("function_call_output")) {
+ 		return false
+ 	}
+diff --git a/backend/internal/repository/account_repo.go b/backend/internal/repository/account_repo.go
+index eddd4614d..468a82a0e 100644
+--- a/backend/internal/repository/account_repo.go
++++ b/backend/internal/repository/account_repo.go
+@@ -1478,10 +1478,38 @@ func (r *accountRepository) BatchUpdateLastUsed(ctx context.Context, updates map
+ 	caseSQL += " END, updated_at = NOW() WHERE id = ANY($" + itoa(idx) + ") AND deleted_at IS NULL"
+ 	args = append(args, pq.Array(ids))
+ 
+-	_, err := r.sql.ExecContext(ctx, caseSQL, args...)
++	// 同一事务内先按 id 升序锁定目标行再更新，与计费合并事务锁多个账号行的顺序一致；
++	// 锁强度与更新非键列相同，不阻塞引用 accounts 的外键检查。
++	exec := r.sql
++	var tx *sql.Tx
++	if db, ok := r.sql.(*sql.DB); ok {
++		var err error
++		if tx, err = db.BeginTx(ctx, nil); err != nil {
++			return err
++		}
++		defer func() {
++			if tx != nil {
++				_ = tx.Rollback()
++			}
++		}()
++		exec = tx
++	}
++	rows, err := exec.QueryContext(ctx, "SELECT id FROM accounts WHERE id = ANY($1) AND deleted_at IS NULL ORDER BY id FOR NO KEY UPDATE", pq.Array(ids))
+ 	if err != nil {
+ 		return err
+ 	}
++	if err := rows.Close(); err != nil {
++		return err
++	}
++	if _, err := exec.ExecContext(ctx, caseSQL, args...); err != nil {
++		return err
++	}
++	if tx != nil {
++		if err := tx.Commit(); err != nil {
++			return err
++		}
++		tx = nil
++	}
+ 	lastUsedPayload := make(map[string]int64, len(updates))
+ 	for id, ts := range updates {
+ 		lastUsedPayload[strconv.FormatInt(id, 10)] = ts.Unix()
+diff --git a/backend/internal/repository/usage_billing_batch_repo.go b/backend/internal/repository/usage_billing_batch_repo.go
+new file mode 100644
+index 000000000..99340f902
+--- /dev/null
++++ b/backend/internal/repository/usage_billing_batch_repo.go
+@@ -0,0 +1,544 @@
++package repository
++
++import (
++	"context"
++	"database/sql"
++	"errors"
++	"math"
++	"sort"
++	"strings"
++
++	"github.com/lib/pq"
++	"github.com/shopspring/decimal"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++)
++
++var (
++	errUsageBillingBatchMixedUsers       = errors.New("usage billing batch contains commands of different users")
++	errUsageBillingBatchDuplicateRequest = errors.New("usage billing batch contains duplicate request keys")
++	errUsageBillingBatchNilCommand       = errors.New("usage billing batch contains nil command")
++	errUsageBillingBatchDedupRowMissing  = errors.New("usage billing dedup row missing after claim conflict")
++	errUsageBillingBatchNonFiniteAmount  = errors.New("usage billing batch contains non-finite amount")
++)
++
++type usageBillingRequestKey struct {
++	requestID string
++	apiKeyID  int64
++}
++
++// ApplyBatch 在一个事务内结算同一用户的多条计费命令。
++//
++// 每条命令的去重认领、各项累加与返回结果都与按 cmds 顺序逐条调用 Apply 一致：
++//   - 认领用一条多行 INSERT，未认领的命令按已有指纹判定为重复（Applied=false）或指纹冲突；
++//     认领后在归档表命中的命令同样判定，并删除本事务插入的认领行。
++//   - 同一行的多次累加合并为一条语句，累加值取各命令金额之和。同一事务内 NOW() 不变，
++//     窗口重置类表达式的合并结果与逐条执行相同。
++//   - 逐条命令的扣费后余额、是否透支、Key 额度是否在该条耗尽、账号额度状态，
++//     由合并语句返回的累加后值按命令顺序推算。
++//
++// 行锁按 user_subscriptions → users → api_keys → accounts 的顺序获取，表内按主键升序，
++// 与 Apply 的加锁顺序一致。
++//
++// 命令校验失败（混合用户、重复请求键、缺 request_id、非有限金额）时直接返回 error。
++// 返回 error 时没有任何命令生效；提交请求发出后连接中断时提交结果未知，与 Apply 相同。
++func (r *usageBillingRepository) ApplyBatch(ctx context.Context, cmds []*service.UsageBillingCommand) (_ []service.UsageBillingBatchOutcome, err error) {
++	if len(cmds) == 0 {
++		return nil, nil
++	}
++	if r == nil || r.db == nil {
++		return nil, errors.New("usage billing repository db is nil")
++	}
++
++	userID, err := validateUsageBillingBatch(cmds)
++	if err != nil {
++		return nil, err
++	}
++
++	tx, err := r.db.BeginTx(ctx, nil)
++	if err != nil {
++		return nil, err
++	}
++	defer func() {
++		if tx != nil {
++			_ = tx.Rollback()
++		}
++	}()
++
++	outcomes := make([]service.UsageBillingBatchOutcome, len(cmds))
++	applied, err := claimUsageBillingBatch(ctx, tx, cmds, outcomes)
++	if err != nil {
++		return nil, err
++	}
++	for i := range cmds {
++		if applied[i] {
++			outcomes[i].Result = &service.UsageBillingApplyResult{Applied: true}
++		}
++	}
++
++	if err := applyUsageBillingBatchSubscriptions(ctx, tx, cmds, applied); err != nil {
++		return nil, err
++	}
++	if err := applyUsageBillingBatchBalance(ctx, tx, userID, cmds, applied, outcomes); err != nil {
++		return nil, err
++	}
++	if err := applyUsageBillingBatchAPIKeys(ctx, tx, cmds, applied, outcomes); err != nil {
++		return nil, err
++	}
++	if err := applyUsageBillingBatchAccountQuotas(ctx, tx, cmds, applied, outcomes); err != nil {
++		return nil, err
++	}
++
++	if err := tx.Commit(); err != nil {
++		return nil, err
++	}
++	tx = nil
++	return outcomes, nil
++}
++
++// validateUsageBillingBatch 规范化命令并校验：非空、request_id 非空、同一用户、(request_id, api_key_id) 互不相同。
++func validateUsageBillingBatch(cmds []*service.UsageBillingCommand) (int64, error) {
++	var userID int64
++	seen := make(map[usageBillingRequestKey]struct{}, len(cmds))
++	for i, cmd := range cmds {
++		if cmd == nil {
++			return 0, errUsageBillingBatchNilCommand
++		}
++		cmd.Normalize()
++		if cmd.RequestID == "" {
++			return 0, service.ErrUsageBillingRequestIDRequired
++		}
++		for _, amount := range []float64{cmd.BalanceCost, cmd.SubscriptionCost, cmd.APIKeyQuotaCost, cmd.APIKeyRateLimitCost, cmd.AccountQuotaCost} {
++			if math.IsNaN(amount) || math.IsInf(amount, 0) {
++				return 0, errUsageBillingBatchNonFiniteAmount
++			}
++		}
++		if i == 0 {
++			userID = cmd.UserID
++		} else if cmd.UserID != userID {
++			return 0, errUsageBillingBatchMixedUsers
++		}
++		key := usageBillingRequestKey{requestID: cmd.RequestID, apiKeyID: cmd.APIKeyID}
++		if _, dup := seen[key]; dup {
++			return 0, errUsageBillingBatchDuplicateRequest
++		}
++		seen[key] = struct{}{}
++	}
++	return userID, nil
++}
++
++// claimUsageBillingBatch 认领整批命令，返回每条命令是否需要结算；不需要结算的命令在 outcomes 中写入结果。
++func claimUsageBillingBatch(ctx context.Context, tx *sql.Tx, cmds []*service.UsageBillingCommand, outcomes []service.UsageBillingBatchOutcome) ([]bool, error) {
++	// 插入顺序按 (api_key_id, request_id) 排序，并发事务在唯一索引上的等待顺序一致。
++	order := make([]int, len(cmds))
++	for i := range order {
++		order[i] = i
++	}
++	sort.Slice(order, func(a, b int) bool {
++		ca, cb := cmds[order[a]], cmds[order[b]]
++		if ca.APIKeyID != cb.APIKeyID {
++			return ca.APIKeyID < cb.APIKeyID
++		}
++		return ca.RequestID < cb.RequestID
++	})
++	requestIDs := make([]string, len(cmds))
++	apiKeyIDs := make([]int64, len(cmds))
++	fingerprints := make([]string, len(cmds))
++	for pos, i := range order {
++		requestIDs[pos] = cmds[i].RequestID
++		apiKeyIDs[pos] = cmds[i].APIKeyID
++		fingerprints[pos] = cmds[i].RequestFingerprint
++	}
++
++	rows, err := tx.QueryContext(ctx, `
++		INSERT INTO usage_billing_dedup (request_id, api_key_id, request_fingerprint)
++		SELECT t.request_id, t.api_key_id, t.request_fingerprint
++		FROM unnest($1::text[], $2::bigint[], $3::text[]) WITH ORDINALITY AS t(request_id, api_key_id, request_fingerprint, ord)
++		ORDER BY t.ord
++		ON CONFLICT (request_id, api_key_id) DO NOTHING
++		RETURNING id, request_id, api_key_id
++	`, pq.Array(requestIDs), pq.Array(apiKeyIDs), pq.Array(fingerprints))
++	if err != nil {
++		return nil, err
++	}
++	claimedIDs := make(map[usageBillingRequestKey]int64, len(cmds))
++	for rows.Next() {
++		var id int64
++		var key usageBillingRequestKey
++		if err := rows.Scan(&id, &key.requestID, &key.apiKeyID); err != nil {
++			_ = rows.Close()
++			return nil, err
++		}
++		claimedIDs[key] = id
++	}
++	if err := rows.Err(); err != nil {
++		_ = rows.Close()
++		return nil, err
++	}
++	if err := rows.Close(); err != nil {
++		return nil, err
++	}
++
++	applied := make([]bool, len(cmds))
++	var conflicted, claimed []usageBillingRequestKey
++	for _, cmd := range cmds {
++		key := usageBillingRequestKey{requestID: cmd.RequestID, apiKeyID: cmd.APIKeyID}
++		if _, ok := claimedIDs[key]; ok {
++			claimed = append(claimed, key)
++		} else {
++			conflicted = append(conflicted, key)
++		}
++	}
++
++	if len(conflicted) > 0 {
++		existing, err := queryUsageBillingFingerprints(ctx, tx, `
++			SELECT d.request_id, d.api_key_id, d.request_fingerprint
++			FROM usage_billing_dedup d
++			JOIN unnest($1::text[], $2::bigint[]) AS t(request_id, api_key_id)
++				ON d.request_id = t.request_id AND d.api_key_id = t.api_key_id
++		`, conflicted)
++		if err != nil {
++			return nil, err
++		}
++		for i, cmd := range cmds {
++			key := usageBillingRequestKey{requestID: cmd.RequestID, apiKeyID: cmd.APIKeyID}
++			if _, ok := claimedIDs[key]; ok {
++				continue
++			}
++			fingerprint, ok := existing[key]
++			if !ok {
++				return nil, errUsageBillingBatchDedupRowMissing
++			}
++			outcomes[i] = usageBillingDuplicateOutcome(fingerprint, cmd.RequestFingerprint)
++		}
++	}
++
++	var archived map[usageBillingRequestKey]string
++	if len(claimed) > 0 {
++		archived, err = queryUsageBillingFingerprints(ctx, tx, `
++			SELECT a.request_id, a.api_key_id, a.request_fingerprint
++			FROM usage_billing_dedup_archive a
++			JOIN unnest($1::text[], $2::bigint[]) AS t(request_id, api_key_id)
++				ON a.request_id = t.request_id AND a.api_key_id = t.api_key_id
++		`, claimed)
++		if err != nil {
++			return nil, err
++		}
++	}
++	var releaseIDs []int64
++	for i, cmd := range cmds {
++		key := usageBillingRequestKey{requestID: cmd.RequestID, apiKeyID: cmd.APIKeyID}
++		id, ok := claimedIDs[key]
++		if !ok {
++			continue
++		}
++		if fingerprint, hit := archived[key]; hit {
++			outcomes[i] = usageBillingDuplicateOutcome(fingerprint, cmd.RequestFingerprint)
++			releaseIDs = append(releaseIDs, id)
++			continue
++		}
++		applied[i] = true
++	}
++	if len(releaseIDs) > 0 {
++		if _, err := tx.ExecContext(ctx, `DELETE FROM usage_billing_dedup WHERE id = ANY($1::bigint[])`, pq.Array(releaseIDs)); err != nil {
++			return nil, err
++		}
++	}
++	return applied, nil
++}
++
++// usageBillingDuplicateOutcome 按已登记的指纹判定重复命令：指纹相同为已结算（Applied=false），不同为指纹冲突。
++func usageBillingDuplicateOutcome(existingFingerprint, fingerprint string) service.UsageBillingBatchOutcome {
++	if strings.TrimSpace(existingFingerprint) != strings.TrimSpace(fingerprint) {
++		return service.UsageBillingBatchOutcome{Err: service.ErrUsageBillingRequestConflict}
++	}
++	return service.UsageBillingBatchOutcome{Result: &service.UsageBillingApplyResult{Applied: false}}
++}
++
++func queryUsageBillingFingerprints(ctx context.Context, tx *sql.Tx, query string, keys []usageBillingRequestKey) (map[usageBillingRequestKey]string, error) {
++	requestIDs := make([]string, len(keys))
++	apiKeyIDs := make([]int64, len(keys))
++	for i, key := range keys {
++		requestIDs[i] = key.requestID
++		apiKeyIDs[i] = key.apiKeyID
++	}
++	rows, err := tx.QueryContext(ctx, query, pq.Array(requestIDs), pq.Array(apiKeyIDs))
++	if err != nil {
++		return nil, err
++	}
++	found := make(map[usageBillingRequestKey]string, len(keys))
++	for rows.Next() {
++		var key usageBillingRequestKey
++		var fingerprint string
++		if err := rows.Scan(&key.requestID, &key.apiKeyID, &fingerprint); err != nil {
++			_ = rows.Close()
++			return nil, err
++		}
++		found[key] = fingerprint
++	}
++	if err := rows.Err(); err != nil {
++		_ = rows.Close()
++		return nil, err
++	}
++	if err := rows.Close(); err != nil {
++		return nil, err
++	}
++	return found, nil
++}
++
++// usageBillingAmount 把已量化到 8 位小数的金额转为精确十进制。
++func usageBillingAmount(v float64) decimal.Decimal {
++	return decimal.NewFromFloat(v)
++}
++
++// usageBillingAmountGroup 汇总同一行上的多条命令：indexes 按命令顺序排列。
++type usageBillingAmountGroup struct {
++	sum     decimal.Decimal
++	indexes []int
++}
++
++func groupUsageBillingAmounts(cmds []*service.UsageBillingCommand, applied []bool, pick func(*service.UsageBillingCommand) (int64, float64, bool)) (map[int64]*usageBillingAmountGroup, []int64) {
++	groups := make(map[int64]*usageBillingAmountGroup)
++	for i, cmd := range cmds {
++		if !applied[i] {
++			continue
++		}
++		id, amount, ok := pick(cmd)
++		if !ok || !(amount > 0) {
++			continue
++		}
++		g := groups[id]
++		if g == nil {
++			g = &usageBillingAmountGroup{}
++			groups[id] = g
++		}
++		g.sum = g.sum.Add(usageBillingAmount(amount))
++		g.indexes = append(g.indexes, i)
++	}
++	ids := make([]int64, 0, len(groups))
++	for id := range groups {
++		ids = append(ids, id)
++	}
++	sort.Slice(ids, func(a, b int) bool { return ids[a] < ids[b] })
++	return groups, ids
++}
++
++func applyUsageBillingBatchSubscriptions(ctx context.Context, tx *sql.Tx, cmds []*service.UsageBillingCommand, applied []bool) error {
++	groups, ids := groupUsageBillingAmounts(cmds, applied, func(cmd *service.UsageBillingCommand) (int64, float64, bool) {
++		if cmd.SubscriptionID == nil {
++			return 0, 0, false
++		}
++		return *cmd.SubscriptionID, cmd.SubscriptionCost, true
++	})
++	for _, id := range ids {
++		if err := incrementUsageBillingSubscription(ctx, tx, id, groups[id].sum.InexactFloat64()); err != nil {
++			return err
++		}
++	}
++	return nil
++}
++
++func applyUsageBillingBatchBalance(ctx context.Context, tx *sql.Tx, userID int64, cmds []*service.UsageBillingCommand, applied []bool, outcomes []service.UsageBillingBatchOutcome) error {
++	groups, _ := groupUsageBillingAmounts(cmds, applied, func(cmd *service.UsageBillingCommand) (int64, float64, bool) {
++		return userID, cmd.BalanceCost, true
++	})
++	group := groups[userID]
++	if group == nil {
++		return nil
++	}
++
++	var newBalance decimal.Decimal
++	err := tx.QueryRowContext(ctx, `
++		UPDATE users
++		SET balance = balance - $1,
++			updated_at = NOW()
++		WHERE id = $2 AND deleted_at IS NULL
++		RETURNING balance
++	`, group.sum, userID).Scan(&newBalance)
++	if errors.Is(err, sql.ErrNoRows) {
++		return service.ErrUserNotFound
++	}
++	if err != nil {
++		return err
++	}
++
++	running := newBalance.Add(group.sum)
++	for _, i := range group.indexes {
++		cost := usageBillingAmount(cmds[i].BalanceCost)
++		sufficient := running.GreaterThanOrEqual(cost)
++		running = running.Sub(cost)
++		balance := running.InexactFloat64()
++		outcomes[i].Result.NewBalance = &balance
++		outcomes[i].Result.BalanceOverdrafted = !sufficient
++	}
++	return nil
++}
++
++func applyUsageBillingBatchAPIKeys(ctx context.Context, tx *sql.Tx, cmds []*service.UsageBillingCommand, applied []bool, outcomes []service.UsageBillingBatchOutcome) error {
++	quotaGroups, quotaIDs := groupUsageBillingAmounts(cmds, applied, func(cmd *service.UsageBillingCommand) (int64, float64, bool) {
++		return cmd.APIKeyID, cmd.APIKeyQuotaCost, true
++	})
++	rateGroups, rateIDs := groupUsageBillingAmounts(cmds, applied, func(cmd *service.UsageBillingCommand) (int64, float64, bool) {
++		return cmd.APIKeyID, cmd.APIKeyRateLimitCost, true
++	})
++
++	ids := mergeSortedIDs(quotaIDs, rateIDs)
++	for _, id := range ids {
++		if group := quotaGroups[id]; group != nil {
++			if err := applyUsageBillingBatchAPIKeyQuota(ctx, tx, id, group, cmds, outcomes); err != nil {
++				return err
++			}
++		}
++		if group := rateGroups[id]; group != nil {
++			err := incrementUsageBillingAPIKeyRateLimit(ctx, tx, id, group.sum.InexactFloat64())
++			if err != nil && !errors.Is(err, service.ErrAPIKeyNotFound) {
++				return err
++			}
++		}
++	}
++	return nil
++}
++
++func applyUsageBillingBatchAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, group *usageBillingAmountGroup, cmds []*service.UsageBillingCommand, outcomes []service.UsageBillingBatchOutcome) error {
++	var quota, used decimal.Decimal
++	err := tx.QueryRowContext(ctx, usageBillingAPIKeyQuotaUpdate+`
++		RETURNING quota, quota_used
++	`, group.sum, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted).Scan(&quota, &used)
++	if errors.Is(err, sql.ErrNoRows) {
++		return nil
++	}
++	if err != nil {
++		return err
++	}
++	if !quota.IsPositive() {
++		return nil
++	}
++	running := used.Sub(group.sum)
++	for _, i := range group.indexes {
++		before := running
++		running = running.Add(usageBillingAmount(cmds[i].APIKeyQuotaCost))
++		if running.GreaterThanOrEqual(quota) && before.LessThan(quota) {
++			outcomes[i].Result.APIKeyQuotaExhausted = true
++		}
++	}
++	return nil
++}
++
++func applyUsageBillingBatchAccountQuotas(ctx context.Context, tx *sql.Tx, cmds []*service.UsageBillingCommand, applied []bool, outcomes []service.UsageBillingBatchOutcome) error {
++	groups, ids := groupUsageBillingAmounts(cmds, applied, func(cmd *service.UsageBillingCommand) (int64, float64, bool) {
++		return cmd.AccountID, cmd.AccountQuotaCost, service.AccountTypeSupportsQuota(cmd.AccountType)
++	})
++	query := accountQuotaIncrementSQLs[accountQuotaIncrementSQLIndex(true, true)]
++	for _, id := range ids {
++		group := groups[id]
++		state, err := queryAccountQuotaIncrementDecimal(ctx, tx, query, id, group.sum)
++		if err != nil {
++			return err
++		}
++		if state == nil {
++			continue
++		}
++		if state.crossed(group.sum) {
++			accountID := id
++			if err := enqueueSchedulerOutbox(ctx, tx, service.SchedulerOutboxEventAccountChanged, &accountID, nil, nil); err != nil {
++				logger.LegacyPrintf("repository.usage_billing", "[SchedulerOutbox] enqueue quota exceeded failed: account=%d err=%v", accountID, err)
++				return err
++			}
++		}
++
++		// 日/周维度只在库中设置了对应上限时累加，未累加的维度各条命令看到的都是语句返回值。
++		total := state.totalUsed.Sub(group.sum)
++		daily := state.dailyUsed
++		if state.dailyLimit.IsPositive() {
++			daily = daily.Sub(group.sum)
++		}
++		weekly := state.weeklyUsed
++		if state.weeklyLimit.IsPositive() {
++			weekly = weekly.Sub(group.sum)
++		}
++		for _, i := range group.indexes {
++			cost := usageBillingAmount(cmds[i].AccountQuotaCost)
++			total = total.Add(cost)
++			if state.dailyLimit.IsPositive() {
++				daily = daily.Add(cost)
++			}
++			if state.weeklyLimit.IsPositive() {
++				weekly = weekly.Add(cost)
++			}
++			outcomes[i].Result.QuotaState = &service.AccountQuotaState{
++				TotalUsed:   total.InexactFloat64(),
++				TotalLimit:  state.totalLimit.InexactFloat64(),
++				DailyUsed:   daily.InexactFloat64(),
++				DailyLimit:  state.dailyLimit.InexactFloat64(),
++				WeeklyUsed:  weekly.InexactFloat64(),
++				WeeklyLimit: state.weeklyLimit.InexactFloat64(),
++			}
++		}
++	}
++	return nil
++}
++
++// accountQuotaDecimalState 是账号配额累加语句返回的累加后状态（精确十进制）。
++type accountQuotaDecimalState struct {
++	totalUsed, totalLimit   decimal.Decimal
++	dailyUsed, dailyLimit   decimal.Decimal
++	weeklyUsed, weeklyLimit decimal.Decimal
++}
++
++// crossed 判断本次累加 amount 是否让任一设置了上限的维度从未超跨到已超。
++func (s *accountQuotaDecimalState) crossed(amount decimal.Decimal) bool {
++	cross := func(used, limit decimal.Decimal) bool {
++		return limit.IsPositive() && used.GreaterThanOrEqual(limit) && used.Sub(amount).LessThan(limit)
++	}
++	return cross(s.totalUsed, s.totalLimit) || cross(s.dailyUsed, s.dailyLimit) || cross(s.weeklyUsed, s.weeklyLimit)
++}
++
++// queryAccountQuotaIncrementDecimal 执行一条账号配额累加语句，未命中任何行时返回 nil 状态。
++func queryAccountQuotaIncrementDecimal(ctx context.Context, tx *sql.Tx, query string, accountID int64, amount decimal.Decimal) (*accountQuotaDecimalState, error) {
++	rows, err := tx.QueryContext(ctx, query, amount, accountID)
++	if err != nil {
++		return nil, err
++	}
++	var state *accountQuotaDecimalState
++	if rows.Next() {
++		state = &accountQuotaDecimalState{}
++		if err := rows.Scan(
++			&state.totalUsed, &state.totalLimit,
++			&state.dailyUsed, &state.dailyLimit,
++			&state.weeklyUsed, &state.weeklyLimit,
++		); err != nil {
++			_ = rows.Close()
++			return nil, err
++		}
++	}
++	if err := rows.Err(); err != nil {
++		_ = rows.Close()
++		return nil, err
++	}
++	if err := rows.Close(); err != nil {
++		return nil, err
++	}
++	return state, nil
++}
++
++// mergeSortedIDs 合并两个升序 id 列表并去重。
++func mergeSortedIDs(a, b []int64) []int64 {
++	out := make([]int64, 0, len(a)+len(b))
++	i, j := 0, 0
++	for i < len(a) || j < len(b) {
++		switch {
++		case j >= len(b) || (i < len(a) && a[i] < b[j]):
++			out = append(out, a[i])
++			i++
++		case i >= len(a) || b[j] < a[i]:
++			out = append(out, b[j])
++			j++
++		default:
++			out = append(out, a[i])
++			i++
++			j++
++		}
++	}
++	return out
++}
+diff --git a/backend/internal/repository/usage_billing_batch_repo_integration_test.go b/backend/internal/repository/usage_billing_batch_repo_integration_test.go
+new file mode 100644
+index 000000000..d1907acaf
+--- /dev/null
++++ b/backend/internal/repository/usage_billing_batch_repo_integration_test.go
+@@ -0,0 +1,467 @@
++//go:build integration
++
++package repository
++
++import (
++	"context"
++	"database/sql"
++	"fmt"
++	"math"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++	"github.com/stretchr/testify/require"
++
++	dbent "github.com/Wei-Shaw/sub2api/ent"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++)
++
++// batchBillingFixture 是一个用户及其计费相关的行：两个 Key（A 有额度）、两个支持额度的账号
++// （P 设总额度与日额度，Q 只设周额度）和一个订阅。
++type batchBillingFixture struct {
++	userID         int64
++	keyA, keyB     int64
++	accountP       int64
++	accountQ       int64
++	subscriptionID int64
++}
++
++func newBatchBillingFixture(t *testing.T, client *dbent.Client, balance float64) batchBillingFixture {
++	t.Helper()
++	suffix := uuid.NewString()
++	user := mustCreateUser(t, client, &service.User{
++		Email:        fmt.Sprintf("usage-billing-batch-%s@example.com", suffix),
++		PasswordHash: "hash",
++		Balance:      balance,
++	})
++	group := mustCreateGroup(t, client, &service.Group{
++		Name:             "usage-billing-batch-group-" + suffix,
++		Platform:         service.PlatformAnthropic,
++		SubscriptionType: service.SubscriptionTypeSubscription,
++	})
++	keyA := mustCreateApiKey(t, client, &service.APIKey{
++		UserID: user.ID, Key: "sk-usage-billing-batch-a-" + suffix, Name: "batch-a", Quota: 5,
++	})
++	keyB := mustCreateApiKey(t, client, &service.APIKey{
++		UserID: user.ID, Key: "sk-usage-billing-batch-b-" + suffix, Name: "batch-b",
++	})
++	accountP := mustCreateAccount(t, client, &service.Account{
++		Name:  "usage-billing-batch-p-" + suffix,
++		Type:  service.AccountTypeAPIKey,
++		Extra: map[string]any{"quota_limit": 6.0, "quota_daily_limit": 4.0},
++	})
++	accountQ := mustCreateAccount(t, client, &service.Account{
++		Name:  "usage-billing-batch-q-" + suffix,
++		Type:  service.AccountTypeAPIKey,
++		Extra: map[string]any{"quota_weekly_limit": 3.0},
++	})
++	subscription := mustCreateSubscription(t, client, &service.UserSubscription{UserID: user.ID, GroupID: group.ID})
++	return batchBillingFixture{
++		userID: user.ID, keyA: keyA.ID, keyB: keyB.ID,
++		accountP: accountP.ID, accountQ: accountQ.ID, subscriptionID: subscription.ID,
++	}
++}
++
++// batchBillingScript 描述一组命令；key/account 用 'A'/'B'、'P'/'Q' 指代夹具中的行。
++type batchBillingStep struct {
++	key          byte
++	account      byte
++	balance      float64
++	subscription float64
++	keyQuota     float64
++	keyRate      float64
++	accountQuota float64
++}
++
++func (f batchBillingFixture) commands(prefix string, steps []batchBillingStep) []*service.UsageBillingCommand {
++	cmds := make([]*service.UsageBillingCommand, len(steps))
++	for i, s := range steps {
++		cmd := &service.UsageBillingCommand{
++			RequestID:           fmt.Sprintf("%s-%d", prefix, i),
++			UserID:              f.userID,
++			AccountType:         service.AccountTypeAPIKey,
++			BalanceCost:         s.balance,
++			APIKeyQuotaCost:     s.keyQuota,
++			APIKeyRateLimitCost: s.keyRate,
++			AccountQuotaCost:    s.accountQuota,
++		}
++		cmd.APIKeyID = f.keyA
++		if s.key == 'B' {
++			cmd.APIKeyID = f.keyB
++		}
++		cmd.AccountID = f.accountP
++		if s.account == 'Q' {
++			cmd.AccountID = f.accountQ
++		}
++		if s.subscription > 0 {
++			subscriptionID := f.subscriptionID
++			cmd.SubscriptionID = &subscriptionID
++			cmd.SubscriptionCost = s.subscription
++		}
++		cmds[i] = cmd
++	}
++	return cmds
++}
++
++type batchBillingState struct {
++	balance                        string
++	keyAUsed, keyAStatus           string
++	keyAUsage5h, keyAUsage1d       string
++	keyBUsage5h, keyBUsage7d       string
++	pUsed, pDailyUsed, pWeeklyUsed string
++	qUsed, qDailyUsed, qWeeklyUsed string
++	subDaily, subWeekly, subMonth  string
++	dedupRows                      int
++	pOutbox, qOutbox               int
++}
++
++func readBatchBillingState(t *testing.T, ctx context.Context, f batchBillingFixture) batchBillingState {
++	t.Helper()
++	var s batchBillingState
++	q := func(dst any, query string, args ...any) {
++		require.NoError(t, integrationDB.QueryRowContext(ctx, query, args...).Scan(dst))
++	}
++	q(&s.balance, "SELECT balance::text FROM users WHERE id = $1", f.userID)
++	q(&s.keyAUsed, "SELECT quota_used::text FROM api_keys WHERE id = $1", f.keyA)
++	q(&s.keyAStatus, "SELECT status FROM api_keys WHERE id = $1", f.keyA)
++	q(&s.keyAUsage5h, "SELECT usage_5h::text FROM api_keys WHERE id = $1", f.keyA)
++	q(&s.keyAUsage1d, "SELECT usage_1d::text FROM api_keys WHERE id = $1", f.keyA)
++	q(&s.keyBUsage5h, "SELECT usage_5h::text FROM api_keys WHERE id = $1", f.keyB)
++	q(&s.keyBUsage7d, "SELECT usage_7d::text FROM api_keys WHERE id = $1", f.keyB)
++	accountUsed := func(id int64, field string) string {
++		var v string
++		q(&v, "SELECT COALESCE((extra->>$2)::numeric, 0)::text FROM accounts WHERE id = $1", id, field)
++		return v
++	}
++	s.pUsed, s.pDailyUsed, s.pWeeklyUsed = accountUsed(f.accountP, "quota_used"), accountUsed(f.accountP, "quota_daily_used"), accountUsed(f.accountP, "quota_weekly_used")
++	s.qUsed, s.qDailyUsed, s.qWeeklyUsed = accountUsed(f.accountQ, "quota_used"), accountUsed(f.accountQ, "quota_daily_used"), accountUsed(f.accountQ, "quota_weekly_used")
++	q(&s.subDaily, "SELECT daily_usage_usd::text FROM user_subscriptions WHERE id = $1", f.subscriptionID)
++	q(&s.subWeekly, "SELECT weekly_usage_usd::text FROM user_subscriptions WHERE id = $1", f.subscriptionID)
++	q(&s.subMonth, "SELECT monthly_usage_usd::text FROM user_subscriptions WHERE id = $1", f.subscriptionID)
++	q(&s.dedupRows, "SELECT COUNT(*) FROM usage_billing_dedup WHERE api_key_id IN ($1, $2)", f.keyA, f.keyB)
++	q(&s.pOutbox, "SELECT COUNT(*) FROM scheduler_outbox WHERE event_type = $1 AND account_id = $2", service.SchedulerOutboxEventAccountChanged, f.accountP)
++	q(&s.qOutbox, "SELECT COUNT(*) FROM scheduler_outbox WHERE event_type = $1 AND account_id = $2", service.SchedulerOutboxEventAccountChanged, f.accountQ)
++	return s
++}
++
++func TestUsageBillingRepositoryApplyBatch_MatchesSequentialApply(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	repo := NewUsageBillingRepository(client, integrationDB)
++
++	// 余额 10：第 6 条起透支；Key A 额度 5 在第 5 条耗尽；账号 P 日额度 4 在第 5 条、总额度 6 在第 6 条越线；
++	// 账号 Q 周额度 3 在第 3 条恰好达到；第 4 条走订阅。
++	steps := []batchBillingStep{
++		{key: 'A', account: 'P', balance: 1.5, keyQuota: 1.5, keyRate: 1.5, accountQuota: 1.5},
++		{key: 'A', account: 'P', balance: 2.25, keyQuota: 2.25, keyRate: 2.25, accountQuota: 2.25},
++		{key: 'B', account: 'Q', balance: 3, keyRate: 3, accountQuota: 3},
++		{key: 'A', account: 'P', subscription: 1, keyQuota: 1},
++		{key: 'A', account: 'P', balance: 4, keyQuota: 0.5, accountQuota: 0.5},
++		{key: 'B', account: 'P', balance: 0.75, keyRate: 0.12345678, accountQuota: 2},
++		{key: 'A', account: 'Q', balance: 0.1, keyQuota: 0.3, accountQuota: 0.00000001},
++		{key: 'B', account: 'Q', balance: 0.00000003, keyRate: 0.1},
++	}
++
++	sequential := newBatchBillingFixture(t, client, 10)
++	batched := newBatchBillingFixture(t, client, 10)
++
++	seqCmds := sequential.commands("seq-"+uuid.NewString(), steps)
++	seqResults := make([]*service.UsageBillingApplyResult, len(seqCmds))
++	for i, cmd := range seqCmds {
++		res, err := repo.Apply(ctx, cmd)
++		require.NoError(t, err, "sequential step %d", i)
++		seqResults[i] = res
++	}
++
++	outcomes, err := repo.ApplyBatch(ctx, batched.commands("batch-"+uuid.NewString(), steps))
++	require.NoError(t, err)
++	require.Len(t, outcomes, len(steps))
++
++	for i := range steps {
++		require.NoError(t, outcomes[i].Err, "step %d", i)
++		require.Equal(t, seqResults[i], outcomes[i].Result, "step %d", i)
++	}
++
++	seqState := readBatchBillingState(t, ctx, sequential)
++	batchState := readBatchBillingState(t, ctx, batched)
++	// 逐条结算时每次越线各写一条 outbox，合并结算每个账号至多一条；两边都必须至少写一条。
++	require.Positive(t, seqState.pOutbox)
++	require.Positive(t, batchState.pOutbox)
++	require.Positive(t, seqState.qOutbox)
++	require.Positive(t, batchState.qOutbox)
++	require.Equal(t, 1, batchState.pOutbox)
++	require.Equal(t, 1, batchState.qOutbox)
++	seqState.pOutbox, seqState.qOutbox, batchState.pOutbox, batchState.qOutbox = 0, 0, 0, 0
++	require.Equal(t, seqState, batchState)
++	require.Equal(t, len(steps), batchState.dedupRows)
++	require.Equal(t, service.StatusAPIKeyQuotaExhausted, batchState.keyAStatus)
++}
++
++func TestUsageBillingRepositoryApplyBatch_DuplicateAndConflictingRequests(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	repo := NewUsageBillingRepository(client, integrationDB)
++	f := newBatchBillingFixture(t, client, 10)
++
++	prefix := "dup-" + uuid.NewString()
++	settled := f.commands(prefix+"-settled", []batchBillingStep{{key: 'B', balance: 1}})[0]
++	conflicted := f.commands(prefix+"-conflicted", []batchBillingStep{{key: 'B', balance: 2}})[0]
++	for _, cmd := range []*service.UsageBillingCommand{settled, conflicted} {
++		res, err := repo.Apply(ctx, cmd)
++		require.NoError(t, err)
++		require.True(t, res.Applied)
++	}
++
++	retry := f.commands(prefix+"-settled", []batchBillingStep{{key: 'B', balance: 1}})[0]
++	changed := f.commands(prefix+"-conflicted", []batchBillingStep{{key: 'B', balance: 2.5}})[0]
++	fresh := f.commands(prefix+"-fresh", []batchBillingStep{{key: 'B', balance: 0.5}})[0]
++
++	outcomes, err := repo.ApplyBatch(ctx, []*service.UsageBillingCommand{retry, changed, fresh})
++	require.NoError(t, err)
++	require.NoError(t, outcomes[0].Err)
++	require.False(t, outcomes[0].Result.Applied)
++	require.ErrorIs(t, outcomes[1].Err, service.ErrUsageBillingRequestConflict)
++	require.Nil(t, outcomes[1].Result)
++	require.NoError(t, outcomes[2].Err)
++	require.True(t, outcomes[2].Result.Applied)
++	require.InDelta(t, 6.5, *outcomes[2].Result.NewBalance, 1e-9)
++
++	state := readBatchBillingState(t, ctx, f)
++	require.Equal(t, "6.50000000", state.balance)
++	require.Equal(t, 3, state.dedupRows)
++}
++
++func TestUsageBillingRepositoryApplyBatch_ArchivedRequestsAreNotReapplied(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	repo := NewUsageBillingRepository(client, integrationDB)
++	f := newBatchBillingFixture(t, client, 10)
++
++	prefix := "archived-" + uuid.NewString()
++	archived := f.commands(prefix+"-same", []batchBillingStep{{key: 'B', balance: 1}})[0]
++	archivedChanged := f.commands(prefix+"-changed", []batchBillingStep{{key: 'B', balance: 2}})[0]
++	fresh := f.commands(prefix+"-fresh", []batchBillingStep{{key: 'B', balance: 3}})[0]
++	for _, cmd := range []*service.UsageBillingCommand{archived, archivedChanged, fresh} {
++		cmd.Normalize()
++	}
++	_, err := integrationDB.ExecContext(ctx, `
++		INSERT INTO usage_billing_dedup_archive (request_id, api_key_id, request_fingerprint, created_at)
++		VALUES ($1, $2, $3, NOW()), ($4, $5, $6, NOW())
++	`, archived.RequestID, archived.APIKeyID, archived.RequestFingerprint,
++		archivedChanged.RequestID, archivedChanged.APIKeyID, "different-fingerprint")
++	require.NoError(t, err)
++
++	outcomes, err := repo.ApplyBatch(ctx, []*service.UsageBillingCommand{archived, archivedChanged, fresh})
++	require.NoError(t, err)
++	require.NoError(t, outcomes[0].Err)
++	require.False(t, outcomes[0].Result.Applied)
++	require.ErrorIs(t, outcomes[1].Err, service.ErrUsageBillingRequestConflict)
++	require.True(t, outcomes[2].Result.Applied)
++
++	state := readBatchBillingState(t, ctx, f)
++	require.Equal(t, "7.00000000", state.balance)
++	require.Equal(t, 1, state.dedupRows, "claims of archived requests must not remain")
++}
++
++func TestUsageBillingRepositoryApplyBatch_RollsBackWholeBatchOnError(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	repo := NewUsageBillingRepository(client, integrationDB)
++
++	t.Run("deleted user", func(t *testing.T) {
++		f := newBatchBillingFixture(t, client, 10)
++		_, err := integrationDB.ExecContext(ctx, "UPDATE users SET deleted_at = NOW() WHERE id = $1", f.userID)
++		require.NoError(t, err)
++
++		_, err = repo.ApplyBatch(ctx, f.commands("deleted-user-"+uuid.NewString(), []batchBillingStep{
++			{key: 'A', account: 'P', balance: 1, keyQuota: 1, accountQuota: 1},
++			{key: 'B', balance: 1},
++		}))
++		require.ErrorIs(t, err, service.ErrUserNotFound)
++		state := readBatchBillingState(t, ctx, f)
++		require.Zero(t, state.dedupRows)
++		require.Equal(t, "0", state.pUsed)
++	})
++
++	t.Run("missing subscription", func(t *testing.T) {
++		f := newBatchBillingFixture(t, client, 10)
++		_, err := integrationDB.ExecContext(ctx, "UPDATE user_subscriptions SET deleted_at = NOW() WHERE id = $1", f.subscriptionID)
++		require.NoError(t, err)
++
++		_, err = repo.ApplyBatch(ctx, f.commands("missing-sub-"+uuid.NewString(), []batchBillingStep{
++			{key: 'B', balance: 1},
++			{key: 'A', subscription: 1},
++		}))
++		require.ErrorIs(t, err, service.ErrSubscriptionNotFound)
++		state := readBatchBillingState(t, ctx, f)
++		require.Zero(t, state.dedupRows)
++		require.Equal(t, "10.00000000", state.balance)
++	})
++
++	t.Run("invalid batches", func(t *testing.T) {
++		f := newBatchBillingFixture(t, client, 10)
++		other := newBatchBillingFixture(t, client, 10)
++		prefix := "invalid-" + uuid.NewString()
++
++		mixed := append(f.commands(prefix+"-f", []batchBillingStep{{key: 'B', balance: 1}}),
++			other.commands(prefix+"-o", []batchBillingStep{{key: 'B', balance: 1}})...)
++		_, err := repo.ApplyBatch(ctx, mixed)
++		require.ErrorIs(t, err, errUsageBillingBatchMixedUsers)
++
++		dup := f.commands(prefix+"-dup", []batchBillingStep{{key: 'B', balance: 1}})
++		dup = append(dup, f.commands(prefix+"-dup", []batchBillingStep{{key: 'B', balance: 1}})...)
++		_, err = repo.ApplyBatch(ctx, dup)
++		require.ErrorIs(t, err, errUsageBillingBatchDuplicateRequest)
++
++		require.Zero(t, readBatchBillingState(t, ctx, f).dedupRows)
++		require.Zero(t, readBatchBillingState(t, ctx, other).dedupRows)
++	})
++}
++
++func TestUsageBillingLaneCombiner_ConcurrentRequestsOfOneUser(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	repo := NewUsageBillingRepository(client, integrationDB)
++	lanes := service.NewUsageBillingLaneCombiner(repo)
++	defer lanes.Stop()
++
++	const n = 300
++	f := newBatchBillingFixture(t, client, 1000)
++	cmds := f.commands("lane-"+uuid.NewString(), func() []batchBillingStep {
++		steps := make([]batchBillingStep, n)
++		for i := range steps {
++			steps[i] = batchBillingStep{key: 'B', account: 'P', balance: float64(i%7+1) * 0.01, keyRate: 0.01, accountQuota: 0.001}
++		}
++		return steps
++	}())
++
++	results := make([]*service.UsageBillingApplyResult, n)
++	errs := make([]error, n)
++	var wg sync.WaitGroup
++	start := make(chan struct{})
++	for i, cmd := range cmds {
++		wg.Add(1)
++		go func(i int, cmd *service.UsageBillingCommand) {
++			defer wg.Done()
++			<-start
++			callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
++			defer cancel()
++			results[i], errs[i] = lanes.Apply(callCtx, cmd)
++		}(i, cmd)
++	}
++	close(start)
++	wg.Wait()
++
++	var total float64
++	seen := make(map[string]struct{}, n)
++	for i := range cmds {
++		require.NoError(t, errs[i], "request %d", i)
++		require.True(t, results[i].Applied, "request %d", i)
++		require.False(t, results[i].BalanceOverdrafted)
++		key := fmt.Sprintf("%.8f", *results[i].NewBalance)
++		_, dup := seen[key]
++		require.False(t, dup, "two requests observed the same post-deduction balance %s", key)
++		seen[key] = struct{}{}
++		total += cmds[i].BalanceCost
++	}
++
++	var balance float64
++	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance FROM users WHERE id = $1", f.userID).Scan(&balance))
++	require.InDelta(t, 1000-total, balance, 1e-6)
++	state := readBatchBillingState(t, ctx, f)
++	require.Equal(t, n, state.dedupRows)
++	require.Equal(t, "0.300", state.pUsed)
++
++	stats := lanes.Stats()
++	t.Logf("lane stats: %+v", stats)
++	require.Positive(t, stats.Batches, "concurrent requests of one user should be merged")
++	require.Equal(t, uint64(n), stats.SingleApplies+stats.BatchedCommands)
++	require.Zero(t, stats.BatchFallbacks)
++}
++
++func TestUsageBillingRepositoryApplyBatch_RejectsNonFiniteAmounts(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	repo := NewUsageBillingRepository(client, integrationDB)
++	f := newBatchBillingFixture(t, client, 10)
++
++	cmds := f.commands("nonfinite-"+uuid.NewString(), []batchBillingStep{
++		{key: 'B', balance: 1},
++		{key: 'B', account: 'P', balance: 1, accountQuota: 1},
++	})
++	cmds[1].AccountQuotaCost = math.NaN()
++
++	require.NotPanics(t, func() {
++		_, err := repo.ApplyBatch(ctx, cmds)
++		require.ErrorIs(t, err, errUsageBillingBatchNonFiniteAmount)
++	})
++	require.Zero(t, readBatchBillingState(t, ctx, f).dedupRows)
++}
++
++// 计费合并事务按 id 升序持有多个账号行锁；BatchUpdateLastUsed 也按 id 升序加锁，两者交错时不形成死锁。
++func TestAccountRepositoryBatchUpdateLastUsed_LocksRowsInIDOrder(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	accounts := newAccountRepositoryWithSQL(client, integrationDB, nil)
++
++	low := mustCreateAccount(t, client, &service.Account{Name: "last-used-order-low-" + uuid.NewString(), Type: service.AccountTypeAPIKey})
++	high := mustCreateAccount(t, client, &service.Account{Name: "last-used-order-high-" + uuid.NewString(), Type: service.AccountTypeAPIKey})
++	require.Less(t, low.ID, high.ID)
++	_, err := integrationDB.ExecContext(ctx, "UPDATE accounts SET temp_unschedulable_until = NOW() + INTERVAL '1 hour' WHERE id = $1", high.ID)
++	require.NoError(t, err)
++
++	tx, err := integrationDB.BeginTx(ctx, nil)
++	require.NoError(t, err)
++	defer func() { _ = tx.Rollback() }()
++	_, err = tx.ExecContext(ctx, "UPDATE accounts SET updated_at = NOW() WHERE id = $1", low.ID)
++	require.NoError(t, err)
++
++	now := time.Now()
++	flushed := make(chan error, 1)
++	go func() {
++		flushed <- accounts.BatchUpdateLastUsed(ctx, map[int64]time.Time{low.ID: now, high.ID: now})
++	}()
++	time.Sleep(300 * time.Millisecond)
++
++	lockCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
++	defer cancel()
++	_, err = tx.ExecContext(lockCtx, "UPDATE accounts SET updated_at = NOW() WHERE id = $1", high.ID)
++	require.NoError(t, err, "the flush must not hold the higher-id row while waiting for the lower-id row")
++	require.NoError(t, tx.Commit())
++
++	select {
++	case err := <-flushed:
++		require.NoError(t, err)
++	case <-time.After(5 * time.Second):
++		t.Fatal("BatchUpdateLastUsed did not finish")
++	}
++	var lastUsed sql.NullTime
++	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT last_used_at FROM accounts WHERE id = $1", high.ID).Scan(&lastUsed))
++	require.True(t, lastUsed.Valid)
++}
++
++func TestAccountRepositoryBatchUpdateLastUsed_DoesNotBlockForeignKeyShareLocks(t *testing.T) {
++	ctx := context.Background()
++	client := testEntClient(t)
++	accounts := newAccountRepositoryWithSQL(client, integrationDB, nil)
++
++	acc := mustCreateAccount(t, client, &service.Account{Name: "last-used-fk-" + uuid.NewString(), Type: service.AccountTypeAPIKey})
++
++	// 外键检查对被引用行加 FOR KEY SHARE。
++	tx, err := integrationDB.BeginTx(ctx, nil)
++	require.NoError(t, err)
++	defer func() { _ = tx.Rollback() }()
++	_, err = tx.ExecContext(ctx, "SELECT id FROM accounts WHERE id = $1 FOR KEY SHARE", acc.ID)
++	require.NoError(t, err)
++
++	flushCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
++	defer cancel()
++	require.NoError(t, accounts.BatchUpdateLastUsed(flushCtx, map[int64]time.Time{acc.ID: time.Now()}))
++	require.NoError(t, tx.Commit())
++
++	var lastUsed sql.NullTime
++	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT last_used_at FROM accounts WHERE id = $1", acc.ID).Scan(&lastUsed))
++	require.True(t, lastUsed.Valid)
++}
+diff --git a/backend/internal/repository/usage_billing_repo.go b/backend/internal/repository/usage_billing_repo.go
+index 6b509215b..e7cc6ea84 100644
+--- a/backend/internal/repository/usage_billing_repo.go
++++ b/backend/internal/repository/usage_billing_repo.go
+@@ -15,7 +15,7 @@ type usageBillingRepository struct {
+ 	db *sql.DB
+ }
+ 
+-func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) service.UsageBillingRepository {
++func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) service.UsageBillingBatchRepository {
+ 	return &usageBillingRepository{db: sqlDB}
+ }
+ 
+@@ -415,9 +415,9 @@ func userExistsForBilling(ctx context.Context, tx *sql.Tx, userID int64) (bool,
+ 	return true, nil
+ }
+ 
+-func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64) (bool, error) {
+-	var exhausted bool
+-	err := tx.QueryRowContext(ctx, `
++// usageBillingAPIKeyQuotaUpdate 累加 Key 已用额度（$1），本次累加从未达额度跨到达到额度时把 active 状态置为额度耗尽。
++// 参数：$1=金额 $2=api_key_id $3=active 状态 $4=额度耗尽状态。
++const usageBillingAPIKeyQuotaUpdate = `
+ 		UPDATE api_keys
+ 		SET quota_used = quota_used + $1,
+ 			status = CASE
+@@ -429,7 +429,11 @@ func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID
+ 				ELSE status
+ 			END,
+ 			updated_at = NOW()
+-		WHERE id = $2 AND deleted_at IS NULL
++		WHERE id = $2 AND deleted_at IS NULL`
++
++func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64) (bool, error) {
++	var exhausted bool
++	err := tx.QueryRowContext(ctx, usageBillingAPIKeyQuotaUpdate+`
+ 		RETURNING quota > 0 AND quota_used >= quota AND quota_used - $1 < quota
+ 	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted).Scan(&exhausted)
+ 	if errors.Is(err, sql.ErrNoRows) {
+diff --git a/backend/internal/service/bedrock_request.go b/backend/internal/service/bedrock_request.go
+index 4fc7fd721..74df923e6 100644
+--- a/backend/internal/service/bedrock_request.go
++++ b/backend/internal/service/bedrock_request.go
+@@ -226,21 +226,21 @@ func PrepareBedrockRequestBodyWithTokens(body []byte, modelID string, betaTokens
+ 		}
+ 		logger.LegacyPrintf("service.gateway", "[Bedrock] Injected beta tokens: %v (model=%s ccCompat=%v)", betaTokens, modelID, ccCompat)
+ 	} else {
+-		body, _ = sjson.DeleteBytes(body, "anthropic_beta")
++		body, _ = deleteJSONPathIfPresent(body, "anthropic_beta")
+ 	}
+ 
+ 	// 移除 Bedrock 不支持的 Anthropic 直连 API 专有顶层字段
+-	body, _ = sjson.DeleteBytes(body, "provider")
+-	body, _ = sjson.DeleteBytes(body, "metadata")
++	body, _ = deleteJSONPathIfPresent(body, "provider")
++	body, _ = deleteJSONPathIfPresent(body, "metadata")
+ 
+ 	// 移除 model 字段（Bedrock 通过 URL 指定模型）
+-	body, err = sjson.DeleteBytes(body, "model")
++	body, err = deleteJSONPathIfPresent(body, "model")
+ 	if err != nil {
+ 		return nil, fmt.Errorf("remove model field: %w", err)
+ 	}
+ 
+ 	// 移除 stream 字段（Bedrock 通过不同端点控制流式，不接受请求体中的 stream 字段）
+-	body, err = sjson.DeleteBytes(body, "stream")
++	body, err = deleteJSONPathIfPresent(body, "stream")
+ 	if err != nil {
+ 		return nil, fmt.Errorf("remove stream field: %w", err)
+ 	}
+@@ -256,10 +256,10 @@ func PrepareBedrockRequestBodyWithTokens(body []byte, modelID string, betaTokens
+ 		if effort := gjson.GetBytes(body, "output_config.effort"); effort.Exists() {
+ 			body, err = sjson.SetRawBytes(body, "output_config", []byte(`{"effort":`+effort.Raw+`}`))
+ 		} else {
+-			body, err = sjson.DeleteBytes(body, "output_config")
++			body, err = deleteJSONPathIfPresent(body, "output_config")
+ 		}
+ 	} else {
+-		body, err = sjson.DeleteBytes(body, "output_config")
++		body, err = deleteJSONPathIfPresent(body, "output_config")
+ 	}
+ 	if err != nil {
+ 		return nil, fmt.Errorf("normalize output_config field: %w", err)
+@@ -289,6 +289,16 @@ func ResolveBedrockBetaTokens(betaHeader string, body []byte, modelID string) []
+ 	return filterBedrockBetaTokens(betaTokens)
+ }
+ 
++// deleteJSONPathIfPresent 删除 path 指向的值。sjson 在值不存在时也会先复制整个
++// body 再丢弃，所以先用零拷贝视图确认存在；不存在时原样返回 body。path 只能是
++// gjson 与 sjson 语义一致的简单路径。
++func deleteJSONPathIfPresent(body []byte, path string) ([]byte, error) {
++	if !parseRawJSONView(body).Get(path).Exists() {
++		return body, nil
++	}
++	return sjson.DeleteBytes(body, path)
++}
++
+ // convertOutputFormatToInlineSchema 将结构化输出的 JSON schema 内联到最后一条 user message
+ // Bedrock Invoke 不支持 output_format 参数，litellm 的做法是将 schema 追加到用户消息中
+ // 参考: litellm AmazonAnthropicClaudeMessagesConfig._convert_output_format_to_inline_schema()
+@@ -402,45 +412,44 @@ func isBedrockClaude45OrNewer(modelID string) bool {
+ func sanitizeBedrockCacheControl(body []byte, modelID string) []byte {
+ 	isClaude45 := isBedrockClaude45OrNewer(modelID)
+ 
++	// 两段扫描都读零拷贝视图：sjson 每次删除都写入新 buffer，视图所指的旧 body
++	// 不会被修改；删除只发生在 cache_control 内部，数组下标保持不变。
++
+ 	// 清理 system 数组中的 cache_control
+-	systemArr := gjson.GetBytes(body, "system")
+-	if systemArr.Exists() && systemArr.IsArray() {
+-		for i, item := range systemArr.Array() {
+-			if !item.IsObject() {
+-				continue
+-			}
+-			cc := item.Get("cache_control")
+-			if !cc.Exists() || !cc.IsObject() {
+-				continue
++	systemArr := parseRawJSONView(body).Get("system")
++	if systemArr.IsArray() {
++		i := -1
++		systemArr.ForEach(func(_, item gjson.Result) bool {
++			i++
++			if cc := item.Get("cache_control"); item.IsObject() && cc.IsObject() {
++				body = deleteCacheControlUnsupportedFields(body, fmt.Sprintf("system.%d.cache_control", i), cc, isClaude45)
+ 			}
+-			body = deleteCacheControlUnsupportedFields(body, fmt.Sprintf("system.%d.cache_control", i), cc, isClaude45)
+-		}
++			return true
++		})
+ 	}
+ 
+ 	// 清理 messages 中的 cache_control
+-	messages := gjson.GetBytes(body, "messages")
+-	if !messages.Exists() || !messages.IsArray() {
++	messages := parseRawJSONView(body).Get("messages")
++	if !messages.IsArray() {
+ 		return body
+ 	}
+-	for mi, msg := range messages.Array() {
+-		if !msg.IsObject() {
+-			continue
+-		}
++	mi := -1
++	messages.ForEach(func(_, msg gjson.Result) bool {
++		mi++
+ 		content := msg.Get("content")
+-		if !content.Exists() || !content.IsArray() {
+-			continue
++		if !msg.IsObject() || !content.IsArray() {
++			return true
+ 		}
+-		for ci, block := range content.Array() {
+-			if !block.IsObject() {
+-				continue
++		ci := -1
++		content.ForEach(func(_, block gjson.Result) bool {
++			ci++
++			if cc := block.Get("cache_control"); block.IsObject() && cc.IsObject() {
++				body = deleteCacheControlUnsupportedFields(body, fmt.Sprintf("messages.%d.content.%d.cache_control", mi, ci), cc, isClaude45)
+ 			}
+-			cc := block.Get("cache_control")
+-			if !cc.Exists() || !cc.IsObject() {
+-				continue
+-			}
+-			body = deleteCacheControlUnsupportedFields(body, fmt.Sprintf("messages.%d.content.%d.cache_control", mi, ci), cc, isClaude45)
+-		}
+-	}
++			return true
++		})
++		return true
++	})
+ 
+ 	return body
+ }
+diff --git a/backend/internal/service/bedrock_stream.go b/backend/internal/service/bedrock_stream.go
+index a7637b64e..c66bfb213 100644
+--- a/backend/internal/service/bedrock_stream.go
++++ b/backend/internal/service/bedrock_stream.go
+@@ -188,7 +188,8 @@ func (s *GatewayService) handleBedrockStreamingResponse(
+ // extractBedrockChunkData 从 Bedrock EventStream payload 中提取 Claude SSE 事件数据
+ // Bedrock payload 格式：{"bytes":"<base64-encoded-json>"}
+ func extractBedrockChunkData(payload []byte) []byte {
+-	b64 := gjson.GetBytes(payload, "bytes").String()
++	// 零拷贝读取：b64 只在本函数内解码，解码结果写入新 buffer。
++	b64 := parseRawJSONView(payload).Get("bytes").String()
+ 	if b64 == "" {
+ 		return nil
+ 	}
+diff --git a/backend/internal/service/gateway_usage_billing.go b/backend/internal/service/gateway_usage_billing.go
+index 232436bb8..6010eb893 100644
+--- a/backend/internal/service/gateway_usage_billing.go
++++ b/backend/internal/service/gateway_usage_billing.go
+@@ -370,10 +370,9 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
+ 		return true, nil
+ 	}
+ 
+-	billingCtx, cancel := detachedBillingContext(ctx)
+-	defer cancel()
+-
+-	result, err := repo.Apply(billingCtx, cmd)
++	applyCtx, cancelApply := detachedBillingContext(ctx)
++	result, err := repo.Apply(applyCtx, cmd)
++	cancelApply()
+ 	if err != nil {
+ 		return false, err
+ 	}
+@@ -383,6 +382,10 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
+ 		return false, nil
+ 	}
+ 
++	// Apply 可能在按用户合并的结算通道中排队，结算后的缓存同步使用独立的超时。
++	billingCtx, cancel := detachedBillingContext(ctx)
++	defer cancel()
++
+ 	if result.APIKeyQuotaExhausted {
+ 		if invalidator, ok := p.APIKeyService.(apiKeyAuthCacheInvalidator); ok && p.APIKey != nil && p.APIKey.Key != "" {
+ 			invalidator.InvalidateAuthCacheByKey(billingCtx, p.APIKey.Key)
+diff --git a/backend/internal/service/hot_path_zero_copy_test.go b/backend/internal/service/hot_path_zero_copy_test.go
+new file mode 100644
+index 000000000..81295e87a
+--- /dev/null
++++ b/backend/internal/service/hot_path_zero_copy_test.go
+@@ -0,0 +1,312 @@
++//go:build unit
++
++package service
++
++import (
++	"fmt"
++	"math/rand"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// jsonUEscape spells the six-byte JSON escape backslash, 'u', hex at run time.
++func jsonUEscape(hex string) string { return `\` + "u" + hex }
++
++// referenceNormalizeCompactionTriggerInputOrder always takes the decode path.
++func referenceNormalizeCompactionTriggerInputOrder(body []byte) ([]byte, bool, error) {
++	if len(body) == 0 {
++		return body, false, nil
++	}
++	var payload map[string]any
++	if err := decodeOpenAIJSONUseNumber(body, &payload); err != nil {
++		return body, false, err
++	}
++	input, ok := payload["input"].([]any)
++	if !ok || len(input) == 0 {
++		return body, false, nil
++	}
++	triggerCount := 0
++	normalized := make([]any, 0, len(input))
++	for _, raw := range input {
++		item, itemOK := raw.(map[string]any)
++		if itemOK && item["type"] == "compaction_trigger" {
++			triggerCount++
++			continue
++		}
++		normalized = append(normalized, raw)
++	}
++	if triggerCount == 0 {
++		return body, false, nil
++	}
++	if triggerCount == 1 {
++		if last, ok := input[len(input)-1].(map[string]any); ok && last["type"] == "compaction_trigger" {
++			return body, false, nil
++		}
++	}
++	normalized = append(normalized, map[string]any{"type": "compaction_trigger"})
++	payload["input"] = normalized
++	encoded, err := marshalOpenAIUpstreamJSON(payload)
++	if err != nil {
++		return body, false, err
++	}
++	return encoded, true, nil
++}
++
++func requireSameCompactionNormalization(t *testing.T, body []byte) {
++	t.Helper()
++	got, changed, err := NormalizeCompactionTriggerInputOrder(body)
++	want, wantChanged, wantErr := referenceNormalizeCompactionTriggerInputOrder(body)
++	require.Equal(t, wantErr != nil, err != nil, "error mismatch for %s", body)
++	require.Equal(t, wantChanged, changed, "changed mismatch for %s", body)
++	require.Equal(t, string(want), string(got), "body mismatch for %s", body)
++}
++
++func TestCompactionTriggerOrderFastPathMatchesDecode(t *testing.T) {
++	trigger := `{"type":"compaction_trigger"}`
++	msg := `{"type":"message","role":"user","content":"hi"}`
++	cases := map[string]string{
++		"trigger last":                   `{"model":"m","input":[` + msg + `,` + trigger + `]}`,
++		"trigger only":                   `{"input":[` + trigger + `]}`,
++		"trigger first":                  `{"input":[` + trigger + `,` + msg + `]}`,
++		"two triggers":                   `{"input":[` + trigger + `,` + msg + `,` + trigger + `]}`,
++		"token in text, trigger last":    `{"input":[{"type":"message","content":"compaction_trigger"},` + trigger + `]}`,
++		"token only in text":             `{"input":[{"type":"message","content":"compaction_trigger"}]}`,
++		"duplicate input key":            `{"input":[` + msg + `,` + trigger + `],"input":[` + msg + `]}`,
++		"duplicate input key reversed":   `{"input":[` + msg + `],"input":[` + msg + `,` + trigger + `]}`,
++		"duplicate type shadows trigger": `{"input":[` + msg + `,{"type":"compaction_trigger","type":"message"}]}`,
++		"duplicate type reveals trigger": `{"input":[{"type":"message","type":"compaction_trigger"},` + msg + `]}`,
++		"escaped trigger last":           `{"input":[` + msg + `,{"type":"` + jsonUEscape("0063") + `ompaction_trigger"}]}`,
++		"escaped key trigger first":      `{"input":[{"` + jsonUEscape("0074") + `ype":"compaction_trigger"},` + msg + `]}`,
++		"non-ascii escape, trigger last": `{"input":[{"type":"message","content":"caf` + jsonUEscape("00e9") + `"},` + trigger + `]}`,
++		"trigger value not string":       `{"input":[` + msg + `,{"type":["compaction_trigger"]}]}`,
++		"last item not object":           `{"input":[` + trigger + `,"compaction"]}`,
++		"input not array":                `{"input":{"type":"compaction_trigger"}}`,
++		"trailing garbage":               `{"input":[` + trigger + `]} x`,
++		"truncated":                      `{"input":[` + trigger,
++		"top-level array":                `[{"input":[` + trigger + `]}]`,
++		"leading whitespace":             " \n" + `{"input":[` + msg + `,` + trigger + `]}`,
++	}
++	for name, body := range cases {
++		t.Run(name, func(t *testing.T) {
++			requireSameCompactionNormalization(t, []byte(body))
++		})
++	}
++}
++
++func TestCompactionTriggerOrderFastPathMatchesDecodeRandomized(t *testing.T) {
++	rng := rand.New(rand.NewSource(20261114))
++	items := []string{
++		`{"type":"compaction_trigger"}`,
++		`{"type":"message","role":"user","content":"hello"}`,
++		`{"type":"message","content":"mentions compaction_trigger"}`,
++		`{"type":"compaction_trigger","type":"message"}`,
++		`{"type":"message","type":"compaction_trigger"}`,
++		`{"type":"` + jsonUEscape("0063") + `ompaction_trigger"}`,
++		`{"type":"reasoning","encrypted_content":"` + jsonUEscape("001b") + `x"}`,
++		`"compaction_trigger"`,
++		`{"type":"function_call_output","output":"<a ` + jsonUEscape("0026") + ` b>"}`,
++	}
++	for i := 0; i < 20000; i++ {
++		var parts []string
++		for n := rng.Intn(5); n >= 0; n-- {
++			parts = append(parts, items[rng.Intn(len(items))])
++		}
++		body := `{"model":"m","input":[` + strings.Join(parts, ",") + `]`
++		if rng.Intn(5) == 0 {
++			body += `,"input":[` + items[rng.Intn(len(items))] + `]`
++		}
++		body += `}`
++		if rng.Intn(20) == 0 {
++			body = body[:rng.Intn(len(body))]
++		}
++		requireSameCompactionNormalization(t, []byte(body))
++	}
++}
++
++func TestHasCompactionTriggerInInputLiteralGate(t *testing.T) {
++	require.True(t, HasCompactionTriggerInInput([]byte(`{"input":[{"type":"compaction_trigger"}]}`)))
++	require.True(t, HasCompactionTriggerInInput([]byte(`{"input":[{"type":"`+jsonUEscape("0063")+`ompaction_trigger"}]}`)))
++	require.False(t, HasCompactionTriggerInInput([]byte(`{"input":[{"type":"message","content":"caf`+jsonUEscape("00e9")+`"}]}`)))
++	require.False(t, HasCompactionTriggerInInput([]byte(`{"input":[{"type":"message","content":"compaction_trigger"}]}`)))
++}
++
++func TestResponsesInputHasFunctionCallOutputNamed(t *testing.T) {
++	cases := []struct {
++		name string
++		body string
++		want bool
++	}{
++		{"declared tool only", `{"tools":[{"type":"function","name":"automation_update"}],"input":[{"type":"function_call_output","call_id":"c","name":"other","output":"ok"}]}`, false},
++		{"matching output", `{"input":[{"type":"function_call_output","name":"automation_update","output":"x"}]}`, true},
++		{"prefix match", `{"input":[{"type":"function_call_output","name":"codex_apps_selected_page_part_1_of_2"}]}`, true},
++		{"escaped key", `{"input":[{"` + jsonUEscape("0074") + `ype":"function_call_output","name":"automation_update"}]}`, true},
++		{"escaped value", `{"input":[{"type":"function_call_output","name":"` + jsonUEscape("0061") + `utomation_update"}]}`, true},
++		{"type not output", `{"input":[{"type":"function_call","name":"automation_update"}]}`, false},
++		{"non-object item", `{"input":["function_call_output automation_update"]}`, false},
++		{"input not array", `{"input":{"type":"function_call_output","name":"automation_update"}}`, false},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			require.Equal(t, tc.want, ResponsesInputHasFunctionCallOutputNamed([]byte(tc.body), "automation_update", "codex_apps_selected_page_part_"))
++		})
++	}
++}
++
++// referenceOpenAIRequestBodyHasTools is the scan without the literal gate.
++func referenceOpenAIRequestBodyHasTools(body []byte) bool {
++	if tools := gjson.GetBytes(body, "tools"); tools.IsArray() && len(tools.Array()) > 0 {
++		return true
++	}
++	for _, item := range gjson.GetBytes(body, "input").Array() {
++		if strings.TrimSpace(item.Get("type").String()) != "additional_tools" {
++			continue
++		}
++		if tools := item.Get("tools"); tools.IsArray() && len(tools.Array()) > 0 {
++			return true
++		}
++	}
++	return false
++}
++
++func TestOpenAIRequestBodyHasToolsMatchesScan(t *testing.T) {
++	bodies := []string{
++		`{"tools":[{"type":"function","name":"f"}],"input":[]}`,
++		`{"tools":[],"input":[]}`,
++		`{"tools":[null]}`,
++		`{"tools":{},"input":"hi"}`,
++		`{"input":[{"type":"additional_tools","tools":[{"type":"namespace"}]}]}`,
++		`{"input":[{"type":" additional_tools ","tools":[{"type":"namespace"}]}]}`,
++		`{"input":[{"type":"additional_tools","tools":[]}]}`,
++		`{"input":[{"type":"` + jsonUEscape("0061") + `dditional_tools","tools":[1]}]}`,
++		`{"input":{"type":"additional_tools","tools":[1]}}`,
++		`{"input":null}`,
++		`{"input":"additional_tools"}`,
++		`{"input":[{"type":"message","content":"caf` + jsonUEscape("00e9") + `"}]}`,
++	}
++	for _, body := range bodies {
++		require.Equal(t, referenceOpenAIRequestBodyHasTools([]byte(body)), openAIRequestBodyHasTools([]byte(body)), body)
++	}
++}
++
++func TestDeleteJSONPathIfPresent(t *testing.T) {
++	body := []byte(`{"model":"m","stream":true,"messages":[]}`)
++	got, err := deleteJSONPathIfPresent(body, "metadata")
++	require.NoError(t, err)
++	require.Same(t, &body[0], &got[0], "absent path must return the original buffer")
++
++	for _, path := range []string{"model", "stream", "messages"} {
++		got, err := deleteJSONPathIfPresent(body, path)
++		require.NoError(t, err)
++		want, wantErr := sjson.DeleteBytes(body, path)
++		require.NoError(t, wantErr)
++		require.Equal(t, string(want), string(got))
++	}
++	require.Equal(t, `{"model":"m","stream":true,"messages":[]}`, string(body))
++
++	allocs := testing.AllocsPerRun(20, func() {
++		_, _ = deleteJSONPathIfPresent(body, "provider")
++	})
++	require.Zero(t, allocs)
++}
++
++// referenceSanitizeBedrockCacheControl is the copying implementation.
++func referenceSanitizeBedrockCacheControl(body []byte, modelID string) []byte {
++	isClaude45 := isBedrockClaude45OrNewer(modelID)
++	systemArr := gjson.GetBytes(body, "system")
++	if systemArr.Exists() && systemArr.IsArray() {
++		for i, item := range systemArr.Array() {
++			if !item.IsObject() {
++				continue
++			}
++			cc := item.Get("cache_control")
++			if !cc.Exists() || !cc.IsObject() {
++				continue
++			}
++			body = deleteCacheControlUnsupportedFields(body, fmt.Sprintf("system.%d.cache_control", i), cc, isClaude45)
++		}
++	}
++	messages := gjson.GetBytes(body, "messages")
++	if !messages.Exists() || !messages.IsArray() {
++		return body
++	}
++	for mi, msg := range messages.Array() {
++		if !msg.IsObject() {
++			continue
++		}
++		content := msg.Get("content")
++		if !content.Exists() || !content.IsArray() {
++			continue
++		}
++		for ci, block := range content.Array() {
++			if !block.IsObject() {
++				continue
++			}
++			cc := block.Get("cache_control")
++			if !cc.Exists() || !cc.IsObject() {
++				continue
++			}
++			body = deleteCacheControlUnsupportedFields(body, fmt.Sprintf("messages.%d.content.%d.cache_control", mi, ci), cc, isClaude45)
++		}
++	}
++	return body
++}
++
++func TestSanitizeBedrockCacheControlMatchesCopyingScan(t *testing.T) {
++	rng := rand.New(rand.NewSource(7))
++	ccs := []string{
++		`{"type":"ephemeral"}`,
++		`{"type":"ephemeral","scope":"global"}`,
++		`{"type":"ephemeral","ttl":"5m"}`,
++		`{"type":"ephemeral","ttl":"1h","scope":"global"}`,
++		`{"type":"ephemeral","ttl":"30m"}`,
++		`"ephemeral"`,
++	}
++	block := func() string {
++		switch rng.Intn(4) {
++		case 0:
++			return `"plain"`
++		case 1:
++			return `{"type":"text","text":"a"}`
++		default:
++			return `{"type":"text","text":"b","cache_control":` + ccs[rng.Intn(len(ccs))] + `}`
++		}
++	}
++	blocks := func() string {
++		var parts []string
++		for n := rng.Intn(4); n >= 0; n-- {
++			parts = append(parts, block())
++		}
++		return "[" + strings.Join(parts, ",") + "]"
++	}
++	for i := 0; i < 3000; i++ {
++		var msgs []string
++		for n := rng.Intn(4); n >= 0; n-- {
++			switch rng.Intn(4) {
++			case 0:
++				msgs = append(msgs, `{"role":"user","content":"text"}`)
++			case 1:
++				msgs = append(msgs, `"not an object"`)
++			default:
++				msgs = append(msgs, `{"role":"user","content":`+blocks()+`}`)
++			}
++		}
++		body := `{"system":` + blocks() + `,"messages":[` + strings.Join(msgs, ",") + `]}`
++		for _, model := range []string{"anthropic.claude-sonnet-4-6", "anthropic.claude-3-5-sonnet-20241022-v2:0"} {
++			want := referenceSanitizeBedrockCacheControl([]byte(body), model)
++			got := sanitizeBedrockCacheControl([]byte(body), model)
++			require.Equal(t, string(want), string(got), body)
++		}
++	}
++}
++
++func TestExtractBedrockChunkDataReadsEscapedAndPlainBase64(t *testing.T) {
++	require.Equal(t, "hi", string(extractBedrockChunkData([]byte(`{"bytes":"aGk="}`))))
++	require.Equal(t, "?>?", string(extractBedrockChunkData([]byte(`{"bytes":"Pz4\/"}`))))
++	require.Nil(t, extractBedrockChunkData([]byte(`{"bytes":""}`)))
++	require.Nil(t, extractBedrockChunkData([]byte(`{"bytes":"%%%"}`)))
++	require.Nil(t, extractBedrockChunkData([]byte(`{"other":"aGk="}`)))
++}
+diff --git a/backend/internal/service/json_escape_probe.go b/backend/internal/service/json_escape_probe.go
+new file mode 100644
+index 000000000..317bbbed7
+--- /dev/null
++++ b/backend/internal/service/json_escape_probe.go
+@@ -0,0 +1,71 @@
++package service
++
++import "bytes"
++
++// JSONMayEscapePlainASCII reports whether body contains a \u escape that spells a
++// printable ASCII character no JSON encoder needs to escape (letters, digits,
++// underscore, most punctuation). Only such an escape can hide a keyword made of
++// those characters from a literal byte search, so when this returns false a
++// bytes.Contains miss for such a keyword is a reliable negative. Keywords that
++// contain an ignored character below need their own check.
++//
++// Escapes that encoders do emit on real traffic are ignored: control
++// characters (the ANSI escape in shell output), quote, backslash, apostrophe,
++// Go's HTML-safe escapes of <, > and &, and every non-ASCII rune. Large agent
++// requests therefore keep their fast paths instead of being fully decoded. A
++// malformed or truncated escape is reported as true to stay conservative.
++//
++// Escapes are consumed pairwise, so an escaped backslash followed by a literal
++// u (Windows paths, regexes, code samples) is plain text, not an escape.
++func JSONMayEscapePlainASCII(body []byte) bool {
++	for i := 0; ; {
++		j := bytes.IndexByte(body[i:], '\\')
++		if j < 0 {
++			return false
++		}
++		next := i + j + 1
++		if next >= len(body) {
++			return true
++		}
++		if body[next] != 'u' {
++			i = next + 1
++			continue
++		}
++		if next+5 > len(body) {
++			return true
++		}
++		r, ok := parseJSONHex4(body[next+1 : next+5])
++		if !ok || jsonEscapeHidesPlainASCII(r) {
++			return true
++		}
++		i = next + 5
++	}
++}
++
++func parseJSONHex4(b []byte) (rune, bool) {
++	var r rune
++	for _, c := range b {
++		switch {
++		case c >= '0' && c <= '9':
++			r = r<<4 | rune(c-'0')
++		case c >= 'a' && c <= 'f':
++			r = r<<4 | rune(c-'a'+10)
++		case c >= 'A' && c <= 'F':
++			r = r<<4 | rune(c-'A'+10)
++		default:
++			return 0, false
++		}
++	}
++	return r, true
++}
++
++func jsonEscapeHidesPlainASCII(r rune) bool {
++	if r < 0x20 || r >= 0x7f {
++		return false
++	}
++	switch r {
++	case '"', '\\', '<', '>', '&', '\'':
++		return false
++	}
++	return true
++}
+diff --git a/backend/internal/service/json_escape_probe_test.go b/backend/internal/service/json_escape_probe_test.go
+new file mode 100644
+index 000000000..46b1f1d6d
+--- /dev/null
++++ b/backend/internal/service/json_escape_probe_test.go
+@@ -0,0 +1,38 @@
++//go:build unit
++
++package service
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestJSONMayEscapePlainASCII(t *testing.T) {
++	// U(hex) spells the six-byte JSON escape backslash, 'u', hex.
++	U := func(hex string) string { return `\` + "u" + hex }
++	cases := []struct {
++		name string
++		body string
++		want bool
++	}{
++		{"no escapes", `{"input":[{"type":"message","content":"hi"}]}`, false},
++		{"ansi control escape from shell output", `{"output":"` + U("001b") + `[31mred` + U("001b") + `[0m"}`, false},
++		{"go html-safe escapes", `{"text":"a ` + U("003c") + ` b ` + U("0026") + ` c ` + U("003e") + ` d"}`, false},
++		{"quote apostrophe and backslash escapes", `{"text":"` + U("0022") + U("0027") + U("005c") + `"}`, false},
++		{"non-ascii and surrogate pair", `{"text":"caf` + U("00e9") + ` ` + U("d83d") + U("de00") + ` ` + U("4e2d") + `"}`, false},
++		{"escaped letter hides a keyword", `{"type":"` + U("0063") + `ompaction_trigger"}`, true},
++		{"upper-case hex escaped underscore", `{"type":"input` + U("005F") + `image"}`, true},
++		{"escaped digit", `{"n":"` + U("0031") + `"}`, true},
++		{"escaped backslash before u is literal text", `{"code":"\` + U("0041") + `"}`, false},
++		{"escaped backslash in a path", `{"cwd":"C:\\users\\dev","re":"\\u{1F600}"}`, false},
++		{"escape after an escaped backslash", `{"t":"\\` + U("0063") + `"}`, true},
++		{"truncated escape", `{"t":"` + U("00"), true},
++		{"invalid hex", `{"t":"` + U("ZZZZ") + `"}`, true},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			require.Equal(t, tc.want, JSONMayEscapePlainASCII([]byte(tc.body)))
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_call_output_probe.go b/backend/internal/service/openai_call_output_probe.go
+new file mode 100644
+index 000000000..ff82ea8eb
+--- /dev/null
++++ b/backend/internal/service/openai_call_output_probe.go
+@@ -0,0 +1,35 @@
++package service
++
++import (
++	"strings"
++
++	"github.com/tidwall/gjson"
++)
++
++// ResponsesInputHasFunctionCallOutputNamed reports whether the top-level input
++// array holds an object item whose type is "function_call_output" and whose
++// name starts with one of namePrefixes. Keys and string values are compared
++// after JSON unescaping, through a zero-copy view of body. When a member is
++// duplicated, the first occurrence is read; callers that decode the body
++// treat duplicate members separately.
++func ResponsesInputHasFunctionCallOutputNamed(body []byte, namePrefixes ...string) bool {
++	input := parseRawJSONView(body).Get("input")
++	if !input.IsArray() {
++		return false
++	}
++	found := false
++	input.ForEach(func(_, item gjson.Result) bool {
++		if !item.IsObject() || item.Get("type").String() != "function_call_output" {
++			return true
++		}
++		name := item.Get("name").String()
++		for _, prefix := range namePrefixes {
++			if strings.HasPrefix(name, prefix) {
++				found = true
++				return false
++			}
++		}
++		return true
++	})
++	return found
++}
+diff --git a/backend/internal/service/openai_compact_body_signal.go b/backend/internal/service/openai_compact_body_signal.go
+index a545f1cfd..f570d3303 100644
+--- a/backend/internal/service/openai_compact_body_signal.go
++++ b/backend/internal/service/openai_compact_body_signal.go
+@@ -67,16 +67,46 @@ func NormalizeCompactionTriggerInputOrder(body []byte) ([]byte, bool, error) {
+ 	return encoded, true, nil
+ }
+ 
+-// compactionTriggerNeedsDecode lets bodies that cannot hold a trigger skip the
+-// full decode: the type string appears literally unless a \u escape spells it.
+-// Such a body must still be a valid JSON object, so decode errors keep
+-// surfacing from the original path.
++var compactionTriggerToken = []byte("compaction_trigger")
++
++// compactionTriggerNeedsDecode lets bodies whose input order cannot change
++// skip the full decode. Without a \u escape that spells plain ASCII, every
++// decoded "compaction_trigger" string is a literal occurrence of the token, so:
++//   - no occurrence means no trigger;
++//   - a single occurrence that is the type of the last input item, as read
++//     through the zero-copy view, means the decoder sees either that same item
++//     as the only trigger or, when a duplicate member shadows it, no trigger.
++//
++// Either way the body is returned unchanged. Such a body must still be a valid
++// JSON object, so decode errors keep surfacing from the original path.
+ func compactionTriggerNeedsDecode(body []byte) bool {
+-	if bytes.Contains(body, []byte("compaction_trigger")) || bytes.Contains(body, []byte(`\u`)) {
++	if JSONMayEscapePlainASCII(body) {
++		return true
++	}
++	switch bytes.Count(body, compactionTriggerToken) {
++	case 0:
++		trimmed := bytes.TrimLeft(body, " \t\r\n")
++		return len(trimmed) == 0 || trimmed[0] != '{' || !gjson.ValidBytes(body)
++	case 1:
++		return !compactionTriggerIsLastInputItem(body) || !gjson.ValidBytes(body)
++	default:
+ 		return true
+ 	}
+-	trimmed := bytes.TrimLeft(body, " \t\r\n")
+-	return len(trimmed) == 0 || trimmed[0] != '{' || !gjson.ValidBytes(body)
++}
++
++// compactionTriggerIsLastInputItem reports whether the last element of the
++// top-level input array is an object whose type is "compaction_trigger".
++func compactionTriggerIsLastInputItem(body []byte) bool {
++	input := parseRawJSONView(body).Get("input")
++	if !input.IsArray() {
++		return false
++	}
++	var last gjson.Result
++	input.ForEach(func(_, item gjson.Result) bool {
++		last = item
++		return true
++	})
++	return last.IsObject() && last.Get("type").String() == "compaction_trigger"
+ }
+ 
+ func isOpenAINativeCompactionV2(c *gin.Context) bool {
+@@ -177,12 +207,17 @@ func applyOpenAICodexBetaFeatures(c *gin.Context, account *Account, h http.Heade
+ // HasCompactionTriggerInInput detects an input item with
+ // type="compaction_trigger". The handler combines this body signal with the
+ // request path and stream flag to distinguish the native remote compaction v2
+-// wire from the legacy /responses/compact bridge.
++// wire from the legacy /responses/compact bridge. The type string appears
++// literally unless a \u escape spells plain ASCII, so other bodies skip the
++// structural scan.
+ func HasCompactionTriggerInInput(body []byte) bool {
+ 	if len(body) == 0 {
+ 		return false
+ 	}
+-	input := gjson.GetBytes(body, "input")
++	if !bytes.Contains(body, compactionTriggerToken) && !JSONMayEscapePlainASCII(body) {
++		return false
++	}
++	input := parseRawJSONView(body).Get("input")
+ 	if !input.IsArray() {
+ 		return false
+ 	}
+diff --git a/backend/internal/service/openai_gateway_request_body.go b/backend/internal/service/openai_gateway_request_body.go
+index 8465c54ed..53662eae1 100644
+--- a/backend/internal/service/openai_gateway_request_body.go
++++ b/backend/internal/service/openai_gateway_request_body.go
+@@ -653,19 +653,43 @@ func normalizeOpenAIParallelToolCallsWithoutTools(body []byte, responsesLite boo
+ }
+ 
+ // openAIRequestBodyHasTools 同时识别顶层 tools 和 input[].additional_tools。
++// additional_tools 类型字符串只有在字面出现、或被能拼出可见 ASCII 的 \u 转义
++// 拼出时才可能匹配，其余请求体跳过对 input 的结构扫描。
+ func openAIRequestBodyHasTools(body []byte) bool {
+-	if tools := gjson.GetBytes(body, "tools"); tools.IsArray() && len(tools.Array()) > 0 {
++	root := parseRawJSONView(body)
++	if gjsonArrayHasElements(root.Get("tools")) {
+ 		return true
+ 	}
+-	for _, item := range gjson.GetBytes(body, "input").Array() {
+-		if strings.TrimSpace(item.Get("type").String()) != "additional_tools" {
+-			continue
+-		}
+-		if tools := item.Get("tools"); tools.IsArray() && len(tools.Array()) > 0 {
+-			return true
+-		}
++	if !bytes.Contains(body, []byte("additional_tools")) && !JSONMayEscapePlainASCII(body) {
++		return false
+ 	}
+-	return false
++	found := false
++	isAdditionalToolsWithTools := func(item gjson.Result) bool {
++		return strings.TrimSpace(item.Get("type").String()) == "additional_tools" && gjsonArrayHasElements(item.Get("tools"))
++	}
++	input := root.Get("input")
++	if !input.IsArray() {
++		// gjson 把非数组的值当作只含它自身的数组。
++		return input.Type != gjson.Null && isAdditionalToolsWithTools(input)
++	}
++	input.ForEach(func(_, item gjson.Result) bool {
++		found = isAdditionalToolsWithTools(item)
++		return !found
++	})
++	return found
++}
++
++// gjsonArrayHasElements 不分配结果切片地判断数组是否非空。
++func gjsonArrayHasElements(value gjson.Result) bool {
++	if !value.IsArray() {
++		return false
++	}
++	nonEmpty := false
++	value.ForEach(func(_, _ gjson.Result) bool {
++		nonEmpty = true
++		return false
++	})
++	return nonEmpty
+ }
+ 
+ // normalizeOpenAIResponsesReasoningContentReplay removes non-portable
+@@ -2512,7 +2536,7 @@ func openAIRequestBodyMayContainEmptyBase64InputImage(body []byte) bool {
+ 	if len(body) == 0 || !openAIRequestBodyMayContainInputImageToken(body) {
+ 		return false
+ 	}
+-	input := gjson.GetBytes(body, "input")
++	input := parseRawJSONView(body).Get("input")
+ 	if !input.Exists() {
+ 		return false
+ 	}
+@@ -2523,8 +2547,9 @@ func openAIRequestBodyMayContainInputImageToken(body []byte) bool {
+ 	if bytes.Contains(body, []byte("input_image")) {
+ 		return true
+ 	}
+-	// JSON 字符串任意字符都可能被 unicode escape，遇到 \u 时交给 gjson 解码后的结构扫描兜底。
+-	return bytes.Contains(body, []byte("\\u"))
++	// JSON 字符串任意字符都可能被 unicode escape；只有能拼出可见 ASCII 字符的 \u
++	// 才可能藏住 input_image，此时交给 gjson 解码后的结构扫描兜底。
++	return JSONMayEscapePlainASCII(body)
+ }
+ 
+ func openAIJSONValueMayContainEmptyBase64InputImage(value gjson.Result) bool {
+diff --git a/backend/internal/service/openai_reasoning_effort_policy.go b/backend/internal/service/openai_reasoning_effort_policy.go
+index b8f7f3b40..fa023101c 100644
+--- a/backend/internal/service/openai_reasoning_effort_policy.go
++++ b/backend/internal/service/openai_reasoning_effort_policy.go
+@@ -111,11 +111,13 @@ func IsReasoningEffortPolicyDenied(err error) bool {
+ 	return errors.As(err, &mappingDenied)
+ }
+ 
++var reasoningEffortSeparatorRemover = strings.NewReplacer("-", "", "_", "", " ", "")
++
+ // NormalizeMaxReasoningEffort validates and canonicalizes a group policy value.
+ // Empty means that the group does not impose a ceiling.
+ func NormalizeMaxReasoningEffort(raw string) string {
+ 	value := strings.ToLower(strings.TrimSpace(raw))
+-	value = strings.NewReplacer("-", "", "_", "", " ", "").Replace(value)
++	value = reasoningEffortSeparatorRemover.Replace(value)
+ 	switch value {
+ 	case "":
+ 		return ""
+diff --git a/backend/internal/service/openai_responses_namespace.go b/backend/internal/service/openai_responses_namespace.go
+index 17ee43606..3978518ed 100644
+--- a/backend/internal/service/openai_responses_namespace.go
++++ b/backend/internal/service/openai_responses_namespace.go
+@@ -120,7 +120,8 @@ func hasOpenAIResponsesNamespaceToolDeclaration(body []byte) bool {
+ 		return found
+ 	}
+ 
+-	if hasNamespaceTool(gjson.GetBytes(body, "tools")) {
++	root := parseRawJSONView(body)
++	if hasNamespaceTool(root.Get("tools")) {
+ 		return true
+ 	}
+ 
+@@ -128,7 +129,7 @@ func hasOpenAIResponsesNamespaceToolDeclaration(body []byte) bool {
+ 	// tools and into an input.additional_tools carrier. API-key requests are
+ 	// intentionally not rewritten by normalizeOpenAIResponsesLiteTools, so the
+ 	// declaration can arrive here only in this form.
+-	input := gjson.GetBytes(body, "input")
++	input := root.Get("input")
+ 	if !input.IsArray() {
+ 		return false
+ 	}
+@@ -196,7 +197,9 @@ func stripOpenAIResponsesInputNamespaces(body []byte, keepToolCallNamespaces boo
+ 	if !bytes.Contains(body, []byte(`"namespace"`)) {
+ 		return body, nil
+ 	}
+-	input := gjson.GetBytes(body, "input")
++	// Zero-copy view: input.Raw aliases body and is only read below; the
++	// rebuilt array is written into a fresh buffer.
++	input := parseRawJSONView(body).Get("input")
+ 	if !input.IsArray() {
+ 		return body, nil
+ 	}
+diff --git a/backend/internal/service/usage_billing.go b/backend/internal/service/usage_billing.go
+index 447260ecb..fe2b374dd 100644
+--- a/backend/internal/service/usage_billing.go
++++ b/backend/internal/service/usage_billing.go
+@@ -229,3 +229,17 @@ type UsageBillingRepository interface {
+ 	CaptureBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error)
+ 	ReleaseBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error)
+ }
++
++// UsageBillingBatchOutcome 是合并结算中单条命令的结果：Err 非空时 Result 为 nil。
++type UsageBillingBatchOutcome struct {
++	Result *UsageBillingApplyResult
++	Err    error
++}
++
++// UsageBillingBatchRepository 在 UsageBillingRepository 之上支持把同一用户的多条命令合并到一个事务内结算。
++type UsageBillingBatchRepository interface {
++	UsageBillingRepository
++	// ApplyBatch 在一个事务内结算同一用户的多条命令，各条结果与按 cmds 顺序逐条调用 Apply 一致，
++	// 返回值与 cmds 一一对应。返回 error 时没有任何命令生效；提交请求发出后连接中断时提交结果未知，与 Apply 相同。
++	ApplyBatch(ctx context.Context, cmds []*UsageBillingCommand) ([]UsageBillingBatchOutcome, error)
++}
+diff --git a/backend/internal/service/usage_billing_lane.go b/backend/internal/service/usage_billing_lane.go
+new file mode 100644
+index 000000000..39a10a7db
+--- /dev/null
++++ b/backend/internal/service/usage_billing_lane.go
+@@ -0,0 +1,311 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"sync"
++	"sync/atomic"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
++)
++
++const (
++	usageBillingLaneShardCount = 64
++	// usageBillingLaneMaxBatchSize 是单个合并事务最多包含的命令数。
++	usageBillingLaneMaxBatchSize        = 128
++	usageBillingLaneFallbackLogInterval = time.Minute
++)
++
++var errUsageBillingLaneBatchOutcomeMismatch = errors.New("usage billing batch outcome count mismatch")
++
++// UsageBillingLaneCombiner 是按用户合并计费事务的 UsageBillingRepository。
++//
++// 每个用户一条通道：通道空闲时命令立即按单条 Apply 结算；结算进行中到达的命令排队，
++// 上一轮结束后整批（至多 maxBatch 条）交给 ApplyBatch 在一个事务内结算。每个调用方阻塞等待
++// 并拿到自己那条命令的结果。ApplyBatch 返回 error 时整批逐条 Apply。
++// 每次结算（单条、整批、整批回退后的逐条）的超时从开始结算时计算，排队时间不计入。
++//
++// 批量生图的冻结/结算/释放直接调用底层仓储。
++// 通道只在本进程内合并同一用户的计费；结算的原子性与幂等性由底层仓储的事务提供。
++type UsageBillingLaneCombiner struct {
++	repo     UsageBillingBatchRepository
++	maxBatch int
++
++	shards [usageBillingLaneShardCount]usageBillingLaneShard
++	wg     sync.WaitGroup
++
++	singleApplies   atomic.Uint64
++	batches         atomic.Uint64
++	batchedCommands atomic.Uint64
++	batchFallbacks  atomic.Uint64
++	maxBatchSeen    atomic.Uint64
++	lastFallbackLog atomic.Int64
++}
++
++// usageBillingLaneShard 保护一组用户的通道。通道在 lanes 中存在当且仅当它的结算 goroutine 在运行。
++type usageBillingLaneShard struct {
++	mu     sync.Mutex
++	lanes  map[int64]*usageBillingLane
++	closed bool
++}
++
++type usageBillingLane struct {
++	pending []*usageBillingLaneRequest
++}
++
++type usageBillingLaneRequest struct {
++	ctx       context.Context
++	cmd       *UsageBillingCommand
++	done      chan UsageBillingBatchOutcome
++	delivered bool
++}
++
++// UsageBillingLaneStats 是通道合并器的累计计数。
++type UsageBillingLaneStats struct {
++	SingleApplies   uint64
++	Batches         uint64
++	BatchedCommands uint64
++	BatchFallbacks  uint64
++	MaxBatchSize    uint64
++}
++
++// NewUsageBillingLaneCombiner 创建通道合并器。
++func NewUsageBillingLaneCombiner(repo UsageBillingBatchRepository) *UsageBillingLaneCombiner {
++	return newUsageBillingLaneCombiner(repo, usageBillingLaneMaxBatchSize)
++}
++
++func newUsageBillingLaneCombiner(repo UsageBillingBatchRepository, maxBatch int) *UsageBillingLaneCombiner {
++	c := &UsageBillingLaneCombiner{repo: repo, maxBatch: maxBatch}
++	for i := range c.shards {
++		c.shards[i].lanes = make(map[int64]*usageBillingLane)
++	}
++	return c
++}
++
++// Apply 结算一条计费命令：进入该用户的通道并等待结果，结果与直接调用底层 Apply 一致。
++// 缺少 request_id 的命令与 Stop 之后的命令直接调用底层 Apply。
++func (c *UsageBillingLaneCombiner) Apply(ctx context.Context, cmd *UsageBillingCommand) (*UsageBillingApplyResult, error) {
++	if cmd == nil {
++		return c.repo.Apply(ctx, cmd)
++	}
++	cmd.Normalize()
++	if cmd.RequestID == "" {
++		return c.repo.Apply(ctx, cmd)
++	}
++	if ctx == nil {
++		ctx = context.Background()
++	}
++	req := &usageBillingLaneRequest{ctx: ctx, cmd: cmd, done: make(chan UsageBillingBatchOutcome, 1)}
++	if !c.enqueue(req) {
++		return c.repo.Apply(ctx, cmd)
++	}
++	// 入队后命令可能已在执行中的事务里，必须等到结果，不能以单条 Apply 另行结算。
++	out := <-req.done
++	return out.Result, out.Err
++}
++
++func (c *UsageBillingLaneCombiner) ReserveBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error) {
++	return c.repo.ReserveBatchImageBalance(ctx, cmd)
++}
++
++func (c *UsageBillingLaneCombiner) CaptureBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error) {
++	return c.repo.CaptureBatchImageBalance(ctx, cmd)
++}
++
++func (c *UsageBillingLaneCombiner) ReleaseBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error) {
++	return c.repo.ReleaseBatchImageBalance(ctx, cmd)
++}
++
++// Stop 拒收新命令（之后的 Apply 直接调用底层仓储），并等待所有通道结算完已排队的命令。可重复调用。
++func (c *UsageBillingLaneCombiner) Stop() {
++	if c == nil {
++		return
++	}
++	for i := range c.shards {
++		shard := &c.shards[i]
++		shard.mu.Lock()
++		shard.closed = true
++		shard.mu.Unlock()
++	}
++	c.wg.Wait()
++	stats := c.Stats()
++	logger.LegacyPrintf("service.usage_billing_lane", "[UsageBillingLane] stopped: single=%d batches=%d batched_commands=%d fallbacks=%d max_batch=%d",
++		stats.SingleApplies, stats.Batches, stats.BatchedCommands, stats.BatchFallbacks, stats.MaxBatchSize)
++}
++
++// Stats 返回累计计数。
++func (c *UsageBillingLaneCombiner) Stats() UsageBillingLaneStats {
++	return UsageBillingLaneStats{
++		SingleApplies:   c.singleApplies.Load(),
++		Batches:         c.batches.Load(),
++		BatchedCommands: c.batchedCommands.Load(),
++		BatchFallbacks:  c.batchFallbacks.Load(),
++		MaxBatchSize:    c.maxBatchSeen.Load(),
++	}
++}
++
++func (c *UsageBillingLaneCombiner) shardFor(userID int64) *usageBillingLaneShard {
++	return &c.shards[uint64(userID)%usageBillingLaneShardCount]
++}
++
++// enqueue 把命令追加到用户通道；通道不存在时创建并启动结算 goroutine。已停止时返回 false。
++func (c *UsageBillingLaneCombiner) enqueue(req *usageBillingLaneRequest) bool {
++	userID := req.cmd.UserID
++	shard := c.shardFor(userID)
++	shard.mu.Lock()
++	defer shard.mu.Unlock()
++	if shard.closed {
++		return false
++	}
++	if lane, ok := shard.lanes[userID]; ok {
++		lane.pending = append(lane.pending, req)
++		return true
++	}
++	lane := &usageBillingLane{pending: []*usageBillingLaneRequest{req}}
++	shard.lanes[userID] = lane
++	c.wg.Add(1)
++	go c.drain(shard, userID, lane)
++	return true
++}
++
++// drain 循环取出通道中排队的命令结算，队列为空时在同一把锁内移除通道并退出。
++func (c *UsageBillingLaneCombiner) drain(shard *usageBillingLaneShard, userID int64, lane *usageBillingLane) {
++	defer c.wg.Done()
++	for {
++		batch := c.take(shard, userID, lane)
++		if len(batch) == 0 {
++			return
++		}
++		c.execute(batch)
++	}
++}
++
++func (c *UsageBillingLaneCombiner) take(shard *usageBillingLaneShard, userID int64, lane *usageBillingLane) []*usageBillingLaneRequest {
++	shard.mu.Lock()
++	defer shard.mu.Unlock()
++	n := len(lane.pending)
++	if n == 0 {
++		delete(shard.lanes, userID)
++		return nil
++	}
++	if n <= c.maxBatch {
++		batch := lane.pending
++		lane.pending = nil
++		return batch
++	}
++	batch := lane.pending[:c.maxBatch:c.maxBatch]
++	lane.pending = append([]*usageBillingLaneRequest(nil), lane.pending[c.maxBatch:]...)
++	return batch
++}
++
++// execute 结算一批命令并把结果交给各自的调用方；任何路径（含 panic）下每个请求都恰好收到一次结果。
++func (c *UsageBillingLaneCombiner) execute(batch []*usageBillingLaneRequest) {
++	defer func() {
++		if r := recover(); r != nil {
++			logger.LegacyPrintf("service.usage_billing_lane", "[UsageBillingLane] ALERT: panic while settling user=%d batch=%d: %v",
++				batch[0].cmd.UserID, len(batch), r)
++			err := fmt.Errorf("usage billing lane panic: %v", r)
++			for _, req := range batch {
++				deliverUsageBillingLaneResult(req, nil, err)
++			}
++		}
++	}()
++
++	if len(batch) == 1 {
++		c.singleApplies.Add(1)
++		c.applyOne(batch[0], time.Now().Add(postUsageBillingTimeout))
++		return
++	}
++
++	c.recordBatch(len(batch))
++	cmds := make([]*UsageBillingCommand, len(batch))
++	for i, req := range batch {
++		cmds[i] = req.cmd
++	}
++	outcomes, err := c.applyBatch(batch[0].ctx, cmds)
++	if err == nil && len(outcomes) != len(batch) {
++		err = errUsageBillingLaneBatchOutcomeMismatch
++	}
++	if err == nil {
++		for i, req := range batch {
++			deliverUsageBillingLaneResult(req, outcomes[i].Result, outcomes[i].Err)
++		}
++		return
++	}
++
++	c.logBatchFallback(batch[0].cmd.UserID, len(batch), err)
++	// 整批逐条结算共用一个截止时间，数据库不可用时整批在一个超时内结束。
++	deadline := time.Now().Add(postUsageBillingTimeout)
++	for _, req := range batch {
++		c.applyOne(req, deadline)
++	}
++}
++
++// applyOne 以单条 Apply 结算一个请求并交付结果。上下文保留请求上下文中的值，截止时间为 deadline；
++// panic 视同该请求返回 error。
++func (c *UsageBillingLaneCombiner) applyOne(req *usageBillingLaneRequest, deadline time.Time) {
++	ctx, cancel := context.WithDeadline(context.WithoutCancel(req.ctx), deadline)
++	defer cancel()
++	res, err := func() (res *UsageBillingApplyResult, err error) {
++		defer func() {
++			if r := recover(); r != nil {
++				logger.LegacyPrintf("service.usage_billing_lane", "[UsageBillingLane] ALERT: panic while applying user=%d request=%s: %v",
++					req.cmd.UserID, req.cmd.RequestID, r)
++				res, err = nil, fmt.Errorf("usage billing apply panic: %v", r)
++			}
++		}()
++		return c.repo.Apply(ctx, req.cmd)
++	}()
++	deliverUsageBillingLaneResult(req, res, err)
++}
++
++// applyBatch 调用底层 ApplyBatch，panic 视同返回 error（事务已由底层回滚）。
++func (c *UsageBillingLaneCombiner) applyBatch(ctx context.Context, cmds []*UsageBillingCommand) (outcomes []UsageBillingBatchOutcome, err error) {
++	batchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), postUsageBillingTimeout)
++	defer cancel()
++	defer func() {
++		if r := recover(); r != nil {
++			logger.LegacyPrintf("service.usage_billing_lane", "[UsageBillingLane] ALERT: panic while settling user=%d batch=%d: %v",
++				cmds[0].UserID, len(cmds), r)
++			outcomes, err = nil, fmt.Errorf("usage billing batch panic: %v", r)
++		}
++	}()
++	return c.repo.ApplyBatch(batchCtx, cmds)
++}
++
++// logBatchFallback 计数并记录一次整批回退；日志每分钟至多一条，带累计回退次数。
++func (c *UsageBillingLaneCombiner) logBatchFallback(userID int64, size int, err error) {
++	total := c.batchFallbacks.Add(1)
++	now := time.Now().UnixNano()
++	last := c.lastFallbackLog.Load()
++	if now-last < int64(usageBillingLaneFallbackLogInterval) || !c.lastFallbackLog.CompareAndSwap(last, now) {
++		return
++	}
++	logger.LegacyPrintf("service.usage_billing_lane", "[UsageBillingLane] batch settle failed, applying one by one: user=%d batch=%d total_fallbacks=%d err=%v",
++		userID, size, total, err)
++}
++
++func (c *UsageBillingLaneCombiner) recordBatch(size int) {
++	c.batches.Add(1)
++	c.batchedCommands.Add(uint64(size))
++	for {
++		prev := c.maxBatchSeen.Load()
++		if uint64(size) <= prev || c.maxBatchSeen.CompareAndSwap(prev, uint64(size)) {
++			return
++		}
++	}
++}
++
++// deliverUsageBillingLaneResult 把结果交给请求方；已交付过的请求忽略。只在通道的结算 goroutine 中调用。
++func deliverUsageBillingLaneResult(req *usageBillingLaneRequest, res *UsageBillingApplyResult, err error) {
++	if req.delivered {
++		return
++	}
++	req.delivered = true
++	if err != nil {
++		res = nil
++	}
++	req.done <- UsageBillingBatchOutcome{Result: res, Err: err}
++}
+diff --git a/backend/internal/service/usage_billing_lane_test.go b/backend/internal/service/usage_billing_lane_test.go
+new file mode 100644
+index 000000000..928e20f2a
+--- /dev/null
++++ b/backend/internal/service/usage_billing_lane_test.go
+@@ -0,0 +1,616 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"math/rand"
++	"sort"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++// laneTestRepo 按用户记账：Apply 与 ApplyBatch 都按命令顺序扣减余额并返回扣后余额，
++// 同时记录每个用户的并发执行数。
++type laneTestRepo struct {
++	mu          sync.Mutex
++	balances    map[int64]float64
++	applyCalls  []string
++	batchCalls  [][]string
++	inflight    map[int64]int
++	maxInflight int
++
++	// gate 非 nil 时，requestID 在其中的命令在结算前阻塞到对应 channel 关闭。
++	gate map[string]chan struct{}
++	// started 每条命令开始结算时写入其 requestID。
++	started chan string
++
++	batchErr    error
++	batchPanic  bool
++	applyPanic  map[string]bool
++	outcomeErrs map[string]error
++	holdCalls   atomic.Int32
++	// deadlines 记录每条单条 Apply 收到的上下文截止时间。
++	deadlines map[string]time.Time
++}
++
++func newLaneTestRepo() *laneTestRepo {
++	return &laneTestRepo{
++		balances:    map[int64]float64{},
++		inflight:    map[int64]int{},
++		gate:        map[string]chan struct{}{},
++		started:     make(chan string, 4096),
++		applyPanic:  map[string]bool{},
++		outcomeErrs: map[string]error{},
++		deadlines:   map[string]time.Time{},
++	}
++}
++
++func (r *laneTestRepo) enter(userID int64) {
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	r.inflight[userID]++
++	if r.inflight[userID] > r.maxInflight {
++		r.maxInflight = r.inflight[userID]
++	}
++}
++
++func (r *laneTestRepo) leave(userID int64) {
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	r.inflight[userID]--
++}
++
++func (r *laneTestRepo) wait(requestID string) {
++	r.mu.Lock()
++	ch := r.gate[requestID]
++	r.mu.Unlock()
++	if ch != nil {
++		<-ch
++	}
++}
++
++func (r *laneTestRepo) deduct(cmd *UsageBillingCommand) *UsageBillingApplyResult {
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	r.balances[cmd.UserID] -= cmd.BalanceCost
++	balance := r.balances[cmd.UserID]
++	return &UsageBillingApplyResult{Applied: true, NewBalance: &balance}
++}
++
++func (r *laneTestRepo) Apply(ctx context.Context, cmd *UsageBillingCommand) (*UsageBillingApplyResult, error) {
++	r.enter(cmd.UserID)
++	defer r.leave(cmd.UserID)
++	r.started <- cmd.RequestID
++	r.wait(cmd.RequestID)
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	r.mu.Lock()
++	r.applyCalls = append(r.applyCalls, cmd.RequestID)
++	if deadline, ok := ctx.Deadline(); ok {
++		r.deadlines[cmd.RequestID] = deadline
++	}
++	panicNow := r.applyPanic[cmd.RequestID]
++	outcomeErr := r.outcomeErrs[cmd.RequestID]
++	r.mu.Unlock()
++	if panicNow {
++		panic("apply boom")
++	}
++	if outcomeErr != nil {
++		return nil, outcomeErr
++	}
++	return r.deduct(cmd), nil
++}
++
++func (r *laneTestRepo) ApplyBatch(_ context.Context, cmds []*UsageBillingCommand) ([]UsageBillingBatchOutcome, error) {
++	userID := cmds[0].UserID
++	r.enter(userID)
++	defer r.leave(userID)
++	ids := make([]string, len(cmds))
++	for i, cmd := range cmds {
++		ids[i] = cmd.RequestID
++		r.started <- cmd.RequestID
++	}
++	for _, cmd := range cmds {
++		r.wait(cmd.RequestID)
++	}
++	r.mu.Lock()
++	r.batchCalls = append(r.batchCalls, ids)
++	batchErr, batchPanic := r.batchErr, r.batchPanic
++	r.mu.Unlock()
++	if batchPanic {
++		panic("batch boom")
++	}
++	if batchErr != nil {
++		return nil, batchErr
++	}
++	out := make([]UsageBillingBatchOutcome, len(cmds))
++	for i, cmd := range cmds {
++		r.mu.Lock()
++		err := r.outcomeErrs[cmd.RequestID]
++		r.mu.Unlock()
++		if err != nil {
++			out[i] = UsageBillingBatchOutcome{Err: err}
++			continue
++		}
++		out[i] = UsageBillingBatchOutcome{Result: r.deduct(cmd)}
++	}
++	return out, nil
++}
++
++func (r *laneTestRepo) ReserveBatchImageBalance(context.Context, *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error) {
++	r.holdCalls.Add(1)
++	return &BatchImageBalanceHoldResult{Applied: true}, nil
++}
++
++func (r *laneTestRepo) CaptureBatchImageBalance(context.Context, *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error) {
++	r.holdCalls.Add(1)
++	return &BatchImageBalanceHoldResult{Applied: true}, nil
++}
++
++func (r *laneTestRepo) ReleaseBatchImageBalance(context.Context, *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error) {
++	r.holdCalls.Add(1)
++	return &BatchImageBalanceHoldResult{Applied: true}, nil
++}
++
++func (r *laneTestRepo) block(requestID string) chan struct{} {
++	ch := make(chan struct{})
++	r.mu.Lock()
++	r.gate[requestID] = ch
++	r.mu.Unlock()
++	return ch
++}
++
++func newLaneTestCombiner(repo UsageBillingBatchRepository, maxBatch int) *UsageBillingLaneCombiner {
++	return newUsageBillingLaneCombiner(repo, maxBatch)
++}
++
++func laneTestCommand(userID int64, requestID string, cost float64) *UsageBillingCommand {
++	return &UsageBillingCommand{RequestID: requestID, APIKeyID: 1, UserID: userID, BalanceCost: cost}
++}
++
++type laneTestResult struct {
++	requestID string
++	res       *UsageBillingApplyResult
++	err       error
++}
++
++func applyAsync(c *UsageBillingLaneCombiner, cmd *UsageBillingCommand, out chan<- laneTestResult) {
++	go func() {
++		res, err := c.Apply(context.Background(), cmd)
++		out <- laneTestResult{requestID: cmd.RequestID, res: res, err: err}
++	}()
++}
++
++func waitStarted(t *testing.T, repo *laneTestRepo, requestID string) {
++	t.Helper()
++	select {
++	case got := <-repo.started:
++		require.Equal(t, requestID, got)
++	case <-time.After(5 * time.Second):
++		t.Fatalf("request %s did not start", requestID)
++	}
++}
++
++func waitPending(t *testing.T, c *UsageBillingLaneCombiner, userID int64, n int) {
++	t.Helper()
++	require.Eventually(t, func() bool {
++		shard := c.shardFor(userID)
++		shard.mu.Lock()
++		defer shard.mu.Unlock()
++		lane := shard.lanes[userID]
++		return lane != nil && len(lane.pending) == n
++	}, 5*time.Second, time.Millisecond)
++}
++
++func laneCount(c *UsageBillingLaneCombiner) int {
++	total := 0
++	for i := range c.shards {
++		shard := &c.shards[i]
++		shard.mu.Lock()
++		total += len(shard.lanes)
++		shard.mu.Unlock()
++	}
++	return total
++}
++
++func collectResults(t *testing.T, out <-chan laneTestResult, n int) map[string]laneTestResult {
++	t.Helper()
++	results := make(map[string]laneTestResult, n)
++	for i := 0; i < n; i++ {
++		select {
++		case r := <-out:
++			results[r.requestID] = r
++		case <-time.After(10 * time.Second):
++			t.Fatalf("only %d/%d results received", i, n)
++		}
++	}
++	return results
++}
++
++func TestUsageBillingLane_HoldMethodsPassThrough(t *testing.T) {
++	repo := newLaneTestRepo()
++	c := newLaneTestCombiner(repo, 8)
++	ctx := context.Background()
++
++	_, err := c.ReserveBatchImageBalance(ctx, &BatchImageBalanceHoldCommand{})
++	require.NoError(t, err)
++	_, err = c.CaptureBatchImageBalance(ctx, &BatchImageBalanceHoldCommand{})
++	require.NoError(t, err)
++	_, err = c.ReleaseBatchImageBalance(ctx, &BatchImageBalanceHoldCommand{})
++	require.NoError(t, err)
++	require.EqualValues(t, 3, repo.holdCalls.Load())
++}
++
++func TestUsageBillingLane_MissingRequestIDAppliesDirectly(t *testing.T) {
++	repo := newLaneTestRepo()
++	c := newLaneTestCombiner(repo, 8)
++
++	res, err := c.Apply(context.Background(), laneTestCommand(7, "  ", 1))
++	require.NoError(t, err)
++	require.True(t, res.Applied)
++	require.Zero(t, c.Stats().SingleApplies)
++	require.Zero(t, laneCount(c))
++}
++
++func TestUsageBillingLane_IdleLaneAppliesImmediately(t *testing.T) {
++	repo := newLaneTestRepo()
++	repo.balances[7] = 10
++	c := newLaneTestCombiner(repo, 8)
++
++	res, err := c.Apply(context.Background(), laneTestCommand(7, "r1", 1.5))
++	require.NoError(t, err)
++	require.True(t, res.Applied)
++	require.Equal(t, 8.5, *res.NewBalance)
++	require.Equal(t, []string{"r1"}, repo.applyCalls)
++	require.Empty(t, repo.batchCalls)
++	require.EqualValues(t, 1, c.Stats().SingleApplies)
++	require.Eventually(t, func() bool { return laneCount(c) == 0 }, time.Second, time.Millisecond)
++}
++
++func TestUsageBillingLane_QueuedRequestsSettleAsOneBatch(t *testing.T) {
++	repo := newLaneTestRepo()
++	repo.balances[7] = 100
++	c := newLaneTestCombiner(repo, 64)
++	out := make(chan laneTestResult, 16)
++
++	release := repo.block("first")
++	applyAsync(c, laneTestCommand(7, "first", 1), out)
++	waitStarted(t, repo, "first")
++
++	for i := 0; i < 5; i++ {
++		applyAsync(c, laneTestCommand(7, fmt.Sprintf("q%d", i), float64(i+1)), out)
++	}
++	waitPending(t, c, 7, 5)
++	close(release)
++
++	results := collectResults(t, out, 6)
++	for id, r := range results {
++		require.NoError(t, r.err, id)
++		require.True(t, r.res.Applied, id)
++	}
++
++	require.Equal(t, []string{"first"}, repo.applyCalls)
++	require.Len(t, repo.batchCalls, 1)
++	require.ElementsMatch(t, []string{"q0", "q1", "q2", "q3", "q4"}, repo.batchCalls[0])
++
++	// 每个调用方拿到的是自己那条命令在批内顺序下的扣后余额。
++	running := 99.0
++	for _, id := range repo.batchCalls[0] {
++		var cost float64
++		_, _ = fmt.Sscanf(id, "q%f", &cost)
++		running -= cost + 1
++		require.Equal(t, running, *results[id].res.NewBalance, id)
++	}
++	require.Equal(t, 84.0, repo.balances[7])
++
++	stats := c.Stats()
++	require.EqualValues(t, 1, stats.SingleApplies)
++	require.EqualValues(t, 1, stats.Batches)
++	require.EqualValues(t, 5, stats.BatchedCommands)
++	require.EqualValues(t, 5, stats.MaxBatchSize)
++	require.Equal(t, 1, repo.maxInflight)
++	require.Eventually(t, func() bool { return laneCount(c) == 0 }, time.Second, time.Millisecond)
++}
++
++func TestUsageBillingLane_DifferentUsersSettleIndependently(t *testing.T) {
++	repo := newLaneTestRepo()
++	c := newLaneTestCombiner(repo, 8)
++	out := make(chan laneTestResult, 4)
++
++	release := repo.block("a1")
++	applyAsync(c, laneTestCommand(1, "a1", 1), out)
++	waitStarted(t, repo, "a1")
++
++	res, err := c.Apply(context.Background(), laneTestCommand(2, "b1", 1))
++	require.NoError(t, err)
++	require.True(t, res.Applied)
++
++	close(release)
++	collectResults(t, out, 1)
++}
++
++func TestUsageBillingLane_SplitsQueueByMaxBatchSize(t *testing.T) {
++	repo := newLaneTestRepo()
++	c := newLaneTestCombiner(repo, 3)
++	out := make(chan laneTestResult, 16)
++
++	release := repo.block("first")
++	applyAsync(c, laneTestCommand(7, "first", 1), out)
++	waitStarted(t, repo, "first")
++	for i := 0; i < 7; i++ {
++		applyAsync(c, laneTestCommand(7, fmt.Sprintf("q%d", i), 1), out)
++		waitPending(t, c, 7, i+1)
++	}
++	close(release)
++
++	results := collectResults(t, out, 8)
++	for id, r := range results {
++		require.NoError(t, r.err, id)
++	}
++	require.Len(t, repo.batchCalls, 2)
++	require.Equal(t, []string{"q0", "q1", "q2"}, repo.batchCalls[0])
++	require.Equal(t, []string{"q3", "q4", "q5"}, repo.batchCalls[1])
++	require.Equal(t, []string{"first", "q6"}, repo.applyCalls)
++	require.EqualValues(t, 3, c.Stats().MaxBatchSize)
++}
++
++func TestUsageBillingLane_BatchErrorFallsBackToSingleApply(t *testing.T) {
++	for _, tc := range []struct {
++		name  string
++		setup func(*laneTestRepo)
++	}{
++		{name: "error", setup: func(r *laneTestRepo) { r.batchErr = errors.New("batch failed") }},
++		{name: "panic", setup: func(r *laneTestRepo) { r.batchPanic = true }},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			repo := newLaneTestRepo()
++			repo.balances[7] = 10
++			tc.setup(repo)
++			c := newLaneTestCombiner(repo, 8)
++			out := make(chan laneTestResult, 8)
++
++			release := repo.block("first")
++			applyAsync(c, laneTestCommand(7, "first", 1), out)
++			waitStarted(t, repo, "first")
++			applyAsync(c, laneTestCommand(7, "q0", 2), out)
++			waitPending(t, c, 7, 1)
++			applyAsync(c, laneTestCommand(7, "q1", 3), out)
++			waitPending(t, c, 7, 2)
++			close(release)
++
++			results := collectResults(t, out, 3)
++			for id, r := range results {
++				require.NoError(t, r.err, id)
++				require.True(t, r.res.Applied, id)
++			}
++			require.Equal(t, []string{"first", "q0", "q1"}, repo.applyCalls)
++			require.Equal(t, 7.0, *results["q0"].res.NewBalance)
++			require.Equal(t, 4.0, *results["q1"].res.NewBalance)
++			require.EqualValues(t, 1, c.Stats().BatchFallbacks)
++		})
++	}
++}
++
++func TestUsageBillingLane_PerCommandOutcomeErrorReachesItsCaller(t *testing.T) {
++	repo := newLaneTestRepo()
++	repo.outcomeErrs["q1"] = ErrUsageBillingRequestConflict
++	c := newLaneTestCombiner(repo, 8)
++	out := make(chan laneTestResult, 8)
++
++	release := repo.block("first")
++	applyAsync(c, laneTestCommand(7, "first", 1), out)
++	waitStarted(t, repo, "first")
++	applyAsync(c, laneTestCommand(7, "q0", 1), out)
++	applyAsync(c, laneTestCommand(7, "q1", 1), out)
++	waitPending(t, c, 7, 2)
++	close(release)
++
++	results := collectResults(t, out, 3)
++	require.NoError(t, results["q0"].err)
++	require.ErrorIs(t, results["q1"].err, ErrUsageBillingRequestConflict)
++	require.Nil(t, results["q1"].res)
++	require.Zero(t, c.Stats().BatchFallbacks)
++}
++
++func TestUsageBillingLane_ApplyPanicDeliversErrorAndLaneKeepsWorking(t *testing.T) {
++	repo := newLaneTestRepo()
++	repo.applyPanic["boom"] = true
++	c := newLaneTestCombiner(repo, 8)
++
++	res, err := c.Apply(context.Background(), laneTestCommand(7, "boom", 1))
++	require.Error(t, err)
++	require.Nil(t, res)
++
++	res, err = c.Apply(context.Background(), laneTestCommand(7, "after", 1))
++	require.NoError(t, err)
++	require.True(t, res.Applied)
++	require.Eventually(t, func() bool { return laneCount(c) == 0 }, time.Second, time.Millisecond)
++}
++
++func TestUsageBillingLane_StopWaitsForQueuedCommandsThenBypassesLanes(t *testing.T) {
++	repo := newLaneTestRepo()
++	c := newLaneTestCombiner(repo, 8)
++	out := make(chan laneTestResult, 8)
++
++	release := repo.block("first")
++	applyAsync(c, laneTestCommand(7, "first", 1), out)
++	waitStarted(t, repo, "first")
++	applyAsync(c, laneTestCommand(7, "q0", 1), out)
++	waitPending(t, c, 7, 1)
++
++	stopped := make(chan struct{})
++	go func() {
++		c.Stop()
++		close(stopped)
++	}()
++	select {
++	case <-stopped:
++		t.Fatal("Stop returned while a lane still had queued commands")
++	case <-time.After(50 * time.Millisecond):
++	}
++
++	close(release)
++	select {
++	case <-stopped:
++	case <-time.After(5 * time.Second):
++		t.Fatal("Stop did not return after lanes drained")
++	}
++	results := collectResults(t, out, 2)
++	require.NoError(t, results["first"].err)
++	require.NoError(t, results["q0"].err)
++
++	before := c.Stats()
++	res, err := c.Apply(context.Background(), laneTestCommand(7, "late", 1))
++	require.NoError(t, err)
++	require.True(t, res.Applied)
++	require.Equal(t, before, c.Stats())
++	require.Zero(t, laneCount(c))
++
++	c.Stop()
++}
++
++func TestUsageBillingLane_StopOnNilCombiner(t *testing.T) {
++	var c *UsageBillingLaneCombiner
++	require.NotPanics(t, c.Stop)
++}
++
++func TestUsageBillingLane_ConcurrentUsersReceiveTheirOwnResults(t *testing.T) {
++	const (
++		users       = 24
++		perUser     = 60
++		initBalance = 1_000_000.0
++	)
++	repo := newLaneTestRepo()
++	for u := int64(1); u <= users; u++ {
++		repo.balances[u] = initBalance
++	}
++	c := newLaneTestCombiner(repo, 16)
++
++	type call struct {
++		userID int64
++		cost   float64
++		res    *UsageBillingApplyResult
++		err    error
++	}
++	calls := make([]*call, 0, users*perUser)
++	for u := int64(1); u <= users; u++ {
++		for i := 0; i < perUser; i++ {
++			calls = append(calls, &call{userID: u, cost: float64(rand.Intn(1000) + 1)})
++		}
++	}
++
++	var wg sync.WaitGroup
++	for i, cl := range calls {
++		wg.Add(1)
++		go func(i int, cl *call) {
++			defer wg.Done()
++			if i%7 == 0 {
++				time.Sleep(time.Duration(rand.Intn(200)) * time.Microsecond)
++			}
++			cl.res, cl.err = c.Apply(context.Background(), laneTestCommand(cl.userID, fmt.Sprintf("u%d-%d", cl.userID, i), cl.cost))
++		}(i, cl)
++	}
++	wg.Wait()
++
++	byUser := map[int64][]*call{}
++	for _, cl := range calls {
++		require.NoError(t, cl.err)
++		require.True(t, cl.res.Applied)
++		byUser[cl.userID] = append(byUser[cl.userID], cl)
++	}
++	for u, list := range byUser {
++		// 按扣后余额从高到低排列时，相邻两条的差恰好是后一条的费用：每条结果对应同一用户串行扣费序列中的一个位置。
++		sort.Slice(list, func(a, b int) bool { return *list[a].res.NewBalance > *list[b].res.NewBalance })
++		prev := initBalance
++		total := 0.0
++		for _, cl := range list {
++			require.Equal(t, prev-cl.cost, *cl.res.NewBalance, "user %d", u)
++			prev = *cl.res.NewBalance
++			total += cl.cost
++		}
++		require.Equal(t, initBalance-total, repo.balances[u])
++	}
++	require.Equal(t, 1, repo.maxInflight, "a user must never have two settlements running at once")
++	require.Eventually(t, func() bool { return laneCount(c) == 0 }, time.Second, time.Millisecond)
++	c.Stop()
++}
++
++func TestUsageBillingLane_QueuedRequestTimeoutStartsWhenSettlementStarts(t *testing.T) {
++	repo := newLaneTestRepo()
++	c := newLaneTestCombiner(repo, 8)
++	out := make(chan laneTestResult, 4)
++
++	release := repo.block("first")
++	applyAsync(c, laneTestCommand(7, "first", 1), out)
++	waitStarted(t, repo, "first")
++
++	// 调用方的截止时间在排队期间到期；单独结算时仍以开始结算的时刻计算超时。
++	callerCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
++	defer cancel()
++	go func() {
++		res, err := c.Apply(callerCtx, laneTestCommand(7, "queued", 1))
++		out <- laneTestResult{requestID: "queued", res: res, err: err}
++	}()
++	waitPending(t, c, 7, 1)
++	<-callerCtx.Done()
++	close(release)
++
++	results := collectResults(t, out, 2)
++	require.NoError(t, results["queued"].err)
++	require.True(t, results["queued"].res.Applied)
++	require.Greater(t, time.Until(repo.deadlines["queued"]), postUsageBillingTimeout-5*time.Second)
++}
++
++func TestUsageBillingLane_FallbackSharesOneDeadline(t *testing.T) {
++	repo := newLaneTestRepo()
++	repo.batchErr = errors.New("batch failed")
++	c := newLaneTestCombiner(repo, 8)
++	out := make(chan laneTestResult, 8)
++
++	release := repo.block("first")
++	applyAsync(c, laneTestCommand(7, "first", 1), out)
++	waitStarted(t, repo, "first")
++	for i := 0; i < 3; i++ {
++		applyAsync(c, laneTestCommand(7, fmt.Sprintf("q%d", i), 1), out)
++		waitPending(t, c, 7, i+1)
++	}
++	close(release)
++
++	results := collectResults(t, out, 4)
++	for id, r := range results {
++		require.NoError(t, r.err, id)
++	}
++	require.Equal(t, repo.deadlines["q0"], repo.deadlines["q1"])
++	require.Equal(t, repo.deadlines["q0"], repo.deadlines["q2"])
++}
++
++func TestUsageBillingLane_FallbackPanicOnlyFailsThatRequest(t *testing.T) {
++	repo := newLaneTestRepo()
++	repo.batchErr = errors.New("batch failed")
++	repo.applyPanic["q0"] = true
++	c := newLaneTestCombiner(repo, 8)
++	out := make(chan laneTestResult, 8)
++
++	release := repo.block("first")
++	applyAsync(c, laneTestCommand(7, "first", 1), out)
++	waitStarted(t, repo, "first")
++	applyAsync(c, laneTestCommand(7, "q0", 1), out)
++	waitPending(t, c, 7, 1)
++	applyAsync(c, laneTestCommand(7, "q1", 1), out)
++	waitPending(t, c, 7, 2)
++	close(release)
++
++	results := collectResults(t, out, 3)
++	require.Error(t, results["q0"].err)
++	require.Nil(t, results["q0"].res)
++	require.NoError(t, results["q1"].err)
++	require.True(t, results["q1"].res.Applied)
++}
+diff --git a/backend/internal/service/wire.go b/backend/internal/service/wire.go
+index d24d33a1a..efa0c2587 100644
+--- a/backend/internal/service/wire.go
++++ b/backend/internal/service/wire.go
+@@ -993,8 +993,15 @@ var ProviderSet = wire.NewSet(
+ 	ProvideChannelMonitorV2Aggregator,
+ 	NewChannelMonitorRequestTemplateService,
+ 	ProvideUserPlatformQuotaUsageFlusher,
++	NewUsageBillingLaneCombiner,
++	ProvideUsageBillingRepository,
+ )
+ 
++// ProvideUsageBillingRepository 以按用户合并结算的通道作为各服务使用的计费仓储。
++func ProvideUsageBillingRepository(lanes *UsageBillingLaneCombiner) UsageBillingRepository {
++	return lanes
++}
++
+ // ProvideUserPlatformQuotaUsageFlusher 创建并启动 UserPlatformQuotaUsageFlusher。
+ func ProvideUserPlatformQuotaUsageFlusher(cfg *config.Config, cache BillingCache, quotaRepo UserPlatformQuotaRepository, tw *TimingWheelService) *UserPlatformQuotaUsageFlusher {
+ 	svc := NewUserPlatformQuotaUsageFlusher(cfg, cache, quotaRepo, tw)

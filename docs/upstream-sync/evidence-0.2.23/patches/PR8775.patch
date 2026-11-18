@@ -1,0 +1,293 @@
+diff --git a/backend/internal/web/embed_on.go b/backend/internal/web/embed_on.go
+index 03e5e5f50..d401e7fde 100644
+--- a/backend/internal/web/embed_on.go
++++ b/backend/internal/web/embed_on.go
+@@ -149,18 +149,23 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 	// Check cache first
+ 	cached := s.cache.Get()
+ 	if cached != nil {
+-		// Check If-None-Match for 304 response
+-		if match := c.GetHeader("If-None-Match"); match == cached.ETag {
+-			c.Status(http.StatusNotModified)
+-			c.Abort()
+-			return
++		// A matching ETag is only enough for 304 when the response has no
++		// per-request nonce. Otherwise the browser would reuse HTML carrying a
++		// stale nonce that no longer matches the CSP header of this request.
++		if nonce == "" {
++			if match := c.GetHeader("If-None-Match"); match == cached.ETag {
++				applyHTMLNoCacheHeaders(c.Writer.Header())
++				c.Status(http.StatusNotModified)
++				c.Abort()
++				return
++			}
+ 		}
+ 
+ 		// Replace nonce placeholder with actual nonce before serving
+ 		content := replaceNoncePlaceholder(cached.Content, nonce)
+ 
+ 		c.Header("ETag", cached.ETag)
+-		c.Header("Cache-Control", "no-cache") // Must revalidate
++		applyHTMLNoCacheHeaders(c.Writer.Header())
+ 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+ 		c.Abort()
+ 		return
+@@ -173,6 +178,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 	settings, err := s.settings.GetPublicSettingsForInjection(ctx)
+ 	if err != nil {
+ 		// Fallback: serve without injection
++		applyHTMLNoCacheHeaders(c.Writer.Header())
+ 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
+ 		c.Abort()
+ 		return
+@@ -181,6 +187,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 	settingsJSON, err := json.Marshal(settings)
+ 	if err != nil {
+ 		// Fallback: serve without injection
++		applyHTMLNoCacheHeaders(c.Writer.Header())
+ 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
+ 		c.Abort()
+ 		return
+@@ -196,7 +203,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 	if cached != nil {
+ 		c.Header("ETag", cached.ETag)
+ 	}
+-	c.Header("Cache-Control", "no-cache")
++	applyHTMLNoCacheHeaders(c.Writer.Header())
+ 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+ 	c.Abort()
+ }
+diff --git a/backend/internal/web/embed_test.go b/backend/internal/web/embed_test.go
+index 75dac764f..97b9c948d 100644
+--- a/backend/internal/web/embed_test.go
++++ b/backend/internal/web/embed_test.go
+@@ -352,7 +352,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 		assert.True(t, strings.HasSuffix(etag, `"`))
+ 	})
+ 
+-	t.Run("returns_304_for_matching_etag", func(t *testing.T) {
++	t.Run("returns_304_only_when_no_nonce_is_present", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+ 			settings: map[string]string{"test": "value"},
+ 		}
+@@ -360,12 +360,8 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 		server, err := NewFrontendServer(provider)
+ 		require.NoError(t, err)
+ 
+-		// Use a real router for proper 304 handling
++		// No nonce in context means the cached body has no per-request part.
+ 		router := gin.New()
+-		router.Use(func(c *gin.Context) {
+-			c.Set(middleware.CSPNonceKey, "test-nonce")
+-			c.Next()
+-		})
+ 		router.Use(server.Middleware())
+ 
+ 		// First request to populate cache and get ETag
+@@ -383,9 +379,47 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 
+ 		assert.Equal(t, http.StatusNotModified, w2.Code)
+ 		assert.Empty(t, w2.Body.String())
++		assertNoStoreHTMLHeaders(t, w2.Header())
+ 	})
+ 
+-	t.Run("sets_cache_control_header", func(t *testing.T) {
++	t.Run("serves_fresh_html_when_cached_nonce_is_stale", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: map[string]string{"test": "value"},
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		router := gin.New()
++		router.Use(func(c *gin.Context) {
++			c.Set(middleware.CSPNonceKey, c.GetHeader("X-Test-Nonce"))
++			c.Next()
++		})
++		router.Use(server.Middleware())
++
++		w1 := httptest.NewRecorder()
++		req1 := httptest.NewRequest(http.MethodGet, "/", nil)
++		req1.Header.Set("X-Test-Nonce", "first-nonce")
++		router.ServeHTTP(w1, req1)
++		etag := w1.Header().Get("ETag")
++		require.NotEmpty(t, etag)
++		assert.Contains(t, w1.Body.String(), `nonce="first-nonce"`)
++
++		// The document embeds the request nonce, so a matching ETag must not
++		// turn this into a 304 that reuses the previous nonce.
++		w2 := httptest.NewRecorder()
++		req2 := httptest.NewRequest(http.MethodGet, "/", nil)
++		req2.Header.Set("X-Test-Nonce", "second-nonce")
++		req2.Header.Set("If-None-Match", etag)
++		router.ServeHTTP(w2, req2)
++
++		assert.Equal(t, http.StatusOK, w2.Code)
++		assert.Contains(t, w2.Body.String(), `nonce="second-nonce"`)
++		assert.NotContains(t, w2.Body.String(), `nonce="first-nonce"`)
++		assertNoStoreHTMLHeaders(t, w2.Header())
++	})
++
++	t.Run("sets_no_store_cache_headers", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+ 			settings: map[string]string{"test": "value"},
+ 		}
+@@ -400,7 +434,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 
+ 		server.serveIndexHTML(c)
+ 
+-		assert.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
++		assertNoStoreHTMLHeaders(t, w.Header())
+ 	})
+ 
+ 	t.Run("fallback_on_settings_error", func(t *testing.T) {
+@@ -427,6 +461,78 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 	})
+ }
+ 
++func assertNoStoreHTMLHeaders(t *testing.T, header http.Header) {
++	t.Helper()
++	assert.Equal(t, "no-cache, no-store, must-revalidate", header.Get("Cache-Control"))
++	assert.Equal(t, "no-cache", header.Get("Pragma"))
++	assert.Equal(t, "0", header.Get("Expires"))
++	assert.Equal(t, "no-store", header.Get("CDN-Cache-Control"))
++	assert.Equal(t, "no-store", header.Get("Surrogate-Control"))
++}
++
++func TestFrontendServer_NoStoreHeadersOnEveryHTMLPath(t *testing.T) {
++	t.Run("cache_hit", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: map[string]string{"test": "value"},
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w1 := httptest.NewRecorder()
++		c1, _ := gin.CreateTestContext(w1)
++		c1.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c1.Set(middleware.CSPNonceKey, "nonce1")
++		server.serveIndexHTML(c1)
++		require.Equal(t, http.StatusOK, w1.Code)
++
++		w2 := httptest.NewRecorder()
++		c2, _ := gin.CreateTestContext(w2)
++		c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c2.Set(middleware.CSPNonceKey, "nonce2")
++		server.serveIndexHTML(c2)
++
++		assert.Equal(t, http.StatusOK, w2.Code)
++		assertNoStoreHTMLHeaders(t, w2.Header())
++	})
++
++	t.Run("settings_error_fallback", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			err: context.DeadlineExceeded,
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(w)
++		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c.Set(middleware.CSPNonceKey, "nonce123")
++		server.serveIndexHTML(c)
++
++		assert.Equal(t, http.StatusOK, w.Code)
++		assertNoStoreHTMLHeaders(t, w.Header())
++	})
++
++	t.Run("settings_marshal_error_fallback", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: make(chan struct{}),
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(w)
++		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c.Set(middleware.CSPNonceKey, "nonce123")
++		server.serveIndexHTML(c)
++
++		assert.Equal(t, http.StatusOK, w.Code)
++		assertNoStoreHTMLHeaders(t, w.Header())
++	})
++}
++
+ func TestFrontendServer_InvalidateCache(t *testing.T) {
+ 	t.Run("invalidates_cache", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+diff --git a/backend/internal/web/html_cache_headers.go b/backend/internal/web/html_cache_headers.go
+new file mode 100644
+index 000000000..ade6c3598
+--- /dev/null
++++ b/backend/internal/web/html_cache_headers.go
+@@ -0,0 +1,18 @@
++//go:build embed || unit
++
++package web
++
++import "net/http"
++
++// applyHTMLNoCacheHeaders marks settings-injected HTML as uncacheable at every
++// layer: browser memory/disk cache, back/forward cache (browsers skip bfcache
++// for no-store responses) and CDN edge caches. Settings are injected into the
++// document, so a stale copy would paint outdated branding until the next
++// revalidation.
++func applyHTMLNoCacheHeaders(header http.Header) {
++	header.Set("Cache-Control", "no-cache, no-store, must-revalidate")
++	header.Set("Pragma", "no-cache")
++	header.Set("Expires", "0")
++	header.Set("CDN-Cache-Control", "no-store")
++	header.Set("Surrogate-Control", "no-store")
++}
+diff --git a/backend/internal/web/html_cache_headers_test.go b/backend/internal/web/html_cache_headers_test.go
+new file mode 100644
+index 000000000..e762b3ddb
+--- /dev/null
++++ b/backend/internal/web/html_cache_headers_test.go
+@@ -0,0 +1,40 @@
++//go:build unit
++
++package web
++
++import (
++	"net/http"
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++)
++
++func TestApplyHTMLNoCacheHeaders(t *testing.T) {
++	header := http.Header{}
++
++	applyHTMLNoCacheHeaders(header)
++
++	assert.Equal(t, "no-cache, no-store, must-revalidate", header.Get("Cache-Control"))
++	assert.Equal(t, "no-cache", header.Get("Pragma"))
++	assert.Equal(t, "0", header.Get("Expires"))
++	assert.Equal(t, "no-store", header.Get("CDN-Cache-Control"))
++	assert.Equal(t, "no-store", header.Get("Surrogate-Control"))
++}
++
++func TestApplyHTMLNoCacheHeadersReplacesExistingValues(t *testing.T) {
++	header := http.Header{
++		"Cache-Control":     {"public, max-age=3600"},
++		"Pragma":            {"cache"},
++		"Expires":           {"Thu, 01 Jan 2099 00:00:00 GMT"},
++		"CDN-Cache-Control": {"max-age=3600"},
++		"Surrogate-Control": {"max-age=3600"},
++	}
++
++	applyHTMLNoCacheHeaders(header)
++
++	assert.Equal(t, "no-cache, no-store, must-revalidate", header.Get("Cache-Control"))
++	assert.Equal(t, "no-cache", header.Get("Pragma"))
++	assert.Equal(t, "0", header.Get("Expires"))
++	assert.Equal(t, "no-store", header.Get("CDN-Cache-Control"))
++	assert.Equal(t, "no-store", header.Get("Surrogate-Control"))
++}

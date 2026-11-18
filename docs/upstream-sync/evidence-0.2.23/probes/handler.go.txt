@@ -1,0 +1,23 @@
+package handler
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
+)
+
+func TestIntake023CodexUntrustedContext(t *testing.T) {
+	body := []byte("{\"model\":\"gpt-6.1-sol\",\"input\":[{\"type\":\"function_call_output\",\"namespace\":\"agent\",\"name\":\"browser_info\",\"output\":\"active browser details\"}]}")
+	out, changed := normalizeCodexPageContext(body)
+	require.True(t, changed)
+	require.Equal(t, "user", gjson.GetBytes(out, "input.0.role").String())
+	require.Contains(t, gjson.GetBytes(out, "input.0.content.0.text").String(), "<external_browser_info>")
+}
+
+func TestIntake023CodexContextRealCallControl(t *testing.T) {
+	body := []byte("{\"model\":\"gpt-6.1-sol\",\"input\":[{\"type\":\"function_call_output\",\"namespace\":\"agent\",\"name\":\"browser_info\",\"call_id\":\"call_real\",\"output\":\"real tool output\"}]}")
+	out, changed := normalizeCodexPageContext(body)
+	require.False(t, changed)
+	require.Equal(t, body, out)
+}

@@ -1,0 +1,22 @@
+package antigravity
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestIntake023SchemaNonArrayItems(t *testing.T) {
+	out := CleanJSONSchema(map[string]any{"type": "object", "items": map[string]any{"type": "string"}})
+	require.NotContains(t, out, "items")
+}
+
+func TestIntake023SchemaTupleItems(t *testing.T) {
+	out := CleanJSONSchema(map[string]any{"type": "array", "items": []any{map[string]any{"type": "string"}}})
+	require.IsType(t, map[string]any{}, out["items"])
+}
+
+func TestIntake023SchemaArrayControl(t *testing.T) {
+	out := CleanJSONSchema(map[string]any{"type": "array", "items": map[string]any{"type": "string"}})
+	require.Equal(t, "string", out["items"].(map[string]any)["type"])
+}

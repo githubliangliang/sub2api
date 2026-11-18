@@ -1,0 +1,59 @@
+diff --git a/backend/internal/pkg/apicompat/anthropic_to_responses.go b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+index b326241aa..6cd8c2f18 100644
+--- a/backend/internal/pkg/apicompat/anthropic_to_responses.go
++++ b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+@@ -206,6 +206,16 @@ func anthropicMsgToResponsesItems(m AnthropicMessage) ([]ResponsesInputItem, err
+ 		return anthropicUserToResponses(m.Content)
+ 	case "assistant":
+ 		return anthropicAssistantToResponses(m.Content)
++	case "system":
++		// Mid-conversation system turns (e.g. hook output) keep system-level
++		// authority: Responses uses developer for them, not user.
++		items, err := anthropicUserToResponses(m.Content)
++		for i := range items {
++			if items[i].Role == "user" {
++				items[i].Role = "developer"
++			}
++		}
++		return items, err
+ 	default:
+ 		return anthropicUserToResponses(m.Content)
+ 	}
+diff --git a/backend/internal/pkg/apicompat/anthropic_translation_fidelity_test.go b/backend/internal/pkg/apicompat/anthropic_translation_fidelity_test.go
+new file mode 100644
+index 000000000..d0fe37628
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/anthropic_translation_fidelity_test.go
+@@ -0,0 +1,32 @@
++package apicompat
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++// A system message in the middle of an Anthropic conversation (e.g. hook
++// output) must reach Responses as a developer item, not as user input.
++func TestAnthropicToResponses_MidConversationSystemBecomesDeveloper(t *testing.T) {
++	out, err := AnthropicToResponses(&AnthropicRequest{
++		Model:     "gpt-5.2",
++		MaxTokens: 64,
++		Messages: []AnthropicMessage{
++			{Role: "user", Content: json.RawMessage(`"hi"`)},
++			{Role: "system", Content: json.RawMessage(`[{"type":"text","text":"hook output"}]`)},
++			{Role: "system", Content: json.RawMessage(`"extra context"`)},
++		},
++	})
++	require.NoError(t, err)
++
++	input := gjson.ParseBytes(out.Input).Array()
++	require.Len(t, input, 3)
++	require.Equal(t, "user", input[0].Get("role").String())
++	require.Equal(t, "developer", input[1].Get("role").String())
++	require.Equal(t, "hook output", input[1].Get("content.0.text").String())
++	require.Equal(t, "developer", input[2].Get("role").String())
++	require.Equal(t, "extra context", input[2].Get("content.0.text").String())
++}

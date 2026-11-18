@@ -1,0 +1,1450 @@
+diff --git a/backend/internal/repository/scheduler_cache.go b/backend/internal/repository/scheduler_cache.go
+index aa7959c7b..1d1a8ae5a 100644
+--- a/backend/internal/repository/scheduler_cache.go
++++ b/backend/internal/repository/scheduler_cache.go
+@@ -8,8 +8,10 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"log/slog"
++	"runtime/debug"
+ 	"slices"
+ 	"strconv"
++	"strings"
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+@@ -17,6 +19,7 @@ import (
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+ 	"github.com/redis/go-redis/v9"
+ 	"github.com/tidwall/gjson"
++	"golang.org/x/sync/singleflight"
+ )
+ 
+ const (
+@@ -35,7 +38,7 @@ const (
+ 	// 账号精简记录（sched:meta:<id>）的修订号：全局修订号与按平台划分的修订号（前缀后接平台名）。
+ 	// 改写精简记录后写入所涉平台的修订号；删除记录、改写平台为空或平台发生变化的记录、写入出错时写入全局修订号。
+ 	// 取值都是新的随机串，读侧只比较是否相等，键丢失后重建也不会与旧取值相同；
+-	// Redis 回滚恢复出缓存记录过的旧取值时，由最长复用时长兜底。
++	// Redis 回滚恢复出缓存记录过的旧取值时，由进程内快照缓存的直接复用时长与宽限期兜底。
+ 	schedulerAccountMetaRevisionKey            = "sched:meta:rev"
+ 	schedulerAccountMetaPlatformRevisionPrefix = "sched:meta:rev:"
+ 
+@@ -47,12 +50,20 @@ const (
+ 	// 替代立即 DEL，让正在读取旧版本的 reader 有足够时间完成 ZRANGE。
+ 	snapshotGraceTTLSeconds = 60
+ 
+-	// schedulerSnapshotCacheMaxAge 是进程内快照缓存条目的最长复用时长，
+-	// 限定了未推进修订号的精简记录改写在本进程的最长可见延迟，与 outbox_lag_rebuild_seconds 默认 10 秒的陈旧容忍度相同。
++	// schedulerSnapshotCacheMaxAge 是进程内快照缓存条目的直接复用时长，与 outbox_lag_rebuild_seconds 默认 10 秒的陈旧容忍度相同。
++	// 未推进修订号的精简记录改写在本进程的可见延迟不超过该时长与 schedulerSnapshotCacheStaleGrace 之和（另加一次加载耗时）。
+ 	schedulerSnapshotCacheMaxAge = 10 * time.Second
++	// schedulerSnapshotCacheStaleGrace：条目超过直接复用时长、但 (active, 修订号) 仍与 Redis 一致时，
++	// 在该宽限期内继续返回该条目，同时触发一次后台加载；超过宽限期后调用方等待加载结果。
++	schedulerSnapshotCacheStaleGrace = 20 * time.Second
+ 	// schedulerSnapshotCacheEvictAge：写入条目时，加载时间早于该时长的其它条目一并清除，
+ 	// 已退休分组的条目不会长期驻留。
+ 	schedulerSnapshotCacheEvictAge = 10 * schedulerSnapshotCacheMaxAge
++	// schedulerLastUsedCacheMaxAge 是条目内 last_used 读取结果的复用时长；本进程写入 last_used 后该结果立即失效。
++	schedulerLastUsedCacheMaxAge = 200 * time.Millisecond
++	// schedulerSharedLoadTimeout 是合并加载（快照条目、last_used）的上下文时限，约束取连接与重试；
++	// 单次套接字读取另受 Redis 客户端读超时约束。合并加载不随单个调用方取消。
++	schedulerSharedLoadTimeout = 10 * time.Second
+ 
+ 	schedulerAccountMetaRevisionBytes        = 16
+ 	schedulerAccountMetaRevisionWriteTimeout = 3 * time.Second
+@@ -250,6 +261,10 @@ type schedulerCache struct {
+ 
+ 	snapshotMu      sync.RWMutex
+ 	snapshotEntries map[string]*schedulerSnapshotEntry
++	// snapshotLoads 合并同一 bucket、同一组 (active, 修订号) 的条目加载。
++	snapshotLoads singleflight.Group
++	// lastUsedGeneration 在本进程每次写入 last_used 后递增，条目内缓存的 last_used 读取结果随之失效。
++	lastUsedGeneration atomic.Uint64
+ 
+ 	// globalRevisionPending 与 globalRevisionWriting 合并写入出错后的后台全局修订号写入，见 scheduleGlobalAccountMetaRevision。
+ 	globalRevisionPending atomic.Bool
+@@ -258,14 +273,38 @@ type schedulerCache struct {
+ 
+ // schedulerSnapshotEntry 是一个 bucket 的已解码快照。
+ // revisions 依次是全局修订号与该 bucket 成员可能涉及的各平台修订号（见 schedulerSnapshotTagKeys）。
+-// accounts 是按快照顺序排列的母本，发布后只读，指针不外泄；
++// accounts 是按快照顺序排列的母本，发布后只读，指针不外泄；母本可以同时被多个条目引用。
++// ids、payloads、lastUsedKeys 与 accounts 一一对齐，payloads 是解码出母本的精简记录原文。
+ // 每次读取都按值复制出本次请求独占的副本再套用 last_used。
+ type schedulerSnapshotEntry struct {
+ 	active       string
+ 	revisions    []string
+ 	loadedAt     time.Time
++	ids          []string
+ 	accounts     []*service.Account
++	payloads     []string
+ 	lastUsedKeys []string
++
++	lastUsed      atomic.Pointer[schedulerLastUsedValues]
++	lastUsedLoads singleflight.Group
++	// refreshing 在宽限期内的后台加载进行期间为 true，同一条目同时只发起一次后台加载。
++	refreshing atomic.Bool
++}
++
++// schedulerLastUsedValues 是条目的一次 last_used 读取结果，与条目的 accounts 一一对齐。
++// nil 表示沿用母本的 LastUsedAt；非 nil 的时间晚于母本，由各次读取共享，不得原地修改。
++type schedulerLastUsedValues struct {
++	fetchedAt  time.Time
++	generation uint64
++	values     []*time.Time
++}
++
++func (v *schedulerLastUsedValues) freshAt(now time.Time, generation uint64) bool {
++	if v == nil || v.generation != generation {
++		return false
++	}
++	age := now.Sub(v.fetchedAt)
++	return age >= 0 && age < schedulerLastUsedCacheMaxAge
+ }
+ 
+ func NewSchedulerCache(rdb *redis.Client) service.SchedulerCache {
+@@ -288,60 +327,141 @@ func newSchedulerCacheWithChunkSizes(rdb *redis.Client, mgetChunkSize, writeChun
+ 	}
+ }
+ 
+-// GetSnapshot 读取 bucket 的激活快照。解码后的精简记录按 bucket 常驻进程内存，
+-// 只有 ready、active 版本、全局修订号与该 bucket 所涉平台的修订号都与 Redis 一致且未超过最长复用时长时才复用；
+-// 否则重新从 Redis 加载。last_used 每次都从 Redis 读取。
+-// 返回的账号对象由本次调用独占，可以修改其顶层字段；map、切片底层数组与指针指向的值与其它调用共享，不得原地修改。
++// GetSnapshot 读取 bucket 的激活快照，语义与返回账号的使用约束同 GetSnapshotValues。
+ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket service.SchedulerBucket) ([]*service.Account, bool, error) {
++	values, hit, err := c.GetSnapshotValues(ctx, bucket)
++	if err != nil || !hit {
++		return nil, false, err
++	}
++	accounts := make([]*service.Account, len(values))
++	for i := range values {
++		accounts[i] = &values[i]
++	}
++	return accounts, true, nil
++}
++
++// GetSnapshotValues 读取 bucket 的激活快照。解码后的精简记录按 bucket 常驻进程内存：
++// ready、active 版本、全局修订号与该 bucket 所涉平台的修订号都与 Redis 一致且未超过直接复用时长时直接复用；
++// (active, 修订号) 一致但超过直接复用时长的条目在宽限期内继续返回，同时触发一次后台加载；其余情况等待加载结果。
++// 同一 bucket、同一组 (active, 修订号) 的并发加载合并为一次；加载时精简记录原文未变、
++// 且预解析结果对应当前运行时模型映射版本的账号沿用已解码的母本。
++// last_used 读取结果在条目内复用 schedulerLastUsedCacheMaxAge。
++// 返回的切片与其中的账号由本次调用独占，可以修改账号的顶层字段；map、切片底层数组与指针指向的值与其它调用共享，不得原地修改。
++func (c *schedulerCache) GetSnapshotValues(ctx context.Context, bucket service.SchedulerBucket) ([]service.Account, bool, error) {
++	entry, err := c.snapshotEntry(ctx, bucket)
++	if err != nil {
++		return nil, false, err
++	}
++	if entry == nil {
++		return nil, false, nil
++	}
++	accounts, err := c.snapshotAccountsFromEntry(ctx, entry)
++	if err != nil {
++		return nil, false, err
++	}
++	return accounts, true, nil
++}
++
++// snapshotEntry 返回 bucket 当前可用的条目；nil 表示快照未命中。
++func (c *schedulerCache) snapshotEntry(ctx context.Context, bucket service.SchedulerBucket) (*schedulerSnapshotEntry, error) {
+ 	bucketKey := bucket.String()
+ 	tagKeys := schedulerSnapshotTagKeys(bucket)
+ 	tags, err := c.rdb.MGet(ctx, tagKeys...).Result()
+ 	if err != nil {
+-		return nil, false, err
++		return nil, err
+ 	}
+ 	if len(tags) != len(tagKeys) {
+-		return nil, false, fmt.Errorf("unexpected scheduler snapshot tag count: got %d, want %d", len(tags), len(tagKeys))
++		return nil, fmt.Errorf("unexpected scheduler snapshot tag count: got %d, want %d", len(tags), len(tagKeys))
+ 	}
+ 	readyVal, err := schedulerCacheOptionalString(tags[0])
+ 	if err != nil {
+-		return nil, false, err
++		return nil, err
+ 	}
+ 	activeVal, err := schedulerCacheOptionalString(tags[1])
+ 	if err != nil {
+-		return nil, false, err
++		return nil, err
+ 	}
+ 	// 修订号缺失（nil）按空字符串比较：它是一个独立取值，不会与任何写入过的随机修订号相等。
+ 	revisions := make([]string, 0, len(tags)-2)
+ 	for _, tag := range tags[2:] {
+ 		revision, err := schedulerCacheOptionalString(tag)
+ 		if err != nil {
+-			return nil, false, err
++			return nil, err
+ 		}
+ 		revisions = append(revisions, revision)
+ 	}
+ 	if readyVal != "1" || activeVal == "" {
+ 		c.dropSnapshotEntry(bucketKey)
+-		return nil, false, nil
++		return nil, nil
+ 	}
+ 
+ 	now := c.now()
+-	if entry := c.lookupSnapshotEntry(bucketKey); entry != nil && entry.matches(activeVal, revisions, now) {
+-		accounts, err := c.snapshotAccountsFromEntry(ctx, entry)
+-		if err != nil {
+-			return nil, false, err
++	if entry := c.lookupSnapshotEntry(bucketKey); entry != nil && entry.sameVersion(activeVal, revisions) {
++		age := now.Sub(entry.loadedAt)
++		if age >= 0 && age < schedulerSnapshotCacheMaxAge {
++			return entry, nil
++		}
++		if age >= 0 && age < schedulerSnapshotCacheMaxAge+schedulerSnapshotCacheStaleGrace {
++			if entry.refreshing.CompareAndSwap(false, true) {
++				results := c.loadSnapshotEntryShared(ctx, bucket, bucketKey, activeVal, revisions, now)
++				go func() {
++					if result := <-results; result.Err != nil {
++						slog.Warn("scheduler snapshot background reload failed", "bucket", bucketKey, "error", result.Err)
++					}
++					entry.refreshing.Store(false)
++				}()
++			}
++			return entry, nil
++		}
++	}
++
++	select {
++	case result := <-c.loadSnapshotEntryShared(ctx, bucket, bucketKey, activeVal, revisions, now):
++		if result.Err != nil {
++			return nil, result.Err
++		}
++		entry, _ := result.Val.(*schedulerSnapshotEntry)
++		return entry, nil
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	}
++}
++
++// loadSnapshotEntryShared 发起或加入 bucket 在给定 (active, 修订号) 下的条目加载，结果的 Val 为 nil 表示快照未命中。
++// 加载使用与调用方取消解耦、时限为 schedulerSharedLoadTimeout 的上下文。
++func (c *schedulerCache) loadSnapshotEntryShared(ctx context.Context, bucket service.SchedulerBucket, bucketKey, active string, revisions []string, now time.Time) <-chan singleflight.Result {
++	key := bucketKey + "\x00" + active + "\x00" + strings.Join(revisions, "\x00")
++	loadCtx := context.WithoutCancel(ctx)
++	return c.snapshotLoads.DoChan(key, recoverSchedulerSharedLoad("scheduler snapshot load", func() (any, error) {
++		ctx, cancel := context.WithTimeout(loadCtx, schedulerSharedLoadTimeout)
++		defer cancel()
++		entry, err := c.loadSnapshotEntry(ctx, bucket, bucketKey, active, revisions, now)
++		if err != nil || entry == nil {
++			return nil, err
+ 		}
+-		return accounts, true, nil
++		return entry, nil
++	}))
++}
++
++// loadSnapshotEntry 从 Redis 加载条目并写入进程内缓存，返回 nil 表示快照未命中。
++// 条目记录的是加载前读到的 (active, 修订号) 与当时的时钟 now：精简记录读取晚于这组取值，
++// 之后若再有改写，修订号或 active 必然不同，或在直接复用时长与宽限期之和后不再返回。
++// 进程内已有同一 (active, 修订号) 且未过期的条目时直接返回它。
++func (c *schedulerCache) loadSnapshotEntry(ctx context.Context, bucket service.SchedulerBucket, bucketKey, active string, revisions []string, now time.Time) (*schedulerSnapshotEntry, error) {
++	previous := c.lookupSnapshotEntry(bucketKey)
++	if previous != nil && previous.matches(active, revisions, c.now()) {
++		return previous, nil
+ 	}
+ 
+-	ids, err := c.rdb.ZRange(ctx, schedulerSnapshotKey(bucket, activeVal), 0, -1).Result()
++	ids, err := c.rdb.ZRange(ctx, schedulerSnapshotKey(bucket, active), 0, -1).Result()
+ 	if err != nil {
+-		return nil, false, err
++		return nil, err
+ 	}
+ 	if len(ids) == 0 {
+ 		// 空快照视为缓存未命中，触发数据库回退查询
+ 		// 这解决了新分组创建后立即绑定账号时的竞态条件问题
+ 		c.dropSnapshotEntry(bucketKey)
+-		return nil, false, nil
++		return nil, nil
+ 	}
+ 
+ 	keys := make([]string, 0, len(ids))
+@@ -352,74 +472,156 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket service.Schedul
+ 	}
+ 	values, err := c.mgetChunked(ctx, keys)
+ 	if err != nil {
+-		return nil, false, err
++		return nil, err
++	}
++	if len(values) != len(ids) {
++		return nil, fmt.Errorf("unexpected scheduler account metadata count: got %d, want %d", len(values), len(ids))
+ 	}
+ 
+-	masters := make([]*service.Account, 0, len(values))
+-	for _, val := range values {
++	reusable := previous.masterIndex()
++	masters := make([]*service.Account, len(values))
++	payloads := make([]string, len(values))
++	for i, val := range values {
+ 		if val == nil {
+ 			c.dropSnapshotEntry(bucketKey)
+-			return nil, false, nil
++			return nil, nil
+ 		}
+-		account, err := decodeCachedAccount(val)
++		payload, err := schedulerCachePayload(val)
+ 		if err != nil {
+-			return nil, false, err
++			return nil, err
+ 		}
+-		masters = append(masters, account)
+-	}
+-	// 母本发布进缓存前由本 goroutine 完成预处理，发布后只读。
+-	for _, master := range masters {
+-		master.PrepareSharedSnapshot()
++		if j, ok := reusable[ids[i]]; ok && previous.payloads[j] == payload && previous.accounts[j].SharedSnapshotCurrent() {
++			masters[i] = previous.accounts[j]
++			payloads[i] = previous.payloads[j]
++			continue
++		}
++		account, err := decodeCachedAccountPayload(payload)
++		if err != nil {
++			return nil, err
++		}
++		// 母本发布进缓存前由本 goroutine 完成预处理，发布后只读。
++		account.PrepareSharedSnapshot()
++		masters[i] = account
++		payloads[i] = payload
+ 	}
+ 
+-	// 条目记录的是加载前读到的 (active, 修订号) 与当时的时钟：精简记录读取晚于这组取值，
+-	// 之后若再有改写，修订号或 active 必然不同，或在最长复用时长后过期。
+ 	entry := &schedulerSnapshotEntry{
+-		active:       activeVal,
++		active:       active,
+ 		revisions:    revisions,
+ 		loadedAt:     now,
++		ids:          ids,
+ 		accounts:     masters,
++		payloads:     payloads,
+ 		lastUsedKeys: lastUsedKeys,
+ 	}
+ 	c.storeSnapshotEntry(bucketKey, entry)
++	return entry, nil
++}
+ 
+-	accounts, err := c.snapshotAccountsFromEntry(ctx, entry)
+-	if err != nil {
+-		return nil, false, err
+-	}
+-	return accounts, true, nil
++func (e *schedulerSnapshotEntry) sameVersion(active string, revisions []string) bool {
++	return e.active == active && slices.Equal(e.revisions, revisions)
+ }
+ 
+ func (e *schedulerSnapshotEntry) matches(active string, revisions []string, now time.Time) bool {
+-	if e.active != active || !slices.Equal(e.revisions, revisions) {
++	if !e.sameVersion(active, revisions) {
+ 		return false
+ 	}
+ 	age := now.Sub(e.loadedAt)
+ 	return age >= 0 && age < schedulerSnapshotCacheMaxAge
+ }
+ 
+-// snapshotAccountsFromEntry 读取最新 last_used，并为本次调用一次性分配一组母本副本。
+-func (c *schedulerCache) snapshotAccountsFromEntry(ctx context.Context, entry *schedulerSnapshotEntry) ([]*service.Account, error) {
+-	lastUsedValues, err := c.mgetChunked(ctx, entry.lastUsedKeys)
++// masterIndex 返回账号 ID 到母本下标的映射；条目为 nil 或缺少原文时返回 nil。
++func (e *schedulerSnapshotEntry) masterIndex() map[string]int {
++	if e == nil || len(e.ids) == 0 || len(e.ids) != len(e.accounts) || len(e.ids) != len(e.payloads) {
++		return nil
++	}
++	index := make(map[string]int, len(e.ids))
++	for i, id := range e.ids {
++		index[id] = i
++	}
++	return index
++}
++
++// snapshotAccountsFromEntry 为本次调用一次性分配一组母本副本，并套用 last_used。
++func (c *schedulerCache) snapshotAccountsFromEntry(ctx context.Context, entry *schedulerSnapshotEntry) ([]service.Account, error) {
++	lastUsed, err := c.entryLastUsed(ctx, entry)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	if len(lastUsedValues) != len(entry.accounts) {
+-		return nil, fmt.Errorf("unexpected scheduler last_used value count: got %d, want %d", len(lastUsedValues), len(entry.accounts))
+-	}
+-	slab := make([]service.Account, len(entry.accounts))
+-	accounts := make([]*service.Account, len(entry.accounts))
++	accounts := make([]service.Account, len(entry.accounts))
+ 	for i, master := range entry.accounts {
+-		slab[i] = *master
+-		account := &slab[i]
+-		if err := applySchedulerLastUsed(account, lastUsedValues[i]); err != nil {
+-			return nil, err
++		accounts[i] = *master
++		if lastUsed[i] != nil {
++			accounts[i].LastUsedAt = lastUsed[i]
+ 		}
+-		accounts[i] = account
+ 	}
+ 	return accounts, nil
+ }
+ 
++// entryLastUsed 返回条目的 last_used 读取结果：结果未超过 schedulerLastUsedCacheMaxAge 且本进程此后未写入 last_used 时直接复用，
++// 否则等待一次合并后的读取。
++func (c *schedulerCache) entryLastUsed(ctx context.Context, entry *schedulerSnapshotEntry) ([]*time.Time, error) {
++	generation := c.lastUsedGeneration.Load()
++	if current := entry.lastUsed.Load(); current.freshAt(c.now(), generation) {
++		return current.values, nil
++	}
++	loadCtx := context.WithoutCancel(ctx)
++	results := entry.lastUsedLoads.DoChan(strconv.FormatUint(generation, 10), recoverSchedulerSharedLoad("scheduler last_used load", func() (any, error) {
++		fetchedAt := c.now()
++		if current := entry.lastUsed.Load(); current.freshAt(fetchedAt, generation) {
++			return current, nil
++		}
++		ctx, cancel := context.WithTimeout(loadCtx, schedulerSharedLoadTimeout)
++		defer cancel()
++		raw, err := c.mgetChunked(ctx, entry.lastUsedKeys)
++		if err != nil {
++			return nil, err
++		}
++		if len(raw) != len(entry.accounts) {
++			return nil, fmt.Errorf("unexpected scheduler last_used value count: got %d, want %d", len(raw), len(entry.accounts))
++		}
++		values := make([]*time.Time, len(raw))
++		for i, value := range raw {
++			lastUsedAt, err := parseSchedulerLastUsed(value)
++			if err != nil {
++				return nil, err
++			}
++			if lastUsedAt != nil && (entry.accounts[i].LastUsedAt == nil || lastUsedAt.After(*entry.accounts[i].LastUsedAt)) {
++				values[i] = lastUsedAt
++			}
++		}
++		loaded := &schedulerLastUsedValues{fetchedAt: fetchedAt, generation: generation, values: values}
++		entry.lastUsed.Store(loaded)
++		return loaded, nil
++	}))
++	select {
++	case result := <-results:
++		if result.Err != nil {
++			return nil, result.Err
++		}
++		loaded, _ := result.Val.(*schedulerLastUsedValues)
++		if loaded == nil {
++			return nil, errors.New("scheduler last_used load returned no values")
++		}
++		return loaded.values, nil
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	}
++}
++
++// recoverSchedulerSharedLoad 包装合并加载：加载 panic 时记录堆栈并转成错误交给全部等待方。
++func recoverSchedulerSharedLoad(name string, load func() (any, error)) func() (any, error) {
++	return func() (result any, err error) {
++		defer func() {
++			if recovered := recover(); recovered != nil {
++				slog.Error("scheduler shared load panicked", "load", name, "panic", recovered, "stack", string(debug.Stack()))
++				result, err = nil, fmt.Errorf("%s panicked: %v", name, recovered)
++			}
++		}()
++		return load()
++	}
++}
++
+ func (c *schedulerCache) lookupSnapshotEntry(bucketKey string) *schedulerSnapshotEntry {
+ 	c.snapshotMu.RLock()
+ 	defer c.snapshotMu.RUnlock()
+@@ -846,6 +1048,8 @@ func (c *schedulerCache) UpdateLastUsed(ctx context.Context, updates map[int64]t
+ 		pipe.Set(ctx, schedulerAccountMetaRevisionKey, newSchedulerAccountMetaRevision(), 0)
+ 	}
+ 	_, err := pipe.Exec(ctx)
++	// 写入结束（含部分失败）后才推进本进程的代际：此后发起的 last_used 读取都排在写入之后。
++	c.lastUsedGeneration.Add(1)
+ 	return err
+ }
+ 
+@@ -930,9 +1134,24 @@ func schedulerLastUsedMillis(value time.Time) (int64, error) {
+ }
+ 
+ func applySchedulerLastUsed(account *service.Account, value any) error {
+-	if account == nil || value == nil {
++	if account == nil {
+ 		return nil
+ 	}
++	lastUsedAt, err := parseSchedulerLastUsed(value)
++	if err != nil {
++		return err
++	}
++	if lastUsedAt != nil && (account.LastUsedAt == nil || lastUsedAt.After(*account.LastUsedAt)) {
++		account.LastUsedAt = lastUsedAt
++	}
++	return nil
++}
++
++// parseSchedulerLastUsed 解析 last_used 侧键的毫秒时间戳；键不存在（nil）时返回 nil。
++func parseSchedulerLastUsed(value any) (*time.Time, error) {
++	if value == nil {
++		return nil, nil
++	}
+ 	var raw string
+ 	switch typed := value.(type) {
+ 	case string:
+@@ -940,31 +1159,38 @@ func applySchedulerLastUsed(account *service.Account, value any) error {
+ 	case []byte:
+ 		raw = string(typed)
+ 	default:
+-		return fmt.Errorf("unexpected last_used cache type: %T", value)
++		return nil, fmt.Errorf("unexpected last_used cache type: %T", value)
+ 	}
+ 	millis, err := strconv.ParseInt(raw, 10, 64)
+ 	if err != nil {
+-		return fmt.Errorf("invalid last_used cache value %q: %w", raw, err)
+-	}
+-	lastUsedAt := time.UnixMilli(millis).UTC()
+-	if account.LastUsedAt == nil || lastUsedAt.After(*account.LastUsedAt) {
+-		account.LastUsedAt = ptrTime(lastUsedAt)
++		return nil, fmt.Errorf("invalid last_used cache value %q: %w", raw, err)
+ 	}
+-	return nil
++	return ptrTime(time.UnixMilli(millis).UTC()), nil
+ }
+ 
+ func decodeCachedAccount(val any) (*service.Account, error) {
+-	var payload []byte
++	payload, err := schedulerCachePayload(val)
++	if err != nil {
++		return nil, err
++	}
++	return decodeCachedAccountPayload(payload)
++}
++
++// schedulerCachePayload 取出 Redis 返回的账号记录原文。
++func schedulerCachePayload(val any) (string, error) {
+ 	switch raw := val.(type) {
+ 	case string:
+-		payload = []byte(raw)
++		return raw, nil
+ 	case []byte:
+-		payload = raw
++		return string(raw), nil
+ 	default:
+-		return nil, fmt.Errorf("unexpected account cache type: %T", val)
++		return "", fmt.Errorf("unexpected account cache type: %T", val)
+ 	}
++}
++
++func decodeCachedAccountPayload(payload string) (*service.Account, error) {
+ 	var account service.Account
+-	if err := json.Unmarshal(payload, &account); err != nil {
++	if err := json.Unmarshal([]byte(payload), &account); err != nil {
+ 		return nil, err
+ 	}
+ 	return &account, nil
+@@ -975,7 +1201,7 @@ func decodeCachedAccount(val any) (*service.Account, error) {
+ // 与最后一批精简记录同一次往返发出，且排在全部精简记录写入之后。
+ // 精简记录用 SET ... GET 写入并取回旧值：旧值的平台与新平台不同时，旧平台 bucket 中可能仍缓存着该账号，
+ // 全部写入完成后另行写入全局修订号。该检测尽力而为（客户端在 pipeline 内部重试时取回的可能已是本次写入的值），
+-// 漏检由进程内快照缓存的最长复用时长兜底。
++// 漏检由进程内快照缓存的直接复用时长与宽限期兜底。
+ // 任一块执行出错时，此前已执行的块与出错的块都可能已有精简记录生效，返回时启动后台写入全局修订号。
+ func (c *schedulerCache) writeAccountIDs(ctx context.Context, accounts []service.Account) ([]int64, error) {
+ 	if len(accounts) == 0 {
+@@ -1102,7 +1328,7 @@ func (c *schedulerCache) scheduleGlobalAccountMetaRevision(ctx context.Context)
+ }
+ 
+ // advanceGlobalAccountMetaRevision 单独写入新的全局修订号，使所有 bucket 的进程内快照失效。
+-// 不受调用方取消影响；失败只记录日志，由进程内快照缓存的最长复用时长兜底。
++// 不受调用方取消影响；失败只记录日志，由进程内快照缓存的直接复用时长与宽限期兜底。
+ func (c *schedulerCache) advanceGlobalAccountMetaRevision(ctx context.Context) {
+ 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), schedulerAccountMetaRevisionWriteTimeout)
+ 	defer cancel()
+@@ -1135,21 +1361,29 @@ func (c *schedulerCache) mgetChunked(ctx context.Context, keys []string) ([]any,
+ 		return []any{}, nil
+ 	}
+ 
+-	out := make([]any, 0, len(keys))
+ 	chunkSize := c.mgetChunkSize
+ 	if chunkSize <= 0 {
+ 		chunkSize = defaultSchedulerSnapshotMGetChunkSize
+ 	}
++	if len(keys) <= chunkSize {
++		return c.rdb.MGet(ctx, keys...).Result()
++	}
++	// 多个分块的 MGET 放在同一个 pipeline 里，一次往返发出。
++	pipe := c.rdb.Pipeline()
++	cmds := make([]*redis.SliceCmd, 0, (len(keys)+chunkSize-1)/chunkSize)
+ 	for start := 0; start < len(keys); start += chunkSize {
+ 		end := start + chunkSize
+ 		if end > len(keys) {
+ 			end = len(keys)
+ 		}
+-		part, err := c.rdb.MGet(ctx, keys[start:end]...).Result()
+-		if err != nil {
+-			return nil, err
+-		}
+-		out = append(out, part...)
++		cmds = append(cmds, pipe.MGet(ctx, keys[start:end]...))
++	}
++	if _, err := pipe.Exec(ctx); err != nil {
++		return nil, err
++	}
++	out := make([]any, 0, len(keys))
++	for _, cmd := range cmds {
++		out = append(out, cmd.Val()...)
+ 	}
+ 	return out, nil
+ }
+diff --git a/backend/internal/repository/scheduler_cache_snapshot_memo_unit_test.go b/backend/internal/repository/scheduler_cache_snapshot_memo_unit_test.go
+index 9b3d92ea2..54cb3e898 100644
+--- a/backend/internal/repository/scheduler_cache_snapshot_memo_unit_test.go
++++ b/backend/internal/repository/scheduler_cache_snapshot_memo_unit_test.go
+@@ -12,6 +12,7 @@ import (
+ 	"testing"
+ 	"time"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+ 	"github.com/alicebob/miniredis/v2"
+ 	"github.com/redis/go-redis/v9"
+@@ -219,8 +220,10 @@ func memoEntryCount(cache *schedulerCache) int {
+ 	return len(cache.snapshotEntries)
+ }
+ 
+-func TestSchedulerCacheSnapshotMemoSecondReadOnlyFetchesTagsAndLastUsed(t *testing.T) {
++func TestSchedulerCacheSnapshotMemoRepeatReadsFetchTagsAndExpiredLastUsed(t *testing.T) {
+ 	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
++	cache.now = clock.Now
+ 	bucket := memoTestBucket(101)
+ 	memoPublish(t, cache, bucket, memoTestAccount(1, "a"), memoTestAccount(2, "b"), memoTestAccount(3, "c"))
+ 
+@@ -228,9 +231,17 @@ func TestSchedulerCacheSnapshotMemoSecondReadOnlyFetchesTagsAndLastUsed(t *testi
+ 	first := memoRead(t, cache, bucket)
+ 	require.Equal(t, 1, recorder.countPrefix("zrange "))
+ 	require.Equal(t, 1, recorder.countPrefix("mget "+schedulerAccountMetaPrefix))
++	require.Equal(t, 1, recorder.countPrefix("mget "+schedulerAccountLastUsedPrefix))
+ 
+ 	recorder.reset()
+ 	second := memoRead(t, cache, bucket)
++	require.Equal(t, []string{
++		"mget " + schedulerBucketKey(schedulerReadyPrefix, bucket),
++	}, recorder.recorded(), "last_used read within its max age is reused")
++
++	clock.Advance(schedulerLastUsedCacheMaxAge)
++	recorder.reset()
++	memoRead(t, cache, bucket)
+ 	require.Equal(t, []string{
+ 		"mget " + schedulerBucketKey(schedulerReadyPrefix, bucket),
+ 		"mget " + schedulerLastUsedKey("1"),
+@@ -248,6 +259,8 @@ func TestSchedulerCacheSnapshotMemoSecondReadOnlyFetchesTagsAndLastUsed(t *testi
+ func TestSchedulerCacheSnapshotMemoLastUsedIsFreshAndCopiesAreIndependent(t *testing.T) {
+ 	ctx := context.Background()
+ 	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
++	cache.now = clock.Now
+ 	bucket := memoTestBucket(102)
+ 	embedded := time.Now().UTC().Truncate(time.Millisecond).Add(-time.Hour)
+ 	account := memoTestAccount(11, "a")
+@@ -272,8 +285,9 @@ func TestSchedulerCacheSnapshotMemoLastUsedIsFreshAndCopiesAreIndependent(t *tes
+ 	second[0].Credentials = map[string]any{"model_mapping": map[string]any{"claude-sonnet": "replaced"}}
+ 	require.Equal(t, "replaced", second[0].GetMappedModel("claude-sonnet"))
+ 
+-	// 删除 last_used 侧键（不改精简记录）：若母本曾被套用 last_used，这里会读到 latest。
++	// 删除 last_used 侧键（不改精简记录）并越过 last_used 复用时长：若母本曾被套用 last_used，这里会读到 latest。
+ 	require.NoError(t, cache.rdb.Del(ctx, schedulerLastUsedKey("11")).Err())
++	clock.Advance(schedulerLastUsedCacheMaxAge)
+ 	recorder.reset()
+ 	third := memoRead(t, cache, bucket)
+ 	require.Zero(t, recorder.countPrefix("zrange "))
+@@ -660,6 +674,8 @@ func memoReadExpectHit(t *testing.T, cache *schedulerCache, recorder *schedulerC
+ func TestSchedulerCacheSnapshotMemoPlatformRevisionScopesInvalidation(t *testing.T) {
+ 	ctx := context.Background()
+ 	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
++	cache.now = clock.Now
+ 	geminiSingle := service.SchedulerBucket{GroupID: 201, Platform: service.PlatformGemini, Mode: service.SchedulerModeSingle}
+ 	gemini := memoTestAccountOn(service.PlatformGemini, 211, "gemini")
+ 	memoPublish(t, cache, geminiSingle, gemini)
+@@ -672,7 +688,6 @@ func TestSchedulerCacheSnapshotMemoPlatformRevisionScopesInvalidation(t *testing
+ 	memoRead(t, cache, geminiSingle)
+ 	require.Equal(t, []string{
+ 		"mget " + schedulerBucketKey(schedulerReadyPrefix, geminiSingle),
+-		"mget " + schedulerLastUsedKey("211"),
+ 	}, recorder.recorded(), "an Anthropic account write must not invalidate a Gemini bucket")
+ 
+ 	gemini.Name = "gemini-renamed"
+@@ -844,10 +859,250 @@ func TestSchedulerCacheSnapshotMemoMaxAgeBoundsUnversionedWrites(t *testing.T) {
+ 	clock.Advance(schedulerSnapshotCacheMaxAge - time.Millisecond)
+ 	require.Equal(t, "old", memoRead(t, cache, bucket)[0].Name)
+ 
++	// 超过直接复用时长：本次仍返回旧条目，同时由后台加载刷新。
+ 	clock.Advance(time.Millisecond)
++	require.Equal(t, "old", memoRead(t, cache, bucket)[0].Name)
++	require.Eventually(t, func() bool {
++		accounts, hit, err := cache.GetSnapshot(ctx, bucket)
++		return err == nil && hit && accounts[0].Name == "new"
++	}, time.Second, 5*time.Millisecond)
++}
++
++func TestSchedulerCacheSnapshotMemoStaleGraceIsBounded(t *testing.T) {
++	ctx := context.Background()
++	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
++	cache.now = clock.Now
++	bucket := memoTestBucket(127)
++	memoPublish(t, cache, bucket, memoTestAccount(152, "old"))
++	require.Equal(t, "old", memoRead(t, cache, bucket)[0].Name)
++
++	_, metaPayload, err := marshalSchedulerCacheAccount(memoTestAccount(152, "new"))
++	require.NoError(t, err)
++	require.NoError(t, cache.rdb.Set(ctx, schedulerAccountMetaKey("152"), metaPayload, 0).Err())
++
++	// 超过直接复用时长与宽限期之和后，读取等待加载结果。
++	clock.Advance(schedulerSnapshotCacheMaxAge + schedulerSnapshotCacheStaleGrace)
++	recorder.reset()
++	require.Equal(t, "new", memoRead(t, cache, bucket)[0].Name)
++	require.Equal(t, 1, recorder.countPrefix("zrange "))
++}
++
++func TestSchedulerCacheSnapshotMemoVersionChangeWaitsForReload(t *testing.T) {
++	ctx := context.Background()
++	cache, _, _ := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
++	cache.now = clock.Now
++	bucket := memoTestBucket(128)
++	account := memoTestAccount(153, "old")
++	memoPublish(t, cache, bucket, account)
++	require.Equal(t, "old", memoRead(t, cache, bucket)[0].Name)
++
++	// 条目已超过直接复用时长；修订号变化后不走宽限期，本次读取即看到新值。
++	clock.Advance(schedulerSnapshotCacheMaxAge)
++	account.Name = "new"
++	require.NoError(t, cache.SetAccount(ctx, &account))
+ 	require.Equal(t, "new", memoRead(t, cache, bucket)[0].Name)
+ }
+ 
++// blockingZRangeHook 让 ZRANGE 停在 release 关闭之前。
++type blockingZRangeHook struct {
++	release chan struct{}
++}
++
++func (h *blockingZRangeHook) DialHook(next redis.DialHook) redis.DialHook { return next }
++
++func (h *blockingZRangeHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
++	return func(ctx context.Context, cmd redis.Cmder) error {
++		if strings.EqualFold(cmd.Name(), "zrange") {
++			<-h.release
++		}
++		return next(ctx, cmd)
++	}
++}
++
++func (h *blockingZRangeHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
++	return next
++}
++
++func TestSchedulerCacheSnapshotMemoConcurrentLoadsAreCoalesced(t *testing.T) {
++	ctx := context.Background()
++	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	bucket := memoTestBucket(129)
++	memoPublish(t, cache, bucket, memoTestAccount(154, "a"), memoTestAccount(155, "b"))
++	hook := &blockingZRangeHook{release: make(chan struct{})}
++	cache.rdb.AddHook(hook)
++	recorder.reset()
++
++	const readers = 16
++	results := make(chan error, readers)
++	for i := 0; i < readers; i++ {
++		go func() {
++			accounts, hit, err := cache.GetSnapshot(ctx, bucket)
++			if err == nil && (!hit || len(accounts) != 2) {
++				err = fmt.Errorf("hit=%v accounts=%d", hit, len(accounts))
++			}
++			results <- err
++		}()
++	}
++	readyKey := "mget " + schedulerBucketKey(schedulerReadyPrefix, bucket)
++	require.Eventually(t, func() bool { return recorder.countPrefix(readyKey) == readers }, time.Second, time.Millisecond)
++	close(hook.release)
++	for i := 0; i < readers; i++ {
++		require.NoError(t, <-results)
++	}
++	require.Equal(t, 1, recorder.countPrefix("zrange "))
++	require.Equal(t, 1, recorder.countPrefix("mget "+schedulerAccountMetaPrefix))
++}
++
++func TestSchedulerCacheSnapshotMemoCanceledWaiterDoesNotAbortSharedLoad(t *testing.T) {
++	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	bucket := memoTestBucket(130)
++	memoPublish(t, cache, bucket, memoTestAccount(156, "a"))
++	hook := &blockingZRangeHook{release: make(chan struct{})}
++	cache.rdb.AddHook(hook)
++
++	ctx, cancel := context.WithCancel(context.Background())
++	done := make(chan error, 1)
++	go func() {
++		_, _, err := cache.GetSnapshot(ctx, bucket)
++		done <- err
++	}()
++	require.Eventually(t, func() bool { return recorder.countPrefix("zrange ") == 1 }, time.Second, time.Millisecond)
++	cancel()
++	require.ErrorIs(t, <-done, context.Canceled)
++
++	close(hook.release)
++	require.Eventually(t, func() bool { return memoEntryCount(cache) == 1 }, time.Second, time.Millisecond)
++	require.Equal(t, []int64{156}, memoIDs(memoRead(t, cache, bucket)))
++}
++
++func TestSchedulerCacheSnapshotMemoReloadReusesUnchangedMasters(t *testing.T) {
++	ctx := context.Background()
++	cache, _, _ := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	bucket := memoTestBucket(131)
++	changed := memoTestAccount(158, "b")
++	memoPublish(t, cache, bucket, memoTestAccount(157, "a"), changed, memoTestAccount(159, "c"))
++	memoRead(t, cache, bucket)
++	before := cache.lookupSnapshotEntry(bucket.String())
++	require.NotNil(t, before)
++
++	changed.Name = "b2"
++	require.NoError(t, cache.SetAccount(ctx, &changed))
++	got := memoRead(t, cache, bucket)
++	require.Equal(t, "b2", got[1].Name)
++	after := cache.lookupSnapshotEntry(bucket.String())
++	require.NotSame(t, before, after)
++	require.Same(t, before.accounts[0], after.accounts[0])
++	require.NotSame(t, before.accounts[1], after.accounts[1])
++	require.Same(t, before.accounts[2], after.accounts[2])
++	require.Equal(t, "b", before.accounts[1].Name, "reload must not modify the previous master")
++}
++
++// 服务层按该方法签名探测值切片读取。
++var _ interface {
++	GetSnapshotValues(ctx context.Context, bucket service.SchedulerBucket) ([]service.Account, bool, error)
++} = (*schedulerCache)(nil)
++
++func TestSchedulerCacheSnapshotMemoReloadRedecodesMastersAfterRuntimeMappingChange(t *testing.T) {
++	ctx := context.Background()
++	cache, _, _ := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	bucket := memoTestBucket(134)
++	changed := memoTestAccount(167, "b")
++	memoPublish(t, cache, bucket, memoTestAccount(166, "a"), changed)
++	memoRead(t, cache, bucket)
++	before := cache.lookupSnapshotEntry(bucket.String())
++	require.True(t, before.accounts[0].SharedSnapshotCurrent())
++
++	xai.SetRuntimeModelMappingOptions(xai.RuntimeModelMappingOptions())
++	require.False(t, before.accounts[0].SharedSnapshotCurrent())
++	changed.Name = "b2"
++	require.NoError(t, cache.SetAccount(ctx, &changed))
++	memoRead(t, cache, bucket)
++	after := cache.lookupSnapshotEntry(bucket.String())
++	require.NotSame(t, before.accounts[0], after.accounts[0], "a master prepared under an older runtime mapping version is decoded again")
++	require.True(t, after.accounts[0].SharedSnapshotCurrent())
++}
++
++func TestSchedulerCacheSnapshotMemoStaleEntryStartsOneBackgroundReload(t *testing.T) {
++	ctx := context.Background()
++	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
++	cache.now = clock.Now
++	bucket := memoTestBucket(135)
++	memoPublish(t, cache, bucket, memoTestAccount(168, "old"))
++	require.Equal(t, "old", memoRead(t, cache, bucket)[0].Name)
++	stale := cache.lookupSnapshotEntry(bucket.String())
++
++	_, metaPayload, err := marshalSchedulerCacheAccount(memoTestAccount(168, "new"))
++	require.NoError(t, err)
++	require.NoError(t, cache.rdb.Set(ctx, schedulerAccountMetaKey("168"), metaPayload, 0).Err())
++	hook := &blockingZRangeHook{release: make(chan struct{})}
++	cache.rdb.AddHook(hook)
++	clock.Advance(schedulerSnapshotCacheMaxAge)
++	recorder.reset()
++
++	for i := 0; i < 5; i++ {
++		require.Equal(t, "old", memoRead(t, cache, bucket)[0].Name)
++	}
++	require.True(t, stale.refreshing.Load())
++	require.Eventually(t, func() bool { return recorder.countPrefix("zrange ") == 1 }, time.Second, time.Millisecond)
++	close(hook.release)
++	require.Eventually(t, func() bool { return !stale.refreshing.Load() }, time.Second, time.Millisecond)
++	require.Equal(t, "new", memoRead(t, cache, bucket)[0].Name)
++	require.Equal(t, 1, recorder.countPrefix("zrange "))
++}
++
++func TestSchedulerCacheSnapshotMemoLastUsedWriteInvalidatesLocalCache(t *testing.T) {
++	ctx := context.Background()
++	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
++	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
++	cache.now = clock.Now
++	bucket := memoTestBucket(132)
++	memoPublish(t, cache, bucket, memoTestAccount(160, "a"))
++	require.Nil(t, memoRead(t, cache, bucket)[0].LastUsedAt)
++
++	// 其它进程写入的 last_used 在复用时长内不可见。
++	usedAt := time.Date(2026, 10, 20, 7, 0, 0, 0, time.UTC)
++	require.NoError(t, cache.rdb.Set(ctx, schedulerLastUsedKey("160"), strconv.FormatInt(usedAt.UnixMilli(), 10), 0).Err())
++	require.Nil(t, memoRead(t, cache, bucket)[0].LastUsedAt)
++
++	// 本进程写入 last_used 后立即可见。
++	later := usedAt.Add(time.Minute)
++	require.NoError(t, cache.UpdateLastUsed(ctx, map[int64]time.Time{160: later}))
++	recorder.reset()
++	got := memoRead(t, cache, bucket)
++	require.Equal(t, later, *got[0].LastUsedAt)
++	require.Equal(t, 1, recorder.countPrefix("mget "+schedulerAccountLastUsedPrefix))
++	require.Zero(t, recorder.countPrefix("zrange "))
++}
++
++func TestSchedulerCacheSnapshotMemoChunkedMGetUsesOnePipeline(t *testing.T) {
++	mr := miniredis.RunT(t)
++	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
++	t.Cleanup(func() { _ = rdb.Close() })
++	recorder := &schedulerCacheCommandRecorder{}
++	rdb.AddHook(recorder)
++	cache, ok := newSchedulerCacheWithChunkSizes(rdb, 2, defaultSchedulerSnapshotWriteChunkSize).(*schedulerCache)
++	require.True(t, ok)
++	bucket := memoTestBucket(133)
++	accounts := make([]service.Account, 0, 5)
++	for id := int64(161); id <= 165; id++ {
++		accounts = append(accounts, memoTestAccount(id, strconv.FormatInt(id, 10)))
++	}
++	memoPublish(t, cache, bucket, accounts...)
++
++	recorder.reset()
++	got := memoRead(t, cache, bucket)
++	require.Equal(t, []int64{161, 162, 163, 164, 165}, memoIDs(got))
++	batches := recorder.pipelineBatches()
++	require.Len(t, batches, 2, "metadata and last_used each travel in one pipeline")
++	for _, batch := range batches {
++		require.Len(t, batch, 3)
++	}
++	require.Equal(t, 3, recorder.countPrefix("mget "+schedulerAccountMetaPrefix))
++}
++
+ func TestSchedulerCacheSnapshotMemoEvictsLongIdleEntries(t *testing.T) {
+ 	cache, _, _ := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
+ 	clock := &memoTestClock{now: time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)}
+diff --git a/backend/internal/service/account.go b/backend/internal/service/account.go
+index be94a95ed..2fe64d9ee 100644
+--- a/backend/internal/service/account.go
++++ b/backend/internal/service/account.go
+@@ -677,6 +677,11 @@ func (a *Account) PrepareSharedSnapshot() {
+ 	a.modelMappingCacheShared = true
+ }
+ 
++// SharedSnapshotCurrent 报告账号是否为 PrepareSharedSnapshot 处理过的母本，且其预解析结果对应当前的运行时模型映射版本。
++func (a *Account) SharedSnapshotCurrent() bool {
++	return a != nil && a.modelMappingCacheShared && a.modelMappingCacheRuntimeVersion == xai.RuntimeModelMappingVersion()
++}
++
+ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]string {
+ 	if a.Credentials == nil {
+ 		// Antigravity 平台使用默认映射
+diff --git a/backend/internal/service/gateway_scheduling.go b/backend/internal/service/gateway_scheduling.go
+index b1219980e..1060bbd0e 100644
+--- a/backend/internal/service/gateway_scheduling.go
++++ b/backend/internal/service/gateway_scheduling.go
+@@ -1548,18 +1548,21 @@ func (s *GatewayService) getSchedulableAccount(ctx context.Context, accountID in
+ 	return account, nil
+ }
+ 
++// filterAccountsBySchedulingThreshold 在 accounts 上原地剔除被调度阈值暂停的账号并返回剔除后的切片；
++// accounts 必须由调用方独占，调用后只能使用返回值。
+ func (s *GatewayService) filterAccountsBySchedulingThreshold(ctx context.Context, accounts []Account) []Account {
+ 	if len(accounts) == 0 {
+ 		return accounts
+ 	}
+ 
+-	filtered := make([]Account, 0, len(accounts))
++	filtered := accounts[:0]
+ 	for i := range accounts {
+ 		if s.isAccountBlockedBySchedulingThreshold(ctx, &accounts[i]) {
+ 			continue
+ 		}
+ 		filtered = append(filtered, accounts[i])
+ 	}
++	clear(accounts[len(filtered):])
+ 	return filtered
+ }
+ 
+diff --git a/backend/internal/service/scheduler_cache.go b/backend/internal/service/scheduler_cache.go
+index 5e5dbed16..dd9e7f6da 100644
+--- a/backend/internal/service/scheduler_cache.go
++++ b/backend/internal/service/scheduler_cache.go
+@@ -73,6 +73,13 @@ func ParseSchedulerBucket(raw string) (SchedulerBucket, bool) {
+ 	}, true
+ }
+ 
++// schedulerSnapshotValuesReader 由能直接返回账号值切片的 SchedulerCache 实现。
++// GetSnapshotValues 与 GetSnapshot 读取同一份快照，返回的切片与其中的账号由本次调用独占，
++// 账号的使用约束与 GetSnapshot 相同。
++type schedulerSnapshotValuesReader interface {
++	GetSnapshotValues(ctx context.Context, bucket SchedulerBucket) ([]Account, bool, error)
++}
++
+ // SchedulerCache 负责调度快照与账号快照的缓存读写。
+ type SchedulerCache interface {
+ 	// GetSnapshot 读取快照并返回命中与否（ready + active + 数据完整）。
+diff --git a/backend/internal/service/scheduler_snapshot_fallback_coalesce_test.go b/backend/internal/service/scheduler_snapshot_fallback_coalesce_test.go
+new file mode 100644
+index 000000000..b5f5e4825
+--- /dev/null
++++ b/backend/internal/service/scheduler_snapshot_fallback_coalesce_test.go
+@@ -0,0 +1,237 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"testing/synctest"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/stretchr/testify/require"
++)
++
++// fallbackCoalesceCache 总是快照未命中，并统计发布令牌与回写次数。
++type fallbackCoalesceCache struct {
++	SchedulerCache
++	reads    atomic.Int32
++	tokens   atomic.Int32
++	publish  atomic.Int32
++	snapshot []Account
++}
++
++func (c *fallbackCoalesceCache) GetSnapshot(context.Context, SchedulerBucket) ([]*Account, bool, error) {
++	c.reads.Add(1)
++	return nil, false, nil
++}
++
++func (c *fallbackCoalesceCache) CaptureBucketWriteToken(_ context.Context, bucket SchedulerBucket) (SchedulerBucketWriteToken, error) {
++	c.tokens.Add(1)
++	return SchedulerBucketWriteToken{Bucket: bucket, Epoch: 1}, nil
++}
++
++func (c *fallbackCoalesceCache) SetSnapshot(_ context.Context, _ SchedulerBucket, _ SchedulerBucketWriteToken, accounts []Account) error {
++	c.publish.Add(1)
++	c.snapshot = accounts
++	return nil
++}
++
++// fallbackCoalesceRepo 的配置池查询停在 release 关闭之前，并统计调用次数。
++type fallbackCoalesceRepo struct {
++	AccountRepository
++	release  chan struct{}
++	calls    atomic.Int32
++	accounts []Account
++}
++
++func (r *fallbackCoalesceRepo) ListModelAvailabilityCandidates(ctx context.Context, _ *int64, _ []string, _ bool) ([]Account, error) {
++	r.calls.Add(1)
++	select {
++	case <-r.release:
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	}
++	return r.accounts, nil
++}
++
++func newFallbackCoalesceService(cache SchedulerCache, repo AccountRepository) *SchedulerSnapshotService {
++	return NewSchedulerSnapshotService(cache, nil, repo, nil, &config.Config{
++		RunMode: config.RunModeStandard,
++		Gateway: config.GatewayConfig{Scheduling: config.GatewaySchedulingConfig{
++			DbFallbackEnabled: true,
++		}},
++	})
++}
++
++func TestSchedulerFallbackConcurrentMissesShareOneDBLoad(t *testing.T) {
++	synctest.Test(t, func(t *testing.T) {
++		cache := &fallbackCoalesceCache{}
++		repo := &fallbackCoalesceRepo{
++			release: make(chan struct{}),
++			accounts: []Account{
++				{ID: 7101, Name: "a", Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true},
++				{ID: 7102, Name: "b", Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true},
++			},
++		}
++		svc := newFallbackCoalesceService(cache, repo)
++		groupID := int64(71)
++
++		const callers = 12
++		results := make([][]Account, callers)
++		errs := make([]error, callers)
++		var wg sync.WaitGroup
++		for i := 0; i < callers; i++ {
++			wg.Add(1)
++			go func(i int) {
++				defer wg.Done()
++				results[i], _, errs[i] = svc.ListSchedulableAccounts(context.Background(), &groupID, PlatformOpenAI, false)
++			}(i)
++		}
++		synctest.Wait()
++		require.Equal(t, int32(callers), cache.reads.Load())
++		require.Equal(t, int32(1), repo.calls.Load())
++		close(repo.release)
++		wg.Wait()
++
++		require.Equal(t, int32(1), repo.calls.Load())
++		require.Equal(t, int32(1), cache.tokens.Load())
++		require.Equal(t, int32(1), cache.publish.Load())
++		for i := 0; i < callers; i++ {
++			require.NoError(t, errs[i])
++			require.Len(t, results[i], 2)
++		}
++
++		// 每个调用方的切片相互独立，也不与回写的快照共用底层数组。
++		results[0][0].Name = "mutated"
++		results[0] = append(results[0][:1], Account{ID: 7199})
++		for i := 1; i < callers; i++ {
++			require.Equal(t, "a", results[i][0].Name)
++			require.Equal(t, int64(7102), results[i][1].ID)
++		}
++		require.Equal(t, "a", cache.snapshot[0].Name)
++		require.Equal(t, int64(7102), cache.snapshot[1].ID)
++	})
++}
++
++func TestSchedulerFallbackCanceledWaiterLeavesSharedLoadRunning(t *testing.T) {
++	synctest.Test(t, func(t *testing.T) {
++		cache := &fallbackCoalesceCache{}
++		repo := &fallbackCoalesceRepo{
++			release:  make(chan struct{}),
++			accounts: []Account{{ID: 7201, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true}},
++		}
++		svc := newFallbackCoalesceService(cache, repo)
++		groupID := int64(72)
++
++		ctx, cancel := context.WithCancel(context.Background())
++		canceled := make(chan error, 1)
++		go func() {
++			_, _, err := svc.ListSchedulableAccounts(ctx, &groupID, PlatformOpenAI, false)
++			canceled <- err
++		}()
++		synctest.Wait()
++		require.Equal(t, int32(1), repo.calls.Load())
++
++		joined := make(chan []Account, 1)
++		go func() {
++			accounts, _, err := svc.ListSchedulableAccounts(context.Background(), &groupID, PlatformOpenAI, false)
++			if err != nil {
++				accounts = nil
++			}
++			joined <- accounts
++		}()
++		synctest.Wait()
++
++		cancel()
++		require.ErrorIs(t, <-canceled, context.Canceled)
++		close(repo.release)
++		accounts := <-joined
++		require.Len(t, accounts, 1)
++		require.Equal(t, int32(1), repo.calls.Load(), "the canceled caller must not abort the shared load")
++		require.Equal(t, int32(1), cache.publish.Load())
++	})
++}
++
++// valuesReaderCache 直接返回值切片；GetSnapshot 不应被调用。
++type valuesReaderCache struct {
++	SchedulerCache
++	values        []Account
++	snapshotCalls atomic.Int32
++}
++
++func (c *valuesReaderCache) GetSnapshotValues(context.Context, SchedulerBucket) ([]Account, bool, error) {
++	return c.values, true, nil
++}
++
++func (c *valuesReaderCache) GetSnapshot(context.Context, SchedulerBucket) ([]*Account, bool, error) {
++	c.snapshotCalls.Add(1)
++	return nil, false, nil
++}
++
++func TestSchedulerSnapshotListUsesValuesReaderWithoutCopy(t *testing.T) {
++	cache := &valuesReaderCache{values: []Account{
++		{ID: 7301, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true},
++		{ID: 7302, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true},
++	}}
++	svc := newFallbackCoalesceService(cache, nil)
++	groupID := int64(73)
++
++	accounts, _, err := svc.ListSchedulableAccounts(context.Background(), &groupID, PlatformOpenAI, false)
++	require.NoError(t, err)
++	require.Len(t, accounts, 2)
++	require.Same(t, &cache.values[0], &accounts[0])
++	require.Zero(t, cache.snapshotCalls.Load())
++}
++
++// 快照缓存的是配置池（#8729）：值切片路径同样要在读取时排除限时封禁中的账号，到期的账号直接回到候选。
++func TestSchedulerSnapshotValuesReaderFiltersTimeBlockedAccounts(t *testing.T) {
++	future := time.Now().Add(time.Hour)
++	past := time.Now().Add(-time.Minute)
++	cache := &valuesReaderCache{values: []Account{
++		{ID: 7311, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, RateLimitResetAt: &future},
++		{ID: 7312, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, RateLimitResetAt: &past},
++		{ID: 7313, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, TempUnschedulableUntil: &future},
++		{ID: 7314, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, OverloadUntil: &past},
++	}}
++	svc := newFallbackCoalesceService(cache, nil)
++	groupID := int64(74)
++
++	accounts, _, err := svc.ListSchedulableAccounts(context.Background(), &groupID, PlatformOpenAI, false)
++	require.NoError(t, err)
++	require.Equal(t, []int64{7312, 7314}, []int64{accounts[0].ID, accounts[1].ID})
++	require.Len(t, accounts, 2)
++}
++
++// 合并回源时回写快照保留完整配置池，各调用方拿到的切片只含当前可调度的账号。
++func TestSchedulerFallbackPublishesPoolAndReturnsSchedulable(t *testing.T) {
++	future := time.Now().Add(time.Hour)
++	release := make(chan struct{})
++	close(release)
++	cache := &fallbackCoalesceCache{}
++	repo := &fallbackCoalesceRepo{
++		release: release,
++		accounts: []Account{
++			{ID: 7401, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true},
++			{ID: 7402, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, RateLimitResetAt: &future},
++		},
++	}
++	svc := newFallbackCoalesceService(cache, repo)
++	groupID := int64(75)
++
++	accounts, _, err := svc.ListSchedulableAccounts(context.Background(), &groupID, PlatformOpenAI, false)
++	require.NoError(t, err)
++	require.Len(t, accounts, 1)
++	require.Equal(t, int64(7401), accounts[0].ID)
++	require.Len(t, cache.snapshot, 2, "the published snapshot keeps the configured pool")
++}
++
++func TestFilterAccountsBySchedulingThresholdCompactsInPlace(t *testing.T) {
++	svc := &GatewayService{}
++	accounts := []Account{{ID: 1}, {ID: 2}, {ID: 3}}
++	filtered := svc.filterAccountsBySchedulingThreshold(context.Background(), accounts)
++	require.Equal(t, []int64{1, 2, 3}, []int64{filtered[0].ID, filtered[1].ID, filtered[2].ID})
++	require.Same(t, &accounts[0], &filtered[0])
++}
+diff --git a/backend/internal/service/scheduler_snapshot_service.go b/backend/internal/service/scheduler_snapshot_service.go
+index f49caaa6c..9c9538eaa 100644
+--- a/backend/internal/service/scheduler_snapshot_service.go
++++ b/backend/internal/service/scheduler_snapshot_service.go
+@@ -6,6 +6,7 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"log/slog"
++	"runtime/debug"
+ 	"sort"
+ 	"strconv"
+ 	"sync"
+@@ -14,6 +15,7 @@ import (
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/domain"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
++	"golang.org/x/sync/singleflight"
+ )
+ 
+ var (
+@@ -23,6 +25,11 @@ var (
+ 	ErrSchedulerBucketRebuildBusy       = errors.New("scheduler bucket rebuild busy")
+ )
+ 
++const (
++	// schedulerSharedFallbackTimeout 是合并回源在未配置 db_fallback_timeout_seconds 时的时长上限；合并回源不随单个调用方取消。
++	schedulerSharedFallbackTimeout = 30 * time.Second
++)
++
+ const (
+ 	outboxEventTimeout                    = 2 * time.Minute
+ 	schedulerOutboxCleanupBatch           = 5000
+@@ -144,6 +151,9 @@ type SchedulerSnapshotService struct {
+ 	fullRebuildRequested uint64
+ 	fullRebuildCompleted uint64
+ 	fullRebuildLastErr   error
++
++	// fallbackLoads 合并同一 bucket 的并发数据库回源。
++	fallbackLoads singleflight.Group
+ }
+ 
+ func NewSchedulerSnapshotService(
+@@ -212,26 +222,92 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context,
+ 	useMixed := (platform == PlatformAnthropic || platform == PlatformGemini) && !hasForcePlatform
+ 	mode := s.resolveMode(platform, hasForcePlatform)
+ 	bucket := s.bucketFor(groupID, platform, mode)
+-	var writeToken SchedulerBucketWriteToken
+-	canPublish := false
+ 	if err := ctx.Err(); err != nil {
+ 		return nil, useMixed, err
+ 	}
+ 
+ 	if s.cache != nil {
+-		cached, hit, err := s.cache.GetSnapshot(ctx, bucket)
++		cached, hit, err := s.readSnapshotAccounts(ctx, bucket)
+ 		if ctxErr := ctx.Err(); ctxErr != nil {
+ 			return nil, useMixed, ctxErr
+ 		}
+ 		if err != nil {
+ 			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] cache read failed: bucket=%s err=%v", bucket.String(), err)
+ 		} else if hit {
+-			return derefSchedulableAccounts(cached), useMixed, nil
++			return cached, useMixed, nil
+ 		}
+-		token, err := s.cache.CaptureBucketWriteToken(ctx, bucket)
+-		if ctxErr := ctx.Err(); ctxErr != nil {
+-			return nil, useMixed, ctxErr
++	}
++
++	accounts, err := s.loadFallbackAccounts(ctx, bucket, useMixed)
++	if err != nil {
++		return nil, useMixed, err
++	}
++	return accounts, useMixed, nil
++}
++
++// readSnapshotAccounts 读取 bucket 快照，只返回当前可调度的账号；缓存实现能直接返回值切片时直接使用该切片。
++// 快照缓存的是配置的账号池，限流、过载、临时不可调度等限时封禁在每次读取时判定，到期无需写入或 outbox 事件。
++func (s *SchedulerSnapshotService) readSnapshotAccounts(ctx context.Context, bucket SchedulerBucket) ([]Account, bool, error) {
++	if reader, ok := s.cache.(schedulerSnapshotValuesReader); ok {
++		accounts, hit, err := reader.GetSnapshotValues(ctx, bucket)
++		if err != nil || !hit {
++			return nil, false, err
++		}
++		// GetSnapshotValues 返回的切片由本次调用独占，可以原地压缩。
++		return compactSchedulableAccounts(accounts), true, nil
++	}
++	cached, hit, err := s.cache.GetSnapshot(ctx, bucket)
++	if err != nil || !hit {
++		return nil, false, err
++	}
++	return derefSchedulableAccounts(cached), true, nil
++}
++
++// loadFallbackAccounts 回源数据库读取 bucket 的账号，取得发布令牌时尽力回写快照。
++// 同一 bucket 的并发回源合并为一次：合并回源与回写不随单个调用方取消，各调用方按自身 ctx 等待结果，
++// 并各自得到一份只含当前可调度账号的独占切片；账号的 map、切片底层数组与指针指向的值在调用方之间共享，不得原地修改。
++func (s *SchedulerSnapshotService) loadFallbackAccounts(ctx context.Context, bucket SchedulerBucket, useMixed bool) ([]Account, error) {
++	loadCtx := context.WithoutCancel(ctx)
++	results := s.fallbackLoads.DoChan(bucket.String(), func() (result any, err error) {
++		defer func() {
++			if recovered := recover(); recovered != nil {
++				slog.Error("scheduler db fallback panicked", "bucket", bucket.String(), "panic", recovered, "stack", string(debug.Stack()))
++				result, err = nil, fmt.Errorf("scheduler db fallback panicked: %v", recovered)
++			}
++		}()
++		return s.loadAndPublishFallback(loadCtx, bucket, useMixed)
++	})
++	select {
++	case result := <-results:
++		if result.Err != nil {
++			return nil, result.Err
++		}
++		shared, _ := result.Val.([]Account)
++		if shared == nil {
++			return nil, nil
++		}
++		accounts := make([]Account, 0, len(shared))
++		for i := range shared {
++			if shared[i].IsSchedulable() {
++				accounts = append(accounts, shared[i])
++			}
+ 		}
++		return accounts, nil
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	}
++}
++
++// loadAndPublishFallback 先取发布令牌再读数据库：令牌之后发生的 Retire 会拦下这次回写。
++// 取令牌、读库与回写共用 withSharedFallbackTimeout 的时限。
++func (s *SchedulerSnapshotService) loadAndPublishFallback(ctx context.Context, bucket SchedulerBucket, useMixed bool) ([]Account, error) {
++	ctx, cancel := s.withSharedFallbackTimeout(ctx)
++	defer cancel()
++
++	var writeToken SchedulerBucketWriteToken
++	canPublish := false
++	if s.cache != nil {
++		token, err := s.cache.CaptureBucketWriteToken(ctx, bucket)
+ 		if err != nil {
+ 			if errors.Is(err, ErrSchedulerBucketRetired) || errors.Is(err, ErrSchedulerBucketWriteFenced) {
+ 				slog.Debug("[Scheduler] cache publish fenced", "bucket", bucket.String())
+@@ -245,22 +321,16 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context,
+ 	}
+ 
+ 	if err := s.guardFallback(ctx); err != nil {
+-		return nil, useMixed, err
++		return nil, err
+ 	}
+ 
+-	fallbackCtx, cancel := s.withFallbackTimeout(ctx)
+-	defer cancel()
+-
+-	accounts, err := s.loadAccountsFromDB(fallbackCtx, bucket, useMixed)
++	accounts, err := s.loadAccountsFromDB(ctx, bucket, useMixed)
+ 	if err != nil {
+-		return nil, useMixed, err
+-	}
+-	if ctxErr := ctx.Err(); ctxErr != nil {
+-		return nil, useMixed, ctxErr
++		return nil, err
+ 	}
+ 
+ 	if s.cache != nil && canPublish {
+-		if err := s.cache.SetSnapshot(fallbackCtx, bucket, writeToken, accounts); err != nil {
++		if err := s.cache.SetSnapshot(ctx, bucket, writeToken, accounts); err != nil {
+ 			if errors.Is(err, ErrSchedulerBucketRetired) || errors.Is(err, ErrSchedulerBucketWriteFenced) {
+ 				slog.Debug("[Scheduler] cache publish fenced", "bucket", bucket.String())
+ 			} else {
+@@ -269,13 +339,8 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context,
+ 		}
+ 	}
+ 
+-	eligible := make([]Account, 0, len(accounts))
+-	for _, account := range accounts {
+-		if account.IsSchedulable() {
+-			eligible = append(eligible, account)
+-		}
+-	}
+-	return eligible, useMixed, nil
++	// 回写与共享结果保留完整的配置池；限时封禁在各调用方读取时按 IsSchedulable 判定（见 loadFallbackAccounts）。
++	return accounts, nil
+ }
+ 
+ func (s *SchedulerSnapshotService) GetAccount(ctx context.Context, accountID int64) (*Account, error) {
+@@ -1606,6 +1671,15 @@ func (s *SchedulerSnapshotService) withFallbackTimeout(ctx context.Context) (con
+ 	return context.WithTimeout(ctx, timeout)
+ }
+ 
++// withSharedFallbackTimeout 为合并回源设置时长上限：db_fallback_timeout_seconds 为正时取该值，否则取 schedulerSharedFallbackTimeout。
++func (s *SchedulerSnapshotService) withSharedFallbackTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
++	timeout := schedulerSharedFallbackTimeout
++	if s.cfg != nil && s.cfg.Gateway.Scheduling.DbFallbackTimeoutSeconds > 0 {
++		timeout = time.Duration(s.cfg.Gateway.Scheduling.DbFallbackTimeoutSeconds) * time.Second
++	}
++	return context.WithTimeout(ctx, timeout)
++}
++
+ func (s *SchedulerSnapshotService) isRunModeSimple() bool {
+ 	return s.cfg != nil && s.cfg.RunMode == config.RunModeSimple
+ }
+@@ -1646,6 +1720,18 @@ func dedupeBuckets(in []SchedulerBucket) []SchedulerBucket {
+ 	return out
+ }
+ 
++// compactSchedulableAccounts 原地保留当前可调度的账号；accounts 必须由调用方独占。
++func compactSchedulableAccounts(accounts []Account) []Account {
++	out := accounts[:0]
++	for i := range accounts {
++		if accounts[i].IsSchedulable() {
++			out = append(out, accounts[i])
++		}
++	}
++	clear(accounts[len(out):])
++	return out
++}
++
+ func derefSchedulableAccounts(accounts []*Account) []Account {
+ 	if len(accounts) == 0 {
+ 		return []Account{}

@@ -1,0 +1,292 @@
+diff --git a/backend/internal/service/openai_codex_account_identity.go b/backend/internal/service/openai_codex_account_identity.go
+index a7ce16616..39921cd53 100644
+--- a/backend/internal/service/openai_codex_account_identity.go
++++ b/backend/internal/service/openai_codex_account_identity.go
+@@ -46,6 +46,15 @@ func codexAccountIdentitySource(c *gin.Context, fallback *Account) *Account {
+ 	return fallback
+ }
+ 
++// codexClientSessionID returns the client's own session header, before any
++// outbound rewrite.
++func codexClientSessionID(c *gin.Context) string {
++	if c == nil || c.Request == nil {
++		return ""
++	}
++	return extractClientSessionID(c.Request.Header)
++}
++
+ // codexAccountIdentityNamespace returns a stable, credential-scoped namespace.
+ // Multiple local rows that use the same ChatGPT account intentionally share the
+ // same namespace. Setup tokens use an irreversible bearer fingerprint because
+@@ -162,7 +171,21 @@ func applyCodexAccountIdentityEmbeddedMetadata(values map[string]any, account *A
+ 	return true
+ }
+ 
+-func applyCodexAccountIdentityClientMetadataMap(requestBody map[string]any, account *Account, apiKeyID int64) bool {
++// codexPromptCacheKeyKind scopes a prompt_cache_key that names the client's
++// session in the session namespace, so it stays equal to the scoped session.
++// Codex derives the key from its session-id header, which matches
++// client_metadata.session_id except on an ephemeral fork such as thread/sample:
++// the fork names itself in the metadata but keeps its parent's header and key.
++func codexPromptCacheKeyKind(promptCacheKey, bodySessionID, clientSessionID string) string {
++	for _, sessionID := range []string{bodySessionID, clientSessionID} {
++		if strings.TrimSpace(sessionID) != "" && promptCacheKey == sessionID {
++			return "session"
++		}
++	}
++	return "prompt-cache"
++}
++
++func applyCodexAccountIdentityClientMetadataMap(requestBody map[string]any, account *Account, apiKeyID int64, clientSessionID string) bool {
+ 	if requestBody == nil || codexAccountIdentityNamespace(account) == "" {
+ 		return false
+ 	}
+@@ -179,10 +202,7 @@ func applyCodexAccountIdentityClientMetadataMap(requestBody map[string]any, acco
+ 		}
+ 	}
+ 	if raw, ok := requestBody["prompt_cache_key"].(string); ok && strings.TrimSpace(raw) != "" {
+-		kind := "prompt-cache"
+-		if strings.TrimSpace(originalBodySessionID) != "" && raw == originalBodySessionID {
+-			kind = "session"
+-		}
++		kind := codexPromptCacheKeyKind(raw, originalBodySessionID, clientSessionID)
+ 		next := scopeCodexAccountIdentityValue(account, apiKeyID, kind, raw)
+ 		if next != raw {
+ 			requestBody["prompt_cache_key"] = next
+@@ -195,7 +215,7 @@ func applyCodexAccountIdentityClientMetadataMap(requestBody map[string]any, acco
+ // applyCodexAccountIdentityClientMetadataRaw scopes only the small identity
+ // subobjects with gjson/sjson. The passthrough hot path never unmarshals the
+ // potentially multi-megabyte request body.
+-func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, apiKeyID int64) ([]byte, bool, error) {
++func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, apiKeyID int64, clientSessionID string) ([]byte, bool, error) {
+ 	if len(body) == 0 || codexAccountIdentityNamespace(account) == "" {
+ 		return body, false, nil
+ 	}
+@@ -232,10 +252,7 @@ func applyCodexAccountIdentityClientMetadataRaw(body []byte, account *Account, a
+ 	}
+ 	if promptCacheKey := gjson.GetBytes(body, "prompt_cache_key"); promptCacheKey.Type == gjson.String && strings.TrimSpace(promptCacheKey.String()) != "" {
+ 		raw := promptCacheKey.String()
+-		kind := "prompt-cache"
+-		if strings.TrimSpace(originalBodySessionID) != "" && raw == originalBodySessionID {
+-			kind = "session"
+-		}
++		kind := codexPromptCacheKeyKind(raw, originalBodySessionID, clientSessionID)
+ 		scoped := scopeCodexAccountIdentityValue(account, apiKeyID, kind, raw)
+ 		if scoped != raw {
+ 			rewritten, err := sjson.SetBytes(next, "prompt_cache_key", scoped)
+diff --git a/backend/internal/service/openai_codex_account_identity_test.go b/backend/internal/service/openai_codex_account_identity_test.go
+index ffceba2d3..e0e864beb 100644
+--- a/backend/internal/service/openai_codex_account_identity_test.go
++++ b/backend/internal/service/openai_codex_account_identity_test.go
+@@ -4,13 +4,17 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"encoding/json"
++	"io"
+ 	"net/http"
+ 	"net/http/httptest"
++	"strings"
+ 	"testing"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/stretchr/testify/require"
+ 	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
+ )
+ 
+ type codexAccountIdentityRepoStub struct {
+@@ -27,13 +31,13 @@ func TestCodexRequestBodyIdentityNamespaceIsStablePerOAuthAccount(t *testing.T)
+ 	account11 := &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-account-11"}}
+ 	account19 := &Account{ID: 19, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-account-19"}}
+ 
+-	first, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77)
++	first, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77, "")
+ 	require.NoError(t, err)
+ 	require.True(t, changed)
+-	firstAgain, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77)
++	firstAgain, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account11, 77, "")
+ 	require.NoError(t, err)
+ 	require.True(t, changed)
+-	second, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account19, 77)
++	second, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account19, 77, "")
+ 	require.NoError(t, err)
+ 	require.True(t, changed)
+ 	require.JSONEq(t, string(first), string(firstAgain))
+@@ -228,3 +232,67 @@ func TestBuildUpstreamRequestNamespacesCodexIdentityByOAuthAccount(t *testing.T)
+ 	}
+ 	require.GreaterOrEqual(t, checked, 5, "test must exercise the real outbound identity surface")
+ }
++
++// An ephemeral Codex fork, such as thread/sample, names itself in
++// client_metadata.session_id but keeps its parent's session-id header and
++// prompt_cache_key. Upstream, the fork must keep the parent's cache key.
++func TestCodexForkKeepsParentPromptCacheKeyUpstream(t *testing.T) {
++	for _, passthrough := range []bool{false, true} {
++		t.Run(map[bool]string{false: "transformed", true: "passthrough"}[passthrough], func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			forward := func(promptCacheKey, bodySessionID string) (http.Header, []byte) {
++				t.Helper()
++				c, _ := gin.CreateTestContext(httptest.NewRecorder())
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
++				c.Request.Header.Set("User-Agent", "codex_cli_rs/0.167.0")
++				c.Request.Header.Set("originator", "codex_cli_rs")
++				c.Request.Header.Set("session-id", "parent-session")
++				body := []byte(`{"model":"gpt-5.6-sol","stream":false,"input":[{"type":"message","role":"user","content":"hi"}]}`)
++				body, err := sjson.SetBytes(body, "prompt_cache_key", promptCacheKey)
++				require.NoError(t, err)
++				body, err = sjson.SetBytes(body, "client_metadata.session_id", bodySessionID)
++				require.NoError(t, err)
++
++				upstream := &httpUpstreamRecorder{resp: &http.Response{
++					StatusCode: http.StatusOK,
++					Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid"}},
++					Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
++				}}
++				svc := &OpenAIGatewayService{
++					cfg:           &config.Config{},
++					httpUpstream:  upstream,
++					toolCorrector: NewCodexToolCorrector(),
++				}
++				account := newTestOAuthAccount(4501, map[string]any{"openai_oauth_passthrough": passthrough})
++				account.Status = StatusActive
++				account.Schedulable = true
++				account.Concurrency = 1
++				account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
++
++				_, err = svc.Forward(context.Background(), c, account, body)
++				require.NoError(t, err)
++				require.NotNil(t, upstream.lastReq)
++				return upstream.lastReq.Header, upstream.lastBody
++			}
++
++			parentHeader, parentBody := forward("parent-session", "parent-session")
++			parentKey := gjson.GetBytes(parentBody, "prompt_cache_key").String()
++			require.NotEqual(t, "parent-session", parentKey, "the key is account-scoped")
++			require.Equal(t, gjson.GetBytes(parentBody, "client_metadata.session_id").String(), parentKey)
++
++			forkHeader, forkBody := forward("parent-session", "fork-session")
++			require.Equal(t, parentKey, gjson.GetBytes(forkBody, "prompt_cache_key").String(),
++				"a fork keeps its parent's upstream cache key")
++			require.Equal(t, parentHeader.Get("session_id"), forkHeader.Get("session_id"))
++			require.NotEqual(t,
++				gjson.GetBytes(parentBody, "client_metadata.session_id").String(),
++				gjson.GetBytes(forkBody, "client_metadata.session_id").String(),
++				"the fork keeps its own session identity",
++			)
++
++			_, customBody := forward("caller-cache-key", "parent-session")
++			require.NotEqual(t, parentKey, gjson.GetBytes(customBody, "prompt_cache_key").String(),
++				"a caller-chosen key keeps its own namespace")
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_codex_turn_metadata_test.go b/backend/internal/service/openai_codex_turn_metadata_test.go
+index a3a5b4773..94d132f57 100644
+--- a/backend/internal/service/openai_codex_turn_metadata_test.go
++++ b/backend/internal/service/openai_codex_turn_metadata_test.go
+@@ -24,7 +24,7 @@ func TestCodexTurnMetadataRewritePreservesHeaderSafeJSON(t *testing.T) {
+ 		},
+ 		"account_body_map": func(t *testing.T, raw string) string {
+ 			cm := map[string]any{openAIWSTurnMetadataHeader: raw}
+-			require.True(t, applyCodexAccountIdentityClientMetadataMap(map[string]any{"client_metadata": cm}, account, 77))
++			require.True(t, applyCodexAccountIdentityClientMetadataMap(map[string]any{"client_metadata": cm}, account, 77, ""))
+ 			value, ok := cm[openAIWSTurnMetadataHeader].(string)
+ 			require.True(t, ok)
+ 			return value
+@@ -32,7 +32,7 @@ func TestCodexTurnMetadataRewritePreservesHeaderSafeJSON(t *testing.T) {
+ 		"account_body_raw": func(t *testing.T, raw string) string {
+ 			body, err := json.Marshal(map[string]any{"client_metadata": map[string]any{openAIWSTurnMetadataHeader: raw}})
+ 			require.NoError(t, err)
+-			updated, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account, 77)
++			updated, changed, err := applyCodexAccountIdentityClientMetadataRaw(body, account, 77, "")
+ 			require.NoError(t, err)
+ 			require.True(t, changed)
+ 			return gjson.GetBytes(updated, "client_metadata."+openAIWSTurnMetadataHeader).String()
+diff --git a/backend/internal/service/openai_gateway_chat_completions.go b/backend/internal/service/openai_gateway_chat_completions.go
+index c340de7c4..6a9d77366 100644
+--- a/backend/internal/service/openai_gateway_chat_completions.go
++++ b/backend/internal/service/openai_gateway_chat_completions.go
+@@ -285,7 +285,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
+ 		} else if promptCacheKey != "" {
+ 			reqBody["prompt_cache_key"] = promptCacheKey
+ 		}
+-		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
++		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c))
+ 		responsesBody, err = json.Marshal(reqBody)
+ 		if err != nil {
+ 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
+diff --git a/backend/internal/service/openai_gateway_forward.go b/backend/internal/service/openai_gateway_forward.go
+index ba7c1beae..d74ac5c77 100644
+--- a/backend/internal/service/openai_gateway_forward.go
++++ b/backend/internal/service/openai_gateway_forward.go
+@@ -569,7 +569,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+ 		// Account namespace is orthogonal to fingerprint convergence: preserve
+ 		// each client's identity cardinality, but never reuse it across OAuth
+ 		// credentials after scheduler failover.
+-		if !isCompactRequest && applyCodexAccountIdentityClientMetadataMap(decoded, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c)) {
++		if !isCompactRequest && applyCodexAccountIdentityClientMetadataMap(decoded, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c)) {
+ 			markDecodedModified()
+ 		}
+ 		stageCodexFingerprintIDs(c, nil)
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index 4756d8338..32f9c8aaf 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -266,7 +266,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+ 		if codexResult.PromptCacheKey != "" {
+ 			promptCacheKey = codexResult.PromptCacheKey
+ 		}
+-		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), apiKeyID)
++		applyCodexAccountIdentityClientMetadataMap(reqBody, codexAccountIdentitySource(c, account), apiKeyID, codexClientSessionID(c))
+ 		delete(reqBody, "prompt_cache_key")
+ 		if shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
+ 			compatTurnState = s.getOpenAICompatSessionTurnState(ctx, c, account, promptCacheKey)
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index bf3debe63..8cb506486 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -173,7 +173,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
+ 			reqStream = false
+ 		}
+ 
+-		accountScopedBody, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
++		accountScopedBody, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(body, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c))
+ 		if scopeErr != nil {
+ 			return nil, scopeErr
+ 		}
+diff --git a/backend/internal/service/openai_ws_forwarder_ingress.go b/backend/internal/service/openai_ws_forwarder_ingress.go
+index 5d8fffa62..c3994e354 100644
+--- a/backend/internal/service/openai_ws_forwarder_ingress.go
++++ b/backend/internal/service/openai_ws_forwarder_ingress.go
+@@ -320,7 +320,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 			normalized = next
+ 		}
+ 		accountIdentitySourceRaw := append([]byte(nil), normalized...)
+-		accountScopedPayload, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(normalized, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
++		accountScopedPayload, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(normalized, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c))
+ 		if scopeErr != nil {
+ 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket identity metadata", scopeErr)
+ 		}
+diff --git a/backend/internal/service/openai_ws_v2_passthrough_adapter.go b/backend/internal/service/openai_ws_v2_passthrough_adapter.go
+index 71804511e..22d74f58d 100644
+--- a/backend/internal/service/openai_ws_v2_passthrough_adapter.go
++++ b/backend/internal/service/openai_ws_v2_passthrough_adapter.go
+@@ -761,7 +761,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
+ 			firstClientMessage = aliasedBody
+ 		}
+ 	}
+-	accountScopedFirst, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(firstClientMessage, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
++	accountScopedFirst, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(firstClientMessage, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c))
+ 	if scopeErr != nil {
+ 		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket identity metadata", scopeErr)
+ 	}
+@@ -1015,7 +1015,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
+ 				}
+ 			}
+ 			if isResponseCreate || eventType == "session.update" {
+-				accountScopedPayload, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(payload, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))
++				accountScopedPayload, accountScoped, scopeErr := applyCodexAccountIdentityClientMetadataRaw(payload, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c), codexClientSessionID(c))
+ 				if scopeErr != nil {
+ 					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket identity metadata", scopeErr)
+ 				}

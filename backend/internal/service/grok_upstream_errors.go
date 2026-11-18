@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 // isGrokContentPolicyRejection identifies request-scoped safety refusals from
@@ -181,11 +183,33 @@ func grokContentPolicyMessage(value string) bool {
 }
 
 func grokContentPolicyClientMessage(responseBody []byte) string {
-	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)))
+	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokUpstreamErrorMessage(responseBody)))
 	if message == "" {
 		return "Request blocked by upstream content policy"
 	}
 	return message
+}
+
+// xAI's flat error fields are handled only by Grok; shared account and model
+// classifiers retain the existing nested-error contract.
+func grokUpstreamErrorMessage(body []byte) string {
+	if message := extractUpstreamErrorMessage(body); strings.TrimSpace(message) != "" {
+		return message
+	}
+	if value := gjson.GetBytes(body, "error"); value.Type == gjson.String {
+		return value.String()
+	}
+	return ""
+}
+
+func grokUpstreamErrorCode(body []byte) string {
+	if code := strings.TrimSpace(extractUpstreamErrorCode(body)); code != "" {
+		return code
+	}
+	if code := gjson.GetBytes(body, "code"); code.Type == gjson.String || code.Type == gjson.Number {
+		return strings.TrimSpace(code.String())
+	}
+	return ""
 }
 
 // shouldFailoverGrokUpstreamError is the body-aware counterpart of the

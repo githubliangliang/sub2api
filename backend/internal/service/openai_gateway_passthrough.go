@@ -1400,6 +1400,27 @@ func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []b
 		isOpenAITransientProcessingError(http.StatusBadRequest, message, payload)
 }
 
+// Apply health updates without replaying a stream that already reached the client.
+// Capacity errors retain the existing explicit model-only cooldown policy.
+func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffects(
+	c *gin.Context, account *Account, payload []byte, message string, headers http.Header, canonicalModel string,
+) {
+	if s == nil || account == nil {
+		return
+	}
+	ctx := context.Background()
+	if c != nil && c.Request != nil {
+		ctx = c.Request.Context()
+	}
+	status := openAIStreamFailedEventSemanticStatus(payload, message)
+	if account.Platform == PlatformOpenAI && status == http.StatusServiceUnavailable {
+		s.handleOpenAIExplicitModelCooldown(ctx, account, status, payload, canonicalModel)
+		return
+	}
+	body := openAIStreamFailedEventPassthroughBody(payload, message)
+	s.handleOpenAIAccountUpstreamError(ctx, account, status, headers, body, canonicalModel)
+}
+
 func (s *OpenAIGatewayService) recordOpenAIStreamUpstreamError(
 	c *gin.Context,
 	account *Account,

@@ -1,0 +1,127 @@
+{
+  "release_claim": "v0.2.22: Gemini sticky-session failover uses actual upstream usage for billing.",
+  "final_tag_fact": "PR8822 restored ForceCacheBilling within the same merged PR; the aggregate delta retains that policy. Only stable native session hashing is selected.",
+  "commits": "8d57f461c fix(gemini): keep forced cache billing on sticky-session failover\nb6c21cd5e fix(gemini): 原生请求按稳定前缀生成粘性会话哈希，换号按上游实际用量计费\n",
+  "observations": [
+    {
+      "ref": "v0.2.21",
+      "path": "backend/internal/handler/gemini_v1beta_handler.go",
+      "force_cache_billing_lines": [
+        {
+          "line": 828,
+          "text": "\t\t// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。"
+        },
+        {
+          "line": 829,
+          "text": "\t\tforceCacheBilling := fs.ForceCacheBilling"
+        },
+        {
+          "line": 848,
+          "text": "\t\t\t\tForceCacheBilling:  forceCacheBilling,"
+        }
+      ]
+    },
+    {
+      "ref": "v0.2.21",
+      "path": "backend/internal/service/gateway_usage_billing.go",
+      "force_cache_billing_lines": [
+        {
+          "line": 54,
+          "text": "\tForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）"
+        },
+        {
+          "line": 671,
+          "text": "\t\tForceCacheBilling:  input.ForceCacheBilling,"
+        },
+        {
+          "line": 692,
+          "text": "\tForceCacheBilling  bool"
+        },
+        {
+          "line": 784,
+          "text": "\tif input.ForceCacheBilling && result.Usage.InputTokens > 0 {"
+        }
+      ]
+    },
+    {
+      "ref": "v0.2.22",
+      "path": "backend/internal/handler/gemini_v1beta_handler.go",
+      "force_cache_billing_lines": [
+        {
+          "line": 819,
+          "text": "\t\t// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。"
+        },
+        {
+          "line": 820,
+          "text": "\t\tforceCacheBilling := fs.ForceCacheBilling"
+        },
+        {
+          "line": 839,
+          "text": "\t\t\t\tForceCacheBilling:  forceCacheBilling,"
+        }
+      ]
+    },
+    {
+      "ref": "v0.2.22",
+      "path": "backend/internal/service/gateway_usage_billing.go",
+      "force_cache_billing_lines": [
+        {
+          "line": 54,
+          "text": "\tForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）"
+        },
+        {
+          "line": 674,
+          "text": "\t\tForceCacheBilling:  input.ForceCacheBilling,"
+        },
+        {
+          "line": 695,
+          "text": "\tForceCacheBilling  bool"
+        },
+        {
+          "line": 787,
+          "text": "\tif input.ForceCacheBilling && result.Usage.InputTokens > 0 {"
+        }
+      ]
+    },
+    {
+      "ref": "v0.2.23",
+      "path": "backend/internal/handler/gemini_v1beta_handler.go",
+      "force_cache_billing_lines": [
+        {
+          "line": 819,
+          "text": "\t\t// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。"
+        },
+        {
+          "line": 820,
+          "text": "\t\tforceCacheBilling := fs.ForceCacheBilling"
+        },
+        {
+          "line": 839,
+          "text": "\t\t\t\tForceCacheBilling:  forceCacheBilling,"
+        }
+      ]
+    },
+    {
+      "ref": "v0.2.23",
+      "path": "backend/internal/service/gateway_usage_billing.go",
+      "force_cache_billing_lines": [
+        {
+          "line": 54,
+          "text": "\tForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）"
+        },
+        {
+          "line": 674,
+          "text": "\t\tForceCacheBilling:  input.ForceCacheBilling,"
+        },
+        {
+          "line": 695,
+          "text": "\tForceCacheBilling  bool"
+        },
+        {
+          "line": 787,
+          "text": "\tif input.ForceCacheBilling && result.Usage.InputTokens > 0 {"
+        }
+      ]
+    }
+  ]
+}

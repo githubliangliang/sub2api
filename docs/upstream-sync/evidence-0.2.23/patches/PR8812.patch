@@ -1,0 +1,2225 @@
+diff --git a/backend/ent/group.go b/backend/ent/group.go
+index f6f54735d..e4763f50d 100644
+--- a/backend/ent/group.go
++++ b/backend/ent/group.go
+@@ -128,6 +128,8 @@ type Group struct {
+ 	AllowLive bool `json:"allow_live,omitempty"`
+ 	// 是否强制此 OpenAI/Composite 分组请求使用 service_tier=priority
+ 	ForceOpenaiFast bool `json:"force_openai_fast,omitempty"`
++	// 是否对支持 Ultrafast 的模型强制使用 service_tier=ultrafast（优先于 force_openai_fast）
++	ForceOpenaiUltrafast bool `json:"force_openai_ultrafast,omitempty"`
+ 	// 是否让此 OpenAI/Composite 分组的 Fast 请求按 Standard 价格计费
+ 	FreeOpenaiFast bool `json:"free_openai_fast,omitempty"`
+ 	// 仅允许非 apikey 类型账号关联到此分组
+@@ -264,7 +266,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
+ 		switch columns[i] {
+ 		case group.FieldI18n, group.FieldVideoModelPrices, group.FieldModelPricing, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelAllowlist, group.FieldCodexModelsManifestConfig, group.FieldReasoningEffortMappings:
+ 			values[i] = new([]byte)
+-		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageCountBilling, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
++		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageCountBilling, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldForceOpenaiUltrafast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
+ 			values[i] = new(sql.NullBool)
+ 		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
+ 			values[i] = new(sql.NullFloat64)
+@@ -648,6 +650,12 @@ func (_m *Group) assignValues(columns []string, values []any) error {
+ 			} else if value.Valid {
+ 				_m.ForceOpenaiFast = value.Bool
+ 			}
++		case group.FieldForceOpenaiUltrafast:
++			if value, ok := values[i].(*sql.NullBool); !ok {
++				return fmt.Errorf("unexpected type %T for field force_openai_ultrafast", values[i])
++			} else if value.Valid {
++				_m.ForceOpenaiUltrafast = value.Bool
++			}
+ 		case group.FieldFreeOpenaiFast:
+ 			if value, ok := values[i].(*sql.NullBool); !ok {
+ 				return fmt.Errorf("unexpected type %T for field free_openai_fast", values[i])
+@@ -1016,6 +1024,9 @@ func (_m *Group) String() string {
+ 	builder.WriteString("force_openai_fast=")
+ 	builder.WriteString(fmt.Sprintf("%v", _m.ForceOpenaiFast))
+ 	builder.WriteString(", ")
++	builder.WriteString("force_openai_ultrafast=")
++	builder.WriteString(fmt.Sprintf("%v", _m.ForceOpenaiUltrafast))
++	builder.WriteString(", ")
+ 	builder.WriteString("free_openai_fast=")
+ 	builder.WriteString(fmt.Sprintf("%v", _m.FreeOpenaiFast))
+ 	builder.WriteString(", ")
+diff --git a/backend/ent/group/group.go b/backend/ent/group/group.go
+index 5e265e6c3..6b72d0c1d 100644
+--- a/backend/ent/group/group.go
++++ b/backend/ent/group/group.go
+@@ -124,6 +124,8 @@ const (
+ 	FieldAllowLive = "allow_live"
+ 	// FieldForceOpenaiFast holds the string denoting the force_openai_fast field in the database.
+ 	FieldForceOpenaiFast = "force_openai_fast"
++	// FieldForceOpenaiUltrafast holds the string denoting the force_openai_ultrafast field in the database.
++	FieldForceOpenaiUltrafast = "force_openai_ultrafast"
+ 	// FieldFreeOpenaiFast holds the string denoting the free_openai_fast field in the database.
+ 	FieldFreeOpenaiFast = "free_openai_fast"
+ 	// FieldRequireOauthOnly holds the string denoting the require_oauth_only field in the database.
+@@ -281,6 +283,7 @@ var Columns = []string{
+ 	FieldAllowMessagesDispatch,
+ 	FieldAllowLive,
+ 	FieldForceOpenaiFast,
++	FieldForceOpenaiUltrafast,
+ 	FieldFreeOpenaiFast,
+ 	FieldRequireOauthOnly,
+ 	FieldRequirePrivacySet,
+@@ -410,6 +413,8 @@ var (
+ 	DefaultAllowLive bool
+ 	// DefaultForceOpenaiFast holds the default value on creation for the "force_openai_fast" field.
+ 	DefaultForceOpenaiFast bool
++	// DefaultForceOpenaiUltrafast holds the default value on creation for the "force_openai_ultrafast" field.
++	DefaultForceOpenaiUltrafast bool
+ 	// DefaultFreeOpenaiFast holds the default value on creation for the "free_openai_fast" field.
+ 	DefaultFreeOpenaiFast bool
+ 	// DefaultRequireOauthOnly holds the default value on creation for the "require_oauth_only" field.
+@@ -699,6 +704,11 @@ func ByForceOpenaiFast(opts ...sql.OrderTermOption) OrderOption {
+ 	return sql.OrderByField(FieldForceOpenaiFast, opts...).ToFunc()
+ }
+ 
++// ByForceOpenaiUltrafast orders the results by the force_openai_ultrafast field.
++func ByForceOpenaiUltrafast(opts ...sql.OrderTermOption) OrderOption {
++	return sql.OrderByField(FieldForceOpenaiUltrafast, opts...).ToFunc()
++}
++
+ // ByFreeOpenaiFast orders the results by the free_openai_fast field.
+ func ByFreeOpenaiFast(opts ...sql.OrderTermOption) OrderOption {
+ 	return sql.OrderByField(FieldFreeOpenaiFast, opts...).ToFunc()
+diff --git a/backend/ent/group/where.go b/backend/ent/group/where.go
+index 967965aa2..ba1049f55 100644
+--- a/backend/ent/group/where.go
++++ b/backend/ent/group/where.go
+@@ -300,6 +300,11 @@ func ForceOpenaiFast(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldEQ(FieldForceOpenaiFast, v))
+ }
+ 
++// ForceOpenaiUltrafast applies equality check predicate on the "force_openai_ultrafast" field. It's identical to ForceOpenaiUltrafastEQ.
++func ForceOpenaiUltrafast(v bool) predicate.Group {
++	return predicate.Group(sql.FieldEQ(FieldForceOpenaiUltrafast, v))
++}
++
+ // FreeOpenaiFast applies equality check predicate on the "free_openai_fast" field. It's identical to FreeOpenaiFastEQ.
+ func FreeOpenaiFast(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldEQ(FieldFreeOpenaiFast, v))
+@@ -2310,6 +2315,16 @@ func ForceOpenaiFastNEQ(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldNEQ(FieldForceOpenaiFast, v))
+ }
+ 
++// ForceOpenaiUltrafastEQ applies the EQ predicate on the "force_openai_ultrafast" field.
++func ForceOpenaiUltrafastEQ(v bool) predicate.Group {
++	return predicate.Group(sql.FieldEQ(FieldForceOpenaiUltrafast, v))
++}
++
++// ForceOpenaiUltrafastNEQ applies the NEQ predicate on the "force_openai_ultrafast" field.
++func ForceOpenaiUltrafastNEQ(v bool) predicate.Group {
++	return predicate.Group(sql.FieldNEQ(FieldForceOpenaiUltrafast, v))
++}
++
+ // FreeOpenaiFastEQ applies the EQ predicate on the "free_openai_fast" field.
+ func FreeOpenaiFastEQ(v bool) predicate.Group {
+ 	return predicate.Group(sql.FieldEQ(FieldFreeOpenaiFast, v))
+diff --git a/backend/ent/group_create.go b/backend/ent/group_create.go
+index 12b585c67..29c38e9f3 100644
+--- a/backend/ent/group_create.go
++++ b/backend/ent/group_create.go
+@@ -738,6 +738,20 @@ func (_c *GroupCreate) SetNillableForceOpenaiFast(v *bool) *GroupCreate {
+ 	return _c
+ }
+ 
++// SetForceOpenaiUltrafast sets the "force_openai_ultrafast" field.
++func (_c *GroupCreate) SetForceOpenaiUltrafast(v bool) *GroupCreate {
++	_c.mutation.SetForceOpenaiUltrafast(v)
++	return _c
++}
++
++// SetNillableForceOpenaiUltrafast sets the "force_openai_ultrafast" field if the given value is not nil.
++func (_c *GroupCreate) SetNillableForceOpenaiUltrafast(v *bool) *GroupCreate {
++	if v != nil {
++		_c.SetForceOpenaiUltrafast(*v)
++	}
++	return _c
++}
++
+ // SetFreeOpenaiFast sets the "free_openai_fast" field.
+ func (_c *GroupCreate) SetFreeOpenaiFast(v bool) *GroupCreate {
+ 	_c.mutation.SetFreeOpenaiFast(v)
+@@ -1183,6 +1197,10 @@ func (_c *GroupCreate) defaults() error {
+ 		v := group.DefaultForceOpenaiFast
+ 		_c.mutation.SetForceOpenaiFast(v)
+ 	}
++	if _, ok := _c.mutation.ForceOpenaiUltrafast(); !ok {
++		v := group.DefaultForceOpenaiUltrafast
++		_c.mutation.SetForceOpenaiUltrafast(v)
++	}
+ 	if _, ok := _c.mutation.FreeOpenaiFast(); !ok {
+ 		v := group.DefaultFreeOpenaiFast
+ 		_c.mutation.SetFreeOpenaiFast(v)
+@@ -1395,6 +1413,9 @@ func (_c *GroupCreate) check() error {
+ 	if _, ok := _c.mutation.ForceOpenaiFast(); !ok {
+ 		return &ValidationError{Name: "force_openai_fast", err: errors.New(`ent: missing required field "Group.force_openai_fast"`)}
+ 	}
++	if _, ok := _c.mutation.ForceOpenaiUltrafast(); !ok {
++		return &ValidationError{Name: "force_openai_ultrafast", err: errors.New(`ent: missing required field "Group.force_openai_ultrafast"`)}
++	}
+ 	if _, ok := _c.mutation.FreeOpenaiFast(); !ok {
+ 		return &ValidationError{Name: "free_openai_fast", err: errors.New(`ent: missing required field "Group.free_openai_fast"`)}
+ 	}
+@@ -1695,6 +1716,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
+ 		_spec.SetField(group.FieldForceOpenaiFast, field.TypeBool, value)
+ 		_node.ForceOpenaiFast = value
+ 	}
++	if value, ok := _c.mutation.ForceOpenaiUltrafast(); ok {
++		_spec.SetField(group.FieldForceOpenaiUltrafast, field.TypeBool, value)
++		_node.ForceOpenaiUltrafast = value
++	}
+ 	if value, ok := _c.mutation.FreeOpenaiFast(); ok {
+ 		_spec.SetField(group.FieldFreeOpenaiFast, field.TypeBool, value)
+ 		_node.FreeOpenaiFast = value
+@@ -2801,6 +2826,18 @@ func (u *GroupUpsert) UpdateForceOpenaiFast() *GroupUpsert {
+ 	return u
+ }
+ 
++// SetForceOpenaiUltrafast sets the "force_openai_ultrafast" field.
++func (u *GroupUpsert) SetForceOpenaiUltrafast(v bool) *GroupUpsert {
++	u.Set(group.FieldForceOpenaiUltrafast, v)
++	return u
++}
++
++// UpdateForceOpenaiUltrafast sets the "force_openai_ultrafast" field to the value that was provided on create.
++func (u *GroupUpsert) UpdateForceOpenaiUltrafast() *GroupUpsert {
++	u.SetExcluded(group.FieldForceOpenaiUltrafast)
++	return u
++}
++
+ // SetFreeOpenaiFast sets the "free_openai_fast" field.
+ func (u *GroupUpsert) SetFreeOpenaiFast(v bool) *GroupUpsert {
+ 	u.Set(group.FieldFreeOpenaiFast, v)
+@@ -4078,6 +4115,20 @@ func (u *GroupUpsertOne) UpdateForceOpenaiFast() *GroupUpsertOne {
+ 	})
+ }
+ 
++// SetForceOpenaiUltrafast sets the "force_openai_ultrafast" field.
++func (u *GroupUpsertOne) SetForceOpenaiUltrafast(v bool) *GroupUpsertOne {
++	return u.Update(func(s *GroupUpsert) {
++		s.SetForceOpenaiUltrafast(v)
++	})
++}
++
++// UpdateForceOpenaiUltrafast sets the "force_openai_ultrafast" field to the value that was provided on create.
++func (u *GroupUpsertOne) UpdateForceOpenaiUltrafast() *GroupUpsertOne {
++	return u.Update(func(s *GroupUpsert) {
++		s.UpdateForceOpenaiUltrafast()
++	})
++}
++
+ // SetFreeOpenaiFast sets the "free_openai_fast" field.
+ func (u *GroupUpsertOne) SetFreeOpenaiFast(v bool) *GroupUpsertOne {
+ 	return u.Update(func(s *GroupUpsert) {
+@@ -5552,6 +5603,20 @@ func (u *GroupUpsertBulk) UpdateForceOpenaiFast() *GroupUpsertBulk {
+ 	})
+ }
+ 
++// SetForceOpenaiUltrafast sets the "force_openai_ultrafast" field.
++func (u *GroupUpsertBulk) SetForceOpenaiUltrafast(v bool) *GroupUpsertBulk {
++	return u.Update(func(s *GroupUpsert) {
++		s.SetForceOpenaiUltrafast(v)
++	})
++}
++
++// UpdateForceOpenaiUltrafast sets the "force_openai_ultrafast" field to the value that was provided on create.
++func (u *GroupUpsertBulk) UpdateForceOpenaiUltrafast() *GroupUpsertBulk {
++	return u.Update(func(s *GroupUpsert) {
++		s.UpdateForceOpenaiUltrafast()
++	})
++}
++
+ // SetFreeOpenaiFast sets the "free_openai_fast" field.
+ func (u *GroupUpsertBulk) SetFreeOpenaiFast(v bool) *GroupUpsertBulk {
+ 	return u.Update(func(s *GroupUpsert) {
+diff --git a/backend/ent/group_update.go b/backend/ent/group_update.go
+index 732c2a7c7..672b07b20 100644
+--- a/backend/ent/group_update.go
++++ b/backend/ent/group_update.go
+@@ -1023,6 +1023,20 @@ func (_u *GroupUpdate) SetNillableForceOpenaiFast(v *bool) *GroupUpdate {
+ 	return _u
+ }
+ 
++// SetForceOpenaiUltrafast sets the "force_openai_ultrafast" field.
++func (_u *GroupUpdate) SetForceOpenaiUltrafast(v bool) *GroupUpdate {
++	_u.mutation.SetForceOpenaiUltrafast(v)
++	return _u
++}
++
++// SetNillableForceOpenaiUltrafast sets the "force_openai_ultrafast" field if the given value is not nil.
++func (_u *GroupUpdate) SetNillableForceOpenaiUltrafast(v *bool) *GroupUpdate {
++	if v != nil {
++		_u.SetForceOpenaiUltrafast(*v)
++	}
++	return _u
++}
++
+ // SetFreeOpenaiFast sets the "free_openai_fast" field.
+ func (_u *GroupUpdate) SetFreeOpenaiFast(v bool) *GroupUpdate {
+ 	_u.mutation.SetFreeOpenaiFast(v)
+@@ -1887,6 +1901,9 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+ 	if value, ok := _u.mutation.ForceOpenaiFast(); ok {
+ 		_spec.SetField(group.FieldForceOpenaiFast, field.TypeBool, value)
+ 	}
++	if value, ok := _u.mutation.ForceOpenaiUltrafast(); ok {
++		_spec.SetField(group.FieldForceOpenaiUltrafast, field.TypeBool, value)
++	}
+ 	if value, ok := _u.mutation.FreeOpenaiFast(); ok {
+ 		_spec.SetField(group.FieldFreeOpenaiFast, field.TypeBool, value)
+ 	}
+@@ -3243,6 +3260,20 @@ func (_u *GroupUpdateOne) SetNillableForceOpenaiFast(v *bool) *GroupUpdateOne {
+ 	return _u
+ }
+ 
++// SetForceOpenaiUltrafast sets the "force_openai_ultrafast" field.
++func (_u *GroupUpdateOne) SetForceOpenaiUltrafast(v bool) *GroupUpdateOne {
++	_u.mutation.SetForceOpenaiUltrafast(v)
++	return _u
++}
++
++// SetNillableForceOpenaiUltrafast sets the "force_openai_ultrafast" field if the given value is not nil.
++func (_u *GroupUpdateOne) SetNillableForceOpenaiUltrafast(v *bool) *GroupUpdateOne {
++	if v != nil {
++		_u.SetForceOpenaiUltrafast(*v)
++	}
++	return _u
++}
++
+ // SetFreeOpenaiFast sets the "free_openai_fast" field.
+ func (_u *GroupUpdateOne) SetFreeOpenaiFast(v bool) *GroupUpdateOne {
+ 	_u.mutation.SetFreeOpenaiFast(v)
+@@ -4137,6 +4168,9 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
+ 	if value, ok := _u.mutation.ForceOpenaiFast(); ok {
+ 		_spec.SetField(group.FieldForceOpenaiFast, field.TypeBool, value)
+ 	}
++	if value, ok := _u.mutation.ForceOpenaiUltrafast(); ok {
++		_spec.SetField(group.FieldForceOpenaiUltrafast, field.TypeBool, value)
++	}
+ 	if value, ok := _u.mutation.FreeOpenaiFast(); ok {
+ 		_spec.SetField(group.FieldFreeOpenaiFast, field.TypeBool, value)
+ 	}
+diff --git a/backend/ent/migrate/schema.go b/backend/ent/migrate/schema.go
+index 39370f418..ede04e823 100644
+--- a/backend/ent/migrate/schema.go
++++ b/backend/ent/migrate/schema.go
+@@ -957,6 +957,7 @@ var (
+ 		{Name: "allow_messages_dispatch", Type: field.TypeBool, Default: false},
+ 		{Name: "allow_live", Type: field.TypeBool, Default: false},
+ 		{Name: "force_openai_fast", Type: field.TypeBool, Default: false},
++		{Name: "force_openai_ultrafast", Type: field.TypeBool, Default: false},
+ 		{Name: "free_openai_fast", Type: field.TypeBool, Default: false},
+ 		{Name: "require_oauth_only", Type: field.TypeBool, Default: false},
+ 		{Name: "require_privacy_set", Type: field.TypeBool, Default: false},
+diff --git a/backend/ent/mutation.go b/backend/ent/mutation.go
+index ca3b6e9e5..8ad231e0f 100644
+--- a/backend/ent/mutation.go
++++ b/backend/ent/mutation.go
+@@ -22161,6 +22161,7 @@ type GroupMutation struct {
+ 	allow_messages_dispatch                 *bool
+ 	allow_live                              *bool
+ 	force_openai_fast                       *bool
++	force_openai_ultrafast                  *bool
+ 	free_openai_fast                        *bool
+ 	require_oauth_only                      *bool
+ 	require_privacy_set                     *bool
+@@ -25058,6 +25059,42 @@ func (m *GroupMutation) ResetForceOpenaiFast() {
+ 	m.force_openai_fast = nil
+ }
+ 
++// SetForceOpenaiUltrafast sets the "force_openai_ultrafast" field.
++func (m *GroupMutation) SetForceOpenaiUltrafast(b bool) {
++	m.force_openai_ultrafast = &b
++}
++
++// ForceOpenaiUltrafast returns the value of the "force_openai_ultrafast" field in the mutation.
++func (m *GroupMutation) ForceOpenaiUltrafast() (r bool, exists bool) {
++	v := m.force_openai_ultrafast
++	if v == nil {
++		return
++	}
++	return *v, true
++}
++
++// OldForceOpenaiUltrafast returns the old "force_openai_ultrafast" field's value of the Group entity.
++// If the Group object wasn't provided to the builder, the object is fetched from the database.
++// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
++func (m *GroupMutation) OldForceOpenaiUltrafast(ctx context.Context) (v bool, err error) {
++	if !m.op.Is(OpUpdateOne) {
++		return v, errors.New("OldForceOpenaiUltrafast is only allowed on UpdateOne operations")
++	}
++	if m.id == nil || m.oldValue == nil {
++		return v, errors.New("OldForceOpenaiUltrafast requires an ID field in the mutation")
++	}
++	oldValue, err := m.oldValue(ctx)
++	if err != nil {
++		return v, fmt.Errorf("querying old value for OldForceOpenaiUltrafast: %w", err)
++	}
++	return oldValue.ForceOpenaiUltrafast, nil
++}
++
++// ResetForceOpenaiUltrafast resets all changes to the "force_openai_ultrafast" field.
++func (m *GroupMutation) ResetForceOpenaiUltrafast() {
++	m.force_openai_ultrafast = nil
++}
++
+ // SetFreeOpenaiFast sets the "free_openai_fast" field.
+ func (m *GroupMutation) SetFreeOpenaiFast(b bool) {
+ 	m.free_openai_fast = &b
+@@ -25995,7 +26032,7 @@ func (m *GroupMutation) Type() string {
+ // order to get all numeric fields that were incremented/decremented, call
+ // AddedFields().
+ func (m *GroupMutation) Fields() []string {
+-	fields := make([]string, 0, 68)
++	fields := make([]string, 0, 69)
+ 	if m.created_at != nil {
+ 		fields = append(fields, group.FieldCreatedAt)
+ 	}
+@@ -26158,6 +26195,9 @@ func (m *GroupMutation) Fields() []string {
+ 	if m.force_openai_fast != nil {
+ 		fields = append(fields, group.FieldForceOpenaiFast)
+ 	}
++	if m.force_openai_ultrafast != nil {
++		fields = append(fields, group.FieldForceOpenaiUltrafast)
++	}
+ 	if m.free_openai_fast != nil {
+ 		fields = append(fields, group.FieldFreeOpenaiFast)
+ 	}
+@@ -26316,6 +26356,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
+ 		return m.AllowLive()
+ 	case group.FieldForceOpenaiFast:
+ 		return m.ForceOpenaiFast()
++	case group.FieldForceOpenaiUltrafast:
++		return m.ForceOpenaiUltrafast()
+ 	case group.FieldFreeOpenaiFast:
+ 		return m.FreeOpenaiFast()
+ 	case group.FieldRequireOauthOnly:
+@@ -26461,6 +26503,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
+ 		return m.OldAllowLive(ctx)
+ 	case group.FieldForceOpenaiFast:
+ 		return m.OldForceOpenaiFast(ctx)
++	case group.FieldForceOpenaiUltrafast:
++		return m.OldForceOpenaiUltrafast(ctx)
+ 	case group.FieldFreeOpenaiFast:
+ 		return m.OldFreeOpenaiFast(ctx)
+ 	case group.FieldRequireOauthOnly:
+@@ -26876,6 +26920,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
+ 		}
+ 		m.SetForceOpenaiFast(v)
+ 		return nil
++	case group.FieldForceOpenaiUltrafast:
++		v, ok := value.(bool)
++		if !ok {
++			return fmt.Errorf("unexpected type %T for field %s", value, name)
++		}
++		m.SetForceOpenaiUltrafast(v)
++		return nil
+ 	case group.FieldFreeOpenaiFast:
+ 		v, ok := value.(bool)
+ 		if !ok {
+@@ -27647,6 +27698,9 @@ func (m *GroupMutation) ResetField(name string) error {
+ 	case group.FieldForceOpenaiFast:
+ 		m.ResetForceOpenaiFast()
+ 		return nil
++	case group.FieldForceOpenaiUltrafast:
++		m.ResetForceOpenaiUltrafast()
++		return nil
+ 	case group.FieldFreeOpenaiFast:
+ 		m.ResetFreeOpenaiFast()
+ 		return nil
+diff --git a/backend/ent/runtime/runtime.go b/backend/ent/runtime/runtime.go
+index c36a5110e..9541efb6d 100644
+--- a/backend/ent/runtime/runtime.go
++++ b/backend/ent/runtime/runtime.go
+@@ -1183,66 +1183,70 @@ func init() {
+ 	groupDescForceOpenaiFast := groupFields[50].Descriptor()
+ 	// group.DefaultForceOpenaiFast holds the default value on creation for the force_openai_fast field.
+ 	group.DefaultForceOpenaiFast = groupDescForceOpenaiFast.Default.(bool)
++	// groupDescForceOpenaiUltrafast is the schema descriptor for force_openai_ultrafast field.
++	groupDescForceOpenaiUltrafast := groupFields[51].Descriptor()
++	// group.DefaultForceOpenaiUltrafast holds the default value on creation for the force_openai_ultrafast field.
++	group.DefaultForceOpenaiUltrafast = groupDescForceOpenaiUltrafast.Default.(bool)
+ 	// groupDescFreeOpenaiFast is the schema descriptor for free_openai_fast field.
+-	groupDescFreeOpenaiFast := groupFields[51].Descriptor()
++	groupDescFreeOpenaiFast := groupFields[52].Descriptor()
+ 	// group.DefaultFreeOpenaiFast holds the default value on creation for the free_openai_fast field.
+ 	group.DefaultFreeOpenaiFast = groupDescFreeOpenaiFast.Default.(bool)
+ 	// groupDescRequireOauthOnly is the schema descriptor for require_oauth_only field.
+-	groupDescRequireOauthOnly := groupFields[52].Descriptor()
++	groupDescRequireOauthOnly := groupFields[53].Descriptor()
+ 	// group.DefaultRequireOauthOnly holds the default value on creation for the require_oauth_only field.
+ 	group.DefaultRequireOauthOnly = groupDescRequireOauthOnly.Default.(bool)
+ 	// groupDescRequirePrivacySet is the schema descriptor for require_privacy_set field.
+-	groupDescRequirePrivacySet := groupFields[53].Descriptor()
++	groupDescRequirePrivacySet := groupFields[54].Descriptor()
+ 	// group.DefaultRequirePrivacySet holds the default value on creation for the require_privacy_set field.
+ 	group.DefaultRequirePrivacySet = groupDescRequirePrivacySet.Default.(bool)
+ 	// groupDescDefaultMappedModel is the schema descriptor for default_mapped_model field.
+-	groupDescDefaultMappedModel := groupFields[54].Descriptor()
++	groupDescDefaultMappedModel := groupFields[55].Descriptor()
+ 	// group.DefaultDefaultMappedModel holds the default value on creation for the default_mapped_model field.
+ 	group.DefaultDefaultMappedModel = groupDescDefaultMappedModel.Default.(string)
+ 	// group.DefaultMappedModelValidator is a validator for the "default_mapped_model" field. It is called by the builders before save.
+ 	group.DefaultMappedModelValidator = groupDescDefaultMappedModel.Validators[0].(func(string) error)
+ 	// groupDescMessagesDispatchModelConfig is the schema descriptor for messages_dispatch_model_config field.
+-	groupDescMessagesDispatchModelConfig := groupFields[55].Descriptor()
++	groupDescMessagesDispatchModelConfig := groupFields[56].Descriptor()
+ 	// group.DefaultMessagesDispatchModelConfig holds the default value on creation for the messages_dispatch_model_config field.
+ 	group.DefaultMessagesDispatchModelConfig = groupDescMessagesDispatchModelConfig.Default.(domain.OpenAIMessagesDispatchModelConfig)
+ 	// groupDescModelAllowlist is the schema descriptor for model_allowlist field.
+-	groupDescModelAllowlist := groupFields[56].Descriptor()
++	groupDescModelAllowlist := groupFields[57].Descriptor()
+ 	// group.DefaultModelAllowlist holds the default value on creation for the model_allowlist field.
+ 	group.DefaultModelAllowlist = groupDescModelAllowlist.Default.(domain.GroupModelAllowlist)
+ 	// groupDescCodexModelsManifestConfig is the schema descriptor for codex_models_manifest_config field.
+-	groupDescCodexModelsManifestConfig := groupFields[57].Descriptor()
++	groupDescCodexModelsManifestConfig := groupFields[58].Descriptor()
+ 	// group.DefaultCodexModelsManifestConfig holds the default value on creation for the codex_models_manifest_config field.
+ 	group.DefaultCodexModelsManifestConfig = groupDescCodexModelsManifestConfig.Default.(domain.GroupCodexModelsManifestConfig)
+ 	// groupDescRpmLimit is the schema descriptor for rpm_limit field.
+-	groupDescRpmLimit := groupFields[58].Descriptor()
++	groupDescRpmLimit := groupFields[59].Descriptor()
+ 	// group.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
+ 	group.DefaultRpmLimit = groupDescRpmLimit.Default.(int)
+ 	// groupDescMaxReasoningEffort is the schema descriptor for max_reasoning_effort field.
+-	groupDescMaxReasoningEffort := groupFields[59].Descriptor()
++	groupDescMaxReasoningEffort := groupFields[60].Descriptor()
+ 	// group.DefaultMaxReasoningEffort holds the default value on creation for the max_reasoning_effort field.
+ 	group.DefaultMaxReasoningEffort = groupDescMaxReasoningEffort.Default.(string)
+ 	// group.MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
+ 	group.MaxReasoningEffortValidator = groupDescMaxReasoningEffort.Validators[0].(func(string) error)
+ 	// groupDescMaxReasoningEffortOverLimit is the schema descriptor for max_reasoning_effort_over_limit field.
+-	groupDescMaxReasoningEffortOverLimit := groupFields[60].Descriptor()
++	groupDescMaxReasoningEffortOverLimit := groupFields[61].Descriptor()
+ 	// group.DefaultMaxReasoningEffortOverLimit holds the default value on creation for the max_reasoning_effort_over_limit field.
+ 	group.DefaultMaxReasoningEffortOverLimit = groupDescMaxReasoningEffortOverLimit.Default.(string)
+ 	// group.MaxReasoningEffortOverLimitValidator is a validator for the "max_reasoning_effort_over_limit" field. It is called by the builders before save.
+ 	group.MaxReasoningEffortOverLimitValidator = groupDescMaxReasoningEffortOverLimit.Validators[0].(func(string) error)
+ 	// groupDescReasoningEffortMappings is the schema descriptor for reasoning_effort_mappings field.
+-	groupDescReasoningEffortMappings := groupFields[61].Descriptor()
++	groupDescReasoningEffortMappings := groupFields[62].Descriptor()
+ 	// group.DefaultReasoningEffortMappings holds the default value on creation for the reasoning_effort_mappings field.
+ 	group.DefaultReasoningEffortMappings = groupDescReasoningEffortMappings.Default.([]domain.ReasoningEffortMapping)
+ 	// groupDescProfitControlEnabled is the schema descriptor for profit_control_enabled field.
+-	groupDescProfitControlEnabled := groupFields[62].Descriptor()
++	groupDescProfitControlEnabled := groupFields[63].Descriptor()
+ 	// group.DefaultProfitControlEnabled holds the default value on creation for the profit_control_enabled field.
+ 	group.DefaultProfitControlEnabled = groupDescProfitControlEnabled.Default.(bool)
+ 	// groupDescProfitMinMargin is the schema descriptor for profit_min_margin field.
+-	groupDescProfitMinMargin := groupFields[63].Descriptor()
++	groupDescProfitMinMargin := groupFields[64].Descriptor()
+ 	// group.DefaultProfitMinMargin holds the default value on creation for the profit_min_margin field.
+ 	group.DefaultProfitMinMargin = groupDescProfitMinMargin.Default.(float64)
+ 	// groupDescProfitSafetyBuffer is the schema descriptor for profit_safety_buffer field.
+-	groupDescProfitSafetyBuffer := groupFields[64].Descriptor()
++	groupDescProfitSafetyBuffer := groupFields[65].Descriptor()
+ 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
+ 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
+ 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
+diff --git a/backend/ent/schema/group.go b/backend/ent/schema/group.go
+index e84c38829..5c47e0406 100644
+--- a/backend/ent/schema/group.go
++++ b/backend/ent/schema/group.go
+@@ -253,6 +253,9 @@ func (Group) Fields() []ent.Field {
+ 		field.Bool("force_openai_fast").
+ 			Default(false).
+ 			Comment("是否强制此 OpenAI/Composite 分组请求使用 service_tier=priority"),
++		field.Bool("force_openai_ultrafast").
++			Default(false).
++			Comment("是否对支持 Ultrafast 的模型强制使用 service_tier=ultrafast（优先于 force_openai_fast）"),
+ 		field.Bool("free_openai_fast").
+ 			Default(false).
+ 			Comment("是否让此 OpenAI/Composite 分组的 Fast 请求按 Standard 价格计费"),
+diff --git a/backend/internal/handler/admin/group_handler.go b/backend/internal/handler/admin/group_handler.go
+index a5388afdc..beacae5c0 100644
+--- a/backend/internal/handler/admin/group_handler.go
++++ b/backend/internal/handler/admin/group_handler.go
+@@ -239,6 +239,7 @@ type CreateGroupRequest struct {
+ 	AllowMessagesDispatch       bool                                      `json:"allow_messages_dispatch"`
+ 	AllowLive                   bool                                      `json:"allow_live"`
+ 	ForceOpenAIFast             bool                                      `json:"force_openai_fast"`
++	ForceOpenAIUltrafast        bool                                      `json:"force_openai_ultrafast"`
+ 	FreeOpenAIFast              bool                                      `json:"free_openai_fast"`
+ 	RequireOAuthOnly            bool                                      `json:"require_oauth_only"`
+ 	RequirePrivacySet           bool                                      `json:"require_privacy_set"`
+@@ -316,6 +317,7 @@ type UpdateGroupRequest struct {
+ 	AllowMessagesDispatch       *bool                                      `json:"allow_messages_dispatch"`
+ 	AllowLive                   *bool                                      `json:"allow_live"`
+ 	ForceOpenAIFast             *bool                                      `json:"force_openai_fast"`
++	ForceOpenAIUltrafast        *bool                                      `json:"force_openai_ultrafast"`
+ 	FreeOpenAIFast              *bool                                      `json:"free_openai_fast"`
+ 	RequireOAuthOnly            *bool                                      `json:"require_oauth_only"`
+ 	RequirePrivacySet           *bool                                      `json:"require_privacy_set"`
+@@ -719,6 +721,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
+ 		AllowMessagesDispatch:           req.AllowMessagesDispatch,
+ 		AllowLive:                       req.AllowLive,
+ 		ForceOpenAIFast:                 req.ForceOpenAIFast,
++		ForceOpenAIUltrafast:            req.ForceOpenAIUltrafast,
+ 		FreeOpenAIFast:                  req.FreeOpenAIFast,
+ 		RequireOAuthOnly:                req.RequireOAuthOnly,
+ 		RequirePrivacySet:               req.RequirePrivacySet,
+@@ -867,6 +870,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
+ 		AllowMessagesDispatch:           req.AllowMessagesDispatch,
+ 		AllowLive:                       req.AllowLive,
+ 		ForceOpenAIFast:                 req.ForceOpenAIFast,
++		ForceOpenAIUltrafast:            req.ForceOpenAIUltrafast,
+ 		FreeOpenAIFast:                  req.FreeOpenAIFast,
+ 		RequireOAuthOnly:                req.RequireOAuthOnly,
+ 		RequirePrivacySet:               req.RequirePrivacySet,
+diff --git a/backend/internal/handler/admin/group_handler_openai_fast_test.go b/backend/internal/handler/admin/group_handler_openai_fast_test.go
+index 54ff52f9f..3cbed8822 100644
+--- a/backend/internal/handler/admin/group_handler_openai_fast_test.go
++++ b/backend/internal/handler/admin/group_handler_openai_fast_test.go
+@@ -25,3 +25,21 @@ func TestGroupRequestsDecodeForceOpenAIFast(t *testing.T) {
+ 	require.Nil(t, omitted.ForceOpenAIFast)
+ 	require.Nil(t, omitted.FreeOpenAIFast)
+ }
++
++func TestGroupRequestsDecodeForceOpenAIUltrafast(t *testing.T) {
++	var createReq CreateGroupRequest
++	require.NoError(t, json.Unmarshal([]byte(`{"name":"ultrafast","force_openai_ultrafast":true}`), &createReq))
++	require.True(t, createReq.ForceOpenAIUltrafast)
++	require.False(t, createReq.ForceOpenAIFast)
++
++	var updateReq UpdateGroupRequest
++	require.NoError(t, json.Unmarshal([]byte(`{"force_openai_fast":false,"force_openai_ultrafast":true}`), &updateReq))
++	require.NotNil(t, updateReq.ForceOpenAIUltrafast)
++	require.True(t, *updateReq.ForceOpenAIUltrafast)
++	require.NotNil(t, updateReq.ForceOpenAIFast)
++	require.False(t, *updateReq.ForceOpenAIFast)
++
++	var omitted UpdateGroupRequest
++	require.NoError(t, json.Unmarshal([]byte(`{}`), &omitted))
++	require.Nil(t, omitted.ForceOpenAIUltrafast)
++}
+diff --git a/backend/internal/handler/dto/group_mapper_openai_fast_test.go b/backend/internal/handler/dto/group_mapper_openai_fast_test.go
+index 6ad07b061..15d892420 100644
+--- a/backend/internal/handler/dto/group_mapper_openai_fast_test.go
++++ b/backend/internal/handler/dto/group_mapper_openai_fast_test.go
+@@ -23,3 +23,18 @@ func TestGroupMapperExposesForceOpenAIFastOnlyToAdmins(t *testing.T) {
+ 	require.Contains(t, string(adminJSON), `"force_openai_fast":true`)
+ 	require.Contains(t, string(adminJSON), `"free_openai_fast":true`)
+ }
++
++func TestGroupMapperExposesForceOpenAIUltrafastOnlyToAdmins(t *testing.T) {
++	group := &service.Group{
++		ID: 7, Name: "ultrafast", Platform: service.PlatformOpenAI, Status: service.StatusActive, ForceOpenAIUltrafast: true,
++	}
++
++	userJSON, err := json.Marshal(GroupFromService(group))
++	require.NoError(t, err)
++	require.NotContains(t, string(userJSON), "force_openai_ultrafast")
++
++	adminJSON, err := json.Marshal(GroupFromServiceAdmin(group))
++	require.NoError(t, err)
++	require.Contains(t, string(adminJSON), `"force_openai_ultrafast":true`)
++	require.Contains(t, string(adminJSON), `"force_openai_fast":false`)
++}
+diff --git a/backend/internal/handler/dto/mappers.go b/backend/internal/handler/dto/mappers.go
+index b9cbf7ad7..3adf2e237 100644
+--- a/backend/internal/handler/dto/mappers.go
++++ b/backend/internal/handler/dto/mappers.go
+@@ -149,6 +149,7 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
+ 	out := &AdminGroup{
+ 		Group:                       groupFromServiceBase(g),
+ 		ForceOpenAIFast:             g.ForceOpenAIFast,
++		ForceOpenAIUltrafast:        g.ForceOpenAIUltrafast,
+ 		FreeOpenAIFast:              g.FreeOpenAIFast,
+ 		ProfitControlEnabled:        g.ProfitControlEnabled,
+ 		ProfitMinMargin:             g.ProfitMinMargin,
+diff --git a/backend/internal/handler/dto/types.go b/backend/internal/handler/dto/types.go
+index 557cb3797..d59be6a85 100644
+--- a/backend/internal/handler/dto/types.go
++++ b/backend/internal/handler/dto/types.go
+@@ -172,7 +172,8 @@ type Group struct {
+ type AdminGroup struct {
+ 	Group
+ 	// ForceOpenAIFast 是管理端请求策略，用户侧分组 DTO 无需暴露。
+-	ForceOpenAIFast bool `json:"force_openai_fast"`
++	ForceOpenAIFast      bool `json:"force_openai_fast"`
++	ForceOpenAIUltrafast bool `json:"force_openai_ultrafast"`
+ 	// FreeOpenAIFast 是管理端计费策略，用户侧分组 DTO 无需暴露。
+ 	FreeOpenAIFast bool `json:"free_openai_fast"`
+ 
+diff --git a/backend/internal/repository/api_key_repo.go b/backend/internal/repository/api_key_repo.go
+index 07c12e43a..6779be889 100644
+--- a/backend/internal/repository/api_key_repo.go
++++ b/backend/internal/repository/api_key_repo.go
+@@ -212,6 +212,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
+ 				group.FieldAllowMessagesDispatch,
+ 				group.FieldAllowLive,
+ 				group.FieldForceOpenaiFast,
++				group.FieldForceOpenaiUltrafast,
+ 				group.FieldFreeOpenaiFast,
+ 				group.FieldDefaultMappedModel,
+ 				group.FieldMessagesDispatchModelConfig,
+@@ -1028,6 +1029,7 @@ func groupEntityToService(g *dbent.Group) *service.Group {
+ 		AllowMessagesDispatch:           g.AllowMessagesDispatch,
+ 		AllowLive:                       g.AllowLive,
+ 		ForceOpenAIFast:                 g.ForceOpenaiFast,
++		ForceOpenAIUltrafast:            g.ForceOpenaiUltrafast,
+ 		FreeOpenAIFast:                  g.FreeOpenaiFast,
+ 		RequireOAuthOnly:                g.RequireOauthOnly,
+ 		RequirePrivacySet:               g.RequirePrivacySet,
+diff --git a/backend/internal/repository/api_key_repo_openai_fast_projection_integration_test.go b/backend/internal/repository/api_key_repo_openai_fast_projection_integration_test.go
+index f3687c307..cd77ac8a3 100644
+--- a/backend/internal/repository/api_key_repo_openai_fast_projection_integration_test.go
++++ b/backend/internal/repository/api_key_repo_openai_fast_projection_integration_test.go
+@@ -44,3 +44,36 @@ func TestGetByKeyForAuthCarriesGroupForceOpenAIFast(t *testing.T) {
+ 	require.True(t, got.Group.ForceOpenAIFast)
+ 	require.True(t, got.Group.FreeOpenAIFast)
+ }
++
++func TestGetByKeyForAuthCarriesGroupForceOpenAIUltrafast(t *testing.T) {
++	ctx := context.Background()
++	suffix := time.Now().UnixNano()
++	group := mustCreateGroup(t, integrationEntClient, &service.Group{
++		Name: fmt.Sprintf("ultrafast-proj-group-%d", suffix), Platform: service.PlatformOpenAI,
++		RateMultiplier: 1, ForceOpenAIUltrafast: true,
++	})
++	user := mustCreateUser(t, integrationEntClient, &service.User{
++		Email: fmt.Sprintf("ultrafast-proj-%d@example.com", suffix), Concurrency: 5,
++	})
++	groupID := group.ID
++	keyValue := fmt.Sprintf("sk-ultrafast-proj-%d", suffix)
++	apiKeyRepo := NewAPIKeyRepository(integrationEntClient, integrationDB)
++	key := &service.APIKey{UserID: user.ID, GroupID: &groupID, Key: keyValue, Name: "ultrafast-proj", Status: service.StatusActive}
++	require.NoError(t, apiKeyRepo.Create(ctx, key))
++	t.Cleanup(func() {
++		_, err := integrationDB.ExecContext(ctx, "DELETE FROM auth_cache_invalidation_outbox WHERE cache_key = encode(sha256(convert_to($1, 'UTF8')), 'hex')", keyValue)
++		require.NoError(t, err)
++		_, err = integrationDB.ExecContext(ctx, "DELETE FROM api_keys WHERE id = $1", key.ID)
++		require.NoError(t, err)
++		_, err = integrationDB.ExecContext(ctx, "DELETE FROM users WHERE id = $1", user.ID)
++		require.NoError(t, err)
++		_, err = integrationDB.ExecContext(ctx, "DELETE FROM groups WHERE id = $1", group.ID)
++		require.NoError(t, err)
++	})
++
++	got, err := apiKeyRepo.GetByKeyForAuth(ctx, keyValue)
++	require.NoError(t, err)
++	require.NotNil(t, got.Group)
++	require.True(t, got.Group.ForceOpenAIUltrafast)
++	require.False(t, got.Group.ForceOpenAIFast)
++}
+diff --git a/backend/internal/repository/fixtures_integration_test.go b/backend/internal/repository/fixtures_integration_test.go
+index 50e398b3e..cffc6be98 100644
+--- a/backend/internal/repository/fixtures_integration_test.go
++++ b/backend/internal/repository/fixtures_integration_test.go
+@@ -91,6 +91,7 @@ func mustCreateGroup(t *testing.T, client *dbent.Client, g *service.Group) *serv
+ 		SetRateMultiplier(g.RateMultiplier).
+ 		SetIsExclusive(g.IsExclusive).
+ 		SetForceOpenaiFast(g.ForceOpenAIFast).
++		SetForceOpenaiUltrafast(g.ForceOpenAIUltrafast).
+ 		SetFreeOpenaiFast(g.FreeOpenAIFast).
+ 		SetModelAllowlist(service.DomainGroupModelAllowlist(g.ModelAllowlist)).
+ 		SetCodexModelsManifestConfig(g.CodexModelsManifestConfig).
+diff --git a/backend/internal/repository/group_repo.go b/backend/internal/repository/group_repo.go
+index cd8bfe756..f185870c0 100644
+--- a/backend/internal/repository/group_repo.go
++++ b/backend/internal/repository/group_repo.go
+@@ -138,6 +138,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
+ 		SetAllowMessagesDispatch(groupIn.AllowMessagesDispatch).
+ 		SetAllowLive(groupIn.AllowLive).
+ 		SetForceOpenaiFast(groupIn.ForceOpenAIFast).
++		SetForceOpenaiUltrafast(groupIn.ForceOpenAIUltrafast).
+ 		SetFreeOpenaiFast(groupIn.FreeOpenAIFast).
+ 		SetRequireOauthOnly(groupIn.RequireOAuthOnly).
+ 		SetRequirePrivacySet(groupIn.RequirePrivacySet).
+@@ -323,6 +324,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
+ 		SetAllowMessagesDispatch(groupIn.AllowMessagesDispatch).
+ 		SetAllowLive(groupIn.AllowLive).
+ 		SetForceOpenaiFast(groupIn.ForceOpenAIFast).
++		SetForceOpenaiUltrafast(groupIn.ForceOpenAIUltrafast).
+ 		SetFreeOpenaiFast(groupIn.FreeOpenAIFast).
+ 		SetRequireOauthOnly(groupIn.RequireOAuthOnly).
+ 		SetRequirePrivacySet(groupIn.RequirePrivacySet).
+diff --git a/backend/internal/repository/migrations_schema_integration_test.go b/backend/internal/repository/migrations_schema_integration_test.go
+index 57f06fd2a..f480caf00 100644
+--- a/backend/internal/repository/migrations_schema_integration_test.go
++++ b/backend/internal/repository/migrations_schema_integration_test.go
+@@ -58,6 +58,7 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
+ 	// groups: OpenAI Live 与 Fast 强制策略都默认关闭，管理员显式开启后才生效。
+ 	requireColumn(t, tx, "groups", "allow_live", "boolean", 0, false)
+ 	requireColumn(t, tx, "groups", "force_openai_fast", "boolean", 0, false)
++	requireColumn(t, tx, "groups", "force_openai_ultrafast", "boolean", 0, false)
+ 	requireColumn(t, tx, "groups", "free_openai_fast", "boolean", 0, false)
+ 
+ 	// api_keys: key length should be 128
+diff --git a/backend/internal/service/admin_group.go b/backend/internal/service/admin_group.go
+index 68bbfca90..fbe32e830 100644
+--- a/backend/internal/service/admin_group.go
++++ b/backend/internal/service/admin_group.go
+@@ -369,6 +369,7 @@ func sanitizeGroupOpenAIFast(group *Group) {
+ 	if group == nil || !groupSupportsOpenAIFast(group.Platform) {
+ 		if group != nil {
+ 			group.ForceOpenAIFast = false
++			group.ForceOpenAIUltrafast = false
+ 			group.FreeOpenAIFast = false
+ 		}
+ 	}
+@@ -626,6 +627,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
+ 		AllowMessagesDispatch:           input.AllowMessagesDispatch,
+ 		AllowLive:                       input.AllowLive,
+ 		ForceOpenAIFast:                 input.ForceOpenAIFast,
++		ForceOpenAIUltrafast:            input.ForceOpenAIUltrafast,
+ 		FreeOpenAIFast:                  input.FreeOpenAIFast,
+ 		RequireOAuthOnly:                input.RequireOAuthOnly,
+ 		RequirePrivacySet:               input.RequirePrivacySet,
+@@ -1019,6 +1021,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
+ 	if input.ForceOpenAIFast != nil {
+ 		group.ForceOpenAIFast = *input.ForceOpenAIFast
+ 	}
++	if input.ForceOpenAIUltrafast != nil {
++		group.ForceOpenAIUltrafast = *input.ForceOpenAIUltrafast
++	}
+ 	if input.FreeOpenAIFast != nil {
+ 		group.FreeOpenAIFast = *input.FreeOpenAIFast
+ 	}
+diff --git a/backend/internal/service/admin_group_duplicate.go b/backend/internal/service/admin_group_duplicate.go
+index 9e7ea9333..ab6afc7f7 100644
+--- a/backend/internal/service/admin_group_duplicate.go
++++ b/backend/internal/service/admin_group_duplicate.go
+@@ -147,6 +147,7 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
+ 		AllowMessagesDispatch:           source.AllowMessagesDispatch,
+ 		AllowLive:                       source.AllowLive,
+ 		ForceOpenAIFast:                 source.ForceOpenAIFast,
++		ForceOpenAIUltrafast:            source.ForceOpenAIUltrafast,
+ 		FreeOpenAIFast:                  source.FreeOpenAIFast,
+ 		RequireOAuthOnly:                source.RequireOAuthOnly,
+ 		RequirePrivacySet:               source.RequirePrivacySet,
+diff --git a/backend/internal/service/admin_group_duplicate_test.go b/backend/internal/service/admin_group_duplicate_test.go
+index d991590a0..bdcfdd01f 100644
+--- a/backend/internal/service/admin_group_duplicate_test.go
++++ b/backend/internal/service/admin_group_duplicate_test.go
+@@ -216,6 +216,7 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
+ 	require.Equal(t, source.ModelRouting, duplicate.ModelRouting)
+ 	require.Equal(t, source.MessagesDispatchModelConfig, duplicate.MessagesDispatchModelConfig)
+ 	require.Equal(t, source.ForceOpenAIFast, duplicate.ForceOpenAIFast)
++	require.Equal(t, source.ForceOpenAIUltrafast, duplicate.ForceOpenAIUltrafast)
+ 	require.Equal(t, source.FreeOpenAIFast, duplicate.FreeOpenAIFast)
+ 	require.Equal(t, source.ModelAllowlist, duplicate.ModelAllowlist)
+ 	require.Equal(t, source.RPMLimit, duplicate.RPMLimit)
+diff --git a/backend/internal/service/admin_service.go b/backend/internal/service/admin_service.go
+index ade1b59c5..7a9e76930 100644
+--- a/backend/internal/service/admin_service.go
++++ b/backend/internal/service/admin_service.go
+@@ -294,6 +294,7 @@ type CreateGroupInput struct {
+ 	AllowMessagesDispatch       bool
+ 	AllowLive                   bool
+ 	ForceOpenAIFast             bool
++	ForceOpenAIUltrafast        bool
+ 	FreeOpenAIFast              bool
+ 	DefaultMappedModel          string
+ 	RequireOAuthOnly            bool
+@@ -377,6 +378,7 @@ type UpdateGroupInput struct {
+ 	AllowMessagesDispatch       *bool
+ 	AllowLive                   *bool
+ 	ForceOpenAIFast             *bool
++	ForceOpenAIUltrafast        *bool
+ 	FreeOpenAIFast              *bool
+ 	DefaultMappedModel          *string
+ 	RequireOAuthOnly            *bool
+diff --git a/backend/internal/service/admin_service_group_test.go b/backend/internal/service/admin_service_group_test.go
+index af12cf0e4..460e9e65b 100644
+--- a/backend/internal/service/admin_service_group_test.go
++++ b/backend/internal/service/admin_service_group_test.go
+@@ -2350,3 +2350,150 @@ func TestAdminService_CreateGroup_CodexModelsManifestConfigDisabledAccepted(t *t
+ 	require.Equal(t, []int64{1, 2}, group.CodexModelsManifestConfig.AccountIDs)
+ 	require.False(t, repo.created.CodexModelsManifestConfig.Enabled)
+ }
++
++func TestAdminService_CreateGroup_NormalizesForceOpenAIUltrafastByPlatform(t *testing.T) {
++	for _, tt := range []struct {
++		name     string
++		platform string
++		want     bool
++	}{
++		{name: "openai", platform: PlatformOpenAI, want: true},
++		{name: "composite", platform: PlatformComposite, want: true},
++		{name: "anthropic", platform: PlatformAnthropic, want: false},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			repo := &groupRepoStubForAdmin{}
++			svc := &adminServiceImpl{groupRepo: repo}
++
++			group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
++				Name: "ultrafast-" + tt.name, Platform: tt.platform, RateMultiplier: 1, ForceOpenAIUltrafast: true,
++			})
++
++			require.NoError(t, err)
++			require.NotNil(t, group)
++			require.Equal(t, tt.want, repo.created.ForceOpenAIUltrafast)
++			require.False(t, repo.created.ForceOpenAIFast)
++		})
++	}
++}
++
++// 两个开关相互独立：同时开启表示"支持的模型走 Ultra Fast，其余走 Fast"。
++func TestAdminService_CreateGroup_AllowsForcingFastAndUltrafastTogether(t *testing.T) {
++	repo := &groupRepoStubForAdmin{}
++	svc := &adminServiceImpl{groupRepo: repo}
++
++	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
++		Name: "both", Platform: PlatformOpenAI, RateMultiplier: 1, ForceOpenAIFast: true, ForceOpenAIUltrafast: true,
++	})
++
++	require.NoError(t, err)
++	require.NotNil(t, group)
++	require.True(t, repo.created.ForceOpenAIFast)
++	require.True(t, repo.created.ForceOpenAIUltrafast)
++}
++
++// 不支持该能力的平台两个开关都会被清零。
++func TestAdminService_CreateGroup_UnsupportedPlatformIgnoresBothForcedTiers(t *testing.T) {
++	repo := &groupRepoStubForAdmin{}
++	svc := &adminServiceImpl{groupRepo: repo}
++
++	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
++		Name: "anthropic-both", Platform: PlatformAnthropic, RateMultiplier: 1, ForceOpenAIFast: true, ForceOpenAIUltrafast: true,
++	})
++
++	require.NoError(t, err)
++	require.NotNil(t, group)
++	require.False(t, repo.created.ForceOpenAIFast)
++	require.False(t, repo.created.ForceOpenAIUltrafast)
++}
++
++func TestAdminService_UpdateGroup_ForceOpenAIUltrafast(t *testing.T) {
++	truth, falsity := true, false
++
++	t.Run("enables ultrafast and invalidates auth cache", func(t *testing.T) {
++		existing := &Group{ID: 1, Name: "g", Platform: PlatformOpenAI, Status: StatusActive}
++		repo := &groupRepoStubForAdmin{getByID: existing}
++		invalidator := &authCacheInvalidatorStub{}
++		svc := &adminServiceImpl{groupRepo: repo, authCacheInvalidator: invalidator}
++
++		_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{ForceOpenAIUltrafast: &truth})
++
++		require.NoError(t, err)
++		require.True(t, repo.updated.ForceOpenAIUltrafast)
++		require.False(t, repo.updated.ForceOpenAIFast)
++		require.Equal(t, []int64{existing.ID}, invalidator.groupIDs)
++	})
++
++	t.Run("switching fast to ultrafast in one request", func(t *testing.T) {
++		existing := &Group{ID: 1, Name: "g", Platform: PlatformOpenAI, Status: StatusActive, ForceOpenAIFast: true}
++		repo := &groupRepoStubForAdmin{getByID: existing}
++		svc := &adminServiceImpl{groupRepo: repo}
++
++		_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{
++			ForceOpenAIFast: &falsity, ForceOpenAIUltrafast: &truth,
++		})
++
++		require.NoError(t, err)
++		require.False(t, repo.updated.ForceOpenAIFast)
++		require.True(t, repo.updated.ForceOpenAIUltrafast)
++	})
++
++	t.Run("enabling ultrafast leaves fast untouched", func(t *testing.T) {
++		existing := &Group{ID: 1, Name: "g", Platform: PlatformOpenAI, Status: StatusActive, ForceOpenAIFast: true}
++		repo := &groupRepoStubForAdmin{getByID: existing}
++		svc := &adminServiceImpl{groupRepo: repo}
++
++		_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{ForceOpenAIUltrafast: &truth})
++
++		require.NoError(t, err)
++		require.True(t, repo.updated.ForceOpenAIFast)
++		require.True(t, repo.updated.ForceOpenAIUltrafast)
++	})
++
++	t.Run("enabling fast leaves ultrafast untouched", func(t *testing.T) {
++		existing := &Group{ID: 1, Name: "g", Platform: PlatformOpenAI, Status: StatusActive, ForceOpenAIUltrafast: true}
++		repo := &groupRepoStubForAdmin{getByID: existing}
++		svc := &adminServiceImpl{groupRepo: repo}
++
++		_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{ForceOpenAIFast: &truth})
++
++		require.NoError(t, err)
++		require.True(t, repo.updated.ForceOpenAIFast)
++		require.True(t, repo.updated.ForceOpenAIUltrafast)
++	})
++
++	t.Run("platform change clears both", func(t *testing.T) {
++		existing := &Group{ID: 1, Name: "g", Platform: PlatformOpenAI, Status: StatusActive, ForceOpenAIFast: true, ForceOpenAIUltrafast: true}
++		repo := &groupRepoStubForAdmin{getByID: existing}
++		svc := &adminServiceImpl{groupRepo: repo}
++
++		_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{Platform: PlatformAnthropic})
++
++		require.NoError(t, err)
++		require.False(t, repo.updated.ForceOpenAIFast)
++		require.False(t, repo.updated.ForceOpenAIUltrafast)
++	})
++
++	t.Run("platform change clears ultrafast", func(t *testing.T) {
++		existing := &Group{ID: 1, Name: "g", Platform: PlatformOpenAI, Status: StatusActive, ForceOpenAIUltrafast: true}
++		repo := &groupRepoStubForAdmin{getByID: existing}
++		svc := &adminServiceImpl{groupRepo: repo}
++
++		_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{Platform: PlatformAnthropic})
++
++		require.NoError(t, err)
++		require.False(t, repo.updated.ForceOpenAIUltrafast)
++	})
++
++	t.Run("unrelated update preserves ultrafast", func(t *testing.T) {
++		description := "renamed"
++		existing := &Group{ID: 1, Name: "g", Platform: PlatformOpenAI, Status: StatusActive, ForceOpenAIUltrafast: true}
++		repo := &groupRepoStubForAdmin{getByID: existing}
++		svc := &adminServiceImpl{groupRepo: repo}
++
++		_, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{Description: &description})
++
++		require.NoError(t, err)
++		require.True(t, repo.updated.ForceOpenAIUltrafast)
++	})
++}
+diff --git a/backend/internal/service/api_key_auth_cache.go b/backend/internal/service/api_key_auth_cache.go
+index 716c0a58c..0760068b9 100644
+--- a/backend/internal/service/api_key_auth_cache.go
++++ b/backend/internal/service/api_key_auth_cache.go
+@@ -108,6 +108,7 @@ type APIKeyAuthGroupSnapshot struct {
+ 	AllowMessagesDispatch       bool                              `json:"allow_messages_dispatch"`
+ 	AllowLive                   bool                              `json:"allow_live"`
+ 	ForceOpenAIFast             bool                              `json:"force_openai_fast"`
++	ForceOpenAIUltrafast        bool                              `json:"force_openai_ultrafast"`
+ 	FreeOpenAIFast              bool                              `json:"free_openai_fast"`
+ 	DefaultMappedModel          string                            `json:"default_mapped_model,omitempty"`
+ 	MessagesDispatchModelConfig OpenAIMessagesDispatchModelConfig `json:"messages_dispatch_model_config,omitempty"`
+diff --git a/backend/internal/service/api_key_auth_cache_impl.go b/backend/internal/service/api_key_auth_cache_impl.go
+index 2bb7204fd..9ee51e0a0 100644
+--- a/backend/internal/service/api_key_auth_cache_impl.go
++++ b/backend/internal/service/api_key_auth_cache_impl.go
+@@ -14,7 +14,7 @@ import (
+ 	"github.com/dgraph-io/ristretto"
+ )
+ 
+-const apiKeyAuthSnapshotVersion = 27 // v27: group require_privacy_set (OpenAI scheduling reads it from ctx)
++const apiKeyAuthSnapshotVersion = 28 // v28: group force_openai_ultrafast (OpenAI gateway reads it from ctx)
+ 
+ type apiKeyAuthCacheConfig struct {
+ 	l1Size        int
+@@ -421,6 +421,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey)
+ 			AllowMessagesDispatch:           apiKey.Group.AllowMessagesDispatch,
+ 			AllowLive:                       apiKey.Group.AllowLive,
+ 			ForceOpenAIFast:                 apiKey.Group.ForceOpenAIFast,
++			ForceOpenAIUltrafast:            apiKey.Group.ForceOpenAIUltrafast,
+ 			FreeOpenAIFast:                  apiKey.Group.FreeOpenAIFast,
+ 			DefaultMappedModel:              apiKey.Group.DefaultMappedModel,
+ 			MessagesDispatchModelConfig:     apiKey.Group.MessagesDispatchModelConfig,
+@@ -526,6 +527,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
+ 			AllowMessagesDispatch:           snapshot.Group.AllowMessagesDispatch,
+ 			AllowLive:                       snapshot.Group.AllowLive,
+ 			ForceOpenAIFast:                 snapshot.Group.ForceOpenAIFast,
++			ForceOpenAIUltrafast:            snapshot.Group.ForceOpenAIUltrafast,
+ 			FreeOpenAIFast:                  snapshot.Group.FreeOpenAIFast,
+ 			DefaultMappedModel:              snapshot.Group.DefaultMappedModel,
+ 			MessagesDispatchModelConfig:     snapshot.Group.MessagesDispatchModelConfig,
+diff --git a/backend/internal/service/api_key_auth_cache_openai_fast_test.go b/backend/internal/service/api_key_auth_cache_openai_fast_test.go
+index 2c39d5bca..e9b0b678d 100644
+--- a/backend/internal/service/api_key_auth_cache_openai_fast_test.go
++++ b/backend/internal/service/api_key_auth_cache_openai_fast_test.go
+@@ -34,3 +34,29 @@ func TestAPIKeyAuthSnapshotGroupForceOpenAIFastRoundtrip(t *testing.T) {
+ 	require.True(t, materialized.Group.FreeOpenAIFast)
+ 	require.Equal(t, apiKeyAuthSnapshotVersion, cached.Snapshot.Version)
+ }
++
++func TestAPIKeyAuthSnapshotGroupForceOpenAIUltrafastRoundtrip(t *testing.T) {
++	groupID := int64(51)
++	apiKey := &APIKey{
++		ID: 83, UserID: 40, GroupID: &groupID, Key: "sk-ultrafast-roundtrip", Status: StatusActive,
++		User: &User{ID: 40, Status: StatusActive},
++		Group: &Group{
++			ID: groupID, Name: "ultrafast-roundtrip", Platform: PlatformOpenAI, Status: StatusActive,
++			Hydrated: true, ForceOpenAIUltrafast: true,
++		},
++	}
++	svc := &APIKeyService{}
++
++	payload, err := json.Marshal(&APIKeyAuthCacheEntry{Snapshot: svc.snapshotFromAPIKey(context.Background(), apiKey)})
++	require.NoError(t, err)
++	require.Contains(t, string(payload), `"force_openai_ultrafast":true`)
++	var cached APIKeyAuthCacheEntry
++	require.NoError(t, json.Unmarshal(payload, &cached))
++
++	materialized, used, err := svc.applyAuthCacheEntry(apiKey.Key, &cached)
++	require.NoError(t, err)
++	require.True(t, used)
++	require.NotNil(t, materialized.Group)
++	require.True(t, materialized.Group.ForceOpenAIUltrafast)
++	require.False(t, materialized.Group.ForceOpenAIFast)
++}
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index 9b6bf9222..b97e8226d 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -2059,7 +2059,7 @@ func (s *BillingService) applyModelSpecificPricingPolicyEx(model string, pricing
+ 		return pricing
+ 	}
+ 	cloned := *pricing
+-	if isOpenAIGPT6AstraModel(normalized) {
++	if openAIModelSupportsUltrafast(normalized) {
+ 		cloned.UltrafastMultiplier = 6
+ 	}
+ 	if needsOpus55FastMultiplier {
+diff --git a/backend/internal/service/billing_service_test.go b/backend/internal/service/billing_service_test.go
+index 52264f805..2ac79d6da 100644
+--- a/backend/internal/service/billing_service_test.go
++++ b/backend/internal/service/billing_service_test.go
+@@ -2225,6 +2225,35 @@ func TestAstraUltrafastPricingUsesSixTimesStandard(t *testing.T) {
+ 	require.Equal(t, 2.0, configuredServiceTierMultiplier("ultrafast", p))
+ }
+ 
++// 门控与计费共用同一判定：凡是分组会强制写入 ultrafast 的模型，都必须按 6x 计费。
++func TestOpenAIUltrafastGateMatchesBilling(t *testing.T) {
++	svc := newTestBillingService()
++	for _, tt := range []struct {
++		model string
++		want  float64
++	}{
++		{model: "gpt-6-astra", want: 6},
++		{model: "gpt-6.1-sol", want: 6},
++		{model: "gpt-6.1-sol-high", want: 6},
++		{model: "gpt-6.1-terra", want: 2},
++		{model: "gpt-6-sol", want: 2},
++		{model: "gpt-5.6-sol", want: 2},
++	} {
++		pricing, err := svc.GetModelPricing(tt.model)
++		require.NoError(t, err, tt.model)
++		require.Equal(t, tt.want, configuredServiceTierMultiplier(OpenAIFastTierUltrafast, pricing), tt.model)
++		require.Equal(t, tt.want == 6, openAIModelSupportsUltrafast(tt.model), tt.model)
++
++		// 渠道自定义价格与显式 Fast 倍率都不改变 Ultrafast 倍率。
++		custom, fast := 1e-6, 3.0
++		channelPricing, err := svc.GetModelPricingWithChannel(tt.model, &ChannelModelPricing{
++			InputPrice: &custom, OutputPrice: &custom, FastMultiplier: &fast,
++		})
++		require.NoError(t, err, tt.model)
++		require.Equal(t, tt.want, configuredServiceTierMultiplier(OpenAIFastTierUltrafast, channelPricing), tt.model)
++	}
++}
++
+ func TestGPT61SolExplicitZeroCacheWriteAcrossTiers(t *testing.T) {
+ 	pricing := &PricingService{}
+ 	var err error
+diff --git a/backend/internal/service/group.go b/backend/internal/service/group.go
+index bcaa3a045..3e55c3e66 100644
+--- a/backend/internal/service/group.go
++++ b/backend/internal/service/group.go
+@@ -103,6 +103,7 @@ type Group struct {
+ 	AllowMessagesDispatch       bool
+ 	AllowLive                   bool
+ 	ForceOpenAIFast             bool // 强制 OpenAI 网关请求使用 service_tier=priority
++	ForceOpenAIUltrafast        bool // 对支持 Ultrafast 的模型强制 service_tier=ultrafast，优先于 ForceOpenAIFast
+ 	FreeOpenAIFast              bool // OpenAI Fast 请求按 Standard 价格向用户计费
+ 	RequireOAuthOnly            bool // 仅允许非 apikey 类型账号关联（OpenAI/Antigravity/Anthropic/Gemini）
+ 	RequirePrivacySet           bool // 调度时仅允许 privacy 已成功设置的账号（OpenAI/Antigravity/Anthropic/Gemini）
+diff --git a/backend/internal/service/openai_fast_policy_test.go b/backend/internal/service/openai_fast_policy_test.go
+index 6a0a2080a..a53e5ffe1 100644
+--- a/backend/internal/service/openai_fast_policy_test.go
++++ b/backend/internal/service/openai_fast_policy_test.go
+@@ -583,3 +583,193 @@ func TestSetOpenAIFastPolicySettings_Validation(t *testing.T) {
+ 	require.Equal(t, BetaPolicyActionPass, got.Rules[1].Action)
+ 	require.Equal(t, OpenAIFastPolicyActionForcePriority, got.Rules[2].Action)
+ }
++
++func openAIUltrafastGroupContext() context.Context {
++	return context.WithValue(context.Background(), ctxkey.Group, &Group{
++		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIUltrafast: true,
++	})
++}
++
++func TestApplyOpenAIFastPolicyToBody_GroupForceUltrafastInjectsAndOverridesTier(t *testing.T) {
++	svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
++	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++
++	for _, body := range [][]byte{
++		[]byte(`{"model":"gpt-6.1-sol","input":"hi"}`),
++		[]byte(`{"model":"gpt-6.1-sol","service_tier":"default"}`),
++		[]byte(`{"model":"gpt-6.1-sol","service_tier":"fast"}`),
++		[]byte(`{"model":"gpt-6.1-sol","service_tier":"priority"}`),
++		[]byte(`{"model":"gpt-6.1-sol","service_tier":"flex"}`),
++		[]byte(`{"model":"gpt-6.1-sol","service_tier":"ultrafast"}`),
++		[]byte(`{"model":"gpt-6.1-sol","service_tier":"client-unknown"}`),
++	} {
++		updated, err := svc.applyOpenAIFastPolicyToBody(openAIUltrafastGroupContext(), account, "gpt-6.1-sol", body)
++		require.NoError(t, err)
++		require.Equal(t, OpenAIFastTierUltrafast, gjson.GetBytes(updated, "service_tier").String(), "body %s", body)
++	}
++}
++
++// 全局策略在分组强制之后裁决：针对 ultrafast 的 filter / block / force_priority
++// 规则必须作用在分组写入的 ultrafast 上，而只针对 priority 的规则不应误伤。
++func TestApplyOpenAIFastPolicyToBody_GroupForceUltrafastStillHonorsGlobalPolicy(t *testing.T) {
++	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	body := []byte(`{"model":"gpt-6.1-sol"}`)
++	rule := func(tier, action string) *OpenAIFastPolicySettings {
++		return &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
++			ServiceTier: tier, Action: action, Scope: BetaPolicyScopeAll, ErrorMessage: "ultrafast disabled",
++		}}}
++	}
++
++	t.Run("ultrafast filter strips the forced tier", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, rule(OpenAIFastTierUltrafast, BetaPolicyActionFilter))
++		updated, err := svc.applyOpenAIFastPolicyToBody(openAIUltrafastGroupContext(), account, "gpt-6.1-sol", body)
++		require.NoError(t, err)
++		require.False(t, gjson.GetBytes(updated, "service_tier").Exists())
++	})
++
++	t.Run("ultrafast block rejects the request", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, rule(OpenAIFastTierUltrafast, BetaPolicyActionBlock))
++		_, err := svc.applyOpenAIFastPolicyToBody(openAIUltrafastGroupContext(), account, "gpt-6.1-sol", body)
++		var blocked *OpenAIFastBlockedError
++		require.ErrorAs(t, err, &blocked)
++		require.Equal(t, "ultrafast disabled", blocked.Message)
++	})
++
++	t.Run("ultrafast force_priority downgrades to priority", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, rule(OpenAIFastTierUltrafast, OpenAIFastPolicyActionForcePriority))
++		updated, err := svc.applyOpenAIFastPolicyToBody(openAIUltrafastGroupContext(), account, "gpt-6.1-sol", body)
++		require.NoError(t, err)
++		require.Equal(t, OpenAIFastTierPriority, gjson.GetBytes(updated, "service_tier").String())
++	})
++
++	t.Run("priority-only filter leaves ultrafast alone", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, openAIFastFilterPriorityPolicy())
++		updated, err := svc.applyOpenAIFastPolicyToBody(openAIUltrafastGroupContext(), account, "gpt-6.1-sol", body)
++		require.NoError(t, err)
++		require.Equal(t, OpenAIFastTierUltrafast, gjson.GetBytes(updated, "service_tier").String())
++	})
++
++	t.Run("model whitelist fallback filters unsupported models", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
++			ServiceTier: OpenAIFastTierUltrafast, Action: BetaPolicyActionPass, Scope: BetaPolicyScopeAll,
++			ModelWhitelist: []string{"gpt-6.1-sol"}, FallbackAction: BetaPolicyActionFilter,
++		}}})
++		supported, err := svc.applyOpenAIFastPolicyToBody(openAIUltrafastGroupContext(), account, "gpt-6.1-sol", body)
++		require.NoError(t, err)
++		require.Equal(t, OpenAIFastTierUltrafast, gjson.GetBytes(supported, "service_tier").String())
++
++		// Astra 支持 Ultrafast，分组会写入；不在白名单内，由 fallback 过滤掉。
++		notWhitelisted, err := svc.applyOpenAIFastPolicyToBody(
++			openAIUltrafastGroupContext(), account, "gpt-6-astra", []byte(`{"model":"gpt-6-astra"}`))
++		require.NoError(t, err)
++		require.False(t, gjson.GetBytes(notWhitelisted, "service_tier").Exists())
++	})
++}
++
++func TestOpenAIModelSupportsUltrafast(t *testing.T) {
++	for _, model := range []string{
++		"gpt-6-astra", "gpt-6", "GPT-6-Astra", "openai/gpt-6-astra",
++		"gpt-6.1-sol", "gpt-6.1-sol-high", "openai/gpt-6.1-sol", "gpt-6.1-sol-openai-compact",
++	} {
++		require.True(t, openAIModelSupportsUltrafast(model), model)
++	}
++	for _, model := range []string{
++		"", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.4-mini",
++		"gpt-6.1-solar", "grok-4", "claude-opus-5-5",
++	} {
++		require.False(t, openAIModelSupportsUltrafast(model), model)
++	}
++}
++
++func TestOpenAIGroupForcedServiceTier(t *testing.T) {
++	openAIAccount := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	const sol, astra, unsupported = "gpt-6.1-sol", "gpt-6-astra", "gpt-5.6-sol"
++	group := func(platform string, fast, ultrafast bool) context.Context {
++		return context.WithValue(context.Background(), ctxkey.Group, &Group{
++			ID: 7, Platform: platform, Status: StatusActive, Hydrated: true,
++			ForceOpenAIFast: fast, ForceOpenAIUltrafast: ultrafast,
++		})
++	}
++	for _, tt := range []struct {
++		name    string
++		ctx     context.Context
++		account *Account
++		model   string
++		want    string
++	}{
++		{name: "no group", ctx: context.Background(), account: openAIAccount, model: sol, want: ""},
++		{name: "nil account", ctx: group(PlatformOpenAI, true, true), account: nil, model: sol, want: ""},
++		{name: "follow client", ctx: group(PlatformOpenAI, false, false), account: openAIAccount, model: sol, want: ""},
++
++		{name: "fast only, ultrafast-capable model", ctx: group(PlatformOpenAI, true, false), account: openAIAccount, model: sol, want: OpenAIFastTierPriority},
++		{name: "fast only, other model", ctx: group(PlatformOpenAI, true, false), account: openAIAccount, model: unsupported, want: OpenAIFastTierPriority},
++		{name: "fast only, empty model", ctx: group(PlatformOpenAI, true, false), account: openAIAccount, model: "", want: OpenAIFastTierPriority},
++
++		{name: "ultrafast only, sol", ctx: group(PlatformOpenAI, false, true), account: openAIAccount, model: sol, want: OpenAIFastTierUltrafast},
++		{name: "ultrafast only, astra", ctx: group(PlatformOpenAI, false, true), account: openAIAccount, model: astra, want: OpenAIFastTierUltrafast},
++		{name: "ultrafast only, sol effort alias", ctx: group(PlatformOpenAI, false, true), account: openAIAccount, model: "gpt-6.1-sol-high", want: OpenAIFastTierUltrafast},
++		{name: "ultrafast only, unsupported model follows client", ctx: group(PlatformOpenAI, false, true), account: openAIAccount, model: unsupported, want: ""},
++		{name: "ultrafast only, empty model follows client", ctx: group(PlatformOpenAI, false, true), account: openAIAccount, model: "", want: ""},
++
++		{name: "both, supported model gets ultrafast", ctx: group(PlatformOpenAI, true, true), account: openAIAccount, model: sol, want: OpenAIFastTierUltrafast},
++		{name: "both, unsupported model falls back to fast", ctx: group(PlatformOpenAI, true, true), account: openAIAccount, model: unsupported, want: OpenAIFastTierPriority},
++
++		{name: "composite group with openai account", ctx: group(PlatformComposite, false, true), account: openAIAccount, model: sol, want: OpenAIFastTierUltrafast},
++		{name: "composite group with grok account", ctx: group(PlatformComposite, true, true), account: &Account{Platform: PlatformGrok}, model: sol, want: ""},
++		{name: "unsupported group platform", ctx: group(PlatformAnthropic, true, true), account: openAIAccount, model: sol, want: ""},
++		{name: "unhydrated group", ctx: context.WithValue(context.Background(), ctxkey.Group, &Group{ID: 7, Platform: PlatformOpenAI, Status: StatusActive, ForceOpenAIFast: true, ForceOpenAIUltrafast: true}), account: openAIAccount, model: sol, want: ""},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, openAIGroupForcedServiceTier(tt.ctx, tt.account, tt.model))
++		})
++	}
++}
++
++// 仅强制 Ultra Fast 的分组：不支持的模型保留客户端传入的档位（含省略）。
++func TestApplyOpenAIFastPolicyToBody_GroupForceUltrafastSkipsUnsupportedModels(t *testing.T) {
++	svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
++	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++
++	for _, tt := range []struct {
++		body string
++		want string
++	}{
++		{body: `{"model":"gpt-5.6-sol","input":"hi"}`, want: ""},
++		{body: `{"model":"gpt-5.6-sol","service_tier":"fast"}`, want: OpenAIFastTierPriority},
++		{body: `{"model":"gpt-5.6-sol","service_tier":"flex"}`, want: OpenAIFastTierFlex},
++		{body: `{"model":"gpt-5.6-sol","service_tier":"ultrafast"}`, want: OpenAIFastTierUltrafast},
++	} {
++		updated, err := svc.applyOpenAIFastPolicyToBody(openAIUltrafastGroupContext(), account, "gpt-5.6-sol", []byte(tt.body))
++		require.NoError(t, err)
++		require.Equal(t, tt.want, gjson.GetBytes(updated, "service_tier").String(), "body %s", tt.body)
++	}
++}
++
++// 两个开关同时开启：支持的模型写 ultrafast，其余模型写 priority。
++func TestApplyOpenAIFastPolicyToBody_GroupForceFastAndUltrafastTogether(t *testing.T) {
++	svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
++	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
++		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIFast: true, ForceOpenAIUltrafast: true,
++	})
++
++	for _, tt := range []struct {
++		model string
++		want  string
++	}{
++		{model: "gpt-6.1-sol", want: OpenAIFastTierUltrafast},
++		{model: "gpt-6-astra", want: OpenAIFastTierUltrafast},
++		{model: "gpt-5.6-sol", want: OpenAIFastTierPriority},
++		{model: "gpt-6.1-terra", want: OpenAIFastTierPriority},
++	} {
++		for _, body := range []string{
++			`{"model":"` + tt.model + `"}`,
++			`{"model":"` + tt.model + `","service_tier":"flex"}`,
++			`{"model":"` + tt.model + `","service_tier":"ultrafast"}`,
++		} {
++			updated, err := svc.applyOpenAIFastPolicyToBody(ctx, account, tt.model, []byte(body))
++			require.NoError(t, err)
++			require.Equal(t, tt.want, gjson.GetBytes(updated, "service_tier").String(), "body %s", body)
++		}
++	}
++}
+diff --git a/backend/internal/service/openai_fast_policy_ws_test.go b/backend/internal/service/openai_fast_policy_ws_test.go
+index 7bc2d5f4d..da98c229d 100644
+--- a/backend/internal/service/openai_fast_policy_ws_test.go
++++ b/backend/internal/service/openai_fast_policy_ws_test.go
+@@ -1202,3 +1202,83 @@ func TestPassthroughBilling_BlockedFrameDoesNotMutateServiceTier(t *testing.T) {
+ 	require.Equal(t, "flex", *tier,
+ 		"blocked frame is never sent upstream; billing must retain the previous turn's tier")
+ }
++
++func TestWSResponseCreate_GroupForceUltrafast(t *testing.T) {
++	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
++		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIUltrafast: true,
++	})
++
++	t.Run("injects and overrides tier on response.create", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
++		for _, frame := range [][]byte{
++			[]byte(`{"type":"response.create","model":"gpt-6.1-sol","input":[]}`),
++			[]byte(`{"type":"response.create","model":"gpt-6.1-sol","service_tier":"priority"}`),
++			[]byte(`{"type":"response.create","model":"gpt-6.1-sol","service_tier":"flex"}`),
++		} {
++			updated, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, "gpt-6.1-sol", frame)
++			require.NoError(t, err)
++			require.Nil(t, blocked)
++			require.Equal(t, OpenAIFastTierUltrafast, gjson.GetBytes(updated, "service_tier").String(), "frame %s", frame)
++		}
++	})
++
++	t.Run("unsupported model keeps the client tier", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
++		missing, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(
++			ctx, account, "gpt-5.6-sol", []byte(`{"type":"response.create","model":"gpt-5.6-sol"}`))
++		require.NoError(t, err)
++		require.Nil(t, blocked)
++		require.False(t, gjson.GetBytes(missing, "service_tier").Exists())
++
++		flex, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(
++			ctx, account, "gpt-5.6-sol", []byte(`{"type":"response.create","model":"gpt-5.6-sol","service_tier":"flex"}`))
++		require.NoError(t, err)
++		require.Nil(t, blocked)
++		require.Equal(t, OpenAIFastTierFlex, gjson.GetBytes(flex, "service_tier").String())
++	})
++
++	t.Run("with force fast also on, unsupported model gets priority", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
++		bothCtx := context.WithValue(context.Background(), ctxkey.Group, &Group{
++			ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIFast: true, ForceOpenAIUltrafast: true,
++		})
++		for model, want := range map[string]string{"gpt-6.1-sol": OpenAIFastTierUltrafast, "gpt-5.6-sol": OpenAIFastTierPriority} {
++			updated, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(
++				bothCtx, account, model, []byte(`{"type":"response.create","model":"`+model+`","service_tier":"flex"}`))
++			require.NoError(t, err)
++			require.Nil(t, blocked)
++			require.Equal(t, want, gjson.GetBytes(updated, "service_tier").String(), model)
++		}
++	})
++
++	t.Run("does not touch other frames", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
++		frame := []byte(`{"type":"response.cancel","model":"gpt-6.1-sol"}`)
++		updated, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, "gpt-6.1-sol", frame)
++		require.NoError(t, err)
++		require.Nil(t, blocked)
++		require.Equal(t, string(frame), string(updated))
++	})
++
++	t.Run("global ultrafast filter remains authoritative", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
++			ServiceTier: OpenAIFastTierUltrafast, Action: BetaPolicyActionFilter, Scope: BetaPolicyScopeAll,
++		}}})
++		updated, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(
++			ctx, account, "gpt-6.1-sol", []byte(`{"type":"response.create","model":"gpt-6.1-sol"}`))
++		require.NoError(t, err)
++		require.Nil(t, blocked)
++		require.False(t, gjson.GetBytes(updated, "service_tier").Exists())
++	})
++
++	t.Run("global ultrafast block rejects the frame", func(t *testing.T) {
++		svc := newOpenAIGatewayServiceWithSettings(t, &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
++			ServiceTier: OpenAIFastTierUltrafast, Action: BetaPolicyActionBlock, Scope: BetaPolicyScopeAll,
++		}}})
++		_, blocked, err := svc.applyOpenAIFastPolicyToWSResponseCreate(
++			ctx, account, "gpt-6.1-sol", []byte(`{"type":"response.create","model":"gpt-6.1-sol"}`))
++		require.NoError(t, err)
++		require.NotNil(t, blocked)
++	})
++}
+diff --git a/backend/internal/service/openai_gateway_forward.go b/backend/internal/service/openai_gateway_forward.go
+index d74ac5c77..d1dd2c2d7 100644
+--- a/backend/internal/service/openai_gateway_forward.go
++++ b/backend/internal/service/openai_gateway_forward.go
+@@ -678,10 +678,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
+ 	}
+ 
+ 	rawTier := requestView.ServiceTier
+-	if openAIGroupForcesFast(ctx, account) {
+-		rawTier = OpenAIFastTierPriority
+-		if requestView.ServiceTier != OpenAIFastTierPriority {
+-			markPatchSet("service_tier", OpenAIFastTierPriority)
++	if forcedTier := openAIGroupForcedServiceTier(ctx, account, upstreamModel); forcedTier != "" {
++		rawTier = forcedTier
++		if requestView.ServiceTier != forcedTier {
++			markPatchSet("service_tier", forcedTier)
+ 		}
+ 	}
+ 	if rawTier != "" {
+diff --git a/backend/internal/service/openai_gateway_record_usage_test.go b/backend/internal/service/openai_gateway_record_usage_test.go
+index b1e2bde2f..50839470d 100644
+--- a/backend/internal/service/openai_gateway_record_usage_test.go
++++ b/backend/internal/service/openai_gateway_record_usage_test.go
+@@ -3272,6 +3272,18 @@ func TestGroupBillsOpenAIFastAtStandardRequiresOpenAIAccount(t *testing.T) {
+ 	))
+ }
+ 
++// "免费 Fast" 只把 priority 降到 Standard 价；Ultrafast 是独立的更高档位，
++// 分组强制 Ultrafast 时仍按 Ultrafast 计费。
++func TestGroupBillsOpenAIFastAtStandardExcludesUltrafast(t *testing.T) {
++	apiKey := &APIKey{Group: &Group{Platform: PlatformOpenAI, FreeOpenAIFast: true, ForceOpenAIUltrafast: true}}
++
++	require.False(t, groupBillsOpenAIFastAtStandard(
++		apiKey,
++		&Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth},
++		OpenAIFastTierUltrafast,
++	))
++}
++
+ func TestOpenAIGatewayServiceRecordUsage_ServiceTierNeverRaisedByUpstreamResponse(t *testing.T) {
+ 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+ 	userRepo := &openAIRecordUsageUserRepoStub{}
+diff --git a/backend/internal/service/openai_gateway_request_body.go b/backend/internal/service/openai_gateway_request_body.go
+index 53662eae1..ca990500c 100644
+--- a/backend/internal/service/openai_gateway_request_body.go
++++ b/backend/internal/service/openai_gateway_request_body.go
+@@ -2235,12 +2235,42 @@ func openAIFastPolicySettingsFromContext(ctx context.Context) *OpenAIFastPolicyS
+ 	return nil
+ }
+ 
+-func openAIGroupForcesFast(ctx context.Context, account *Account) bool {
++// openAIModelSupportsUltrafast reports whether OpenAI offers the Ultrafast
++// service tier for the model: GPT-6 Astra and GPT-6.1 Sol only. It is the single
++// source for both the group-forced tier gate and the 6x Ultrafast billing
++// multiplier, so a model can never be forced onto Ultrafast yet billed below it.
++func openAIModelSupportsUltrafast(model string) bool {
++	normalized := normalizeKnownOpenAICodexModel(model)
++	return isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6.1-sol"
++}
++
++// openAIGroupForcedServiceTier returns the service_tier that the trusted request
++// Group forces onto an OpenAI-account request for the given upstream model, or
++// "" when the group forces nothing and the client's value is kept.
++//
++// The two group flags are independent and resolve as Ultrafast > Fast > client:
++//   - ForceOpenAIUltrafast applies only to models that support Ultrafast
++//     (openAIModelSupportsUltrafast) and yields "ultrafast".
++//   - Otherwise ForceOpenAIFast yields "priority", for every model.
++//
++// So a group with only ForceOpenAIUltrafast leaves unsupported models to the
++// client, and a group with both flags falls back to Fast for them.
++func openAIGroupForcedServiceTier(ctx context.Context, account *Account, model string) string {
+ 	if ctx == nil || account == nil || account.Platform != PlatformOpenAI {
+-		return false
++		return ""
+ 	}
+ 	group, _ := ctx.Value(ctxkey.Group).(*Group)
+-	return IsGroupContextValid(group) && groupSupportsOpenAIFast(group.Platform) && group.ForceOpenAIFast
++	if !IsGroupContextValid(group) || !groupSupportsOpenAIFast(group.Platform) {
++		return ""
++	}
++	switch {
++	case group.ForceOpenAIUltrafast && openAIModelSupportsUltrafast(model):
++		return OpenAIFastTierUltrafast
++	case group.ForceOpenAIFast:
++		return OpenAIFastTierPriority
++	default:
++		return ""
++	}
+ }
+ 
+ // applyOpenAIFastPolicyToBody applies the OpenAI fast policy to a raw request
+@@ -2249,7 +2279,9 @@ func openAIGroupForcesFast(ctx context.Context, account *Account) bool {
+ // normalizes the service_tier value (e.g. client alias "fast" → "priority").
+ // action=force_priority rewrites any matched known tier to "priority". Before
+ // the global policy is evaluated, a trusted request Group with
+-// ForceOpenAIFast enabled unconditionally sets service_tier to "priority".
++// ForceOpenAIFast enabled unconditionally sets service_tier to "priority";
++// ForceOpenAIUltrafast sets it to "ultrafast" for models that support it and
++// takes precedence there (see openAIGroupForcedServiceTier).
+ // The global policy remains authoritative and may still pass, filter, or block
+ // that final value.
+ //
+@@ -2262,10 +2294,10 @@ func (s *OpenAIGatewayService) applyOpenAIFastPolicyToBody(ctx context.Context,
+ 	if len(body) == 0 {
+ 		return body, nil
+ 	}
+-	if openAIGroupForcesFast(ctx, account) {
+-		updated, err := sjson.SetBytes(body, "service_tier", OpenAIFastTierPriority)
++	if forcedTier := openAIGroupForcedServiceTier(ctx, account, model); forcedTier != "" {
++		updated, err := sjson.SetBytes(body, "service_tier", forcedTier)
+ 		if err != nil {
+-			return body, fmt.Errorf("force group service_tier priority on body: %w", err)
++			return body, fmt.Errorf("force group service_tier %s on body: %w", forcedTier, err)
+ 		}
+ 		body = updated
+ 	}
+@@ -2349,7 +2381,9 @@ func writeOpenAIFastPolicyBlockedResponse(c *gin.Context, err *OpenAIFastBlocked
+ //   - filter: returns a copy with top-level service_tier removed
+ //   - force_priority: keeps service_tier and rewrites it to "priority"
+ //   - block: returns (frame, *OpenAIFastBlockedError)
+-//   - Group ForceOpenAIFast: sets priority first, then applies the global rule
++//   - Group ForceOpenAIFast / ForceOpenAIUltrafast: sets priority / ultrafast
++//     (ultrafast only for models that support it) first, then applies the
++//     global rule
+ //
+ // Only frames whose "type" field strictly equals "response.create" are
+ // inspected/mutated. Any other frame type — including the empty string —
+@@ -2388,10 +2422,10 @@ func (s *OpenAIGatewayService) applyOpenAIFastPolicyToWSResponseCreate(
+ 	if frameType != "response.create" {
+ 		return frame, nil, nil
+ 	}
+-	if openAIGroupForcesFast(ctx, account) {
+-		updated, err := sjson.SetBytes(frame, "service_tier", OpenAIFastTierPriority)
++	if forcedTier := openAIGroupForcedServiceTier(ctx, account, model); forcedTier != "" {
++		updated, err := sjson.SetBytes(frame, "service_tier", forcedTier)
+ 		if err != nil {
+-			return frame, nil, fmt.Errorf("force group service_tier priority in ws frame: %w", err)
++			return frame, nil, fmt.Errorf("force group service_tier %s in ws frame: %w", forcedTier, err)
+ 		}
+ 		frame = updated
+ 	}
+diff --git a/backend/internal/service/openai_oauth_passthrough_test.go b/backend/internal/service/openai_oauth_passthrough_test.go
+index c913bf0a9..1da794c2d 100644
+--- a/backend/internal/service/openai_oauth_passthrough_test.go
++++ b/backend/internal/service/openai_oauth_passthrough_test.go
+@@ -2769,3 +2769,111 @@ func TestOpenAIGatewayService_OAuthPassthrough_AllowTimeoutHeadersWhenConfigured
+ 	require.Equal(t, "120000", upstream.lastReq.Header.Get("x-stainless-timeout"))
+ 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
+ }
++
++func TestOpenAIGatewayService_OAuthPassthrough_GroupForceOpenAIUltrafastOverridesClientTier(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
++	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
++	body := []byte(`{"model":"gpt-6.1-sol","stream":true,"instructions":"test","input":"hi","service_tier":"priority"}`)
++	upstream := &httpUpstreamRecorder{resp: &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++		Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
++	}}
++	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
++	account := &Account{
++		ID: 123, Name: "oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
++		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
++		Extra:       map[string]any{"openai_passthrough": true}, Status: StatusActive, Schedulable: true,
++		RateMultiplier: f64p(1),
++	}
++	ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
++		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIUltrafast: true,
++	})
++
++	result, err := svc.Forward(ctx, c, account, body)
++
++	require.NoError(t, err)
++	require.NotNil(t, result)
++	require.Equal(t, OpenAIFastTierUltrafast, gjson.GetBytes(upstream.lastBody, "service_tier").String())
++	require.NotNil(t, result.ServiceTier)
++	require.Equal(t, OpenAIFastTierUltrafast, *result.ServiceTier)
++}
++
++func TestOpenAIGatewayService_OAuthLegacy_GroupForceOpenAIUltrafast(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	account := &Account{
++		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
++		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
++		Extra:       map[string]any{"openai_passthrough": false, "openai_oauth_responses_websockets_v2_mode": OpenAIWSIngressModeOff},
++		Status:      StatusActive, Schedulable: true, RateMultiplier: f64p(1),
++	}
++	ctx := context.WithValue(context.Background(), ctxkey.Group, &Group{
++		ID: 7, Platform: PlatformOpenAI, Status: StatusActive, Hydrated: true, ForceOpenAIUltrafast: true,
++	})
++	forward := func(t *testing.T, settings *OpenAIFastPolicySettings, inputBody []byte) (*OpenAIForwardResult, *httpUpstreamRecorder, error) {
++		t.Helper()
++		rec := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(rec)
++		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
++		c.Request.Header.Set("User-Agent", "codex_cli_rs/0.1.0")
++		upstream := &httpUpstreamRecorder{resp: &http.Response{
++			StatusCode: http.StatusOK,
++			Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_group_ultrafast_legacy"}},
++			Body:       io.NopCloser(strings.NewReader("data: [DONE]\n\n")),
++		}}
++		svc := newOpenAIGatewayServiceWithSettings(t, settings)
++		svc.cfg = &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}}
++		svc.httpUpstream = upstream
++		result, err := svc.Forward(ctx, c, account, inputBody)
++		return result, upstream, err
++	}
++
++	t.Run("injects missing tier", func(t *testing.T) {
++		result, upstream, err := forward(t, DefaultOpenAIFastPolicySettings(),
++			[]byte(`{"model":"gpt-6.1-sol","stream":false,"input":[{"type":"text","text":"hi"}]}`))
++		require.NoError(t, err)
++		require.Equal(t, OpenAIFastTierUltrafast, gjson.GetBytes(upstream.lastBody, "service_tier").String())
++		require.NotNil(t, result.ServiceTier)
++		require.Equal(t, OpenAIFastTierUltrafast, *result.ServiceTier)
++	})
++
++	t.Run("overrides client priority", func(t *testing.T) {
++		result, upstream, err := forward(t, DefaultOpenAIFastPolicySettings(),
++			[]byte(`{"model":"gpt-6.1-sol","stream":false,"service_tier":"fast","input":[{"type":"text","text":"hi"}]}`))
++		require.NoError(t, err)
++		require.Equal(t, OpenAIFastTierUltrafast, gjson.GetBytes(upstream.lastBody, "service_tier").String())
++		require.NotNil(t, result.ServiceTier)
++		require.Equal(t, OpenAIFastTierUltrafast, *result.ServiceTier)
++	})
++
++	t.Run("global ultrafast filter remains authoritative", func(t *testing.T) {
++		result, upstream, err := forward(t, &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
++			ServiceTier: OpenAIFastTierUltrafast, Action: BetaPolicyActionFilter, Scope: BetaPolicyScopeAll,
++		}}}, []byte(`{"model":"gpt-6.1-sol","stream":false,"input":[{"type":"text","text":"hi"}]}`))
++		require.NoError(t, err)
++		require.False(t, gjson.GetBytes(upstream.lastBody, "service_tier").Exists())
++		require.Nil(t, result.ServiceTier)
++	})
++
++	t.Run("global force_priority downgrades the forced ultrafast", func(t *testing.T) {
++		result, upstream, err := forward(t, &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
++			ServiceTier: OpenAIFastTierUltrafast, Action: OpenAIFastPolicyActionForcePriority, Scope: BetaPolicyScopeAll,
++		}}}, []byte(`{"model":"gpt-6.1-sol","stream":false,"input":[{"type":"text","text":"hi"}]}`))
++		require.NoError(t, err)
++		require.Equal(t, OpenAIFastTierPriority, gjson.GetBytes(upstream.lastBody, "service_tier").String())
++		require.NotNil(t, result.ServiceTier)
++		require.Equal(t, OpenAIFastTierPriority, *result.ServiceTier)
++	})
++
++	t.Run("global ultrafast block rejects with 403", func(t *testing.T) {
++		_, upstream, err := forward(t, &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
++			ServiceTier: OpenAIFastTierUltrafast, Action: BetaPolicyActionBlock, Scope: BetaPolicyScopeAll,
++		}}}, []byte(`{"model":"gpt-6.1-sol","stream":false,"input":[{"type":"text","text":"hi"}]}`))
++		var blocked *OpenAIFastBlockedError
++		require.ErrorAs(t, err, &blocked)
++		require.Nil(t, upstream.lastReq)
++	})
++}
+diff --git a/backend/migrations/251_group_force_openai_ultrafast.sql b/backend/migrations/251_group_force_openai_ultrafast.sql
+new file mode 100644
+index 000000000..c2b8ab6d3
+--- /dev/null
++++ b/backend/migrations/251_group_force_openai_ultrafast.sql
+@@ -0,0 +1,5 @@
++ALTER TABLE groups
++    ADD COLUMN IF NOT EXISTS force_openai_ultrafast BOOLEAN NOT NULL DEFAULT FALSE;
++
++COMMENT ON COLUMN groups.force_openai_ultrafast IS
++    'Force service_tier=ultrafast on OpenAI gateway requests in this group for models that support Ultrafast, before global Fast/Flex policy evaluation; takes precedence over force_openai_fast';
+diff --git a/backend/migrations/group_force_openai_ultrafast_migration_test.go b/backend/migrations/group_force_openai_ultrafast_migration_test.go
+new file mode 100644
+index 000000000..57d19e854
+--- /dev/null
++++ b/backend/migrations/group_force_openai_ultrafast_migration_test.go
+@@ -0,0 +1,18 @@
++package migrations
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestGroupForceOpenAIUltrafastMigration(t *testing.T) {
++	content, err := FS.ReadFile("251_group_force_openai_ultrafast.sql")
++	require.NoError(t, err)
++
++	sql := strings.Join(strings.Fields(string(content)), " ")
++	require.Contains(t, sql,
++		"ADD COLUMN IF NOT EXISTS force_openai_ultrafast BOOLEAN NOT NULL DEFAULT FALSE")
++	require.Contains(t, sql, "COMMENT ON COLUMN groups.force_openai_ultrafast")
++}
+diff --git a/frontend/src/i18n/locales/en/admin/overview.ts b/frontend/src/i18n/locales/en/admin/overview.ts
+index 8faf063f2..64cc01081 100644
+--- a/frontend/src/i18n/locales/en/admin/overview.ts
++++ b/frontend/src/i18n/locales/en/admin/overview.ts
+@@ -1273,6 +1273,8 @@ export default {
+         title: 'OpenAI Fast mode',
+         force: 'Force Fast (priority)',
+         hint: 'Forces service_tier=priority on OpenAI requests in this group. The global Fast/Flex policy can still filter or block it. New requests update immediately after saving; existing WebSocket sessions must reconnect.',
++        forceUltrafast: 'Force Ultra Fast (ultrafast)',
++        ultrafastHint: 'Forces service_tier=ultrafast only on models that support Ultra Fast (GPT-6 Astra, GPT-6.1 Sol), taking precedence over "Force Fast". Other models get priority when "Force Fast" is also on, otherwise they follow the client. Ultra Fast is billed at 6x the Standard price, is not covered by "Free Fast", and requires upstream accounts with Ultra Fast access.',
+         free: 'Free Fast',
+         freeHint: 'Fast requests in this group still use the priority tier, but customers are charged the equivalent Standard price.'
+       },
+diff --git a/frontend/src/i18n/locales/zh/admin/overview.ts b/frontend/src/i18n/locales/zh/admin/overview.ts
+index 9b84e772e..e8c34f2ce 100644
+--- a/frontend/src/i18n/locales/zh/admin/overview.ts
++++ b/frontend/src/i18n/locales/zh/admin/overview.ts
+@@ -1271,6 +1271,8 @@ export default {
+         title: 'OpenAI Fast 模式',
+         force: '强制使用 Fast（priority）',
+         hint: '开启后，此分组的 OpenAI 请求会强制写入 service_tier=priority；全局 Fast/Flex 策略仍可过滤或拦截。保存后新请求立即生效，已建立的 WebSocket 会话需重连。',
++        forceUltrafast: '强制使用 Ultra Fast（ultrafast）',
++        ultrafastHint: '开启后，仅对支持 Ultra Fast 的模型（GPT-6 Astra、GPT-6.1 Sol）强制写入 service_tier=ultrafast，优先于"强制使用 Fast"；其他模型在同时开启"强制使用 Fast"时写入 priority，否则跟随客户端。Ultra Fast 按标准价 6 倍计费，不受"免费 Fast"影响，且需要上游账号具备 Ultra Fast 权限。',
+         free: '免费 Fast',
+         freeHint: '该分组的 Fast 请求仍使用 priority 档位，但客户实际费用按同一请求的 Standard 价格计算。'
+       },
+diff --git a/frontend/src/types/index.ts b/frontend/src/types/index.ts
+index 71dea09b8..21ffc9303 100644
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -643,6 +643,7 @@ export interface AdminGroup extends Group {
+   // 管理端的 name / description 始终是原字段，各语言译文另放在 i18n 里
+   i18n?: GroupI18n
+   force_openai_fast: boolean
++  force_openai_ultrafast: boolean
+   free_openai_fast: boolean
+   model_pricing: import('@/api/admin/channels').ChannelModelPricing[]
+   // 分组利润控制（openai/anthropic/gemini/grok/antigravity 分组可启用；margin/buffer 为小数存储）。
+@@ -818,6 +819,7 @@ export interface CreateGroupRequest {
+   monthly_limit_usd?: number | null
+   long_context_pricing_enabled?: boolean
+   force_openai_fast?: boolean
++  force_openai_ultrafast?: boolean
+   free_openai_fast?: boolean
+   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
+   allow_image_generation?: boolean
+@@ -886,6 +888,7 @@ export interface UpdateGroupRequest {
+   monthly_limit_usd?: number | null
+   long_context_pricing_enabled?: boolean
+   force_openai_fast?: boolean
++  force_openai_ultrafast?: boolean
+   free_openai_fast?: boolean
+   model_pricing?: import('@/api/admin/channels').ChannelModelPricing[]
+   allow_image_generation?: boolean
+diff --git a/frontend/src/views/admin/GroupsView.vue b/frontend/src/views/admin/GroupsView.vue
+index ae9554b05..00572d47e 100644
+--- a/frontend/src/views/admin/GroupsView.vue
++++ b/frontend/src/views/admin/GroupsView.vue
+@@ -1592,6 +1592,19 @@
+           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+             {{ t("admin.groups.openaiFast.hint") }}
+           </p>
++          <div class="flex items-center justify-between gap-4 mt-4">
++            <label class="text-sm text-gray-600 dark:text-gray-400">
++              {{ t("admin.groups.openaiFast.forceUltrafast") }}
++            </label>
++            <Toggle
++              data-testid="create-force-openai-ultrafast"
++              :aria-label="t('admin.groups.openaiFast.forceUltrafast')"
++              v-model="createForm.force_openai_ultrafast"
++            />
++          </div>
++          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
++            {{ t("admin.groups.openaiFast.ultrafastHint") }}
++          </p>
+           <div class="flex items-center justify-between gap-4 mt-4">
+             <label class="text-sm text-gray-600 dark:text-gray-400">
+               {{ t("admin.groups.openaiFast.free") }}
+@@ -3256,6 +3269,19 @@
+           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+             {{ t("admin.groups.openaiFast.hint") }}
+           </p>
++          <div class="flex items-center justify-between gap-4 mt-4">
++            <label class="text-sm text-gray-600 dark:text-gray-400">
++              {{ t("admin.groups.openaiFast.forceUltrafast") }}
++            </label>
++            <Toggle
++              data-testid="edit-force-openai-ultrafast"
++              :aria-label="t('admin.groups.openaiFast.forceUltrafast')"
++              v-model="editForm.force_openai_ultrafast"
++            />
++          </div>
++          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
++            {{ t("admin.groups.openaiFast.ultrafastHint") }}
++          </p>
+           <div class="flex items-center justify-between gap-4 mt-4">
+             <label class="text-sm text-gray-600 dark:text-gray-400">
+               {{ t("admin.groups.openaiFast.free") }}
+@@ -4985,6 +5011,7 @@ const createForm = reactive({
+   monthly_limit_usd: null as number | null,
+   long_context_pricing_enabled: true,
+   force_openai_fast: false,
++  force_openai_ultrafast: false,
+   free_openai_fast: false,
+   model_pricing: [] as PricingFormEntry[],
+   // 图片生成计费配置
+@@ -5352,6 +5379,7 @@ const editForm = reactive({
+   monthly_limit_usd: null as number | null,
+   long_context_pricing_enabled: true,
+   force_openai_fast: false,
++  force_openai_ultrafast: false,
+   free_openai_fast: false,
+   model_pricing: [] as PricingFormEntry[],
+   // 图片生成计费配置
+@@ -5844,6 +5872,7 @@ const closeCreateModal = () => {
+   createForm.video_model_prices = createVideoModelPricesForm();
+   createForm.long_context_pricing_enabled = true;
+   createForm.force_openai_fast = false;
++  createForm.force_openai_ultrafast = false;
+   createForm.free_openai_fast = false;
+   createForm.model_pricing = [];
+   createForm.web_search_price_per_call = null;
+@@ -5970,6 +5999,10 @@ const handleCreateGroup = async () => {
+         createForm.platform,
+         createForm.force_openai_fast,
+       ),
++      force_openai_ultrafast: normalizeGroupOpenAIFast(
++        createForm.platform,
++        createForm.force_openai_ultrafast,
++      ),
+       free_openai_fast: normalizeGroupOpenAIFast(
+         createForm.platform,
+         createForm.free_openai_fast,
+@@ -6119,6 +6152,7 @@ const handleEdit = async (group: AdminGroup) => {
+   editForm.long_context_pricing_enabled =
+     group.long_context_pricing_enabled ?? true;
+   editForm.force_openai_fast = group.force_openai_fast ?? false;
++  editForm.force_openai_ultrafast = group.force_openai_ultrafast ?? false;
+   editForm.free_openai_fast = group.free_openai_fast ?? false;
+   editForm.model_pricing = groupPricingFromAPI(group.model_pricing);
+   editForm.allow_image_generation = group.allow_image_generation ?? false;
+@@ -6254,6 +6288,7 @@ const closeEditModal = () => {
+   editForm.video_model_prices = createVideoModelPricesForm();
+   editForm.long_context_pricing_enabled = true;
+   editForm.force_openai_fast = false;
++  editForm.force_openai_ultrafast = false;
+   editForm.free_openai_fast = false;
+   editForm.model_pricing = [];
+   editForm.web_search_price_per_call = null;
+@@ -6314,6 +6349,10 @@ const handleUpdateGroup = async () => {
+         editForm.platform,
+         editForm.force_openai_fast,
+       ),
++      force_openai_ultrafast: normalizeGroupOpenAIFast(
++        editForm.platform,
++        editForm.force_openai_ultrafast,
++      ),
+       free_openai_fast: normalizeGroupOpenAIFast(
+         editForm.platform,
+         editForm.free_openai_fast,
+diff --git a/frontend/src/views/admin/__tests__/GroupsView.codexManifest.spec.ts b/frontend/src/views/admin/__tests__/GroupsView.codexManifest.spec.ts
+index 0aef73f4f..574f7269b 100644
+--- a/frontend/src/views/admin/__tests__/GroupsView.codexManifest.spec.ts
++++ b/frontend/src/views/admin/__tests__/GroupsView.codexManifest.spec.ts
+@@ -79,6 +79,7 @@ const sourceGroup = {
+   monthly_limit_usd: null,
+   long_context_pricing_enabled: true,
+   force_openai_fast: false,
++  force_openai_ultrafast: false,
+   free_openai_fast: false,
+   model_pricing: [],
+   profit_control_enabled: false,
+diff --git a/frontend/src/views/admin/__tests__/GroupsView.openaiForcedTier.spec.ts b/frontend/src/views/admin/__tests__/GroupsView.openaiForcedTier.spec.ts
+new file mode 100644
+index 000000000..6d4e7fd40
+--- /dev/null
++++ b/frontend/src/views/admin/__tests__/GroupsView.openaiForcedTier.spec.ts
+@@ -0,0 +1,326 @@
++import { defineComponent, h } from "vue";
++import { flushPromises, mount } from "@vue/test-utils";
++import { createPinia } from "pinia";
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++import type { AdminGroup } from "@/types";
++import GroupsView from "@/views/admin/GroupsView.vue";
++
++const {
++  listGroups,
++  getModelAllowlistCandidates,
++  getUsageSummary,
++  getCapacitySummary,
++  getLiveCapability,
++  createGroup,
++  updateGroup,
++} = vi.hoisted(() => ({
++  listGroups: vi.fn(),
++  getModelAllowlistCandidates: vi.fn(),
++  getUsageSummary: vi.fn(),
++  getCapacitySummary: vi.fn(),
++  getLiveCapability: vi.fn(),
++  createGroup: vi.fn(),
++  updateGroup: vi.fn(),
++}));
++
++vi.mock("@/api/admin", () => ({
++  adminAPI: {
++    groups: {
++      list: listGroups,
++      getAll: vi.fn(),
++      getModelAllowlistCandidates,
++      getUsageSummary,
++      getCapacitySummary,
++      getLiveCapability,
++      create: createGroup,
++      update: updateGroup,
++      delete: vi.fn(),
++      duplicate: vi.fn(),
++      updateSortOrder: vi.fn(),
++    },
++    accounts: {
++      list: vi.fn(),
++      getById: vi.fn(),
++    },
++  },
++}));
++
++vi.mock("@/stores/app", () => ({
++  useAppStore: () => ({
++    showError: vi.fn(),
++    showSuccess: vi.fn(),
++  }),
++}));
++
++vi.mock("@/stores/onboarding", () => ({
++  useOnboardingStore: () => ({
++    isCurrentStep: vi.fn(() => false),
++    nextStep: vi.fn(),
++  }),
++}));
++
++vi.mock("vue-i18n", async () => {
++  const actual = await vi.importActual<typeof import("vue-i18n")>("vue-i18n");
++  return {
++    ...actual,
++    useI18n: () => ({ t: (key: string) => key }),
++  };
++});
++
++const sourceGroup = {
++  id: 42,
++  name: "OpenAI",
++  description: null,
++  platform: "openai",
++  rate_multiplier: 1,
++  rpm_limit: 0,
++  is_exclusive: false,
++  status: "active",
++  subscription_type: "standard",
++  daily_limit_usd: null,
++  weekly_limit_usd: null,
++  monthly_limit_usd: null,
++  long_context_pricing_enabled: true,
++  force_openai_fast: false,
++  force_openai_ultrafast: false,
++  free_openai_fast: false,
++  model_pricing: [],
++  profit_control_enabled: false,
++  profit_min_margin: 0,
++  profit_safety_buffer: 0,
++  allow_image_generation: false,
++  allow_batch_image_generation: false,
++  image_rate_independent: false,
++  image_rate_multiplier: 1,
++  batch_image_discount_multiplier: 0.5,
++  batch_image_hold_multiplier: 0.6,
++  image_price_1k: null,
++  image_price_2k: null,
++  image_price_4k: null,
++  video_rate_independent: false,
++  video_rate_multiplier: 1,
++  video_price_480p: null,
++  video_price_720p: null,
++  video_price_1080p: null,
++  web_search_price_per_call: null,
++  search_price_per_1k: null,
++  audio_realtime_price_per_min: null,
++  audio_tts_price_per_million_chars: null,
++  audio_stt_price_per_hour: null,
++  peak_rate_enabled: false,
++  peak_start: "",
++  peak_end: "",
++  peak_rate_multiplier: 1,
++  claude_code_only: false,
++  fallback_group_id: null,
++  fallback_group_id_on_invalid_request: null,
++  allow_messages_dispatch: false,
++  allow_live: false,
++  require_oauth_only: false,
++  require_privacy_set: false,
++  created_at: "2026-09-05T00:00:00Z",
++  updated_at: "2026-09-05T00:00:00Z",
++  model_routing: null,
++  model_routing_enabled: false,
++  mcp_xml_inject: true,
++  supported_model_scopes: [],
++  account_count: 1,
++  active_account_count: 1,
++  rate_limited_account_count: 0,
++  models_list_config: undefined,
++  codex_models_manifest_config: {
++    enabled: false,
++    account_ids: [],
++    fallback_to_scheduler: false,
++  },
++  sort_order: 10,
++} satisfies AdminGroup;
++
++const AppLayoutStub = defineComponent({
++  template: "<main><slot /></main>",
++});
++
++const TablePageLayoutStub = defineComponent({
++  template: '<section><slot name="filters" /><slot name="table" /><slot name="pagination" /></section>',
++});
++
++const DataTableStub = defineComponent({
++  props: {
++    data: { type: Array, default: () => [] },
++  },
++  template: '<div><div v-if="data.length"><slot name="cell-actions" :row="data[0]" /></div></div>',
++});
++
++const BaseDialogStub = defineComponent({
++  props: {
++    show: { type: Boolean, default: false },
++  },
++  template: '<div v-if="show"><slot /><slot name="footer" /></div>',
++});
++
++// 表单提交前会调用这些子组件的 validate()，自动桩不提供该方法。
++const ValidatingFieldStub = defineComponent({
++  setup(_, { expose }) {
++    expose({ validate: () => true, resetValidation: () => undefined });
++    return () => h("div");
++  },
++});
++
++const mountView = () =>
++  mount(GroupsView, {
++    global: {
++      plugins: [createPinia()],
++      stubs: {
++        AppLayout: AppLayoutStub,
++        TablePageLayout: TablePageLayoutStub,
++        DataTable: DataTableStub,
++        Pagination: true,
++        BaseDialog: BaseDialogStub,
++        ConfirmDialog: true,
++        EmptyState: true,
++        Select: true,
++        PlatformIcon: true,
++        Icon: true,
++        GroupCapacityBadge: true,
++        GroupRateMultipliersModal: true,
++        GroupRPMOverridesModal: true,
++        ReasoningEffortPolicyFields: ValidatingFieldStub,
++        CodexManifestAccountsField: ValidatingFieldStub,
++        PricingEntryCard: true,
++        VueDraggable: true,
++      },
++    },
++  });
++
++const openEditDialog = async (group: AdminGroup) => {
++  listGroups.mockResolvedValue({
++    items: [group],
++    total: 1,
++    page: 1,
++    page_size: 20,
++    pages: 1,
++  });
++  const wrapper = mountView();
++  await flushPromises();
++  const editButton = wrapper
++    .findAll("button")
++    .find((button) => button.text().includes("common.edit"));
++  expect(editButton).toBeTruthy();
++  await editButton!.trigger("click");
++  await flushPromises();
++  return wrapper;
++};
++
++const toggle = (
++  wrapper: ReturnType<typeof mountView>,
++  name: "fast" | "ultrafast",
++) => wrapper.get(`[data-testid="edit-force-openai-${name}"]`);
++
++const isOn = (wrapper: ReturnType<typeof mountView>, name: "fast" | "ultrafast") =>
++  toggle(wrapper, name).attributes("aria-checked") === "true";
++
++const submit = async (wrapper: ReturnType<typeof mountView>) => {
++  await wrapper.get("#edit-group-form").trigger("submit");
++  await flushPromises();
++  expect(updateGroup).toHaveBeenCalledTimes(1);
++  expect(updateGroup.mock.calls[0][0]).toBe(sourceGroup.id);
++  return updateGroup.mock.calls[0][1];
++};
++
++describe("GroupsView OpenAI forced service tier", () => {
++  beforeEach(() => {
++    localStorage.clear();
++    listGroups.mockReset();
++    getModelAllowlistCandidates.mockReset();
++    getUsageSummary.mockReset();
++    getCapacitySummary.mockReset();
++    getLiveCapability.mockReset();
++    createGroup.mockReset();
++    updateGroup.mockReset();
++
++    getModelAllowlistCandidates.mockResolvedValue([]);
++    getUsageSummary.mockResolvedValue([]);
++    getCapacitySummary.mockResolvedValue([]);
++    getLiveCapability.mockResolvedValue({ supported: false });
++    updateGroup.mockResolvedValue({});
++  });
++
++  it("shows both switches off for a group that follows the client", async () => {
++    const wrapper = await openEditDialog(sourceGroup);
++
++    expect(isOn(wrapper, "fast")).toBe(false);
++    expect(isOn(wrapper, "ultrafast")).toBe(false);
++
++    wrapper.unmount();
++  });
++
++  it.each([
++    [{ force_openai_fast: true, force_openai_ultrafast: false }],
++    [{ force_openai_fast: false, force_openai_ultrafast: true }],
++    [{ force_openai_fast: true, force_openai_ultrafast: true }],
++  ])("loads and resaves the stored flags %o unchanged", async (flags) => {
++    const wrapper = await openEditDialog({ ...sourceGroup, ...flags });
++
++    expect(isOn(wrapper, "fast")).toBe(flags.force_openai_fast);
++    expect(isOn(wrapper, "ultrafast")).toBe(flags.force_openai_ultrafast);
++    expect(await submit(wrapper)).toMatchObject(flags);
++
++    wrapper.unmount();
++  });
++
++  it("turning on Ultra Fast keeps Force Fast as the fallback for other models", async () => {
++    const wrapper = await openEditDialog({
++      ...sourceGroup,
++      force_openai_fast: true,
++    });
++
++    await toggle(wrapper, "ultrafast").trigger("click");
++    expect(isOn(wrapper, "fast")).toBe(true);
++    expect(isOn(wrapper, "ultrafast")).toBe(true);
++
++    expect(await submit(wrapper)).toMatchObject({
++      force_openai_fast: true,
++      force_openai_ultrafast: true,
++    });
++
++    wrapper.unmount();
++  });
++
++  it("the two switches toggle independently", async () => {
++    const wrapper = await openEditDialog({
++      ...sourceGroup,
++      force_openai_fast: true,
++      force_openai_ultrafast: true,
++    });
++
++    await toggle(wrapper, "fast").trigger("click");
++    expect(isOn(wrapper, "fast")).toBe(false);
++    expect(isOn(wrapper, "ultrafast")).toBe(true);
++
++    expect(await submit(wrapper)).toMatchObject({
++      force_openai_fast: false,
++      force_openai_ultrafast: true,
++    });
++
++    wrapper.unmount();
++  });
++
++  it("clears both flags when both switches are turned off", async () => {
++    const wrapper = await openEditDialog({
++      ...sourceGroup,
++      force_openai_fast: true,
++      force_openai_ultrafast: true,
++    });
++
++    await toggle(wrapper, "fast").trigger("click");
++    await toggle(wrapper, "ultrafast").trigger("click");
++
++    expect(await submit(wrapper)).toMatchObject({
++      force_openai_fast: false,
++      force_openai_ultrafast: false,
++    });
++
++    wrapper.unmount();
++  });
++});
+diff --git a/frontend/src/views/admin/__tests__/groupsOpenAIFast.spec.ts b/frontend/src/views/admin/__tests__/groupsOpenAIFast.spec.ts
+index a0333e0a5..db80eddfe 100644
+--- a/frontend/src/views/admin/__tests__/groupsOpenAIFast.spec.ts
++++ b/frontend/src/views/admin/__tests__/groupsOpenAIFast.spec.ts
+@@ -21,6 +21,17 @@ describe("groupsOpenAIFast", () => {
+     expect(normalizeGroupOpenAIFast("openai", false)).toBe(false);
+   });
+ 
++  it("provides localized Ultra Fast switch labels naming the supported models", () => {
++    for (const locale of [zh, en]) {
++      expect(locale.groups.openaiFast).toMatchObject({
++        forceUltrafast: expect.stringContaining("ultrafast"),
++        ultrafastHint: expect.stringContaining("service_tier=ultrafast"),
++      });
++      expect(locale.groups.openaiFast.ultrafastHint).toContain("GPT-6 Astra");
++      expect(locale.groups.openaiFast.ultrafastHint).toContain("GPT-6.1 Sol");
++    }
++  });
++
+   it("provides localized switch labels", () => {
+     expect(zh.groups.openaiFast).toMatchObject({
+       title: expect.any(String),

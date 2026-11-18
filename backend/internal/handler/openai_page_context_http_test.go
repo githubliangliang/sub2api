@@ -48,7 +48,7 @@ func TestCodexPageContextRealHTTPFirstRequest(t *testing.T) {
 	router.POST("/v1/responses", h.Responses)
 	server := httptest.NewServer(router)
 	defer server.Close()
-	body := pageContextRequest(t, pageContextItem("codex_apps_open_page", `{"page_id":"page-fixture","text":"untrusted page content"}`), pageContextItem("codex_apps_selected_page_part_1_of_1", "Companion Page snapshot part 1 of 1:\n"+`{"page_id":null}`), map[string]any{"role": "user", "content": "hello"})
+	body := pageContextRequest(t, pageContextItem("codex_apps_open_page", `{"page_id":"page-fixture","text":"untrusted page content"}`), pageContextItem("codex_apps_selected_page_part_1_of_1", "Companion Page snapshot part 1 of 1:\n"+`{"page_id":null}`), pageContextItem("browser_info", "active browser"), pageContextItem("goal_objective", "current objective"), pageContextItem("untrusted_context", "external context"), map[string]any{"role": "user", "content": "hello"})
 	response, err := server.Client().Post(server.URL+"/v1/responses", "application/json", strings.NewReader(string(body)))
 	require.NoError(t, err)
 	raw, err := io.ReadAll(response.Body)
@@ -58,14 +58,14 @@ func TestCodexPageContextRealHTTPFirstRequest(t *testing.T) {
 	select {
 	case forwarded := <-captured:
 		items := gjson.GetBytes(forwarded, "input").Array()
-		require.Len(t, items, 3)
-		for _, item := range items[:2] {
+		require.Len(t, items, 6)
+		for _, item := range items[:5] {
 			require.Equal(t, "user", item.Get("role").String())
 			require.Equal(t, "message", item.Get("type").String())
-			require.Contains(t, item.Get("content.0.text").String(), "<external_codex_apps_")
+			require.Contains(t, item.Get("content.0.text").String(), "<external_")
 		}
 		require.Contains(t, items[0].Get("content.0.text").String(), "untrusted page content")
-		require.Equal(t, "hello", items[2].Get("content").String())
+		require.Equal(t, "hello", items[5].Get("content").String())
 	case <-time.After(time.Second):
 		t.Fatal("the first request never reached the HTTP upstream")
 	}

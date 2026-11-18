@@ -1,0 +1,210 @@
+2026/11/18 06:15:01 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestCountTokensPassthroughHeadersOnHTTPWire
+=== RUN   TestCountTokensPassthroughHeadersOnHTTPWire/defaults
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    gateway_count_tokens_raw_headers_test.go:139: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_count_tokens_raw_headers_test.go:139
+        	Error:      	Not equal: 
+        	            	expected: true
+        	            	actual  : false
+        	Test:       	TestCountTokensPassthroughHeadersOnHTTPWire/defaults
+=== RUN   TestCountTokensPassthroughHeadersOnHTTPWire/mixed_case_multivalue
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    gateway_count_tokens_raw_headers_test.go:133: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_count_tokens_raw_headers_test.go:133
+        	Error:      	Not equal: 
+        	            	expected: []string{"application/json; charset=utf-8", "application/custom-json"}
+        	            	actual  : []string{"application/json", "application/json; charset=utf-8", "application/custom-json"}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,3 @@
+        	            	-([]string) (len=2) {
+        	            	+([]string) (len=3) {
+        	            	+ (string) (len=16) "application/json",
+        	            	  (string) (len=31) "application/json; charset=utf-8",
+        	Test:       	TestCountTokensPassthroughHeadersOnHTTPWire/mixed_case_multivalue
+=== RUN   TestCountTokensPassthroughHeadersOnHTTPWire/overrides
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+    gateway_count_tokens_raw_headers_test.go:133: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_count_tokens_raw_headers_test.go:133
+        	Error:      	Not equal: 
+        	            	expected: []string{"application/json; charset=utf-8", "application/custom-json"}
+        	            	actual  : []string{"application/json", "application/json; charset=utf-8", "application/custom-json"}
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,3 @@
+        	            	-([]string) (len=2) {
+        	            	+([]string) (len=3) {
+        	            	+ (string) (len=16) "application/json",
+        	            	  (string) (len=31) "application/json; charset=utf-8",
+        	Test:       	TestCountTokensPassthroughHeadersOnHTTPWire/overrides
+--- FAIL: TestCountTokensPassthroughHeadersOnHTTPWire (0.00s)
+    --- FAIL: TestCountTokensPassthroughHeadersOnHTTPWire/defaults (0.00s)
+    --- FAIL: TestCountTokensPassthroughHeadersOnHTTPWire/mixed_case_multivalue (0.00s)
+    --- FAIL: TestCountTokensPassthroughHeadersOnHTTPWire/overrides (0.00s)
+=== RUN   TestForwardAsChatCompletions_StreamErrorAfterOutputAppliesAccountSideEffects
+    openai_gateway_compat_stream_account_side_effects_test.go:119: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:119
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestForwardAsChatCompletions_StreamErrorAfterOutputAppliesAccountSideEffects
+        	Messages:   	auth failure after output must mark the account exactly once
+--- FAIL: TestForwardAsChatCompletions_StreamErrorAfterOutputAppliesAccountSideEffects (0.00s)
+=== RUN   TestForwardAsAnthropic_StreamErrorAfterOutputAppliesAccountSideEffects
+    openai_gateway_compat_stream_account_side_effects_test.go:133: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:133
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestForwardAsAnthropic_StreamErrorAfterOutputAppliesAccountSideEffects
+        	Messages:   	auth failure after output must mark the account exactly once
+--- FAIL: TestForwardAsAnthropic_StreamErrorAfterOutputAppliesAccountSideEffects (0.00s)
+=== RUN   TestForwardAsChatCompletions_StreamErrorBeforeOutputPreservesAccountState
+--- PASS: TestForwardAsChatCompletions_StreamErrorBeforeOutputPreservesAccountState (0.00s)
+=== RUN   TestForwardAsAnthropic_StreamErrorBeforeOutputPreservesAccountState
+--- PASS: TestForwardAsAnthropic_StreamErrorBeforeOutputPreservesAccountState (0.00s)
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/text/auth
+    openai_gateway_compat_stream_account_side_effects_test.go:215: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:215
+        	Error:      	"data: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"created\":1794982501,\"model\":\"alias\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"created\":1794982501,\"model\":\"alias\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"},\"finish_reason\":null}]}\n\n" does not contain "error"
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/text/auth
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/text/rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/text/rate_limit
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/text/model_rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/text/model_rate_limit
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/text/overload
+2026/11/18 06:15:01 INFO account_model_temp_unschedulable account_id=601 model=gpt-6.1-sol until=2026-11-18T06:20:01.591Z rule_index=0 rule_scope=model status_code=503
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/text/overload
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/text/unconfigured_overload
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/text/unconfigured_overload
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/text/invalid_request
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/tool/auth
+    openai_gateway_compat_stream_account_side_effects_test.go:215: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:215
+        	Error:      	"data: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"created\":1794982501,\"model\":\"alias\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"created\":1794982501,\"model\":\"alias\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"run\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\ndata: {\"id\":\"resp_1\",\"object\":\"chat.completion.chunk\",\"created\":1794982501,\"model\":\"alias\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"x\\\":1}\"}}]},\"finish_reason\":null}]}\n\n" does not contain "error"
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/tool/auth
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/tool/rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/tool/rate_limit
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/tool/model_rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/tool/model_rate_limit
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/tool/overload
+2026/11/18 06:15:01 INFO account_model_temp_unschedulable account_id=601 model=gpt-6.1-sol until=2026-11-18T06:20:01.592Z rule_index=0 rule_scope=model status_code=503
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/tool/overload
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/tool/unconfigured_overload
+    openai_gateway_compat_stream_account_side_effects_test.go:213: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:213
+        	Error:      	Should be false
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/chat/tool/unconfigured_overload
+        	Messages:   	an emitted stream must never be replayed
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/chat/tool/invalid_request
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/text/auth
+    openai_gateway_compat_stream_account_side_effects_test.go:216: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:216
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/text/auth
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/text/rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:217: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:217
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/text/rate_limit
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/text/model_rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:218: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:218
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/text/model_rate_limit
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/text/overload
+    openai_gateway_compat_stream_account_side_effects_test.go:218: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:218
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/text/overload
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/text/unconfigured_overload
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/text/invalid_request
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/tool/auth
+    openai_gateway_compat_stream_account_side_effects_test.go:216: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:216
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/tool/auth
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/tool/rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:217: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:217
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/tool/rate_limit
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/tool/model_rate_limit
+    openai_gateway_compat_stream_account_side_effects_test.go:218: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:218
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/tool/model_rate_limit
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/tool/overload
+    openai_gateway_compat_stream_account_side_effects_test.go:218: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:218
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestOpenAICompatStreamAfterOutputPolicies/messages/tool/overload
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/tool/unconfigured_overload
+=== RUN   TestOpenAICompatStreamAfterOutputPolicies/messages/tool/invalid_request
+--- FAIL: TestOpenAICompatStreamAfterOutputPolicies (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/text/auth (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/text/rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/text/model_rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/text/overload (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/text/unconfigured_overload (0.00s)
+    --- PASS: TestOpenAICompatStreamAfterOutputPolicies/chat/text/invalid_request (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/tool/auth (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/tool/rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/tool/model_rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/tool/overload (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/chat/tool/unconfigured_overload (0.00s)
+    --- PASS: TestOpenAICompatStreamAfterOutputPolicies/chat/tool/invalid_request (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/text/auth (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/text/rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/text/model_rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/text/overload (0.00s)
+    --- PASS: TestOpenAICompatStreamAfterOutputPolicies/messages/text/unconfigured_overload (0.00s)
+    --- PASS: TestOpenAICompatStreamAfterOutputPolicies/messages/text/invalid_request (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/tool/auth (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/tool/rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/tool/model_rate_limit (0.00s)
+    --- FAIL: TestOpenAICompatStreamAfterOutputPolicies/messages/tool/overload (0.00s)
+    --- PASS: TestOpenAICompatStreamAfterOutputPolicies/messages/tool/unconfigured_overload (0.00s)
+    --- PASS: TestOpenAICompatStreamAfterOutputPolicies/messages/tool/invalid_request (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.023s
+FAIL

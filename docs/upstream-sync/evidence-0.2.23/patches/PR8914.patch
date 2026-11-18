@@ -1,0 +1,883 @@
+diff --git a/backend/internal/handler/admin/channel_handler.go b/backend/internal/handler/admin/channel_handler.go
+index 62e88d2bf..c4e564a30 100644
+--- a/backend/internal/handler/admin/channel_handler.go
++++ b/backend/internal/handler/admin/channel_handler.go
+@@ -69,6 +69,7 @@ type channelModelPricingRequest struct {
+ 	CacheReadPrice             *float64                   `json:"cache_read_price" binding:"omitempty,min=0"`
+ 	FastMultiplier             *float64                   `json:"fast_multiplier" binding:"omitempty,gt=0"`
+ 	FlexMultiplier             *float64                   `json:"flex_multiplier" binding:"omitempty,gt=0"`
++	UltrafastMultiplier        *float64                   `json:"ultrafast_multiplier" binding:"omitempty,gt=0"`
+ 	ReasoningEffortMultipliers map[string]float64         `json:"reasoning_effort_multipliers"`
+ 	ImageInputPrice            *float64                   `json:"image_input_price" binding:"omitempty,min=0"`
+ 	ImageOutputPrice           *float64                   `json:"image_output_price" binding:"omitempty,min=0"`
+@@ -145,6 +146,7 @@ type channelModelPricingResponse struct {
+ 	CacheReadPrice             *float64                    `json:"cache_read_price"`
+ 	FastMultiplier             *float64                    `json:"fast_multiplier"`
+ 	FlexMultiplier             *float64                    `json:"flex_multiplier"`
++	UltrafastMultiplier        *float64                    `json:"ultrafast_multiplier"`
+ 	ReasoningEffortMultipliers map[string]float64          `json:"reasoning_effort_multipliers"`
+ 	ImageInputPrice            *float64                    `json:"image_input_price"`
+ 	ImageOutputPrice           *float64                    `json:"image_output_price"`
+@@ -277,6 +279,7 @@ func pricingToResponse(p *service.ChannelModelPricing) channelModelPricingRespon
+ 		CacheReadPrice:             p.CacheReadPrice,
+ 		FastMultiplier:             p.FastMultiplier,
+ 		FlexMultiplier:             p.FlexMultiplier,
++		UltrafastMultiplier:        p.UltrafastMultiplier,
+ 		ReasoningEffortMultipliers: p.ReasoningEffortMultipliers,
+ 		ImageInputPrice:            p.ImageInputPrice,
+ 		ImageOutputPrice:           p.ImageOutputPrice,
+@@ -361,10 +364,11 @@ func pricingRequestToService(reqs []channelModelPricingRequest, allowChannelMult
+ 				SortOrder:            iv.SortOrder,
+ 			})
+ 		}
+-		var fastMultiplier, flexMultiplier *float64
++		var fastMultiplier, flexMultiplier, ultrafastMultiplier *float64
+ 		if allowChannelMultipliers {
+ 			fastMultiplier = r.FastMultiplier
+ 			flexMultiplier = r.FlexMultiplier
++			ultrafastMultiplier = r.UltrafastMultiplier
+ 		}
+ 		result = append(result, service.ChannelModelPricing{
+ 			Platform:                   platform,
+@@ -378,6 +382,7 @@ func pricingRequestToService(reqs []channelModelPricingRequest, allowChannelMult
+ 			CacheReadPrice:             r.CacheReadPrice,
+ 			FastMultiplier:             fastMultiplier,
+ 			FlexMultiplier:             flexMultiplier,
++			UltrafastMultiplier:        ultrafastMultiplier,
+ 			ReasoningEffortMultipliers: r.ReasoningEffortMultipliers,
+ 			ImageInputPrice:            r.ImageInputPrice,
+ 			ImageOutputPrice:           r.ImageOutputPrice,
+diff --git a/backend/internal/handler/admin/channel_handler_test.go b/backend/internal/handler/admin/channel_handler_test.go
+index 738b5cb90..e12338f5a 100644
+--- a/backend/internal/handler/admin/channel_handler_test.go
++++ b/backend/internal/handler/admin/channel_handler_test.go
+@@ -11,6 +11,7 @@ import (
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+ 	"github.com/gin-gonic/gin"
++	"github.com/gin-gonic/gin/binding"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
+@@ -460,6 +461,7 @@ func TestPricingRequestToService_MultipliersGatedByFlag(t *testing.T) {
+ 		BillingMode:                "token",
+ 		FastMultiplier:             float64Ptr(2.5),
+ 		FlexMultiplier:             float64Ptr(0.5),
++		UltrafastMultiplier:        float64Ptr(3),
+ 		ReasoningEffortMultipliers: map[string]float64{"high": 1.5, "max": 3},
+ 		Intervals: []pricingIntervalRequest{{
+ 			MinTokens:            272000,
+@@ -473,6 +475,7 @@ func TestPricingRequestToService_MultipliersGatedByFlag(t *testing.T) {
+ 	allowed := pricingRequestToService([]channelModelPricingRequest{req}, true)
+ 	require.Equal(t, float64Ptr(2.5), allowed[0].FastMultiplier)
+ 	require.Equal(t, float64Ptr(0.5), allowed[0].FlexMultiplier)
++	require.Equal(t, float64Ptr(3), allowed[0].UltrafastMultiplier)
+ 	require.Equal(t, req.ReasoningEffortMultipliers, allowed[0].ReasoningEffortMultipliers)
+ 	require.Equal(t, float64Ptr(2), allowed[0].Intervals[0].InputMultiplier)
+ 	require.Equal(t, float64Ptr(1.5), allowed[0].Intervals[0].OutputMultiplier)
+@@ -482,6 +485,7 @@ func TestPricingRequestToService_MultipliersGatedByFlag(t *testing.T) {
+ 	dropped := pricingRequestToService([]channelModelPricingRequest{req}, false)
+ 	require.Nil(t, dropped[0].FastMultiplier)
+ 	require.Nil(t, dropped[0].FlexMultiplier)
++	require.Nil(t, dropped[0].UltrafastMultiplier)
+ 	require.Equal(t, req.ReasoningEffortMultipliers, dropped[0].ReasoningEffortMultipliers)
+ 	require.Nil(t, dropped[0].Intervals[0].InputMultiplier)
+ 	require.Nil(t, dropped[0].Intervals[0].OutputMultiplier)
+@@ -491,6 +495,22 @@ func TestPricingRequestToService_MultipliersGatedByFlag(t *testing.T) {
+ 	require.Equal(t, 272000, dropped[0].Intervals[0].MinTokens)
+ }
+ 
++func TestPricingRequestAndResponse_UltrafastMultiplier(t *testing.T) {
++	var req channelModelPricingRequest
++	require.NoError(t, json.Unmarshal([]byte(`{"models":["gpt-6-astra"],"ultrafast_multiplier":1.25}`), &req))
++	pricing := pricingRequestToService([]channelModelPricingRequest{req}, true)
++	require.Equal(t, float64Ptr(1.25), pricing[0].UltrafastMultiplier)
++	got := pricingToResponse(&pricing[0])
++	require.Equal(t, float64Ptr(1.25), got.UltrafastMultiplier)
++	data, err := json.Marshal(got)
++	require.NoError(t, err)
++	require.Contains(t, string(data), `"ultrafast_multiplier":1.25`)
++
++	req = channelModelPricingRequest{}
++	require.NoError(t, json.Unmarshal([]byte(`{"models":["gpt-6-astra"],"ultrafast_multiplier":0}`), &req))
++	require.Error(t, binding.Validator.ValidateStruct(&req))
++}
++
+ func TestPricingToResponse_TimePricing(t *testing.T) {
+ 	got := pricingToResponse(&service.ChannelModelPricing{
+ 		BillingMode: service.BillingModeToken,
+diff --git a/backend/internal/repository/channel_repo_pricing.go b/backend/internal/repository/channel_repo_pricing.go
+index 414246a68..d14a4d8eb 100644
+--- a/backend/internal/repository/channel_repo_pricing.go
++++ b/backend/internal/repository/channel_repo_pricing.go
+@@ -16,7 +16,7 @@ import (
+ 
+ func (r *channelRepository) ListModelPricing(ctx context.Context, channelID int64) ([]service.ChannelModelPricing, error) {
+ 	rows, err := r.db.QueryContext(ctx,
+-		`SELECT id, channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing, created_at, updated_at
++		`SELECT id, channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, ultrafast_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing, created_at, updated_at
+ 		 FROM channel_model_pricing WHERE channel_id = $1 ORDER BY id`, channelID,
+ 	)
+ 	if err != nil {
+@@ -65,10 +65,10 @@ func (r *channelRepository) UpdateModelPricing(ctx context.Context, pricing *ser
+ 	}
+ 	result, err := r.db.ExecContext(ctx,
+ 		`UPDATE channel_model_pricing
+-		 SET models = $1, billing_mode = $2, input_price = $3, output_price = $4, cache_write_price = $5, cache_write_1h_price = $6, cache_write_12h_price = $7, cache_read_price = $8, fast_multiplier = $9, flex_multiplier = $10, reasoning_effort_multipliers = $11, image_input_price = $12, image_output_price = $13, per_request_price = $14, time_pricing = $15, platform = $16, updated_at = NOW()
+-		 WHERE id = $17`,
++		 SET models = $1, billing_mode = $2, input_price = $3, output_price = $4, cache_write_price = $5, cache_write_1h_price = $6, cache_write_12h_price = $7, cache_read_price = $8, fast_multiplier = $9, flex_multiplier = $10, ultrafast_multiplier = $11, reasoning_effort_multipliers = $12, image_input_price = $13, image_output_price = $14, per_request_price = $15, time_pricing = $16, platform = $17, updated_at = NOW()
++		 WHERE id = $18`,
+ 		modelsJSON, billingMode, pricing.InputPrice, pricing.OutputPrice, pricing.CacheWritePrice, pricing.CacheWrite1hPrice, pricing.CacheWrite12hPrice, pricing.CacheReadPrice,
+-		pricing.FastMultiplier, pricing.FlexMultiplier, reasoningEffortMultipliersJSON, pricing.ImageInputPrice, pricing.ImageOutputPrice, pricing.PerRequestPrice,
++		pricing.FastMultiplier, pricing.FlexMultiplier, pricing.UltrafastMultiplier, reasoningEffortMultipliersJSON, pricing.ImageInputPrice, pricing.ImageOutputPrice, pricing.PerRequestPrice,
+ 		timePricingJSON, pricing.Platform, pricing.ID,
+ 	)
+ 	if err != nil {
+@@ -100,7 +100,7 @@ func (r *channelRepository) ReplaceModelPricing(ctx context.Context, channelID i
+ // batchLoadModelPricing 批量加载多个渠道的模型定价（含区间）
+ func (r *channelRepository) batchLoadModelPricing(ctx context.Context, channelIDs []int64) (map[int64][]service.ChannelModelPricing, error) {
+ 	rows, err := r.db.QueryContext(ctx,
+-		`SELECT id, channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing, created_at, updated_at
++		`SELECT id, channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, ultrafast_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing, created_at, updated_at
+ 		 FROM channel_model_pricing WHERE channel_id = ANY($1) ORDER BY channel_id, id`,
+ 		pq.Array(channelIDs),
+ 	)
+@@ -185,7 +185,7 @@ func scanModelPricingRows(rows *sql.Rows) ([]service.ChannelModelPricing, []int6
+ 		if err := rows.Scan(
+ 			&p.ID, &p.ChannelID, &p.Platform, &modelsJSON, &p.BillingMode,
+ 			&p.InputPrice, &p.OutputPrice, &p.CacheWritePrice, &p.CacheWrite1hPrice, &p.CacheWrite12hPrice, &p.CacheReadPrice,
+-			&p.FastMultiplier, &p.FlexMultiplier, &reasoningEffortMultipliersJSON,
++			&p.FastMultiplier, &p.FlexMultiplier, &p.UltrafastMultiplier, &reasoningEffortMultipliersJSON,
+ 			&p.ImageInputPrice, &p.ImageOutputPrice, &p.PerRequestPrice, &timePricingJSON, &p.CreatedAt, &p.UpdatedAt,
+ 		); err != nil {
+ 			return nil, nil, fmt.Errorf("scan model pricing: %w", err)
+@@ -261,11 +261,11 @@ func createModelPricingExec(ctx context.Context, exec dbExec, pricing *service.C
+ 		platform = "anthropic"
+ 	}
+ 	err = exec.QueryRowContext(ctx,
+-		`INSERT INTO channel_model_pricing (channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing)
+-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id, created_at, updated_at`,
++		`INSERT INTO channel_model_pricing (channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, ultrafast_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing)
++		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id, created_at, updated_at`,
+ 		pricing.ChannelID, platform, modelsJSON, billingMode,
+ 		pricing.InputPrice, pricing.OutputPrice, pricing.CacheWritePrice, pricing.CacheWrite1hPrice, pricing.CacheWrite12hPrice, pricing.CacheReadPrice,
+-		pricing.FastMultiplier, pricing.FlexMultiplier, reasoningEffortMultipliersJSON, pricing.ImageInputPrice, pricing.ImageOutputPrice,
++		pricing.FastMultiplier, pricing.FlexMultiplier, pricing.UltrafastMultiplier, reasoningEffortMultipliersJSON, pricing.ImageInputPrice, pricing.ImageOutputPrice,
+ 		pricing.PerRequestPrice, timePricingJSON,
+ 	).Scan(&pricing.ID, &pricing.CreatedAt, &pricing.UpdatedAt)
+ 	if err != nil {
+diff --git a/backend/internal/repository/channel_repo_pricing_reasoning_test.go b/backend/internal/repository/channel_repo_pricing_reasoning_test.go
+index 8c83564de..41fa5dfd6 100644
+--- a/backend/internal/repository/channel_repo_pricing_reasoning_test.go
++++ b/backend/internal/repository/channel_repo_pricing_reasoning_test.go
+@@ -30,7 +30,7 @@ func (c *capturedReasoningMultipliersJSON) Match(value driver.Value) bool {
+ func reasoningPricingRow(multipliers any) *sqlmock.Rows {
+ 	return sqlmock.NewRows(channelModelPricingTimePricingColumns).AddRow(
+ 		int64(11), int64(7), "openai", `["custom-model"]`, service.BillingModeToken,
+-		nil, nil, nil, nil, nil, nil, nil, nil, multipliers, nil, nil, nil, nil,
++		nil, nil, nil, nil, nil, nil, nil, nil, nil, multipliers, nil, nil, nil, nil,
+ 		time.Time{}, time.Time{},
+ 	)
+ }
+@@ -56,9 +56,9 @@ func TestChannelReasoningEffortMultipliersRoundTrip(t *testing.T) {
+ 				}
+ 				stored := &capturedReasoningMultipliersJSON{}
+ 				if operation == "update" {
+-					mock.ExpectExec(`(?s)UPDATE channel_model_pricing.*reasoning_effort_multipliers = \$11.*WHERE id = \$17`).
++					mock.ExpectExec(`(?s)UPDATE channel_model_pricing.*reasoning_effort_multipliers = \$12.*WHERE id = \$18`).
+ 						WithArgs([]byte(`["custom-model"]`), service.BillingModeToken,
+-							nil, nil, nil, nil, nil, nil, nil, nil, stored, nil, nil, nil, nil, "openai", int64(11)).
++							nil, nil, nil, nil, nil, nil, nil, nil, nil, stored, nil, nil, nil, nil, "openai", int64(11)).
+ 						WillReturnResult(sqlmock.NewResult(0, 1))
+ 					require.NoError(t, repo.UpdateModelPricing(ctx, pricing))
+ 				} else {
+@@ -69,7 +69,7 @@ func TestChannelReasoningEffortMultipliersRoundTrip(t *testing.T) {
+ 					}
+ 					mock.ExpectQuery(`INSERT INTO channel_model_pricing .*reasoning_effort_multipliers`).
+ 						WithArgs(int64(7), "openai", []byte(`["custom-model"]`), service.BillingModeToken,
+-							nil, nil, nil, nil, nil, nil, nil, nil, stored, nil, nil, nil, nil).
++							nil, nil, nil, nil, nil, nil, nil, nil, nil, stored, nil, nil, nil, nil).
+ 						WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(int64(11), time.Time{}, time.Time{}))
+ 					if operation == "replace" {
+ 						mock.ExpectCommit()
+diff --git a/backend/internal/repository/channel_repo_pricing_time_test.go b/backend/internal/repository/channel_repo_pricing_time_test.go
+index 9ca676ce4..42ace8097 100644
+--- a/backend/internal/repository/channel_repo_pricing_time_test.go
++++ b/backend/internal/repository/channel_repo_pricing_time_test.go
+@@ -16,7 +16,7 @@ import (
+ 
+ var channelModelPricingTimePricingColumns = []string{
+ 	"id", "channel_id", "platform", "models", "billing_mode", "input_price", "output_price",
+-	"cache_write_price", "cache_write_1h_price", "cache_write_12h_price", "cache_read_price", "fast_multiplier", "flex_multiplier", "reasoning_effort_multipliers", "image_input_price", "image_output_price",
++	"cache_write_price", "cache_write_1h_price", "cache_write_12h_price", "cache_read_price", "fast_multiplier", "flex_multiplier", "ultrafast_multiplier", "reasoning_effort_multipliers", "image_input_price", "image_output_price",
+ 	"per_request_price", "time_pricing", "created_at", "updated_at",
+ }
+ 
+@@ -33,7 +33,7 @@ func newChannelModelPricingTimePricingRepo(t *testing.T) (*channelRepository, sq
+ func modelPricingTimePricingRow(timePricing any) *sqlmock.Rows {
+ 	return sqlmock.NewRows(channelModelPricingTimePricingColumns).AddRow(
+ 		int64(11), int64(7), "openai", `["gpt-5"]`, service.BillingModeToken,
+-		nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, timePricing,
++		nil, nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, timePricing,
+ 		time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC), time.Date(2026, 8, 17, 1, 0, 0, 0, time.UTC),
+ 	)
+ }
+@@ -105,10 +105,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateRoundTrip(t *testing.T) {
+ 
+ 	t.Run("create writes JSON", func(t *testing.T) {
+ 		repo, mock := newChannelModelPricingTimePricingRepo(t)
+-		mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO channel_model_pricing (channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing)")).
++		mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO channel_model_pricing (channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, ultrafast_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing)")).
+ 			WithArgs(
+ 				int64(7), "openai", []byte(`["gpt-5"]`), service.BillingModeToken,
+-				nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, channelModelPricingTimePricingJSON,
++				nil, nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, channelModelPricingTimePricingJSON,
+ 			).
+ 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(int64(11), time.Time{}, time.Time{}))
+ 
+@@ -118,10 +118,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateRoundTrip(t *testing.T) {
+ 
+ 	t.Run("update writes JSON and entry ID", func(t *testing.T) {
+ 		repo, mock := newChannelModelPricingTimePricingRepo(t)
+-		mock.ExpectExec(`(?s)UPDATE channel_model_pricing.*per_request_price = \$14, time_pricing = \$15, platform = \$16.*WHERE id = \$17`).
++		mock.ExpectExec(`(?s)UPDATE channel_model_pricing.*per_request_price = \$15, time_pricing = \$16, platform = \$17.*WHERE id = \$18`).
+ 			WithArgs(
+ 				[]byte(`["gpt-5"]`), service.BillingModeToken,
+-				nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, channelModelPricingTimePricingJSON, "openai", int64(11),
++				nil, nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, channelModelPricingTimePricingJSON, "openai", int64(11),
+ 			).
+ 			WillReturnResult(sqlmock.NewResult(0, 1))
+ 
+@@ -153,10 +153,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateWriteNullWhenDisabled(t *t
+ 
+ 			t.Run("create writes SQL NULL", func(t *testing.T) {
+ 				repo, mock := newChannelModelPricingTimePricingRepo(t)
+-				mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO channel_model_pricing (channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing)")).
++				mock.ExpectQuery(regexp.QuoteMeta("INSERT INTO channel_model_pricing (channel_id, platform, models, billing_mode, input_price, output_price, cache_write_price, cache_write_1h_price, cache_write_12h_price, cache_read_price, fast_multiplier, flex_multiplier, ultrafast_multiplier, reasoning_effort_multipliers, image_input_price, image_output_price, per_request_price, time_pricing)")).
+ 					WithArgs(
+ 						int64(7), "openai", []byte(`["gpt-5"]`), service.BillingModeToken,
+-						nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, nil,
++						nil, nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, nil,
+ 					).
+ 					WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow(int64(11), time.Time{}, time.Time{}))
+ 
+@@ -166,10 +166,10 @@ func TestChannelModelPricingTimePricingCreateAndUpdateWriteNullWhenDisabled(t *t
+ 
+ 			t.Run("update writes SQL NULL", func(t *testing.T) {
+ 				repo, mock := newChannelModelPricingTimePricingRepo(t)
+-				mock.ExpectExec(`(?s)UPDATE channel_model_pricing.*per_request_price = \$14, time_pricing = \$15, platform = \$16.*WHERE id = \$17`).
++				mock.ExpectExec(`(?s)UPDATE channel_model_pricing.*per_request_price = \$15, time_pricing = \$16, platform = \$17.*WHERE id = \$18`).
+ 					WithArgs(
+ 						[]byte(`["gpt-5"]`), service.BillingModeToken,
+-						nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, nil, "openai", int64(11),
++						nil, nil, nil, nil, nil, nil, nil, nil, nil, "{}", nil, nil, nil, nil, "openai", int64(11),
+ 					).
+ 					WillReturnResult(sqlmock.NewResult(0, 1))
+ 
+diff --git a/backend/internal/repository/channel_ultrafast_pricing_integration_test.go b/backend/internal/repository/channel_ultrafast_pricing_integration_test.go
+new file mode 100644
+index 000000000..584ca01b8
+--- /dev/null
++++ b/backend/internal/repository/channel_ultrafast_pricing_integration_test.go
+@@ -0,0 +1,86 @@
++//go:build integration
++
++package repository
++
++import (
++	"context"
++	"database/sql"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	dbmigrations "github.com/Wei-Shaw/sub2api/migrations"
++	"github.com/stretchr/testify/require"
++)
++
++func TestChannelUltrafastPricingMigrationPreservesExistingCards(t *testing.T) {
++	ctx := context.Background()
++	tx := testTx(t)
++	_, err := tx.ExecContext(ctx, `ALTER TABLE channel_model_pricing DROP COLUMN ultrafast_multiplier`)
++	require.NoError(t, err)
++	var channelID, pricingID int64
++	require.NoError(t, tx.QueryRowContext(ctx, `INSERT INTO channels (name) VALUES ('ultrafast-migration') RETURNING id`).Scan(&channelID))
++	require.NoError(t, tx.QueryRowContext(ctx, `INSERT INTO channel_model_pricing (channel_id, models, fast_multiplier) VALUES ($1, '["gpt-6-astra"]', 2.5) RETURNING id`, channelID).Scan(&pricingID))
++	migration, err := dbmigrations.FS.ReadFile("252_channel_pricing_ultrafast_multiplier.sql")
++	require.NoError(t, err)
++	for range 2 {
++		_, err = tx.ExecContext(ctx, string(migration))
++		require.NoError(t, err)
++		var ultrafast sql.NullFloat64
++		var fast float64
++		require.NoError(t, tx.QueryRowContext(ctx, `SELECT ultrafast_multiplier, fast_multiplier FROM channel_model_pricing WHERE id = $1`, pricingID).Scan(&ultrafast, &fast))
++		require.False(t, ultrafast.Valid)
++		require.Equal(t, 2.5, fast)
++	}
++	_, err = tx.ExecContext(ctx, `UPDATE channel_model_pricing SET ultrafast_multiplier = 1.25 WHERE id = $1`, pricingID)
++	require.NoError(t, err)
++	_, err = tx.ExecContext(ctx, string(migration))
++	require.NoError(t, err)
++	var configured float64
++	require.NoError(t, tx.QueryRowContext(ctx, `SELECT ultrafast_multiplier FROM channel_model_pricing WHERE id = $1`, pricingID).Scan(&configured))
++	require.Equal(t, 1.25, configured)
++}
++
++func TestChannelUltrafastPricingCreateUpdateReplace(t *testing.T) {
++	ctx := context.Background()
++	channel := &service.Channel{}
++	repo := newReasoningPricingIntegrationChannel(t, channel)
++	multiplier := 3.0
++	pricing := service.ChannelModelPricing{
++		ChannelID: channel.ID, Platform: service.PlatformOpenAI, Models: []string{"gpt-6-astra"},
++		UltrafastMultiplier: &multiplier,
++	}
++	require.NoError(t, repo.CreateModelPricing(ctx, &pricing))
++	assertStored := func(want *float64) {
++		t.Helper()
++		listed, err := repo.ListModelPricing(ctx, channel.ID)
++		require.NoError(t, err)
++		require.Len(t, listed, 1)
++		require.Equal(t, want, listed[0].UltrafastMultiplier)
++		batch, err := repo.batchLoadModelPricing(ctx, []int64{channel.ID})
++		require.NoError(t, err)
++		require.Len(t, batch[channel.ID], 1)
++		require.Equal(t, want, batch[channel.ID][0].UltrafastMultiplier)
++	}
++	assertStored(&multiplier)
++	multiplier = 1.25
++	require.NoError(t, repo.UpdateModelPricing(ctx, &pricing))
++	assertStored(&multiplier)
++	pricing.UltrafastMultiplier = nil
++	require.NoError(t, repo.UpdateModelPricing(ctx, &pricing))
++	assertStored(nil)
++	var stored sql.NullFloat64
++	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT ultrafast_multiplier FROM channel_model_pricing WHERE id = $1`, pricing.ID).Scan(&stored))
++	require.False(t, stored.Valid)
++
++	multiplier = 1
++	pricing.UltrafastMultiplier = &multiplier
++	require.NoError(t, repo.ReplaceModelPricing(ctx, channel.ID, []service.ChannelModelPricing{pricing}))
++	assertStored(&multiplier)
++	for _, invalid := range []float64{0, -1} {
++		err := repo.ReplaceModelPricing(ctx, channel.ID, []service.ChannelModelPricing{{
++			Platform: service.PlatformOpenAI, Models: []string{"invalid"}, UltrafastMultiplier: &invalid,
++		}})
++		require.Error(t, err)
++		assertStored(&multiplier) // A rejected replacement must preserve the old card.
++	}
++}
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index bb5daa03f..4b0e06c6b 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -112,6 +112,7 @@ type ModelPricing struct {
+ 	CacheReadPricePerTokenPriority     float64            // priority service tier 下缓存读取每token价格 (USD)
+ 	FastMultiplier                     *float64           // 渠道显式 Fast/priority 倍率；nil 时沿用模型目录行为
+ 	FlexMultiplier                     *float64           // 渠道显式 Flex 倍率；nil 时沿用默认行为
++	UltrafastMultiplierOverride        *float64           // 渠道显式 Ultra Fast 倍率；nil 时沿用模型默认倍率
+ 	ReasoningEffortMultipliers         map[string]float64 // 最终转发的推理等级对应的计费倍率；未配置的等级按 1 倍计费
+ 	CacheCreation5mPrice               float64            // 5分钟缓存创建每token价格 (USD)
+ 	CacheCreation1hPrice               float64            // 1小时缓存创建每token价格 (USD)
+@@ -157,10 +158,14 @@ func serviceTierCostMultiplier(serviceTier string) float64 {
+ 
+ func configuredServiceTierMultiplier(serviceTier string, pricing *ModelPricing) float64 {
+ 	if pricing != nil {
+-		if normalizeBillingServiceTier(serviceTier) == OpenAIFastTierUltrafast && pricing.UltrafastMultiplier > 0 {
+-			return pricing.UltrafastMultiplier
+-		}
+ 		switch normalizeBillingServiceTier(serviceTier) {
++		case OpenAIFastTierUltrafast:
++			if pricing.UltrafastMultiplierOverride != nil {
++				return *pricing.UltrafastMultiplierOverride
++			}
++			if pricing.UltrafastMultiplier > 0 {
++				return pricing.UltrafastMultiplier
++			}
+ 		case "priority", "fast":
+ 			if pricing.FastMultiplier != nil {
+ 				return *pricing.FastMultiplier
+@@ -1629,6 +1634,7 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
+ 	applyChannelTokenPriceOverrides(pricing, channelPricing)
+ 	pricing.FastMultiplier = channelPricing.FastMultiplier
+ 	pricing.FlexMultiplier = channelPricing.FlexMultiplier
++	pricing.UltrafastMultiplierOverride = channelPricing.UltrafastMultiplier
+ 	pricing.ReasoningEffortMultipliers = maps.Clone(channelPricing.ReasoningEffortMultipliers)
+ 	applyChannelImagePriceOverrides(channelPricing, pricing)
+ 	return pricing, nil
+diff --git a/backend/internal/service/channel.go b/backend/internal/service/channel.go
+index b32dcac16..05eddd058 100644
+--- a/backend/internal/service/channel.go
++++ b/backend/internal/service/channel.go
+@@ -101,6 +101,7 @@ type ChannelModelPricing struct {
+ 	CacheReadPrice             *float64            `json:"cache_read_price"`
+ 	FastMultiplier             *float64            `json:"fast_multiplier"`
+ 	FlexMultiplier             *float64            `json:"flex_multiplier"`
++	UltrafastMultiplier        *float64            `json:"ultrafast_multiplier"`
+ 	ReasoningEffortMultipliers map[string]float64  `json:"reasoning_effort_multipliers,omitempty"`
+ 	ImageInputPrice            *float64            `json:"image_input_price"`
+ 	ImageOutputPrice           *float64            `json:"image_output_price"`
+diff --git a/backend/internal/service/channel_pricing_multipliers_test.go b/backend/internal/service/channel_pricing_multipliers_test.go
+index 11aea750f..2eadb4d79 100644
+--- a/backend/internal/service/channel_pricing_multipliers_test.go
++++ b/backend/internal/service/channel_pricing_multipliers_test.go
+@@ -218,6 +218,9 @@ func TestChannelMultipliersMustBePositive(t *testing.T) {
+ 	zero := 0.0
+ 	require.Error(t, checkPricesNotNegative(ChannelModelPricing{FastMultiplier: &zero}))
+ 	require.Error(t, checkPricesNotNegative(ChannelModelPricing{FlexMultiplier: &zero}))
++	require.Error(t, checkPricesNotNegative(ChannelModelPricing{UltrafastMultiplier: &zero}))
++	negative := -1.0
++	require.Error(t, checkPricesNotNegative(ChannelModelPricing{UltrafastMultiplier: &negative}))
+ 	require.Error(t, ValidateIntervals([]PricingInterval{{
+ 		MinTokens:       100,
+ 		InputMultiplier: &zero,
+diff --git a/backend/internal/service/channel_service.go b/backend/internal/service/channel_service.go
+index f7250c7a7..4fc1da079 100644
+--- a/backend/internal/service/channel_service.go
++++ b/backend/internal/service/channel_service.go
+@@ -804,6 +804,7 @@ func checkPricesNotNegative(p ChannelModelPricing) error {
+ 	}{
+ 		{"fast_multiplier", p.FastMultiplier},
+ 		{"flex_multiplier", p.FlexMultiplier},
++		{"ultrafast_multiplier", p.UltrafastMultiplier},
+ 	} {
+ 		if c.val != nil && *c.val <= 0 {
+ 			return infraerrors.BadRequest("INVALID_MULTIPLIER", fmt.Sprintf("%s must be > 0", c.field))
+diff --git a/backend/internal/service/channel_ultrafast_pricing_test.go b/backend/internal/service/channel_ultrafast_pricing_test.go
+new file mode 100644
+index 000000000..77a5157d7
+--- /dev/null
++++ b/backend/internal/service/channel_ultrafast_pricing_test.go
+@@ -0,0 +1,82 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestChannelUltrafastPricingOverridesBothBillingPaths(t *testing.T) {
++	svc := &BillingService{fallbackPrices: make(map[string]*ModelPricing)}
++	svc.initFallbackPricing()
++	tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheCreationTokens: 1_000_000, CacheReadTokens: 1_000_000}
++	for _, tc := range []struct {
++		name string
++		card string
++		want float64
++	}{
++		{"unset", `{}`, 6},
++		{"null", `{"ultrafast_multiplier":null}`, 6},
++		{"custom", `{"ultrafast_multiplier":3}`, 3},
++		{"standard price", `{"ultrafast_multiplier":1}`, 1},
++		{"fractional", `{"ultrafast_multiplier":1.25}`, 1.25},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			var card ChannelModelPricing
++			require.NoError(t, json.Unmarshal([]byte(tc.card), &card))
++			card.Platform = PlatformOpenAI
++			card.Models = []string{"gpt-6-astra"}
++			card.InputPrice = pricingMultiplier(1e-6)
++			card.OutputPrice = pricingMultiplier(2e-6)
++			card.CacheWritePrice = pricingMultiplier(3e-6)
++			card.CacheReadPrice = pricingMultiplier(0.1e-6)
++			card.FastMultiplier = pricingMultiplier(2.5)
++			card.FlexMultiplier = pricingMultiplier(0.4)
++			groupID := int64(8907)
++			resolver := NewModelPricingResolver(newChannelServiceWithPricings(groupID, []ChannelModelPricing{card}), svc)
++			for name, calculate := range map[string]func(string) (*CostBreakdown, error){
++				"legacy": func(tier string) (*CostBreakdown, error) {
++					return svc.calculateCostInternalWithPolicy("gpt-6-astra", tokens, 1, tier, &card, false)
++				},
++				"unified": func(tier string) (*CostBreakdown, error) {
++					return svc.CalculateCostUnified(CostInput{
++						Ctx: context.Background(), Model: "gpt-6-astra", GroupID: &groupID,
++						Tokens: tokens, RateMultiplier: 1, ServiceTier: tier, Resolver: resolver,
++						DisableModelLongContextPricing: true,
++					})
++				},
++			} {
++				t.Run(name, func(t *testing.T) {
++					cost, err := calculate(" UltraFast ")
++					require.NoError(t, err)
++					require.InDelta(t, tc.want, cost.InputCost, 1e-12)
++					require.InDelta(t, 2*tc.want, cost.OutputCost, 1e-12)
++					require.InDelta(t, 3*tc.want, cost.CacheCreationCost, 1e-12)
++					require.InDelta(t, 0.1*tc.want, cost.CacheReadCost, 1e-12)
++					for tier, multiplier := range map[string]float64{"priority": 2.5, "flex": 0.4, "default": 1} {
++						control, err := calculate(tier)
++						require.NoError(t, err)
++						require.InDelta(t, multiplier, control.InputCost, 1e-12)
++					}
++				})
++			}
++			card.Intervals = []PricingInterval{{MinTokens: 100, InputMultiplier: pricingMultiplier(2)}}
++			resolver = NewModelPricingResolver(newChannelServiceWithPricings(groupID, []ChannelModelPricing{card}), svc)
++			intervalCost, err := svc.CalculateCostUnified(CostInput{
++				Ctx: context.Background(), Model: "gpt-6-astra", GroupID: &groupID,
++				Tokens: tokens, RateMultiplier: 1, ServiceTier: "ultrafast", Resolver: resolver,
++				DisableModelLongContextPricing: true,
++			})
++			require.NoError(t, err)
++			require.InDelta(t, 2*tc.want, intervalCost.InputCost, 1e-12)
++			// A channel override must not mutate the model's shared default.
++			catalog, err := svc.GetModelPricing("gpt-6-astra")
++			require.NoError(t, err)
++			require.Equal(t, 6.0, configuredServiceTierMultiplier("ultrafast", catalog))
++		})
++	}
++}
+diff --git a/backend/internal/service/model_pricing_resolver.go b/backend/internal/service/model_pricing_resolver.go
+index e67404f73..8ea5faa87 100644
+--- a/backend/internal/service/model_pricing_resolver.go
++++ b/backend/internal/service/model_pricing_resolver.go
+@@ -248,6 +248,7 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
+ 	}
+ 	resolved.BasePricing.FastMultiplier = chPricing.FastMultiplier
+ 	resolved.BasePricing.FlexMultiplier = chPricing.FlexMultiplier
++	resolved.BasePricing.UltrafastMultiplierOverride = chPricing.UltrafastMultiplier
+ 	resolved.BasePricing.ReasoningEffortMultipliers = maps.Clone(chPricing.ReasoningEffortMultipliers)
+ 	applyChannelImagePriceOverrides(chPricing, resolved.BasePricing)
+ 
+diff --git a/backend/migrations/252_channel_pricing_ultrafast_multiplier.sql b/backend/migrations/252_channel_pricing_ultrafast_multiplier.sql
+new file mode 100644
+index 000000000..ad6f4ec59
+--- /dev/null
++++ b/backend/migrations/252_channel_pricing_ultrafast_multiplier.sql
+@@ -0,0 +1,18 @@
++ALTER TABLE channel_model_pricing
++    ADD COLUMN IF NOT EXISTS ultrafast_multiplier NUMERIC(12,6);
++
++DO $$
++BEGIN
++    IF NOT EXISTS (
++        SELECT 1 FROM pg_constraint
++        WHERE conname = 'channel_model_pricing_ultrafast_multiplier_positive'
++          AND conrelid = 'channel_model_pricing'::regclass
++    ) THEN
++        ALTER TABLE channel_model_pricing
++            ADD CONSTRAINT channel_model_pricing_ultrafast_multiplier_positive
++            CHECK (ultrafast_multiplier IS NULL OR ultrafast_multiplier > 0);
++    END IF;
++END $$;
++
++COMMENT ON COLUMN channel_model_pricing.ultrafast_multiplier IS
++    'Optional channel-specific price multiplier for OpenAI ultrafast service tier; NULL uses the model default';
+diff --git a/frontend/src/api/admin/channels.ts b/frontend/src/api/admin/channels.ts
+index 125edad9f..b1cd61ccf 100644
+--- a/frontend/src/api/admin/channels.ts
++++ b/frontend/src/api/admin/channels.ts
+@@ -52,6 +52,7 @@ export interface ChannelModelPricing {
+   cache_read_price: number | null
+   fast_multiplier?: number | null
+   flex_multiplier?: number | null
++  ultrafast_multiplier?: number | null
+   reasoning_effort_multipliers?: Record<string, number> | null
+   image_input_price: number | null
+   image_output_price: number | null
+diff --git a/frontend/src/components/admin/channel/PricingEntryCard.vue b/frontend/src/components/admin/channel/PricingEntryCard.vue
+index 8d0b96db3..6b6ada2c6 100644
+--- a/frontend/src/components/admin/channel/PricingEntryCard.vue
++++ b/frontend/src/components/admin/channel/PricingEntryCard.vue
+@@ -149,7 +149,7 @@
+             </div>
+           </div>
+ 
+-          <div v-if="enableTierMultipliers" class="mt-3 grid max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
++          <div v-if="enableTierMultipliers" class="mt-3 grid max-w-3xl grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+             <div>
+               <label class="text-xs text-gray-400">{{ t('admin.channels.form.fastMultiplier') }}</label>
+               <input :value="entry.fast_multiplier" @input="emitField('fast_multiplier', ($event.target as HTMLInputElement).value)"
+@@ -160,6 +160,11 @@
+               <input :value="entry.flex_multiplier" @input="emitField('flex_multiplier', ($event.target as HTMLInputElement).value)"
+                 type="number" step="any" min="0.000001" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.multiplierPlaceholder')" />
+             </div>
++            <div v-if="props.platform === 'openai'">
++              <label class="text-xs text-gray-400">{{ t('admin.channels.form.ultrafastMultiplier') }}</label>
++              <input :value="entry.ultrafast_multiplier" @input="emitField('ultrafast_multiplier', ($event.target as HTMLInputElement).value)"
++                type="number" step="any" min="0.000001" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.multiplierPlaceholder')" />
++            </div>
+           </div>
+ 
+           <!-- Channel token intervals; the group long-context toggle controls whether tiers apply. -->
+diff --git a/frontend/src/components/admin/channel/__tests__/PricingEntryCard.modelDefaultPrice.spec.ts b/frontend/src/components/admin/channel/__tests__/PricingEntryCard.modelDefaultPrice.spec.ts
+index 3eaab643a..c03722dea 100644
+--- a/frontend/src/components/admin/channel/__tests__/PricingEntryCard.modelDefaultPrice.spec.ts
++++ b/frontend/src/components/admin/channel/__tests__/PricingEntryCard.modelDefaultPrice.spec.ts
+@@ -25,6 +25,7 @@ function createEntry(models: string[] = []): PricingFormEntry {
+     cache_read_price: null,
+     fast_multiplier: null,
+     flex_multiplier: null,
++    ultrafast_multiplier: null,
+     reasoning_effort_multipliers: null,
+     image_input_price: null,
+     image_output_price: null,
+diff --git a/frontend/src/components/admin/channel/__tests__/PricingEntryCard.timePricing.spec.ts b/frontend/src/components/admin/channel/__tests__/PricingEntryCard.timePricing.spec.ts
+index deee992b3..22e0c3597 100644
+--- a/frontend/src/components/admin/channel/__tests__/PricingEntryCard.timePricing.spec.ts
++++ b/frontend/src/components/admin/channel/__tests__/PricingEntryCard.timePricing.spec.ts
+@@ -23,6 +23,7 @@ function createEntry(billingMode: PricingFormEntry['billing_mode'] = 'token'): P
+     cache_read_price: null,
+     fast_multiplier: null,
+     flex_multiplier: null,
++    ultrafast_multiplier: null,
+     reasoning_effort_multipliers: null,
+     image_input_price: null,
+     image_output_price: null,
+diff --git a/frontend/src/components/admin/channel/types.ts b/frontend/src/components/admin/channel/types.ts
+index 03c74071e..faebc8bd7 100644
+--- a/frontend/src/components/admin/channel/types.ts
++++ b/frontend/src/components/admin/channel/types.ts
+@@ -32,6 +32,7 @@ export interface PricingFormEntry {
+   cache_read_price: number | string | null
+   fast_multiplier?: number | string | null
+   flex_multiplier?: number | string | null
++  ultrafast_multiplier?: number | string | null
+   reasoning_effort_multipliers?: Record<string, number | string> | null
+   image_input_price: number | string | null
+   image_output_price: number | string | null
+diff --git a/frontend/src/i18n/locales/en/admin/channels.ts b/frontend/src/i18n/locales/en/admin/channels.ts
+index d0aa35cc1..d2ac27d2b 100644
+--- a/frontend/src/i18n/locales/en/admin/channels.ts
++++ b/frontend/src/i18n/locales/en/admin/channels.ts
+@@ -150,6 +150,7 @@ export default {
+         pricePlaceholder: 'Default',
+         fastMultiplier: 'Fast Multiplier',
+         flexMultiplier: 'Flex Multiplier',
++        ultrafastMultiplier: 'Ultrafast Multiplier',
+         reasoningEffortMultipliers: 'Custom Reasoning Effort Multipliers (optional)',
+         reasoningEffortMultipliersHint: 'Apply the multiplier for the final forwarded reasoning effort to the entire request cost and quota usage. Unconfigured levels use 1×. These multiply with other billing multipliers.',
+         reasoningEffortMultiplierLabel: '{effort} reasoning effort multiplier',
+diff --git a/frontend/src/i18n/locales/zh/admin/channels.ts b/frontend/src/i18n/locales/zh/admin/channels.ts
+index 236e6ba54..3e7bc09d3 100644
+--- a/frontend/src/i18n/locales/zh/admin/channels.ts
++++ b/frontend/src/i18n/locales/zh/admin/channels.ts
+@@ -150,6 +150,7 @@ export default {
+         pricePlaceholder: '默认',
+         fastMultiplier: 'Fast 倍率',
+         flexMultiplier: 'Flex 倍率',
++        ultrafastMultiplier: 'Ultra Fast 倍率',
+         reasoningEffortMultipliers: '自定义思考等级倍率（可选）',
+         reasoningEffortMultipliersHint: '按请求最终转发的思考等级，对整次请求的费用与额度消耗应用对应倍率。未配置的等级按 1 倍计费，可与其他计费倍率叠加。',
+         reasoningEffortMultiplierLabel: '{effort} 思考等级倍率',
+diff --git a/frontend/src/views/admin/ChannelsView.vue b/frontend/src/views/admin/ChannelsView.vue
+index 3633f2726..c53bb7809 100644
+--- a/frontend/src/views/admin/ChannelsView.vue
++++ b/frontend/src/views/admin/ChannelsView.vue
+@@ -883,6 +883,7 @@ function addPricingEntry(sectionIdx: number) {
+     cache_read_price: null,
+     fast_multiplier: null,
+     flex_multiplier: null,
++    ultrafast_multiplier: null,
+     reasoning_effort_multipliers: null,
+     image_input_price: null,
+     image_output_price: null,
+@@ -923,6 +924,7 @@ async function syncLatestModels(sectionIdx: number) {
+       cache_read_price: null,
+       fast_multiplier: null,
+       flex_multiplier: null,
++      ultrafast_multiplier: null,
+       reasoning_effort_multipliers: null,
+       image_input_price: null,
+       image_output_price: null,
+@@ -1158,6 +1160,7 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
+         cache_read_price: mTokToPerToken(entry.cache_read_price),
+         fast_multiplier: entry.fast_multiplier != null && entry.fast_multiplier !== '' ? Number(entry.fast_multiplier) : null,
+         flex_multiplier: entry.flex_multiplier != null && entry.flex_multiplier !== '' ? Number(entry.flex_multiplier) : null,
++        ultrafast_multiplier: entry.ultrafast_multiplier != null && entry.ultrafast_multiplier !== '' ? Number(entry.ultrafast_multiplier) : null,
+         reasoning_effort_multipliers: formReasoningEffortMultipliersToAPI(entry.reasoning_effort_multipliers),
+         image_input_price: mTokToPerToken(entry.image_input_price),
+         image_output_price: mTokToPerToken(entry.image_output_price),
+@@ -1252,6 +1255,7 @@ function apiToForm(channel: Channel): PlatformSection[] {
+         cache_read_price: perTokenToMTok(p.cache_read_price),
+         fast_multiplier: p.fast_multiplier,
+         flex_multiplier: p.flex_multiplier,
++        ultrafast_multiplier: p.ultrafast_multiplier,
+         reasoning_effort_multipliers: p.reasoning_effort_multipliers ? { ...p.reasoning_effort_multipliers } : null,
+         image_input_price: perTokenToMTok(p.image_input_price),
+         image_output_price: perTokenToMTok(p.image_output_price),
+@@ -1579,7 +1583,8 @@ async function handleSubmit() {
+   for (const section of form.platforms.filter(s => s.enabled)) {
+     for (const entry of section.model_pricing) {
+       if (!isValidPositiveMultiplier(entry.fast_multiplier) ||
+-          !isValidPositiveMultiplier(entry.flex_multiplier)) {
++          !isValidPositiveMultiplier(entry.flex_multiplier) ||
++          !isValidPositiveMultiplier(entry.ultrafast_multiplier)) {
+         const platformLabel = t('admin.groups.platforms.' + section.platform, catalogPlatformLabel(section.platform))
+         const modelLabel = entry.models.join(', ') || t('admin.channels.form.unnamed')
+         appStore.showError(`${platformLabel} - ${modelLabel}: ${t('admin.channels.form.multiplierPositive')}`)
+diff --git a/frontend/src/views/admin/__tests__/ChannelsView.ultrafastPricing.spec.ts b/frontend/src/views/admin/__tests__/ChannelsView.ultrafastPricing.spec.ts
+new file mode 100644
+index 000000000..e8b5cf2b8
+--- /dev/null
++++ b/frontend/src/views/admin/__tests__/ChannelsView.ultrafastPricing.spec.ts
+@@ -0,0 +1,166 @@
++import { defineComponent } from 'vue'
++import { flushPromises, mount } from '@vue/test-utils'
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++import type { Channel, CreateChannelRequest, UpdateChannelRequest } from '@/api/admin/channels'
++import ChannelsView from '@/views/admin/ChannelsView.vue'
++import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'
++
++const { list, create, update, getGroups, showError } = vi.hoisted(() => ({
++  list: vi.fn(), create: vi.fn(), update: vi.fn(), getGroups: vi.fn(), showError: vi.fn()
++}))
++
++vi.mock('@/api/admin', () => ({
++  adminAPI: {
++    channels: { list, create, update },
++    groups: { getAll: getGroups },
++    settings: { getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false }) }
++  }
++}))
++vi.mock('@/api/admin/channels', () => ({
++  default: { getModelDefaultPricing: vi.fn().mockResolvedValue({ found: false }) }
++}))
++vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess: vi.fn(), showError }) }))
++vi.mock('vue-i18n', async () => ({
++  ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
++  useI18n: () => ({ t: (key: string) => key })
++}))
++
++function mountView() {
++  return mount(ChannelsView, {
++    global: {
++      stubs: {
++        AppLayout: defineComponent({ template: '<main><slot /></main>' }),
++        TablePageLayout: defineComponent({
++          template: '<section><slot name="filters" /><slot name="table" /><slot name="pagination" /></section>'
++        }),
++        BaseDialog: defineComponent({
++          props: ['show'], template: '<section v-if="show"><slot /><slot name="footer" /></section>'
++        }),
++        DataTable: defineComponent({
++          props: ['data'],
++          template: '<div v-for="row in data" :key="row.id"><slot name="cell-actions" :row="row" /></div>'
++        }),
++        Pagination: true, ConfirmDialog: true, EmptyState: true,
++        Select: true, Icon: true, PlatformIcon: true
++      }
++    }
++  })
++}
++
++type View = ReturnType<typeof mountView>
++
++async function clickButton(wrapper: View, text: string) {
++  const button = wrapper.findAll('button').find(button => button.text() === text)
++  expect(button).toBeDefined()
++  await button!.trigger('click')
++  await flushPromises()
++}
++
++function multiplierInput(wrapper: View) {
++  return wrapper.findAll('label')
++    .find(label => label.text() === 'admin.channels.form.ultrafastMultiplier')!
++    .element.parentElement!.querySelector('input')!
++}
++
++function makeChannel(): Channel {
++  return {
++    id: 1, name: 'Ultra Fast channel', description: '', status: 'active',
++    billing_model_source: 'channel_mapped', restrict_models: false,
++    features_config: {}, group_ids: [22], model_pricing: [], model_mapping: {},
++    apply_pricing_to_account_stats: false, account_stats_pricing_rules: [],
++    created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z'
++  }
++}
++
++describe('ChannelsView Ultra Fast pricing', () => {
++  let stored: Channel[]
++
++  beforeEach(() => {
++    vi.clearAllMocks()
++    localStorage.clear()
++    stored = []
++    list.mockImplementation(async () => ({ items: stored, total: stored.length }))
++    getGroups.mockResolvedValue([{ id: 22, name: 'OpenAI group', platform: 'openai', rate_multiplier: 1 }])
++    create.mockImplementation(async (request: CreateChannelRequest) => {
++      stored = [{ ...makeChannel(), ...request } as Channel]
++      return stored[0]
++    })
++    update.mockImplementation(async (_id: number, request: UpdateChannelRequest) => {
++      stored = [{ ...stored[0], ...request } as Channel]
++      return stored[0]
++    })
++  })
++
++  async function createPricingForm() {
++    const wrapper = mountView()
++    await flushPromises()
++    await clickButton(wrapper, 'admin.channels.createChannel')
++    await wrapper.get('input[required]').setValue('Ultra Fast channel')
++    await wrapper.findAll('label').find(label => label.text() === 'admin.groups.platforms.openai')!
++      .get('input[type="checkbox"]').setValue(true)
++    await clickButton(wrapper, 'admin.groups.platforms.openai')
++    await wrapper.findAll('label').find(label => label.text().includes('OpenAI group'))!
++      .get('input[type="checkbox"]').setValue(true)
++    await wrapper.findAll('button').filter(button => button.text() === '+ common.add').at(-1)!.trigger('click')
++    await flushPromises()
++    const modelInput = wrapper.get('input[placeholder="admin.channels.form.modelsPlaceholder"]')
++    await modelInput.setValue('gpt-6-astra')
++    await modelInput.trigger('keydown', { key: 'Enter' })
++    await flushPromises()
++    return wrapper
++  }
++
++  async function setMultiplier(wrapper: View, value: string) {
++    multiplierInput(wrapper).value = value
++    multiplierInput(wrapper).dispatchEvent(new Event('input', { bubbles: true }))
++    await flushPromises()
++  }
++
++  it('persists, reopens, updates and clears the multiplier through the real pricing card', async () => {
++    const wrapper = await createPricingForm()
++    await setMultiplier(wrapper, '3')
++    await wrapper.get('#channel-form').trigger('submit')
++    await flushPromises()
++    expect(showError).not.toHaveBeenCalled()
++    expect(create).toHaveBeenCalledOnce()
++    expect(create.mock.calls[0][0].model_pricing[0].ultrafast_multiplier).toBe(3)
++
++    for (const [previous, next] of [['3', '1.25'], ['1.25', '']]) {
++      await clickButton(wrapper, 'common.edit')
++      await clickButton(wrapper, 'admin.groups.platforms.openai')
++      expect(multiplierInput(wrapper).value).toBe(previous)
++      await setMultiplier(wrapper, next)
++      await wrapper.get('#channel-form').trigger('submit')
++      await flushPromises()
++      expect(showError).not.toHaveBeenCalled()
++      expect(update.mock.lastCall![1].model_pricing[0].ultrafast_multiplier).toBe(next ? Number(next) : null)
++    }
++    await clickButton(wrapper, 'common.edit')
++    await clickButton(wrapper, 'admin.groups.platforms.openai')
++    expect(multiplierInput(wrapper).value).toBe('')
++    wrapper.unmount()
++  })
++
++  it.each(['0', '-1'])('rejects a non-positive multiplier %s before sending a request', async value => {
++    const wrapper = await createPricingForm()
++    await setMultiplier(wrapper, value)
++    await wrapper.get('#channel-form').trigger('submit')
++    await flushPromises()
++    expect(showError).toHaveBeenCalledWith(expect.stringContaining('admin.channels.form.multiplierPositive'))
++    expect(create).not.toHaveBeenCalled()
++    wrapper.unmount()
++  })
++
++  it('shows Ultra Fast only for OpenAI channel pricing', async () => {
++    const wrapper = await createPricingForm()
++    const entry = wrapper.findComponent(PricingEntryCard).props('entry')
++    for (const [platform, enabled, visible] of [
++      ['openai', true, true], ['anthropic', true, false], ['openai', false, false]
++    ] as const) {
++      const card = mount(PricingEntryCard, { props: { entry, platform, enableTierMultipliers: enabled } })
++      expect(card.text().includes('admin.channels.form.ultrafastMultiplier')).toBe(visible)
++      card.unmount()
++    }
++    wrapper.unmount()
++  })
++})

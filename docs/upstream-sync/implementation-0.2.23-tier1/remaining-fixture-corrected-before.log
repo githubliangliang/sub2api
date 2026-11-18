@@ -1,0 +1,311 @@
+2026/11/18 06:37:37 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestForwardAsChatCompletions_CarriesMetadataUserID
+=== RUN   TestForwardAsChatCompletions_CarriesMetadataUserID/number
+=== RUN   TestForwardAsChatCompletions_CarriesMetadataUserID/json
+    chat_completions_metadata_test.go:87: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/chat_completions_metadata_test.go:87
+        	Error:      	Not equal: 
+        	            	expected: "{\"user_id\":\"{\\\"device_id\\\":\\\"device-1\\\",\\\"session_id\\\":\\\"3f0c9a52-7b1e-4d6a-9c38-5e2f0a1b7c44\\\"}\"}"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-{"user_id":"{\"device_id\":\"device-1\",\"session_id\":\"3f0c9a52-7b1e-4d6a-9c38-5e2f0a1b7c44\"}"}
+        	            	+
+        	Test:       	TestForwardAsChatCompletions_CarriesMetadataUserID/json
+        	Messages:   	{"model":"claude-sonnet-4-5","max_tokens":8192,"messages":[{"role":"user","content":"hi"}],"stream":true}
+=== RUN   TestForwardAsChatCompletions_CarriesMetadataUserID/legacy
+    chat_completions_metadata_test.go:87: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/chat_completions_metadata_test.go:87
+        	Error:      	Not equal: 
+        	            	expected: "{\"user_id\":\"user_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2_account__session_3f0c9a52-7b1e-4d6a-9c38-5e2f0a1b7c44\"}"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-{"user_id":"user_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2_account__session_3f0c9a52-7b1e-4d6a-9c38-5e2f0a1b7c44"}
+        	            	+
+        	Test:       	TestForwardAsChatCompletions_CarriesMetadataUserID/legacy
+        	Messages:   	{"model":"claude-sonnet-4-5","max_tokens":8192,"messages":[{"role":"user","content":"hi"}],"stream":true}
+=== RUN   TestForwardAsChatCompletions_CarriesMetadataUserID/bare_id
+--- FAIL: TestForwardAsChatCompletions_CarriesMetadataUserID (0.00s)
+    --- PASS: TestForwardAsChatCompletions_CarriesMetadataUserID/number (0.00s)
+    --- FAIL: TestForwardAsChatCompletions_CarriesMetadataUserID/json (0.00s)
+    --- FAIL: TestForwardAsChatCompletions_CarriesMetadataUserID/legacy (0.00s)
+    --- PASS: TestForwardAsChatCompletions_CarriesMetadataUserID/bare_id (0.00s)
+=== RUN   TestForwardAsChatCompletions_OAuthAccountKeepsSynthesizedMetadataUserID
+--- PASS: TestForwardAsChatCompletions_OAuthAccountKeepsSynthesizedMetadataUserID (0.00s)
+=== RUN   TestGrokMediaUpstreamErrorFields
+=== RUN   TestGrokMediaUpstreamErrorFields/flat_error
+    grok_media_errors_test.go:51: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_media_errors_test.go:51
+        	Error:      	Not equal: 
+        	            	expected: "Image could not be decoded."
+        	            	actual  : "xAI upstream returned status 400"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-Image could not be decoded.
+        	            	+xAI upstream returned status 400
+        	Test:       	TestGrokMediaUpstreamErrorFields/flat_error
+=== RUN   TestGrokMediaUpstreamErrorFields/nested_error
+    grok_media_errors_test.go:52: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_media_errors_test.go:52
+        	Error:      	Not equal: 
+        	            	expected: "invalid_size"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-invalid_size
+        	            	+
+        	Test:       	TestGrokMediaUpstreamErrorFields/nested_error
+=== RUN   TestGrokMediaUpstreamErrorFields/message_without_code
+    grok_media_errors_test.go:51: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_media_errors_test.go:51
+        	Error:      	Not equal: 
+        	            	expected: "Invalid size."
+        	            	actual  : "xAI upstream returned status 400"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-Invalid size.
+        	            	+xAI upstream returned status 400
+        	Test:       	TestGrokMediaUpstreamErrorFields/message_without_code
+=== RUN   TestGrokMediaUpstreamErrorFields/redact_code_query
+    grok_media_errors_test.go:51: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_media_errors_test.go:51
+        	Error:      	Not equal: 
+        	            	expected: "Invalid size."
+        	            	actual  : "xAI upstream returned status 400"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-Invalid size.
+        	            	+xAI upstream returned status 400
+        	Test:       	TestGrokMediaUpstreamErrorFields/redact_code_query
+=== RUN   TestGrokMediaUpstreamErrorFields/unknown_object
+=== RUN   TestGrokMediaUpstreamErrorFields/content_refusal
+    grok_media_errors_test.go:51: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/grok_media_errors_test.go:51
+        	Error:      	Not equal: 
+        	            	expected: "Input violates content policy."
+        	            	actual  : "Request blocked by upstream content policy"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-Input violates content policy.
+        	            	+Request blocked by upstream content policy
+        	Test:       	TestGrokMediaUpstreamErrorFields/content_refusal
+--- FAIL: TestGrokMediaUpstreamErrorFields (0.00s)
+    --- FAIL: TestGrokMediaUpstreamErrorFields/flat_error (0.00s)
+    --- FAIL: TestGrokMediaUpstreamErrorFields/nested_error (0.00s)
+    --- FAIL: TestGrokMediaUpstreamErrorFields/message_without_code (0.00s)
+    --- FAIL: TestGrokMediaUpstreamErrorFields/redact_code_query (0.00s)
+    --- PASS: TestGrokMediaUpstreamErrorFields/unknown_object (0.00s)
+    --- FAIL: TestGrokMediaUpstreamErrorFields/content_refusal (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.023s
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/buffered/new_binding
+2026/11/18 14:37:37 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:37 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:37 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=false
+2026/11/18 14:37:37 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:37 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=2
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.999997754s allowed is 2e+08, but difference was 2.000002246e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/buffered/new_binding
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/buffered/new_binding_after_disconnect
+2026/11/18 14:37:37 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:37 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:37 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=false
+2026/11/18 14:37:37 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:37 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=2
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.999998797s allowed is 2e+08, but difference was 2.000001203e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/buffered/new_binding_after_disconnect
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/buffered/refresh_binding
+2026/11/18 14:37:37 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:37 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=9401 sticky_source=prefetch model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:37 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=false
+2026/11/18 14:37:37 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:37 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=2
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.999998506s allowed is 2e+08, but difference was 2.000001494e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/buffered/refresh_binding
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/buffered/refresh_after_disconnect
+2026/11/18 14:37:37 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:37 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=9401 sticky_source=prefetch model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:37 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=false
+2026/11/18 14:37:37 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:37 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=2
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.999997943s allowed is 2e+08, but difference was 2.000002057e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/buffered/refresh_after_disconnect
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/buffered/different_binding
+2026/11/18 14:37:37 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:37 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=9499 sticky_source=prefetch model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:37 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=false
+2026/11/18 14:37:37 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:37 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=2
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/buffered/forward_failed
+2026/11/18 14:37:37 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:37 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:37 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=false
+2026/11/18 14:37:37 [Forward] Upstream error (non-retryable): Account=9401() Status=400 RequestID= Body={"type":"error","error":{"type":"invalid_request_error","message":"invalid input"}}
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/buffered/blocked_write_times_out
+2026/11/18 14:37:37 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:37 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:37 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=false
+2026/11/18 14:37:40 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:40 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=2
+    gateway_sticky_writeback_test.go:188: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:188
+        	Error:      	"3.000869304s" is not greater than or equal to "4.8s"
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/buffered/blocked_write_times_out
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/streaming/new_binding
+2026/11/18 14:37:40 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:40 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:40 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=true
+2026/11/18 14:37:40 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:40 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=19
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.9999921s allowed is 2e+08, but difference was 2.0000079e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/streaming/new_binding
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/streaming/new_binding_after_disconnect
+2026/11/18 14:37:40 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:40 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:40 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=true
+2026/11/18 14:37:40 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:40 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=19
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.999994523s allowed is 2e+08, but difference was 2.000005477e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/streaming/new_binding_after_disconnect
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/streaming/refresh_binding
+2026/11/18 14:37:40 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:40 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=9401 sticky_source=prefetch model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:40 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=true
+2026/11/18 14:37:40 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:40 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=19
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.999993161s allowed is 2e+08, but difference was 2.000006839e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/streaming/refresh_binding
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/streaming/refresh_after_disconnect
+2026/11/18 14:37:40 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:40 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=9401 sticky_source=prefetch model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:40 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=true
+2026/11/18 14:37:40 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:40 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=19
+    gateway_sticky_writeback_test.go:199: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:199
+        	Error:      	Max difference between 5s and 2.999980587s allowed is 2e+08, but difference was 2.000019413e+09
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/streaming/refresh_after_disconnect
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/streaming/different_binding
+2026/11/18 14:37:40 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:40 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=9499 sticky_source=prefetch model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:40 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=true
+2026/11/18 14:37:40 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:40 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=19
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/streaming/forward_failed
+2026/11/18 14:37:40 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:40 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:40 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=true
+2026/11/18 14:37:40 [Forward] Upstream error (non-retryable): Account=9401() Status=400 RequestID= Body={"type":"error","error":{"type":"invalid_request_error","message":"invalid input"}}
+=== RUN   TestGatewayMessagesStickyWritebackAfterForward/streaming/blocked_write_times_out
+2026/11/18 14:37:40 INFO sticky.hash_source source=message_content_fallback hash=3cgoum3hm053 content_len=37
+2026/11/18 14:37:40 INFO sticky.scheduler_entry group_id=9400 session_hash=3cgoum3h sticky_account_id=0 sticky_source=cache model=claude-sonnet-4.5 load_batch=false has_concurrency_svc=false excluded_count=0
+2026/11/18 14:37:40 [Anthropic 自动透传] 命中 API Key 透传分支: account=9401 name= model=claude-sonnet-4.5 stream=true
+2026/11/18 14:37:43 [Billing] Using fallback pricing for model: claude-sonnet-4.5
+2026/11/18 14:37:43 [SIMPLE MODE] Usage recorded (not billed): user=9403, tokens=19
+    gateway_sticky_writeback_test.go:188: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/gateway_sticky_writeback_test.go:188
+        	Error:      	"3.002825587s" is not greater than or equal to "4.8s"
+        	Test:       	TestGatewayMessagesStickyWritebackAfterForward/streaming/blocked_write_times_out
+--- FAIL: TestGatewayMessagesStickyWritebackAfterForward (6.01s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/buffered/new_binding (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/buffered/new_binding_after_disconnect (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/buffered/refresh_binding (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/buffered/refresh_after_disconnect (0.00s)
+    --- PASS: TestGatewayMessagesStickyWritebackAfterForward/buffered/different_binding (0.00s)
+    --- PASS: TestGatewayMessagesStickyWritebackAfterForward/buffered/forward_failed (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/buffered/blocked_write_times_out (3.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/streaming/new_binding (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/streaming/new_binding_after_disconnect (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/streaming/refresh_binding (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/streaming/refresh_after_disconnect (0.00s)
+    --- PASS: TestGatewayMessagesStickyWritebackAfterForward/streaming/different_binding (0.00s)
+    --- PASS: TestGatewayMessagesStickyWritebackAfterForward/streaming/forward_failed (0.00s)
+    --- FAIL: TestGatewayMessagesStickyWritebackAfterForward/streaming/blocked_write_times_out (3.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler	6.036s
+=== RUN   TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity
+--- PASS: TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity (0.00s)
+=== RUN   TestSchedulerMetadataAccountProjectsUpstreamBillingProbe
+--- PASS: TestSchedulerMetadataAccountProjectsUpstreamBillingProbe (0.00s)
+=== RUN   TestSchedulerMetadataAccountDropsInvalidUpstreamBillingProbe
+--- PASS: TestSchedulerMetadataAccountDropsInvalidUpstreamBillingProbe (0.00s)
+=== RUN   TestSchedulerMetadataPreservesExistingEndpointCapabilities
+=== RUN   TestSchedulerMetadataPreservesExistingEndpointCapabilities/unconfigured
+=== RUN   TestSchedulerMetadataPreservesExistingEndpointCapabilities/empty
+    scheduler_metadata_capabilities_unit_test.go:41: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go:41
+        	Error:      	map[string]interface {}{"api_key":"fixture"} does not contain "openai_capabilities"
+        	Test:       	TestSchedulerMetadataPreservesExistingEndpointCapabilities/empty
+=== RUN   TestSchedulerMetadataPreservesExistingEndpointCapabilities/chat_only
+    scheduler_metadata_capabilities_unit_test.go:35: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go:35
+        	Error:      	Not equal: 
+        	            	expected: false
+        	            	actual  : true
+        	Test:       	TestSchedulerMetadataPreservesExistingEndpointCapabilities/chat_only
+=== RUN   TestSchedulerMetadataPreservesExistingEndpointCapabilities/embeddings_only
+    scheduler_metadata_capabilities_unit_test.go:34: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go:34
+        	Error:      	Not equal: 
+        	            	expected: false
+        	            	actual  : true
+        	Test:       	TestSchedulerMetadataPreservesExistingEndpointCapabilities/embeddings_only
+=== RUN   TestSchedulerMetadataPreservesExistingEndpointCapabilities/map
+    scheduler_metadata_capabilities_unit_test.go:35: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go:35
+        	Error:      	Not equal: 
+        	            	expected: false
+        	            	actual  : true
+        	Test:       	TestSchedulerMetadataPreservesExistingEndpointCapabilities/map
+--- FAIL: TestSchedulerMetadataPreservesExistingEndpointCapabilities (0.00s)
+    --- PASS: TestSchedulerMetadataPreservesExistingEndpointCapabilities/unconfigured (0.00s)
+    --- FAIL: TestSchedulerMetadataPreservesExistingEndpointCapabilities/empty (0.00s)
+    --- FAIL: TestSchedulerMetadataPreservesExistingEndpointCapabilities/chat_only (0.00s)
+    --- FAIL: TestSchedulerMetadataPreservesExistingEndpointCapabilities/embeddings_only (0.00s)
+    --- FAIL: TestSchedulerMetadataPreservesExistingEndpointCapabilities/map (0.00s)
+=== RUN   TestSchedulerMetadataCapabilitiesSurviveRedisSnapshot
+    scheduler_metadata_capabilities_unit_test.go:63: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go:63
+        	Error:      	Should be false
+        	Test:       	TestSchedulerMetadataCapabilitiesSurviveRedisSnapshot
+--- FAIL: TestSchedulerMetadataCapabilitiesSurviveRedisSnapshot (0.00s)
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/repository	0.023s
+FAIL

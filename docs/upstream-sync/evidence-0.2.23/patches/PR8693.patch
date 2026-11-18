@@ -1,0 +1,2934 @@
+diff --git a/backend/internal/repository/custom_group_usage_rollup_repo.go b/backend/internal/repository/custom_group_usage_rollup_repo.go
+index 1b0e1b292..f6f61f783 100644
+--- a/backend/internal/repository/custom_group_usage_rollup_repo.go
++++ b/backend/internal/repository/custom_group_usage_rollup_repo.go
+@@ -3,6 +3,8 @@ package repository
+ import (
+ 	"context"
+ 	"database/sql"
++	"database/sql/driver"
++	"errors"
+ 	"fmt"
+ 	"time"
+ 
+@@ -17,36 +19,43 @@ type groupUsageRollupSnapshot struct {
+ 	valid        bool
+ 	closedBefore string    // date，历史日桶的右开边界
+ 	retainedDate string    // retained_from 在服务端时区内的日期，历史日桶的左闭边界
+-	tailStart    time.Time // 尾段（还没进日桶的那部分 usage_logs）的起点
++	tailStart    time.Time // 尾段（还没进日桶的那部分 usage_logs）的起点，不早于 expired_before
+ }
+ 
+ // readGroupUsageRollupSnapshot 读一次汇总水位并在 Go 侧判定有效性。
+ //
+ // 判定条件与原先 SQL 里的 state_values CTE 完全一致：
+ // 恰好一行、时区名与当前服务端配置相同、且水位不在未来。
++// expired_before 之前的 usage_logs 已超出保留期：无论水位是否有效都不进入尾段，
++// 其所在日之前的日桶也不读取。
+ func (r *usageLogRepository) readGroupUsageRollupSnapshot(ctx context.Context, timezoneName, todayDate string) (groupUsageRollupSnapshot, error) {
+-	epoch := time.Unix(0, 0).UTC()
+-	invalid := groupUsageRollupSnapshot{
+-		closedBefore: "1970-01-01",
+-		retainedDate: "1970-01-01",
+-		tailStart:    epoch,
+-	}
+-
+ 	var rowCount int
+ 	var closedBefore sql.NullString
+ 	var retainedFrom sql.NullTime
+ 	var stateTimezone sql.NullString
++	var expiredBefore sql.NullTime
+ 	if err := scanSingleRow(ctx, r.sql, `
+ 		SELECT
+ 			COUNT(*),
+ 			MAX(closed_before)::text,
+ 			MAX(retained_from),
+-			MAX(timezone_name)
++			MAX(timezone_name),
++			MAX(expired_before)
+ 		FROM usage_group_rollup_state
+ 		WHERE id = 1
+-	`, nil, &rowCount, &closedBefore, &retainedFrom, &stateTimezone); err != nil {
++	`, nil, &rowCount, &closedBefore, &retainedFrom, &stateTimezone, &expiredBefore); err != nil {
+ 		return groupUsageRollupSnapshot{}, fmt.Errorf("读取分组用量汇总水位: %w", err)
+ 	}
++
++	tailFloor := time.Unix(0, 0).UTC()
++	if rowCount == 1 && expiredBefore.Valid && expiredBefore.Time.After(tailFloor) {
++		tailFloor = expiredBefore.Time.UTC()
++	}
++	invalid := groupUsageRollupSnapshot{
++		closedBefore: "1970-01-01",
++		retainedDate: "1970-01-01",
++		tailStart:    tailFloor,
++	}
+ 	if rowCount != 1 || !closedBefore.Valid || !retainedFrom.Valid ||
+ 		!stateTimezone.Valid || stateTimezone.String != timezoneName ||
+ 		closedBefore.String > todayDate {
+@@ -58,11 +67,19 @@ func (r *usageLogRepository) readGroupUsageRollupSnapshot(ctx context.Context, t
+ 		// 水位值解析不出来，按无效处理：宁可多扫一次，也不要算错钱。
+ 		return invalid, nil //nolint:nilerr // 与上面的 valid 判定同语义，均降级为全量重算
+ 	}
++	tailStart = tailStart.UTC()
++	if tailFloor.After(tailStart) {
++		tailStart = tailFloor
++	}
++	retainedDate := service.GroupUsageDate(retainedFrom.Time)
++	if expiredDate := service.GroupUsageDate(tailFloor); expiredDate > retainedDate {
++		retainedDate = expiredDate
++	}
+ 	return groupUsageRollupSnapshot{
+ 		valid:        true,
+ 		closedBefore: closedBefore.String,
+-		retainedDate: service.GroupUsageDate(retainedFrom.Time),
+-		tailStart:    tailStart.UTC(),
++		retainedDate: retainedDate,
++		tailStart:    tailStart,
+ 	}, nil
+ }
+ 
+@@ -162,94 +179,287 @@ func (r *usageLogRepository) getAllGroupUsageSummaryFromRollups(ctx context.Cont
+ 	return results, nil
+ }
+ 
++const (
++	groupUsageRollupBuildLockSQL   = "SELECT pg_try_advisory_lock(hashtext('usage_group_daily_rollups:build'))"
++	groupUsageRollupBuildUnlockSQL = "SELECT pg_advisory_unlock(hashtext('usage_group_daily_rollups:build'))"
++	// groupUsageRollupBuildMaxRounds 限定一次同步内因并发变更重算脏区间的轮数；
++	// 未收敛的部分保持未发布，由下一次同步继续。
++	groupUsageRollupBuildMaxRounds = 3
++)
++
++var errGroupUsageRollupBuildPreempted = errors.New("分组用量汇总重建登记已被替换")
++
++// groupUsageRollupBuildPlan 是一轮日桶重建：用 [rowsFrom, rowsBefore) 的 usage_logs
++// 重算 [startDate, targetDate) 的日桶，并清理 retainedDate 之前的日桶。
++type groupUsageRollupBuildPlan struct {
++	startDate    string
++	targetDate   string
++	retainedDate string
++	rowsFrom     time.Time
++	rowsBefore   time.Time
++	timezoneName string
++}
++
++// groupUsageRollupTxRunner 在一个事务里执行 fn。
++type groupUsageRollupTxRunner func(ctx context.Context, fn func(q sqlExecutor) error) error
++
+ // SyncGroupUsageRollups 将服务端配置时区今日以前的用量发布为分组日桶。
++//
++// 每轮分三个事务：登记（FOR UPDATE，写入 building_until）、计算（FOR KEY SHARE，重算日桶）、
++// 发布（FOR UPDATE，水位推进到 build_dirty_from 或目标日期）。usage_logs 写入与失效触发器只持
++// FOR KEY SHARE，因此只与登记、发布这两个短事务串行，计算阶段不阻塞写入。
++// 以 *sql.DB 构造时，整个过程持有会话级 advisory lock，同一时刻只有一个重建；
++// 以事务构造时，三个阶段在调用方事务内顺序执行。
+ func (r *dashboardAggregationRepository) SyncGroupUsageRollups(ctx context.Context, todayStart time.Time) error {
+ 	if r == nil || r.sql == nil {
+ 		return nil
+ 	}
+ 	todayStart = service.GroupUsageTodayStart(todayStart)
+-	if db, ok := r.sql.(*sql.DB); ok {
+-		tx, err := db.BeginTx(ctx, nil)
++	db, ok := r.sql.(*sql.DB)
++	if !ok {
++		return syncGroupUsageRollupRounds(ctx, func(ctx context.Context, fn func(q sqlExecutor) error) error {
++			return fn(r.sql)
++		}, todayStart)
++	}
++
++	upToDate, err := groupUsageRollupsUpToDate(ctx, db, todayStart)
++	if err != nil {
++		return err
++	}
++	if upToDate {
++		return nil
++	}
++
++	conn, err := db.Conn(ctx)
++	if err != nil {
++		return err
++	}
++	var locked bool
++	if err := scanSingleRow(ctx, conn, groupUsageRollupBuildLockSQL, nil, &locked); err != nil {
++		// 查询出错时服务端可能已授予锁，丢弃该物理连接以免锁随连接回到连接池。
++		discardGroupUsageRollupBuildConn(conn)
++		return fmt.Errorf("获取分组用量汇总重建锁: %w", err)
++	}
++	if !locked {
++		return conn.Close()
++	}
++	defer releaseGroupUsageRollupBuildLock(conn)
++
++	return syncGroupUsageRollupRounds(ctx, func(ctx context.Context, fn func(q sqlExecutor) error) error {
++		tx, err := conn.BeginTx(ctx, nil)
+ 		if err != nil {
+ 			return err
+ 		}
+-		txRepo := newDashboardAggregationRepositoryWithSQL(tx)
+-		if err := txRepo.syncGroupUsageRollupsInTx(ctx, todayStart); err != nil {
++		if err := fn(tx); err != nil {
+ 			_ = tx.Rollback()
+ 			return err
+ 		}
+ 		return tx.Commit()
++	}, todayStart)
++}
++
++// releaseGroupUsageRollupBuildLock 释放重建锁；释放失败时丢弃该物理连接，由服务端随会话结束释放锁，
++// 避免锁随连接回到连接池。
++func releaseGroupUsageRollupBuildLock(conn *sql.Conn) {
++	unlockCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
++	defer cancel()
++	var unlocked bool
++	if err := scanSingleRow(unlockCtx, conn, groupUsageRollupBuildUnlockSQL, nil, &unlocked); err != nil || !unlocked {
++		discardGroupUsageRollupBuildConn(conn)
++		return
+ 	}
+-	return r.syncGroupUsageRollupsInTx(ctx, todayStart)
++	_ = conn.Close()
++}
++
++// discardGroupUsageRollupBuildConn 关闭底层物理连接而不是归还连接池，会话级锁随会话结束释放。
++func discardGroupUsageRollupBuildConn(conn *sql.Conn) {
++	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
++	_ = conn.Close()
+ }
+ 
+-func (r *dashboardAggregationRepository) syncGroupUsageRollupsInTx(ctx context.Context, todayStart time.Time) error {
++// groupUsageRollupsUpToDate 不加锁地判断今日以前的日桶是否已全部发布。
++func groupUsageRollupsUpToDate(ctx context.Context, q sqlQueryer, todayStart time.Time) (bool, error) {
+ 	var closedBefore string
+-	var previousRetainedFrom time.Time
+ 	var stateTimezoneName string
+-	if err := scanSingleRow(ctx, r.sql, `
+-		SELECT closed_before::text, retained_from, timezone_name
++	var idle bool
++	err := scanSingleRow(ctx, q, `
++		SELECT closed_before::text, timezone_name, building_until IS NULL
++		FROM usage_group_rollup_state
++		WHERE id = 1
++	`, nil, &closedBefore, &stateTimezoneName, &idle)
++	if errors.Is(err, sql.ErrNoRows) {
++		return false, nil
++	}
++	if err != nil {
++		return false, fmt.Errorf("读取分组用量汇总水位: %w", err)
++	}
++	return idle &&
++		closedBefore == service.GroupUsageDate(todayStart) &&
++		stateTimezoneName == service.GroupUsageTimezoneName(), nil
++}
++
++func syncGroupUsageRollupRounds(ctx context.Context, run groupUsageRollupTxRunner, todayStart time.Time) error {
++	for range groupUsageRollupBuildMaxRounds {
++		var plan *groupUsageRollupBuildPlan
++		if err := run(ctx, func(q sqlExecutor) error {
++			var err error
++			plan, err = beginGroupUsageRollupBuild(ctx, q, todayStart)
++			return err
++		}); err != nil {
++			return err
++		}
++		if plan == nil {
++			return nil
++		}
++		if err := run(ctx, func(q sqlExecutor) error {
++			return buildGroupUsageRollups(ctx, q, plan)
++		}); err != nil {
++			return err
++		}
++		var dirty bool
++		if err := run(ctx, func(q sqlExecutor) error {
++			var err error
++			dirty, err = publishGroupUsageRollups(ctx, q, plan)
++			return err
++		}); err != nil {
++			return err
++		}
++		if !dirty {
++			return nil
++		}
++	}
++	return nil
++}
++
++// beginGroupUsageRollupBuild 在 FOR UPDATE 下确定重建区间并登记 building_until。
++// 日桶已发布到今日时返回 nil。
++func beginGroupUsageRollupBuild(ctx context.Context, q sqlExecutor, todayStart time.Time) (*groupUsageRollupBuildPlan, error) {
++	var closedBefore string
++	var retainedFrom time.Time
++	var stateTimezoneName string
++	var expiredBefore time.Time
++	var buildingUntil sql.NullString
++	if err := scanSingleRow(ctx, q, `
++		SELECT closed_before::text, retained_from, timezone_name, expired_before, building_until::text
+ 		FROM usage_group_rollup_state
+ 		WHERE id = 1
+ 		FOR UPDATE
+-	`, nil, &closedBefore, &previousRetainedFrom, &stateTimezoneName); err != nil {
+-		return fmt.Errorf("读取分组用量汇总水位: %w", err)
++	`, nil, &closedBefore, &retainedFrom, &stateTimezoneName, &expiredBefore, &buildingUntil); err != nil {
++		return nil, fmt.Errorf("读取分组用量汇总水位: %w", err)
+ 	}
+ 
+ 	todayDate := service.GroupUsageDate(todayStart)
+ 	timezoneName := service.GroupUsageTimezoneName()
+ 	timezoneChanged := stateTimezoneName != timezoneName
+-	var closedTime time.Time
+ 	if !timezoneChanged {
+-		var err error
+-		closedTime, err = service.ParseGroupUsageDate(closedBefore)
++		closedTime, err := service.ParseGroupUsageDate(closedBefore)
+ 		if err != nil {
+-			return fmt.Errorf("解析分组用量汇总水位 %q: %w", closedBefore, err)
++			return nil, fmt.Errorf("解析分组用量汇总水位 %q: %w", closedBefore, err)
+ 		}
+ 		todayDateTime, err := service.ParseGroupUsageDate(todayDate)
+ 		if err != nil {
+-			return err
++			return nil, err
+ 		}
+ 		if closedTime.After(todayDateTime) {
+-			return fmt.Errorf("分组用量汇总水位位于未来: %s", closedBefore)
++			return nil, fmt.Errorf("分组用量汇总水位位于未来: %s", closedBefore)
+ 		}
+ 		if closedBefore == todayDate {
+-			return nil
++			if buildingUntil.Valid {
++				if _, err := q.ExecContext(ctx, `
++					UPDATE usage_group_rollup_state
++					SET building_until = NULL,
++						build_dirty_from = NULL,
++						updated_at = NOW()
++					WHERE id = 1
++				`); err != nil {
++					return nil, fmt.Errorf("清除分组用量汇总重建登记: %w", err)
++				}
++			}
++			return nil, nil
+ 		}
+ 	}
+ 
+-	var earliest sql.NullTime
+-	if err := scanSingleRow(ctx, r.sql, "SELECT MIN(created_at) FROM usage_logs", nil, &earliest); err != nil {
+-		return fmt.Errorf("读取最早用量记录: %w", err)
+-	}
+-	retainedFrom := todayStart
+-	if earliest.Valid {
+-		retainedFrom = earliest.Time.UTC()
++	// 可读日桶从 retained_from 所在日开始，且不早于保留下界。
++	if retainedFrom.Before(expiredBefore) {
++		retainedFrom = expiredBefore
+ 	}
++	// closed_before 不晚于保留起点时，可读日桶为空，按保留起点全量重建；否则从水位续建。
+ 	retainedDate := service.GroupUsageDate(retainedFrom)
+-	retainedDateTime, err := service.ParseGroupUsageDate(retainedDate)
+-	if err != nil {
+-		return err
++	startDate := closedBefore
++	if timezoneChanged || closedBefore <= retainedDate {
++		var earliest sql.NullTime
++		if err := scanSingleRow(ctx, q, `
++			SELECT MIN(created_at)
++			FROM usage_logs
++			WHERE created_at >= $1
++		`, []any{expiredBefore.UTC()}, &earliest); err != nil {
++			return nil, fmt.Errorf("读取最早用量记录: %w", err)
++		}
++		retainedFrom = todayStart
++		if earliest.Valid {
++			retainedFrom = earliest.Time.UTC()
++		}
++		retainedDate = service.GroupUsageDate(retainedFrom)
++		startDate = retainedDate
+ 	}
+-	rebuildStartDate := retainedDate
+-	if !timezoneChanged && closedTime.After(retainedDateTime) {
+-		rebuildStartDate = closedBefore
++
++	if _, err := q.ExecContext(ctx, `
++		UPDATE usage_group_rollup_state
++		SET closed_before = $1::date,
++			retained_from = $2,
++			timezone_name = $3,
++			building_until = $4::date,
++			build_dirty_from = NULL,
++			updated_at = NOW()
++		WHERE id = 1
++	`, startDate, retainedFrom.UTC(), timezoneName, todayDate); err != nil {
++		return nil, fmt.Errorf("登记分组用量汇总重建: %w", err)
+ 	}
+-	rebuildStart, err := service.ParseGroupUsageDate(rebuildStartDate)
++
++	startTime, err := service.ParseGroupUsageDate(startDate)
+ 	if err != nil {
+-		return err
++		return nil, err
++	}
++	rowsFrom := startTime.UTC()
++	if expiredBefore.After(rowsFrom) {
++		rowsFrom = expiredBefore.UTC()
++	}
++	return &groupUsageRollupBuildPlan{
++		startDate:    startDate,
++		targetDate:   todayDate,
++		retainedDate: retainedDate,
++		rowsFrom:     rowsFrom,
++		rowsBefore:   todayStart.UTC(),
++		timezoneName: timezoneName,
++	}, nil
++}
++
++// buildGroupUsageRollups 重算 [startDate, targetDate) 的日桶，只写入本地日期不早于 startDate 的桶。
++// 状态行只持 FOR KEY SHARE，与 usage_logs 写入和失效触发器兼容；登记与发布的 FOR UPDATE 须等待本事务结束。
++func buildGroupUsageRollups(ctx context.Context, q sqlExecutor, plan *groupUsageRollupBuildPlan) error {
++	var buildingUntil sql.NullString
++	var stateTimezoneName string
++	if err := scanSingleRow(ctx, q, `
++		SELECT building_until::text, timezone_name
++		FROM usage_group_rollup_state
++		WHERE id = 1
++		FOR KEY SHARE
++	`, nil, &buildingUntil, &stateTimezoneName); err != nil {
++		return fmt.Errorf("读取分组用量汇总重建登记: %w", err)
++	}
++	if !buildingUntil.Valid || buildingUntil.String != plan.targetDate || stateTimezoneName != plan.timezoneName {
++		return errGroupUsageRollupBuildPreempted
+ 	}
+ 
+-	if _, err := r.sql.ExecContext(ctx, `
++	if _, err := q.ExecContext(ctx, `
+ 		DELETE FROM usage_group_daily_rollups
+ 		WHERE bucket_date < $1::date
+-			OR (bucket_date >= $2::date AND bucket_date < $3::date)
+-			OR bucket_date >= $3::date
+-	`, retainedDate, rebuildStartDate, todayDate); err != nil {
++			OR bucket_date >= $2::date
++	`, plan.retainedDate, plan.startDate); err != nil {
+ 		return fmt.Errorf("清理分组用量日桶: %w", err)
+ 	}
+ 
+-	if _, err := r.sql.ExecContext(ctx, `
++	if _, err := q.ExecContext(ctx, `
+ 		INSERT INTO usage_group_daily_rollups (bucket_date, group_id, actual_cost, computed_at)
+ 		SELECT
+ 			(created_at AT TIME ZONE $3::text)::date AS bucket_date,
+@@ -260,51 +470,82 @@ func (r *dashboardAggregationRepository) syncGroupUsageRollupsInTx(ctx context.C
+ 		WHERE group_id IS NOT NULL
+ 			AND created_at >= $1
+ 			AND created_at < $2
++			AND (created_at AT TIME ZONE $3::text)::date >= $4::date
+ 		GROUP BY 1, 2
+ 		ON CONFLICT (bucket_date, group_id)
+ 		DO UPDATE SET
+ 			actual_cost = EXCLUDED.actual_cost,
+ 			computed_at = EXCLUDED.computed_at
+-	`, rebuildStart.UTC(), todayStart.UTC(), timezoneName); err != nil {
++	`, plan.rowsFrom, plan.rowsBefore, plan.timezoneName, plan.startDate); err != nil {
+ 		return fmt.Errorf("重建分组用量日桶: %w", err)
+ 	}
++	return nil
++}
+ 
+-	if _, err := r.sql.ExecContext(ctx, `
++// publishGroupUsageRollups 在 FOR UPDATE 下发布本轮结果并清除登记，返回是否存在需要重算的脏区间。
++//
++// 登记之后 [startDate, targetDate) 内的源记录变更都记入了 build_dirty_from，[startDate, build_dirty_from)
++// 的日桶与计算快照一致；水位低于 startDate 说明有未记脏的失效，此时发布不越过当前水位。
++func publishGroupUsageRollups(ctx context.Context, q sqlExecutor, plan *groupUsageRollupBuildPlan) (bool, error) {
++	var closedBefore string
++	var buildingUntil sql.NullString
++	var dirtyFrom sql.NullString
++	if err := scanSingleRow(ctx, q, `
++		SELECT closed_before::text, building_until::text, build_dirty_from::text
++		FROM usage_group_rollup_state
++		WHERE id = 1
++		FOR UPDATE
++	`, nil, &closedBefore, &buildingUntil, &dirtyFrom); err != nil {
++		return false, fmt.Errorf("读取分组用量汇总重建登记: %w", err)
++	}
++	if !buildingUntil.Valid || buildingUntil.String != plan.targetDate {
++		return false, errGroupUsageRollupBuildPreempted
++	}
++
++	publishBefore := plan.targetDate
++	dirty := false
++	if dirtyFrom.Valid && dirtyFrom.String < publishBefore {
++		publishBefore = dirtyFrom.String
++		dirty = true
++	}
++	if closedBefore < plan.startDate && closedBefore < publishBefore {
++		publishBefore = closedBefore
++		dirty = true
++	}
++
++	if _, err := q.ExecContext(ctx, `
+ 		UPDATE usage_group_rollup_state
+ 		SET closed_before = $1::date,
+-			retained_from = $2,
+-			timezone_name = $3,
++			building_until = NULL,
++			build_dirty_from = NULL,
+ 			updated_at = NOW()
+ 		WHERE id = 1
+-	`, todayDate, retainedFrom, timezoneName); err != nil {
+-		return fmt.Errorf("更新分组用量汇总水位: %w", err)
++	`, publishBefore); err != nil {
++		return false, fmt.Errorf("发布分组用量汇总水位: %w", err)
+ 	}
+-	return nil
++	return dirty, nil
+ }
+ 
+-func lockGroupUsageRollupState(ctx context.Context, tx *sql.Tx) error {
+-	var id int16
+-	if err := tx.QueryRowContext(ctx, `
+-		SELECT id
+-		FROM usage_group_rollup_state
++// expireGroupUsageRollupsBefore 把保留下界推进到 cutoff：早于 cutoff 的 usage_logs 不属于任何可读日桶，
++// 删除它们不触发失效。cutoff 须为服务端配置时区的自然日零点，使边界日桶不包含被删除的记录。
++func expireGroupUsageRollupsBefore(ctx context.Context, q sqlExecutor, cutoff time.Time) error {
++	if _, err := q.ExecContext(ctx, `
++		UPDATE usage_group_rollup_state
++		SET expired_before = GREATEST(expired_before, $1),
++			retained_from = GREATEST(retained_from, $1),
++			updated_at = NOW()
+ 		WHERE id = 1
+-		FOR UPDATE
+-	`).Scan(&id); err != nil {
+-		return fmt.Errorf("锁定分组用量汇总水位: %w", err)
++	`, cutoff.UTC()); err != nil {
++		return fmt.Errorf("推进分组用量汇总保留下界: %w", err)
+ 	}
+ 	return nil
+ }
+ 
+-func invalidateGroupUsageRollupsAt(ctx context.Context, tx *sql.Tx, affectedAt time.Time) error {
+-	timezoneName := service.GroupUsageTimezoneName()
+-	_, err := tx.ExecContext(ctx, `
+-		UPDATE usage_group_rollup_state
+-		SET closed_before = LEAST(
+-			closed_before,
+-			($1::timestamptz AT TIME ZONE $2::text)::date
+-		),
+-			updated_at = NOW()
+-		WHERE id = 1
+-	`, affectedAt.UTC(), timezoneName)
++// invalidateGroupUsageRollupsAt 使 affectedAt 所在自然日及之后的日桶失效；早于保留下界的时刻不生效。
++func invalidateGroupUsageRollupsAt(ctx context.Context, q sqlExecutor, affectedAt time.Time) error {
++	_, err := q.ExecContext(ctx,
++		"SELECT invalidate_group_usage_rollups_at($1, $2)",
++		affectedAt.UTC(), service.GroupUsageTimezoneName(),
++	)
+ 	return err
+ }
+diff --git a/backend/internal/repository/dashboard_aggregation_group_usage_test.go b/backend/internal/repository/dashboard_aggregation_group_usage_test.go
+index 40bca32bc..31365c156 100644
+--- a/backend/internal/repository/dashboard_aggregation_group_usage_test.go
++++ b/backend/internal/repository/dashboard_aggregation_group_usage_test.go
+@@ -5,26 +5,260 @@ package repository
+ import (
+ 	"context"
+ 	"database/sql"
++	"database/sql/driver"
+ 	"errors"
+ 	"testing"
+ 	"time"
+ 
+ 	"github.com/DATA-DOG/go-sqlmock"
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/lib/pq"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
+-func TestDashboardAggregationRepositorySyncGroupUsageRollupsNoopsAtCurrentDate(t *testing.T) {
++const (
++	groupRollupPrecheckQuery = `SELECT closed_before::text, timezone_name, building_until IS NULL`
++	groupRollupLockQuery     = `SELECT pg_try_advisory_lock\(hashtext\('usage_group_daily_rollups:build'\)\)`
++	groupRollupUnlockQuery   = `SELECT pg_advisory_unlock\(hashtext\('usage_group_daily_rollups:build'\)\)`
++	groupRollupBeginQuery    = `(?s)SELECT closed_before::text, retained_from, timezone_name, expired_before, building_until::text.*FOR UPDATE`
++	groupRollupBuildQuery    = `(?s)SELECT building_until::text, timezone_name.*FOR KEY SHARE`
++	groupRollupPublishQuery  = `(?s)SELECT closed_before::text, building_until::text, build_dirty_from::text.*FOR UPDATE`
++	groupRollupRegisterExec  = `(?s)UPDATE usage_group_rollup_state.*building_until = \$4::date`
++	groupRollupPublishExec   = `(?s)UPDATE usage_group_rollup_state.*SET closed_before = \$1::date,\s+building_until = NULL`
++	groupRollupExpireExec    = `(?s)UPDATE usage_group_rollup_state.*expired_before = GREATEST\(expired_before, \$1\)`
++	groupRollupInvalidateSQL = `SELECT invalidate_group_usage_rollups_at\(\$1, \$2\)`
++)
++
++var groupRollupEpoch = time.Unix(0, 0).UTC()
++
++func expectGroupRollupPrecheck(mock sqlmock.Sqlmock, closedBefore, timezoneName string, idle bool) {
++	mock.ExpectQuery(groupRollupPrecheckQuery).
++		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "timezone_name", "idle"}).
++			AddRow(closedBefore, timezoneName, idle))
++}
++
++func expectGroupRollupLock(mock sqlmock.Sqlmock, locked bool) {
++	mock.ExpectQuery(groupRollupLockQuery).
++		WillReturnRows(sqlmock.NewRows([]string{"locked"}).AddRow(locked))
++}
++
++func expectGroupRollupUnlock(mock sqlmock.Sqlmock) {
++	mock.ExpectQuery(groupRollupUnlockQuery).
++		WillReturnRows(sqlmock.NewRows([]string{"unlocked"}).AddRow(true))
++}
++
++func groupRollupBeginRows(closedBefore string, retainedFrom time.Time, timezoneName string, expiredBefore time.Time, buildingUntil any) *sqlmock.Rows {
++	return sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name", "expired_before", "building_until"}).
++		AddRow(closedBefore, retainedFrom, timezoneName, expiredBefore, buildingUntil)
++}
++
++// expectGroupRollupRound 期望一轮完整的登记、计算、发布。
++func expectGroupRollupRound(
++	mock sqlmock.Sqlmock,
++	begin *sqlmock.Rows,
++	minCreatedAt *sqlmock.Rows,
++	minCreatedAfter time.Time,
++	register []any,
++	deleteArgs []any,
++	insertArgs []any,
++	publishRows *sqlmock.Rows,
++	publishBefore string,
++) {
++	mock.ExpectBegin()
++	mock.ExpectQuery(groupRollupBeginQuery).WillReturnRows(begin)
++	if minCreatedAt != nil {
++		mock.ExpectQuery(`(?s)SELECT MIN\(created_at\)\s+FROM usage_logs\s+WHERE created_at >= \$1`).
++			WithArgs(minCreatedAfter).
++			WillReturnRows(minCreatedAt)
++	}
++	mock.ExpectExec(groupRollupRegisterExec).
++		WithArgs(toDriverValues(register)...).
++		WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectCommit()
++
++	mock.ExpectBegin()
++	mock.ExpectQuery(groupRollupBuildQuery).
++		WillReturnRows(sqlmock.NewRows([]string{"building_until", "timezone_name"}).AddRow(register[3], register[2]))
++	mock.ExpectExec(`DELETE FROM usage_group_daily_rollups`).
++		WithArgs(toDriverValues(deleteArgs)...).
++		WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectExec(`INSERT INTO usage_group_daily_rollups`).
++		WithArgs(toDriverValues(append(append([]any{}, insertArgs...), register[0]))...).
++		WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectCommit()
++
++	mock.ExpectBegin()
++	mock.ExpectQuery(groupRollupPublishQuery).WillReturnRows(publishRows)
++	mock.ExpectExec(groupRollupPublishExec).
++		WithArgs(publishBefore).
++		WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectCommit()
++}
++
++func toDriverValues(values []any) []driver.Value {
++	args := make([]driver.Value, 0, len(values))
++	for _, value := range values {
++		args = append(args, sqlmockValue{value: value})
++	}
++	return args
++}
++
++// sqlmockValue 按时刻比较 time.Time（忽略 Location），其余值按相等比较。
++type sqlmockValue struct{ value any }
++
++func (v sqlmockValue) Match(actual driver.Value) bool {
++	if expectedTime, ok := v.value.(time.Time); ok {
++		actualTime, ok := actual.(time.Time)
++		return ok && actualTime.Equal(expectedTime)
++	}
++	return actual == v.value
++}
++
++func publishRows(closedBefore, buildingUntil string, dirtyFrom any) *sqlmock.Rows {
++	return sqlmock.NewRows([]string{"closed_before", "building_until", "build_dirty_from"}).
++		AddRow(closedBefore, buildingUntil, dirtyFrom)
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsNoopsWithoutLockingAtCurrentDate(t *testing.T) {
+ 	setGroupUsageRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+ 	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
+ 
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT closed_before::text, retained_from.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name"}).
+-			AddRow("2026-08-14", time.Unix(0, 0).UTC(), "Asia/Shanghai"))
+-	mock.ExpectCommit()
++	expectGroupRollupPrecheck(mock, "2026-08-14", "Asia/Shanghai", true)
++
++	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsSkipsWhenAnotherBuildHoldsLock(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-13", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, false)
++
++	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsBuildsAndPublishesInSeparateTransactions(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++	retainedFrom := time.Date(2026, 5, 1, 3, 0, 0, 0, time.UTC)
++	rebuildStart := time.Date(2026, 8, 12, 16, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-13", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("2026-08-13", retainedFrom, "Asia/Shanghai", groupRollupEpoch, nil),
++		nil, time.Time{},
++		[]any{"2026-08-13", retainedFrom, "Asia/Shanghai", "2026-08-14"},
++		[]any{"2026-05-01", "2026-08-13"},
++		[]any{rebuildStart, todayStart, "Asia/Shanghai"},
++		publishRows("2026-08-13", "2026-08-14", nil),
++		"2026-08-14",
++	)
++	expectGroupRollupUnlock(mock)
++
++	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsRebuildsDirtyRangeBeforeFullPublish(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++	retainedFrom := time.Date(2026, 5, 1, 3, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-11", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	// 第一轮计算期间有 08-12 的迟到写入：只发布到 08-12。
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("2026-08-11", retainedFrom, "Asia/Shanghai", groupRollupEpoch, nil),
++		nil, time.Time{},
++		[]any{"2026-08-11", retainedFrom, "Asia/Shanghai", "2026-08-14"},
++		[]any{"2026-05-01", "2026-08-11"},
++		[]any{time.Date(2026, 8, 10, 16, 0, 0, 0, time.UTC), todayStart, "Asia/Shanghai"},
++		publishRows("2026-08-11", "2026-08-14", "2026-08-12"),
++		"2026-08-12",
++	)
++	// 第二轮只重算脏日期之后的区间。
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("2026-08-12", retainedFrom, "Asia/Shanghai", groupRollupEpoch, nil),
++		nil, time.Time{},
++		[]any{"2026-08-12", retainedFrom, "Asia/Shanghai", "2026-08-14"},
++		[]any{"2026-05-01", "2026-08-12"},
++		[]any{time.Date(2026, 8, 11, 16, 0, 0, 0, time.UTC), todayStart, "Asia/Shanghai"},
++		publishRows("2026-08-12", "2026-08-14", nil),
++		"2026-08-14",
++	)
++	expectGroupRollupUnlock(mock)
++
++	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsStopsAfterMaxRoundsWithoutOverPublishing(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++	retainedFrom := time.Date(2026, 5, 1, 3, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-12", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	for range groupUsageRollupBuildMaxRounds {
++		expectGroupRollupRound(mock,
++			groupRollupBeginRows("2026-08-12", retainedFrom, "Asia/Shanghai", groupRollupEpoch, nil),
++			nil, time.Time{},
++			[]any{"2026-08-12", retainedFrom, "Asia/Shanghai", "2026-08-14"},
++			[]any{"2026-05-01", "2026-08-12"},
++			[]any{time.Date(2026, 8, 11, 16, 0, 0, 0, time.UTC), todayStart, "Asia/Shanghai"},
++			publishRows("2026-08-12", "2026-08-14", "2026-08-12"),
++			"2026-08-12",
++		)
++	}
++	expectGroupRollupUnlock(mock)
++
++	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsPublishKeepsUnmarkedInvalidation(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++	retainedFrom := time.Date(2026, 5, 1, 3, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-13", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	// 计算期间水位被后退到 08-10 而没有记脏：发布不越过 08-10。
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("2026-08-13", retainedFrom, "Asia/Shanghai", groupRollupEpoch, nil),
++		nil, time.Time{},
++		[]any{"2026-08-13", retainedFrom, "Asia/Shanghai", "2026-08-14"},
++		[]any{"2026-05-01", "2026-08-13"},
++		[]any{time.Date(2026, 8, 12, 16, 0, 0, 0, time.UTC), todayStart, "Asia/Shanghai"},
++		publishRows("2026-08-10", "2026-08-14", nil),
++		"2026-08-10",
++	)
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("2026-08-10", retainedFrom, "Asia/Shanghai", groupRollupEpoch, nil),
++		nil, time.Time{},
++		[]any{"2026-08-10", retainedFrom, "Asia/Shanghai", "2026-08-14"},
++		[]any{"2026-05-01", "2026-08-10"},
++		[]any{time.Date(2026, 8, 9, 16, 0, 0, 0, time.UTC), todayStart, "Asia/Shanghai"},
++		publishRows("2026-08-10", "2026-08-14", nil),
++		"2026-08-14",
++	)
++	expectGroupRollupUnlock(mock)
+ 
+ 	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
+ 	require.NoError(t, mock.ExpectationsWereMet())
+@@ -32,57 +266,95 @@ func TestDashboardAggregationRepositorySyncGroupUsageRollupsNoopsAtCurrentDate(t
+ 
+ func TestDashboardAggregationRepositorySyncGroupUsageRollupsRebuildsWhenTimezoneChanges(t *testing.T) {
+ 	useGroupUsageRepositoryTestTimezone(t, "America/New_York")
+-
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+ 	todayStart := time.Date(2026, 3, 9, 4, 0, 0, 0, time.UTC)
+ 	retainedFrom := time.Date(2026, 3, 1, 5, 0, 0, 0, time.UTC)
+ 
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT closed_before::text, retained_from.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name"}).
+-			AddRow("2026-03-09", time.Unix(0, 0).UTC(), "Asia/Shanghai"))
+-	mock.ExpectQuery(`SELECT MIN\(created_at\) FROM usage_logs`).
+-		WillReturnRows(sqlmock.NewRows([]string{"min"}).AddRow(retainedFrom))
+-	mock.ExpectExec(`DELETE FROM usage_group_daily_rollups`).
+-		WithArgs("2026-03-01", "2026-03-01", "2026-03-09").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectExec(`INSERT INTO usage_group_daily_rollups`).
+-		WithArgs(retainedFrom, todayStart, "America/New_York").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs("2026-03-09", retainedFrom, "America/New_York").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectCommit()
++	expectGroupRollupPrecheck(mock, "2026-03-09", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("2026-03-09", groupRollupEpoch, "Asia/Shanghai", groupRollupEpoch, nil),
++		sqlmock.NewRows([]string{"min"}).AddRow(retainedFrom), groupRollupEpoch,
++		[]any{"2026-03-01", retainedFrom, "America/New_York", "2026-03-09"},
++		[]any{"2026-03-01", "2026-03-01"},
++		[]any{retainedFrom, todayStart, "America/New_York"},
++		publishRows("2026-03-01", "2026-03-09", nil),
++		"2026-03-09",
++	)
++	expectGroupRollupUnlock(mock)
+ 
+ 	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
+-func TestDashboardAggregationRepositorySyncGroupUsageRollupsPublishesWatermarkLast(t *testing.T) {
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsFullRebuildExcludesExpiredRows(t *testing.T) {
+ 	setGroupUsageRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+ 	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
+-	retainedFrom := time.Date(2026, 5, 1, 3, 0, 0, 0, time.UTC)
+-	rebuildStart := time.Date(2026, 8, 12, 16, 0, 0, 0, time.UTC)
++	// 保留下界不在 Asia/Shanghai 的日界上（例如在其他时区下推进）：重建只计入下界之后的记录。
++	expiredBefore := time.Date(2026, 5, 1, 18, 0, 0, 0, time.UTC)
++	earliestRetained := time.Date(2026, 5, 1, 19, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "1970-01-01", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("1970-01-01", groupRollupEpoch, "Asia/Shanghai", expiredBefore, nil),
++		sqlmock.NewRows([]string{"min"}).AddRow(earliestRetained), expiredBefore,
++		[]any{"2026-05-02", earliestRetained, "Asia/Shanghai", "2026-08-14"},
++		[]any{"2026-05-02", "2026-05-02"},
++		[]any{expiredBefore, todayStart, "Asia/Shanghai"},
++		publishRows("2026-05-02", "2026-08-14", nil),
++		"2026-08-14",
++	)
++	expectGroupRollupUnlock(mock)
+ 
++	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsKeepsRetainedFromAtExpiredFloor(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++	staleRetainedFrom := time.Date(2026, 5, 1, 3, 0, 0, 0, time.UTC)
++	expiredBefore := time.Date(2026, 5, 14, 16, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-13", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	// retained_from 早于保留下界（例如被其他版本的同步改写）：登记与清理都以保留下界为起点。
++	expectGroupRollupRound(mock,
++		groupRollupBeginRows("2026-08-13", staleRetainedFrom, "Asia/Shanghai", expiredBefore, nil),
++		nil, time.Time{},
++		[]any{"2026-08-13", expiredBefore, "Asia/Shanghai", "2026-08-14"},
++		[]any{"2026-05-15", "2026-08-13"},
++		[]any{time.Date(2026, 8, 12, 16, 0, 0, 0, time.UTC), todayStart, "Asia/Shanghai"},
++		publishRows("2026-08-13", "2026-08-14", nil),
++		"2026-08-14",
++	)
++	expectGroupRollupUnlock(mock)
++
++	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsClearsStaleBuildMarkWhenPublished(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-14", "Asia/Shanghai", false)
++	expectGroupRollupLock(mock, true)
+ 	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT closed_before::text, retained_from.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name"}).
+-			AddRow("2026-08-13", time.Unix(0, 0).UTC(), "Asia/Shanghai"))
+-	mock.ExpectQuery(`SELECT MIN\(created_at\) FROM usage_logs`).
+-		WillReturnRows(sqlmock.NewRows([]string{"min"}).AddRow(retainedFrom))
+-	mock.ExpectExec(`DELETE FROM usage_group_daily_rollups`).
+-		WithArgs("2026-05-01", "2026-08-13", "2026-08-14").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectExec(`INSERT INTO usage_group_daily_rollups`).
+-		WithArgs(rebuildStart, todayStart, "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 2))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs("2026-08-14", retainedFrom, "Asia/Shanghai").
++	mock.ExpectQuery(groupRollupBeginQuery).
++		WillReturnRows(groupRollupBeginRows("2026-08-14", groupRollupEpoch, "Asia/Shanghai", groupRollupEpoch, "2026-08-14"))
++	mock.ExpectExec(`(?s)UPDATE usage_group_rollup_state\s+SET building_until = NULL`).
+ 		WillReturnResult(sqlmock.NewResult(0, 1))
+ 	mock.ExpectCommit()
++	expectGroupRollupUnlock(mock)
+ 
+ 	require.NoError(t, repo.SyncGroupUsageRollups(context.Background(), todayStart))
+ 	require.NoError(t, mock.ExpectationsWereMet())
+@@ -94,17 +366,44 @@ func TestDashboardAggregationRepositorySyncGroupUsageRollupsRejectsFutureWaterma
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+ 	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
+ 
++	expectGroupRollupPrecheck(mock, "2026-08-15", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
+ 	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT closed_before::text, retained_from.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name"}).
+-			AddRow("2026-08-15", time.Unix(0, 0).UTC(), "Asia/Shanghai"))
++	mock.ExpectQuery(groupRollupBeginQuery).
++		WillReturnRows(groupRollupBeginRows("2026-08-15", groupRollupEpoch, "Asia/Shanghai", groupRollupEpoch, nil))
+ 	mock.ExpectRollback()
++	expectGroupRollupUnlock(mock)
+ 
+ 	err := repo.SyncGroupUsageRollups(context.Background(), todayStart)
+ 	require.ErrorContains(t, err, "未来")
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
++func TestDashboardAggregationRepositorySyncGroupUsageRollupsAbortsWhenBuildMarkReplaced(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++	retainedFrom := time.Date(2026, 5, 1, 3, 0, 0, 0, time.UTC)
++
++	expectGroupRollupPrecheck(mock, "2026-08-13", "Asia/Shanghai", true)
++	expectGroupRollupLock(mock, true)
++	mock.ExpectBegin()
++	mock.ExpectQuery(groupRollupBeginQuery).
++		WillReturnRows(groupRollupBeginRows("2026-08-13", retainedFrom, "Asia/Shanghai", groupRollupEpoch, nil))
++	mock.ExpectExec(groupRollupRegisterExec).WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectCommit()
++	mock.ExpectBegin()
++	mock.ExpectQuery(groupRollupBuildQuery).
++		WillReturnRows(sqlmock.NewRows([]string{"building_until", "timezone_name"}).AddRow(nil, "Asia/Shanghai"))
++	mock.ExpectRollback()
++	expectGroupRollupUnlock(mock)
++
++	err := repo.SyncGroupUsageRollups(context.Background(), todayStart)
++	require.ErrorIs(t, err, errGroupUsageRollupBuildPreempted)
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
+ func TestDashboardAggregationRepositoryRecomputeRangeInvalidatesGroupRollupsBeforeDashboardRebuild(t *testing.T) {
+ 	setGroupUsageRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+@@ -112,12 +411,10 @@ func TestDashboardAggregationRepositoryRecomputeRangeInvalidatesGroupRollupsBefo
+ 	start := time.Date(2026, 8, 1, 3, 0, 0, 0, time.UTC)
+ 	end := start.Add(time.Hour)
+ 
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
++	mock.ExpectExec(groupRollupInvalidateSQL).
+ 		WithArgs(start, "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
++		WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectBegin()
+ 	mock.ExpectExec(`DELETE FROM usage_dashboard_hourly`).
+ 		WillReturnError(sql.ErrConnDone)
+ 	mock.ExpectRollback()
+@@ -127,25 +424,17 @@ func TestDashboardAggregationRepositoryRecomputeRangeInvalidatesGroupRollupsBefo
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
+-func TestDashboardAggregationRepositoryRecomputeRangeRebuildsGroupRollupsBeforeCommit(t *testing.T) {
++func TestDashboardAggregationRepositoryRecomputeRangeLeavesGroupRollupRebuildToSync(t *testing.T) {
+ 	setGroupUsageRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+ 	start := time.Date(2026, 8, 1, 3, 0, 0, 0, time.UTC)
+ 	end := start.Add(time.Hour)
+-	fixedNow := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
+-	repo.clock = func() time.Time { return fixedNow }
+-	todayStart := service.GroupUsageTodayStart(fixedNow)
+-	startDate := service.GroupUsageDate(start)
+-	rebuildStart, err := service.ParseGroupUsageDate(startDate)
+-	require.NoError(t, err)
+ 
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
++	mock.ExpectExec(groupRollupInvalidateSQL).
+ 		WithArgs(start, "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
++		WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectBegin()
+ 	for _, query := range []string{
+ 		`DELETE FROM usage_dashboard_hourly WHERE`,
+ 		`DELETE FROM usage_dashboard_hourly_users WHERE`,
+@@ -158,71 +447,67 @@ func TestDashboardAggregationRepositoryRecomputeRangeRebuildsGroupRollupsBeforeC
+ 	} {
+ 		mock.ExpectExec(query).WillReturnResult(sqlmock.NewResult(0, 1))
+ 	}
+-	mock.ExpectQuery(`SELECT closed_before::text, retained_from.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name"}).
+-			AddRow(startDate, time.Unix(0, 0).UTC(), "Asia/Shanghai"))
+-	mock.ExpectQuery(`SELECT MIN\(created_at\) FROM usage_logs`).
+-		WillReturnRows(sqlmock.NewRows([]string{"min"}).AddRow(start))
+-	mock.ExpectExec(`DELETE FROM usage_group_daily_rollups`).
+-		WithArgs(startDate, startDate, service.GroupUsageDate(todayStart)).
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectExec(`INSERT INTO usage_group_daily_rollups`).
+-		WithArgs(rebuildStart.UTC(), todayStart.UTC(), "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(service.GroupUsageDate(todayStart), start, "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+ 	mock.ExpectCommit()
+ 
+ 	require.NoError(t, repo.RecomputeRange(context.Background(), start, end))
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
+-func TestDashboardAggregationRepositoryCleanupUsageLogsNonPartitionedInvalidatesEachBatchAndSyncs(t *testing.T) {
++func TestDashboardAggregationRepositoryRecomputeRangeStopsWhenInvalidationFails(t *testing.T) {
+ 	setGroupUsageRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+-	cutoff := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+-	earliestDeletedAt := time.Date(2026, 5, 3, 2, 0, 0, 0, time.UTC)
++	start := time.Date(2026, 8, 1, 3, 0, 0, 0, time.UTC)
++
++	mock.ExpectExec(groupRollupInvalidateSQL).
++		WithArgs(start, "Asia/Shanghai").
++		WillReturnError(sql.ErrConnDone)
++
++	err := repo.RecomputeRange(context.Background(), start, start.Add(time.Hour))
++	require.ErrorIs(t, err, sql.ErrConnDone)
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositoryCleanupUsageLogsExpiresWholeDaysBeforeDeleting(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	// 2026-07-01 13:00 +08 对齐到 2026-07-01 00:00 +08。
++	cutoff := time.Date(2026, 7, 1, 5, 0, 0, 0, time.UTC)
++	alignedCutoff := time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC)
+ 	fixedNow := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
+ 	repo.clock = func() time.Time { return fixedNow }
+-	todayStart := service.GroupUsageTodayStart(fixedNow)
+ 
++	mock.ExpectExec(groupRollupExpireExec).
++		WithArgs(alignedCutoff).
++		WillReturnResult(sqlmock.NewResult(0, 1))
+ 	mock.ExpectQuery(`SELECT EXISTS`).
+ 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectQuery(`(?s)DELETE FROM usage_logs.*RETURNING created_at`).
+-		WithArgs(cutoff, usageLogsCleanupBatchSize).
+-		WillReturnRows(sqlmock.NewRows([]string{"created_at"}).
+-			AddRow(earliestDeletedAt.Add(time.Hour)).
+-			AddRow(earliestDeletedAt))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(earliestDeletedAt, "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectCommit()
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT closed_before::text, retained_from.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name"}).
+-			AddRow(service.GroupUsageDate(todayStart), time.Unix(0, 0).UTC(), "Asia/Shanghai"))
+-	mock.ExpectCommit()
++	mock.ExpectExec(`(?s)SELECT tableoid, ctid.*ORDER BY created_at ASC, id ASC.*DELETE FROM usage_logs`).
++		WithArgs(alignedCutoff, usageLogsCleanupBatchSize).
++		WillReturnResult(sqlmock.NewResult(0, usageLogsCleanupBatchSize))
++	mock.ExpectExec(`(?s)SELECT tableoid, ctid.*DELETE FROM usage_logs`).
++		WithArgs(alignedCutoff, usageLogsCleanupBatchSize).
++		WillReturnResult(sqlmock.NewResult(0, 3))
++	expectGroupRollupPrecheck(mock, service.GroupUsageDate(service.GroupUsageTodayStart(fixedNow)), "Asia/Shanghai", true)
+ 
+ 	require.NoError(t, repo.CleanupUsageLogs(context.Background(), cutoff))
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
+-func TestDashboardAggregationRepositoryCleanupUsageLogsPartitionedSortsAndInvalidatesEachDropBeforeSync(t *testing.T) {
+-	setGroupUsageRollupTestTimezone(t)
++func TestDashboardAggregationRepositoryCleanupUsageLogsPartitionedInvalidatesRetainedRowsAfterDrop(t *testing.T) {
++	useGroupUsageRepositoryTestTimezone(t, "UTC")
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+-	cutoff := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
+-	aprilStart := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+-	juneStart := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+-	fixedNow := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
++	cutoff := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
++	fixedNow := time.Date(2026, 9, 29, 8, 0, 0, 0, time.UTC)
+ 	repo.clock = func() time.Time { return fixedNow }
+-	todayStart := service.GroupUsageTodayStart(fixedNow)
++	// 6 月分区建于 UTC-5 会话时区，上界是 07-01 05:00 UTC，包含保留下界之后的记录。
++	retainedInJunePartition := time.Date(2026, 7, 1, 3, 0, 0, 0, time.UTC)
+ 
++	mock.ExpectExec(groupRollupExpireExec).
++		WithArgs(cutoff).
++		WillReturnResult(sqlmock.NewResult(0, 1))
+ 	mock.ExpectQuery(`SELECT EXISTS`).
+ 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+ 	mock.ExpectQuery(`SELECT c.relname`).
+@@ -232,78 +517,120 @@ func TestDashboardAggregationRepositoryCleanupUsageLogsPartitionedSortsAndInvali
+ 			AddRow("usage_logs_202604").
+ 			AddRow("usage_logs_202607"))
+ 
+-	for _, partition := range []struct {
+-		name  string
+-		start time.Time
+-	}{
+-		{name: "usage_logs_202604", start: aprilStart},
+-		{name: "usage_logs_202606", start: juneStart},
+-	} {
+-		mock.ExpectBegin()
+-		mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-		mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-			WithArgs(partition.start, "Asia/Shanghai").
+-			WillReturnResult(sqlmock.NewResult(0, 1))
+-		mock.ExpectExec(`DROP TABLE IF EXISTS "` + partition.name + `"`).
+-			WillReturnResult(sqlmock.NewResult(0, 0))
+-		mock.ExpectCommit()
+-	}
+-	// The boundary partition is pruned by exact timestamp. tableoid is required
+-	// because ctid alone can also identify a retained row in another partition.
++	// 4 月分区全部早于保留下界：直接删除。
+ 	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectQuery(`(?s)SELECT tableoid, ctid.*WHERE created_at < \$1.*WHERE \(tableoid, ctid\) IN.*RETURNING created_at`).
+-		WithArgs(cutoff, usageLogsCleanupBatchSize).
+-		WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(cutoff.Add(-time.Hour)))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(cutoff.Add(-time.Hour), "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectExec(`SET LOCAL lock_timeout = '3000ms'`).WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectQuery(`(?s)SELECT expired_before\s+FROM usage_group_rollup_state.*FOR KEY SHARE`).
++		WillReturnRows(sqlmock.NewRows([]string{"expired_before"}).AddRow(cutoff))
++	mock.ExpectQuery(`SELECT MIN\(created_at\) FROM "usage_logs_202604" WHERE created_at >= \$1`).
++		WithArgs(cutoff).
++		WillReturnRows(sqlmock.NewRows([]string{"min"}).AddRow(nil))
++	mock.ExpectExec(`DROP TABLE IF EXISTS "usage_logs_202604"`).
++		WillReturnResult(sqlmock.NewResult(0, 0))
+ 	mock.ExpectCommit()
++	// 6 月分区含保留下界之后的记录：删除后按其中最早时刻失效。
+ 	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT closed_before::text, retained_from.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"closed_before", "retained_from", "timezone_name"}).
+-			AddRow(service.GroupUsageDate(todayStart), time.Unix(0, 0).UTC(), "Asia/Shanghai"))
++	mock.ExpectExec(`SET LOCAL lock_timeout = '3000ms'`).WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectQuery(`(?s)SELECT expired_before\s+FROM usage_group_rollup_state.*FOR KEY SHARE`).
++		WillReturnRows(sqlmock.NewRows([]string{"expired_before"}).AddRow(cutoff))
++	mock.ExpectQuery(`SELECT MIN\(created_at\) FROM "usage_logs_202606" WHERE created_at >= \$1`).
++		WithArgs(cutoff).
++		WillReturnRows(sqlmock.NewRows([]string{"min"}).AddRow(retainedInJunePartition))
++	mock.ExpectExec(`DROP TABLE IF EXISTS "usage_logs_202606"`).
++		WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectExec(groupRollupInvalidateSQL).
++		WithArgs(retainedInJunePartition, "UTC").
++		WillReturnResult(sqlmock.NewResult(0, 0))
+ 	mock.ExpectCommit()
++	// 边界分区按精确时间删除；tableoid 区分不同分区里相同的 ctid。
++	mock.ExpectExec(`(?s)SELECT tableoid, ctid.*WHERE created_at < \$1.*WHERE \(tableoid, ctid\) IN`).
++		WithArgs(cutoff, usageLogsCleanupBatchSize).
++		WillReturnResult(sqlmock.NewResult(0, 1))
++	expectGroupRollupPrecheck(mock, service.GroupUsageDate(service.GroupUsageTodayStart(fixedNow)), "UTC", true)
+ 
+ 	require.NoError(t, repo.CleanupUsageLogs(context.Background(), cutoff))
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
+-func TestDashboardAggregationRepositoryCleanupUsageLogsNonPartitionedFailureRollsBackWithoutSync(t *testing.T) {
++func TestDashboardAggregationRepositoryCleanupUsageLogsStopsWhenExpireFails(t *testing.T) {
+ 	setGroupUsageRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+-	cutoff := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+-	deletedAt := time.Date(2026, 5, 3, 2, 0, 0, 0, time.UTC)
++	cutoff := time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC)
++
++	mock.ExpectExec(groupRollupExpireExec).
++		WithArgs(cutoff).
++		WillReturnError(sql.ErrConnDone)
+ 
++	err := repo.CleanupUsageLogs(context.Background(), cutoff)
++	require.ErrorIs(t, err, sql.ErrConnDone)
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
++func TestDashboardAggregationRepositoryCleanupUsageLogsBatchFailureStopsWithoutSync(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	cutoff := time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC)
++
++	mock.ExpectExec(groupRollupExpireExec).
++		WithArgs(cutoff).
++		WillReturnResult(sqlmock.NewResult(0, 1))
+ 	mock.ExpectQuery(`SELECT EXISTS`).
+ 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectQuery(`(?s)SELECT tableoid, ctid.*ORDER BY created_at ASC, id ASC.*DELETE FROM usage_logs.*RETURNING created_at`).
++	mock.ExpectExec(`(?s)SELECT tableoid, ctid.*DELETE FROM usage_logs`).
+ 		WithArgs(cutoff, usageLogsCleanupBatchSize).
+-		WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(deletedAt))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(deletedAt, "Asia/Shanghai").
+ 		WillReturnError(sql.ErrConnDone)
+-	mock.ExpectRollback()
+ 
+ 	err := repo.CleanupUsageLogs(context.Background(), cutoff)
+ 	require.ErrorIs(t, err, sql.ErrConnDone)
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
++func TestDashboardAggregationRepositoryCleanupUsageLogsSkipsPartitionWhenDropLockTimesOut(t *testing.T) {
++	setGroupUsageRollupTestTimezone(t)
++	db, mock := newSQLMock(t)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	cutoff := time.Date(2026, 7, 17, 16, 0, 0, 0, time.UTC)
++	fixedNow := time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
++	repo.clock = func() time.Time { return fixedNow }
++
++	mock.ExpectExec(groupRollupExpireExec).
++		WithArgs(cutoff).
++		WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectQuery(`SELECT EXISTS`).
++		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
++	mock.ExpectQuery(`SELECT c.relname`).
++		WillReturnRows(sqlmock.NewRows([]string{"relname"}).AddRow("usage_logs_202604"))
++	mock.ExpectBegin()
++	mock.ExpectExec(`SET LOCAL lock_timeout`).WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectQuery(`(?s)SELECT expired_before\s+FROM usage_group_rollup_state.*FOR KEY SHARE`).
++		WillReturnRows(sqlmock.NewRows([]string{"expired_before"}).AddRow(cutoff))
++	mock.ExpectQuery(`SELECT MIN\(created_at\) FROM "usage_logs_202604"`).
++		WillReturnRows(sqlmock.NewRows([]string{"min"}).AddRow(nil))
++	mock.ExpectExec(`DROP TABLE IF EXISTS "usage_logs_202604"`).
++		WillReturnError(&pq.Error{Code: "55P03", Message: "canceling statement due to lock timeout"})
++	mock.ExpectRollback()
++	// 分区保留，其中的过期记录由按行删除清理。
++	mock.ExpectExec(`(?s)SELECT tableoid, ctid.*DELETE FROM usage_logs`).
++		WithArgs(cutoff, usageLogsCleanupBatchSize).
++		WillReturnResult(sqlmock.NewResult(0, 5))
++	expectGroupRollupPrecheck(mock, service.GroupUsageDate(service.GroupUsageTodayStart(fixedNow)), "Asia/Shanghai", true)
++
++	require.NoError(t, repo.CleanupUsageLogs(context.Background(), cutoff))
++	require.NoError(t, mock.ExpectationsWereMet())
++}
++
+ func TestDashboardAggregationRepositoryCleanupUsageLogsPartitionFailureRollsBackAndStops(t *testing.T) {
+ 	setGroupUsageRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+ 	repo := newDashboardAggregationRepositoryWithSQL(db)
+-	cutoff := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
+-	aprilStart := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
++	cutoff := time.Date(2026, 7, 17, 16, 0, 0, 0, time.UTC)
+ 	dropErr := errors.New("drop partition failed")
+ 
++	mock.ExpectExec(groupRollupExpireExec).
++		WithArgs(cutoff).
++		WillReturnResult(sqlmock.NewResult(0, 1))
+ 	mock.ExpectQuery(`SELECT EXISTS`).
+ 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+ 	mock.ExpectQuery(`SELECT c.relname`).
+@@ -311,11 +638,11 @@ func TestDashboardAggregationRepositoryCleanupUsageLogsPartitionFailureRollsBack
+ 			AddRow("usage_logs_202606").
+ 			AddRow("usage_logs_202604"))
+ 	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(aprilStart, "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
++	mock.ExpectExec(`SET LOCAL lock_timeout`).WillReturnResult(sqlmock.NewResult(0, 0))
++	mock.ExpectQuery(`(?s)SELECT expired_before\s+FROM usage_group_rollup_state.*FOR KEY SHARE`).
++		WillReturnRows(sqlmock.NewRows([]string{"expired_before"}).AddRow(cutoff))
++	mock.ExpectQuery(`SELECT MIN\(created_at\) FROM "usage_logs_202604"`).
++		WillReturnRows(sqlmock.NewRows([]string{"min"}).AddRow(nil))
+ 	mock.ExpectExec(`DROP TABLE IF EXISTS "usage_logs_202604"`).
+ 		WillReturnError(dropErr)
+ 	mock.ExpectRollback()
+diff --git a/backend/internal/repository/dashboard_aggregation_repo.go b/backend/internal/repository/dashboard_aggregation_repo.go
+index 347600df0..7a0351f7f 100644
+--- a/backend/internal/repository/dashboard_aggregation_repo.go
++++ b/backend/internal/repository/dashboard_aggregation_repo.go
+@@ -3,6 +3,7 @@ package repository
+ import (
+ 	"context"
+ 	"database/sql"
++	"errors"
+ 	"fmt"
+ 	"log"
+ 	"sort"
+@@ -20,6 +21,9 @@ type dashboardAggregationRepository struct {
+ }
+ 
+ const usageLogsCleanupBatchSize = 10000
++
++// usageLogsPartitionDropLockTimeout 限定删除分区时等待父表锁的时长。
++const usageLogsPartitionDropLockTimeout = 3 * time.Second
+ const usageBillingDedupCleanupBatchSize = 10000
+ 
+ // NewDashboardAggregationRepository 创建仪表盘预聚合仓储。
+@@ -131,29 +135,22 @@ func (r *dashboardAggregationRepository) RecomputeRange(ctx context.Context, sta
+ 		dayEnd = dayEnd.Add(24 * time.Hour)
+ 	}
+ 
++	// 分组日桶从 start 所在自然日起失效，由后台同步重建；失效语句独立提交，不与看板重算共享事务。
++	if err := invalidateGroupUsageRollupsAt(ctx, r.sql, start); err != nil {
++		return err
++	}
++
+ 	// 尽量使用事务保证范围内的一致性（允许在非 *sql.DB 的情况下退化为非事务执行）。
+ 	if db, ok := r.sql.(*sql.DB); ok {
+ 		tx, err := db.BeginTx(ctx, nil)
+ 		if err != nil {
+ 			return err
+ 		}
+-		if err := lockGroupUsageRollupState(ctx, tx); err != nil {
+-			_ = tx.Rollback()
+-			return err
+-		}
+-		if err := invalidateGroupUsageRollupsAt(ctx, tx, start); err != nil {
+-			_ = tx.Rollback()
+-			return err
+-		}
+ 		txRepo := newDashboardAggregationRepositoryWithSQL(tx)
+ 		if err := txRepo.recomputeRangeInTx(ctx, hourStart, hourEnd, dayStart, dayEnd); err != nil {
+ 			_ = tx.Rollback()
+ 			return err
+ 		}
+-		if err := txRepo.syncGroupUsageRollupsInTx(ctx, service.GroupUsageTodayStart(r.now())); err != nil {
+-			_ = tx.Rollback()
+-			return err
+-		}
+ 		return tx.Commit()
+ 	}
+ 	return r.recomputeRangeInTx(ctx, hourStart, hourEnd, dayStart, dayEnd)
+@@ -230,7 +227,13 @@ func (r *dashboardAggregationRepository) CleanupAggregates(ctx context.Context,
+ 	return nil
+ }
+ 
++// CleanupUsageLogs 删除服务端配置时区内 cutoff 所在自然日零点之前的 usage_logs。
++// 删除前先把分组日汇总的保留下界推进到该零点，被删除的记录不触发日桶失效。
+ func (r *dashboardAggregationRepository) CleanupUsageLogs(ctx context.Context, cutoff time.Time) error {
++	cutoff = service.GroupUsageTodayStart(cutoff)
++	if err := expireGroupUsageRollupsBefore(ctx, r.sql, cutoff); err != nil {
++		return err
++	}
+ 	isPartitioned, err := r.isUsageLogsPartitioned(ctx)
+ 	if err != nil {
+ 		return err
+@@ -249,19 +252,7 @@ func (r *dashboardAggregationRepository) CleanupUsageLogs(ctx context.Context, c
+ }
+ 
+ func (r *dashboardAggregationRepository) cleanupUsageLogsBatches(ctx context.Context, cutoff time.Time) error {
+-	db, transactional := r.sql.(*sql.DB)
+ 	for {
+-		if transactional {
+-			affected, err := cleanupUsageLogsBatchWithRollupInvalidation(ctx, db, cutoff)
+-			if err != nil {
+-				return err
+-			}
+-			if affected < usageLogsCleanupBatchSize {
+-				return nil
+-			}
+-			continue
+-		}
+-
+ 		res, err := r.sql.ExecContext(ctx, `
+ 			WITH victims AS (
+ 				SELECT tableoid, ctid
+@@ -286,66 +277,6 @@ func (r *dashboardAggregationRepository) cleanupUsageLogsBatches(ctx context.Con
+ 	}
+ }
+ 
+-func cleanupUsageLogsBatchWithRollupInvalidation(ctx context.Context, db *sql.DB, cutoff time.Time) (int64, error) {
+-	tx, err := db.BeginTx(ctx, nil)
+-	if err != nil {
+-		return 0, err
+-	}
+-	rollback := func(err error) (int64, error) {
+-		_ = tx.Rollback()
+-		return 0, err
+-	}
+-
+-	if err := lockGroupUsageRollupState(ctx, tx); err != nil {
+-		return rollback(err)
+-	}
+-	rows, err := tx.QueryContext(ctx, `
+-		WITH victims AS (
+-			SELECT tableoid, ctid
+-			FROM usage_logs
+-			WHERE created_at < $1
+-			ORDER BY created_at ASC, id ASC
+-			LIMIT $2
+-		)
+-		DELETE FROM usage_logs
+-		WHERE (tableoid, ctid) IN (SELECT tableoid, ctid FROM victims)
+-		RETURNING created_at
+-	`, cutoff.UTC(), usageLogsCleanupBatchSize)
+-	if err != nil {
+-		return rollback(err)
+-	}
+-
+-	var affected int64
+-	var earliestDeletedAt time.Time
+-	for rows.Next() {
+-		var deletedAt time.Time
+-		if err := rows.Scan(&deletedAt); err != nil {
+-			_ = rows.Close()
+-			return rollback(err)
+-		}
+-		affected++
+-		if earliestDeletedAt.IsZero() || deletedAt.Before(earliestDeletedAt) {
+-			earliestDeletedAt = deletedAt
+-		}
+-	}
+-	if err := rows.Err(); err != nil {
+-		_ = rows.Close()
+-		return rollback(err)
+-	}
+-	if err := rows.Close(); err != nil {
+-		return rollback(err)
+-	}
+-	if affected > 0 {
+-		if err := invalidateGroupUsageRollupsAt(ctx, tx, earliestDeletedAt); err != nil {
+-			return rollback(err)
+-		}
+-	}
+-	if err := tx.Commit(); err != nil {
+-		return 0, err
+-	}
+-	return affected, nil
+-}
+-
+ func (r *dashboardAggregationRepository) CleanupUsageBillingDedup(ctx context.Context, cutoff time.Time) error {
+ 	for {
+ 		res, err := r.sql.ExecContext(ctx, `
+@@ -630,40 +561,69 @@ func (r *dashboardAggregationRepository) dropUsageLogsPartitions(ctx context.Con
+ 	sort.Slice(partitions, func(i, j int) bool {
+ 		return partitions[i].month.Before(partitions[j].month)
+ 	})
+-	if db, ok := r.sql.(*sql.DB); ok {
+-		for _, partition := range partitions {
+-			if err := dropUsageLogsPartitionWithRollupInvalidation(ctx, db, partition.name, partition.month); err != nil {
+-				return err
+-			}
+-		}
+-		return nil
+-	}
+ 	for _, partition := range partitions {
+-		if _, err := r.sql.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", pq.QuoteIdentifier(partition.name))); err != nil {
++		if err := r.dropUsageLogsPartition(ctx, partition.name); err != nil {
++			// 父表锁等待超时：保留该分区，其中的过期记录由随后的按行删除清理，空分区在下次清理时删除。
++			if isPostgresLockNotAvailable(err) {
++				log.Printf("[DashboardAggregation] 删除分区 %s 等待锁超时，本次改为按行删除", partition.name)
++				continue
++			}
+ 			return err
+ 		}
+ 	}
+ 	return nil
+ }
+ 
+-func dropUsageLogsPartitionWithRollupInvalidation(ctx context.Context, db *sql.DB, name string, monthStart time.Time) error {
++func isPostgresLockNotAvailable(err error) bool {
++	var pqErr *pq.Error
++	return errors.As(err, &pqErr) && pqErr.Code == "55P03"
++}
++
++// dropUsageLogsPartition 删除一个 usage_logs 月分区。分区内不早于保留下界的记录参与分组日汇总，
++// 删除后按其中最早的时刻使日桶失效；状态行的 FOR KEY SHARE 使失效与重建的登记、发布串行。
++// DROP 需要父表 ACCESS EXCLUSIVE 锁，排队期间会挡住 usage_logs 写入，因此限定锁等待时长。
++func (r *dashboardAggregationRepository) dropUsageLogsPartition(ctx context.Context, name string) error {
++	drop := func(q sqlExecutor) error {
++		var expiredBefore time.Time
++		if err := scanSingleRow(ctx, q, `
++			SELECT expired_before
++			FROM usage_group_rollup_state
++			WHERE id = 1
++			FOR KEY SHARE
++		`, nil, &expiredBefore); err != nil {
++			return fmt.Errorf("读取分组用量汇总保留下界: %w", err)
++		}
++		var earliestRetained sql.NullTime
++		if err := scanSingleRow(ctx, q,
++			fmt.Sprintf("SELECT MIN(created_at) FROM %s WHERE created_at >= $1", pq.QuoteIdentifier(name)),
++			[]any{expiredBefore.UTC()}, &earliestRetained,
++		); err != nil {
++			return err
++		}
++		if _, err := q.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", pq.QuoteIdentifier(name))); err != nil {
++			return err
++		}
++		if earliestRetained.Valid {
++			return invalidateGroupUsageRollupsAt(ctx, q, earliestRetained.Time)
++		}
++		return nil
++	}
++
++	db, ok := r.sql.(*sql.DB)
++	if !ok {
++		return drop(r.sql)
++	}
+ 	tx, err := db.BeginTx(ctx, nil)
+ 	if err != nil {
+ 		return err
+ 	}
+-	rollback := func(err error) error {
++	if _, err := tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL lock_timeout = '%dms'", usageLogsPartitionDropLockTimeout.Milliseconds())); err != nil {
+ 		_ = tx.Rollback()
+ 		return err
+ 	}
+-
+-	if err := lockGroupUsageRollupState(ctx, tx); err != nil {
+-		return rollback(err)
+-	}
+-	if err := invalidateGroupUsageRollupsAt(ctx, tx, monthStart); err != nil {
+-		return rollback(err)
+-	}
+-	if _, err := tx.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", pq.QuoteIdentifier(name))); err != nil {
+-		return rollback(err)
++	if err := drop(tx); err != nil {
++		_ = tx.Rollback()
++		return err
+ 	}
+ 	return tx.Commit()
+ }
+diff --git a/backend/internal/repository/group_usage_rollup_nonblocking_integration_test.go b/backend/internal/repository/group_usage_rollup_nonblocking_integration_test.go
+new file mode 100644
+index 000000000..1aec81eb0
+--- /dev/null
++++ b/backend/internal/repository/group_usage_rollup_nonblocking_integration_test.go
+@@ -0,0 +1,652 @@
++//go:build integration
++
++package repository
++
++import (
++	"context"
++	"database/sql"
++	"fmt"
++	"net/url"
++	"testing"
++	"time"
++
++	"github.com/lib/pq"
++	"github.com/stretchr/testify/require"
++)
++
++// 计算阶段持有状态行 FOR KEY SHARE 期间，usage_logs 的当天写入、迟到写入与窗口内删除都不等待；
++// 迟到写入与删除记入 build_dirty_from，同步重算脏区间后发布到今日，日桶与明细逐日一致。
++func TestGroupUsageRollupSyncDoesNotBlockUsageWritesDuringBuild(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
++	defer cancel()
++	useGroupUsageRepositoryTestTimezone(t, "Asia/Shanghai")
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	db := openGroupUsageRollupSchemaDB(t, schema, "Asia/Shanghai")
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++
++	execGroupUsageRollupSQL(t, ctx, db, `
++		INSERT INTO groups (id) VALUES (10), (20);
++		INSERT INTO users (id) VALUES (1);
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at) VALUES
++			(1, 1, 10, 1, TIMESTAMPTZ '2026-08-10 09:00:00+08'),
++			(2, 1, 10, 2, TIMESTAMPTZ '2026-08-11 09:00:00+08'),
++			(3, 1, 20, 4, TIMESTAMPTZ '2026-08-12 09:00:00+08'),
++			(4, 1, 10, 8, TIMESTAMPTZ '2026-08-13 09:00:00+08');
++		INSERT INTO usage_group_daily_rollups (bucket_date, group_id, actual_cost)
++		VALUES (DATE '2026-08-10', 10, 1);
++		UPDATE usage_group_rollup_state
++		SET closed_before = DATE '2026-08-11',
++			retained_from = TIMESTAMPTZ '2026-08-10 09:00:00+08',
++			timezone_name = 'Asia/Shanghai'
++		WHERE id = 1;
++	`)
++
++	// 让计算阶段停在清理日桶这一步：此时它已持有状态行的 FOR KEY SHARE。
++	blocker, err := db.BeginTx(ctx, nil)
++	require.NoError(t, err)
++	defer func() { _ = blocker.Rollback() }()
++	_, err = blocker.ExecContext(ctx, "LOCK TABLE usage_group_daily_rollups IN SHARE MODE")
++	require.NoError(t, err)
++
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	syncDone := make(chan error, 1)
++	go func() { syncDone <- repo.SyncGroupUsageRollups(ctx, todayStart) }()
++	waitForBlockedGroupUsageRollupStatement(t, ctx, "DELETE FROM usage_group_daily_rollups")
++
++	writeCtx, writeCancel := context.WithTimeout(ctx, 3*time.Second)
++	defer writeCancel()
++	execGroupUsageRollupSQL(t, writeCtx, db, `
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		VALUES (5, 1, 20, 16, TIMESTAMPTZ '2026-08-12 18:00:00+08')
++	`)
++	execGroupUsageRollupSQL(t, writeCtx, db, `
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		VALUES (6, 1, 10, 32, TIMESTAMPTZ '2026-08-14 09:00:00+08')
++	`)
++	execGroupUsageRollupSQL(t, writeCtx, db, `DELETE FROM usage_logs WHERE id = 2`)
++
++	state := readGroupUsageRollupTestState(t, ctx, db)
++	require.Equal(t, "2026-08-11", state.closedBefore)
++	require.Equal(t, "2026-08-14", state.buildingUntil.String)
++	require.Equal(t, "2026-08-11", state.buildDirtyFrom.String)
++
++	require.NoError(t, blocker.Rollback())
++	select {
++	case err := <-syncDone:
++		require.NoError(t, err)
++	case <-ctx.Done():
++		t.Fatal("等待分组日桶同步完成超时")
++	}
++
++	state = readGroupUsageRollupTestState(t, ctx, db)
++	require.Equal(t, "2026-08-14", state.closedBefore)
++	require.False(t, state.buildingUntil.Valid)
++	require.False(t, state.buildDirtyFrom.Valid)
++	requireGroupUsageRollupsMatchUsageLogs(t, ctx, db, "Asia/Shanghai", state.retainedFrom, todayStart)
++
++	summary := groupUsageSummaryByGroup(t, ctx, db, todayStart)
++	require.InDelta(t, 41, summary[10][0], 1e-9)
++	require.InDelta(t, 32, summary[10][1], 1e-9)
++	require.InDelta(t, 8, summary[10][2], 1e-9)
++	require.InDelta(t, 20, summary[20][0], 1e-9)
++	require.InDelta(t, 0, summary[20][1], 1e-9)
++	require.InDelta(t, 0, summary[20][2], 1e-9)
++}
++
++// 保留期清理按整日推进保留下界后删除：发布水位不动，过期记录的写入不触发失效，
++// 窗口内的删除照常使日桶失效。
++func TestGroupUsageRollupRetentionCleanupKeepsPublishedWatermark(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
++	defer cancel()
++	useGroupUsageRepositoryTestTimezone(t, "Asia/Shanghai")
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	db := openGroupUsageRollupSchemaDB(t, schema, "Asia/Shanghai")
++	todayStart := time.Date(2026, 8, 9, 16, 0, 0, 0, time.UTC)
++
++	execGroupUsageRollupSQL(t, ctx, db, `
++		INSERT INTO groups (id) VALUES (10), (20);
++		INSERT INTO users (id) VALUES (1);
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at) VALUES
++			(1, 1, 10, 1, TIMESTAMPTZ '2026-08-01 10:00:00+08'),
++			(2, 1, 10, 2, TIMESTAMPTZ '2026-08-02 05:00:00+08'),
++			(3, 1, 10, 4, TIMESTAMPTZ '2026-08-02 20:00:00+08'),
++			(4, 1, 20, 8, TIMESTAMPTZ '2026-08-05 12:00:00+08'),
++			(5, 1, 10, 16, TIMESTAMPTZ '2026-08-10 08:00:00+08');
++	`)
++
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	repo.clock = func() time.Time { return todayStart.Add(10 * time.Hour) }
++	require.NoError(t, repo.SyncGroupUsageRollups(ctx, todayStart))
++	require.Equal(t, "2026-08-10", readGroupUsageRollupTestState(t, ctx, db).closedBefore)
++
++	shanghai, err := time.LoadLocation("Asia/Shanghai")
++	require.NoError(t, err)
++	require.NoError(t, repo.CleanupUsageLogs(ctx, time.Date(2026, 8, 2, 12, 0, 0, 0, shanghai)))
++
++	alignedCutoff := time.Date(2026, 8, 2, 0, 0, 0, 0, shanghai)
++	state := readGroupUsageRollupTestState(t, ctx, db)
++	require.Equal(t, "2026-08-10", state.closedBefore)
++	require.True(t, state.expiredBefore.Equal(alignedCutoff), "expired_before=%s", state.expiredBefore)
++	require.True(t, state.retainedFrom.Equal(alignedCutoff), "retained_from=%s", state.retainedFrom)
++	require.False(t, state.buildingUntil.Valid)
++
++	var remaining []int64
++	rows, err := db.QueryContext(ctx, "SELECT id FROM usage_logs ORDER BY id")
++	require.NoError(t, err)
++	for rows.Next() {
++		var id int64
++		require.NoError(t, rows.Scan(&id))
++		remaining = append(remaining, id)
++	}
++	require.NoError(t, rows.Err())
++	require.NoError(t, rows.Close())
++	require.Equal(t, []int64{2, 3, 4, 5}, remaining)
++
++	requireGroupUsageRollupsMatchUsageLogs(t, ctx, db, "Asia/Shanghai", alignedCutoff, todayStart)
++	summary := groupUsageSummaryByGroup(t, ctx, db, todayStart)
++	require.InDelta(t, 22, summary[10][0], 1e-9)
++	require.InDelta(t, 16, summary[10][1], 1e-9)
++	require.InDelta(t, 8, summary[20][0], 1e-9)
++
++	execGroupUsageRollupSQL(t, ctx, db, `
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		VALUES (6, 1, 10, 100, TIMESTAMPTZ '2026-08-01 12:00:00+08')
++	`)
++	require.Equal(t, "2026-08-10", readGroupUsageRollupTestState(t, ctx, db).closedBefore)
++	summary = groupUsageSummaryByGroup(t, ctx, db, todayStart)
++	require.InDelta(t, 22, summary[10][0], 1e-9)
++
++	execGroupUsageRollupSQL(t, ctx, db, `DELETE FROM usage_logs WHERE id = 4`)
++	require.Equal(t, "2026-08-05", readGroupUsageRollupTestState(t, ctx, db).closedBefore)
++	summary = groupUsageSummaryByGroup(t, ctx, db, todayStart)
++	require.InDelta(t, 0, summary[20][0], 1e-9)
++	require.InDelta(t, 22, summary[10][0], 1e-9)
++}
++
++func TestGroupUsageRollupTriggersIgnoreRowsBeforeExpiredFloor(t *testing.T) {
++	for _, partitioned := range []bool{false, true} {
++		name := "ordinary"
++		if partitioned {
++			name = "partitioned"
++		}
++		t.Run(name, func(t *testing.T) {
++			ctx := context.Background()
++			schema := createGroupUsageRollupTriggerTestSchema(t, ctx, partitioned)
++			tx := beginGroupUsageRollupTriggerTestTx(t, ctx, schema)
++			defer func() { _ = tx.Rollback() }()
++			require.NoError(t, setGroupUsageRollupTriggerTimeZone(ctx, tx, "Asia/Shanghai"))
++
++			_, err := tx.ExecContext(ctx, `
++				INSERT INTO groups (id) VALUES (10);
++				INSERT INTO users (id) VALUES (1);
++				INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at) VALUES
++					(1, 1, 10, 1, TIMESTAMPTZ '2020-01-15 08:00:00+08'),
++					(2, 1, 10, 2, TIMESTAMPTZ '2020-02-05 08:00:00+08');
++				UPDATE usage_group_rollup_state
++				SET closed_before = DATE '2020-03-01',
++					expired_before = TIMESTAMPTZ '2020-02-01 00:00:00+08'
++				WHERE id = 1;
++				DELETE FROM usage_logs WHERE id = 1;
++				INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++				VALUES (3, 1, 10, 4, TIMESTAMPTZ '2020-01-20 08:00:00+08');
++				UPDATE usage_logs SET actual_cost = 5 WHERE id = 3;
++			`)
++			require.NoError(t, err)
++			require.Equal(t, "2020-03-01", readGroupUsageRollupTestStateTx(t, ctx, tx).closedBefore)
++
++			// 把过期记录改到保留窗口内，按新日期失效。
++			_, err = tx.ExecContext(ctx, `
++				UPDATE usage_logs SET created_at = TIMESTAMPTZ '2020-02-20 08:00:00+08' WHERE id = 3
++			`)
++			require.NoError(t, err)
++			require.Equal(t, "2020-02-20", readGroupUsageRollupTestStateTx(t, ctx, tx).closedBefore)
++
++			_, err = tx.ExecContext(ctx, `DELETE FROM usage_logs WHERE id = 2`)
++			require.NoError(t, err)
++			require.Equal(t, "2020-02-05", readGroupUsageRollupTestStateTx(t, ctx, tx).closedBefore)
++		})
++	}
++}
++
++func TestGroupUsageRollupTriggersMarkDirtyDuringBuild(t *testing.T) {
++	ctx := context.Background()
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	tx := beginGroupUsageRollupTriggerTestTx(t, ctx, schema)
++	defer func() { _ = tx.Rollback() }()
++	require.NoError(t, setGroupUsageRollupTriggerTimeZone(ctx, tx, "Asia/Shanghai"))
++
++	_, err := tx.ExecContext(ctx, `
++		INSERT INTO groups (id) VALUES (10);
++		INSERT INTO users (id) VALUES (1);
++		UPDATE usage_group_rollup_state
++		SET closed_before = DATE '2020-01-05',
++			building_until = DATE '2020-01-10'
++		WHERE id = 1;
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		VALUES (1, 1, 10, 1, TIMESTAMPTZ '2020-01-12 08:00:00+08');
++	`)
++	require.NoError(t, err)
++	state := readGroupUsageRollupTestStateTx(t, ctx, tx)
++	require.Equal(t, "2020-01-05", state.closedBefore)
++	require.False(t, state.buildDirtyFrom.Valid)
++
++	_, err = tx.ExecContext(ctx, `
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		VALUES (2, 1, 10, 1, TIMESTAMPTZ '2020-01-07 08:00:00+08')
++	`)
++	require.NoError(t, err)
++	state = readGroupUsageRollupTestStateTx(t, ctx, tx)
++	require.Equal(t, "2020-01-05", state.closedBefore)
++	require.Equal(t, "2020-01-07", state.buildDirtyFrom.String)
++
++	_, err = tx.ExecContext(ctx, `
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		VALUES (3, 1, 10, 1, TIMESTAMPTZ '2020-01-03 08:00:00+08')
++	`)
++	require.NoError(t, err)
++	state = readGroupUsageRollupTestStateTx(t, ctx, tx)
++	require.Equal(t, "2020-01-03", state.closedBefore)
++	require.Equal(t, "2020-01-03", state.buildDirtyFrom.String)
++
++	_, err = tx.ExecContext(ctx, `DELETE FROM usage_logs WHERE id = 1`)
++	require.NoError(t, err)
++	state = readGroupUsageRollupTestStateTx(t, ctx, tx)
++	require.Equal(t, "2020-01-03", state.buildDirtyFrom.String)
++}
++
++// 计算阶段对状态行只持 FOR KEY SHARE：迟到写入与窗口内删除都不等待它。
++func TestGroupUsageRollupBuildKeyShareDoesNotBlockLateWrites(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
++	defer cancel()
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	seedTx := beginGroupUsageRollupTriggerTestTx(t, ctx, schema)
++	_, err := seedTx.ExecContext(ctx, `
++		INSERT INTO groups (id) VALUES (10);
++		INSERT INTO users (id) VALUES (1);
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		VALUES (1, 1, 10, 1, TIMESTAMPTZ '2020-01-08 08:00:00+08');
++		UPDATE usage_group_rollup_state
++		SET closed_before = DATE '2020-01-05',
++			building_until = DATE '2020-01-10'
++		WHERE id = 1;
++	`)
++	require.NoError(t, err)
++	require.NoError(t, seedTx.Commit())
++
++	buildTx := beginGroupUsageRollupTriggerTestTx(t, ctx, schema)
++	defer func() { _ = buildTx.Rollback() }()
++	var stateID int16
++	require.NoError(t, buildTx.QueryRowContext(ctx, `
++		SELECT id FROM usage_group_rollup_state WHERE id = 1 FOR KEY SHARE
++	`).Scan(&stateID))
++
++	for _, statement := range []string{
++		`INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		 VALUES (2, 1, 10, 1, TIMESTAMPTZ '2020-01-07 08:00:00+08')`,
++		`DELETE FROM usage_logs WHERE id = 1`,
++	} {
++		writeTx := beginGroupUsageRollupTriggerTestTx(t, ctx, schema)
++		require.NoError(t, setGroupUsageRollupTriggerTimeZone(ctx, writeTx, "Asia/Shanghai"))
++		var writePID int
++		require.NoError(t, writeTx.QueryRowContext(ctx, "SELECT pg_backend_pid()").Scan(&writePID))
++		result := make(chan error, 1)
++		go func(statement string) {
++			_, execErr := writeTx.ExecContext(ctx, statement)
++			result <- execErr
++		}(statement)
++		blocked, err := waitForGroupUsageRollupStateLock(ctx, writePID, result)
++		require.NoError(t, err)
++		require.False(t, blocked, "计算阶段不得阻塞: %s", statement)
++		require.NoError(t, writeTx.Commit())
++	}
++
++	require.NoError(t, buildTx.Commit())
++	var dirtyFrom string
++	require.NoError(t, integrationDB.QueryRowContext(ctx, fmt.Sprintf(
++		"SELECT build_dirty_from::text FROM %s.usage_group_rollup_state WHERE id = 1",
++		pq.QuoteIdentifier(schema),
++	)).Scan(&dirtyFrom))
++	require.Equal(t, "2020-01-07", dirtyFrom)
++}
++
++func TestGroupUsageRollupSyncSkipsWhileAnotherBuildHoldsLock(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
++	defer cancel()
++	useGroupUsageRepositoryTestTimezone(t, "Asia/Shanghai")
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	db := openGroupUsageRollupSchemaDB(t, schema, "Asia/Shanghai")
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++
++	holder, err := integrationDB.Conn(ctx)
++	require.NoError(t, err)
++	defer func() { _ = holder.Close() }()
++	var locked bool
++	require.NoError(t, holder.QueryRowContext(ctx, groupUsageRollupBuildLockSQL).Scan(&locked))
++	require.True(t, locked)
++	defer func() { _, _ = holder.ExecContext(context.Background(), groupUsageRollupBuildUnlockSQL) }()
++
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	require.NoError(t, repo.SyncGroupUsageRollups(ctx, todayStart))
++	state := readGroupUsageRollupTestState(t, ctx, db)
++	require.Equal(t, "1970-01-01", state.closedBefore)
++	require.False(t, state.buildingUntil.Valid)
++}
++
++// 上一次重建在登记之后中断：下一次同步覆盖遗留登记并发布到今日。
++func TestGroupUsageRollupSyncRecoversFromInterruptedBuild(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
++	defer cancel()
++	useGroupUsageRepositoryTestTimezone(t, "Asia/Shanghai")
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	db := openGroupUsageRollupSchemaDB(t, schema, "Asia/Shanghai")
++	todayStart := time.Date(2026, 8, 13, 16, 0, 0, 0, time.UTC)
++
++	execGroupUsageRollupSQL(t, ctx, db, `
++		INSERT INTO groups (id) VALUES (10);
++		INSERT INTO users (id) VALUES (1);
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at) VALUES
++			(1, 1, 10, 1, TIMESTAMPTZ '2026-08-11 09:00:00+08'),
++			(2, 1, 10, 2, TIMESTAMPTZ '2026-08-12 09:00:00+08'),
++			(3, 1, 10, 4, TIMESTAMPTZ '2026-08-13 09:00:00+08');
++		INSERT INTO usage_group_daily_rollups (bucket_date, group_id, actual_cost) VALUES
++			(DATE '2026-08-11', 10, 1),
++			(DATE '2026-08-12', 10, 999);
++		UPDATE usage_group_rollup_state
++		SET closed_before = DATE '2026-08-12',
++			retained_from = TIMESTAMPTZ '2026-08-11 09:00:00+08',
++			timezone_name = 'Asia/Shanghai',
++			building_until = DATE '2026-08-14',
++			build_dirty_from = DATE '2026-08-13'
++		WHERE id = 1;
++	`)
++
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	require.NoError(t, repo.SyncGroupUsageRollups(ctx, todayStart))
++
++	state := readGroupUsageRollupTestState(t, ctx, db)
++	require.Equal(t, "2026-08-14", state.closedBefore)
++	require.False(t, state.buildingUntil.Valid)
++	require.False(t, state.buildDirtyFrom.Valid)
++	requireGroupUsageRollupsMatchUsageLogs(t, ctx, db, "Asia/Shanghai", state.retainedFrom, todayStart)
++}
++
++type groupUsageRollupTestState struct {
++	closedBefore   string
++	retainedFrom   time.Time
++	expiredBefore  time.Time
++	buildingUntil  sql.NullString
++	buildDirtyFrom sql.NullString
++}
++
++const groupUsageRollupTestStateQuery = `
++	SELECT closed_before::text, retained_from, expired_before, building_until::text, build_dirty_from::text
++	FROM usage_group_rollup_state
++	WHERE id = 1
++`
++
++func readGroupUsageRollupTestState(t *testing.T, ctx context.Context, q sqlQueryer) groupUsageRollupTestState {
++	t.Helper()
++	var state groupUsageRollupTestState
++	require.NoError(t, scanSingleRow(ctx, q, groupUsageRollupTestStateQuery, nil,
++		&state.closedBefore, &state.retainedFrom, &state.expiredBefore, &state.buildingUntil, &state.buildDirtyFrom))
++	return state
++}
++
++func readGroupUsageRollupTestStateTx(t *testing.T, ctx context.Context, tx *sql.Tx) groupUsageRollupTestState {
++	t.Helper()
++	return readGroupUsageRollupTestState(t, ctx, tx)
++}
++
++// openGroupUsageRollupSchemaDB 打开一个 search_path 指向 schema 的连接池，供仓储以 *sql.DB 方式运行。
++func openGroupUsageRollupSchemaDB(t *testing.T, schema, timezoneName string) *sql.DB {
++	t.Helper()
++	dsn, err := url.Parse(integrationDSN)
++	require.NoError(t, err)
++	query := dsn.Query()
++	query.Set("search_path", schema)
++	query.Set("TimeZone", timezoneName)
++	dsn.RawQuery = query.Encode()
++	db, err := sql.Open("postgres", dsn.String())
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = db.Close() })
++	require.NoError(t, db.PingContext(context.Background()))
++	return db
++}
++
++func execGroupUsageRollupSQL(t *testing.T, ctx context.Context, db *sql.DB, query string) {
++	t.Helper()
++	_, err := db.ExecContext(ctx, query)
++	require.NoError(t, err)
++}
++
++// waitForBlockedGroupUsageRollupStatement 等待某个后端在执行包含 fragment 的语句时进入锁等待。
++func waitForBlockedGroupUsageRollupStatement(t *testing.T, ctx context.Context, fragment string) {
++	t.Helper()
++	ticker := time.NewTicker(10 * time.Millisecond)
++	defer ticker.Stop()
++	for {
++		var blocked bool
++		require.NoError(t, integrationDB.QueryRowContext(ctx, `
++			SELECT EXISTS (
++				SELECT 1
++				FROM pg_stat_activity
++				WHERE wait_event_type = 'Lock'
++					AND position($1 in query) > 0
++			)
++		`, fragment).Scan(&blocked))
++		if blocked {
++			return
++		}
++		select {
++		case <-ticker.C:
++		case <-ctx.Done():
++			t.Fatalf("等待语句进入锁等待超时: %s", fragment)
++		}
++	}
++}
++
++// requireGroupUsageRollupsMatchUsageLogs 断言 [retainedFrom 所在日, todayStart) 的日桶与 usage_logs 明细逐日一致。
++func requireGroupUsageRollupsMatchUsageLogs(t *testing.T, ctx context.Context, db *sql.DB, timezoneName string, retainedFrom, todayStart time.Time) {
++	t.Helper()
++	expected := collectGroupUsageRollupBuckets(t, ctx, db, `
++		SELECT (created_at AT TIME ZONE $3::text)::date::text, group_id, SUM(actual_cost)::float8
++		FROM usage_logs
++		WHERE group_id IS NOT NULL
++			AND created_at >= $1
++			AND created_at < $2
++		GROUP BY 1, 2
++	`, retainedFrom, todayStart, timezoneName)
++	actual := collectGroupUsageRollupBuckets(t, ctx, db, `
++		SELECT bucket_date::text, group_id, actual_cost::float8
++		FROM usage_group_daily_rollups
++		WHERE bucket_date >= ($1::timestamptz AT TIME ZONE $3::text)::date
++			AND bucket_date < ($2::timestamptz AT TIME ZONE $3::text)::date
++	`, retainedFrom, todayStart, timezoneName)
++	require.Equal(t, expected, actual)
++}
++
++func collectGroupUsageRollupBuckets(t *testing.T, ctx context.Context, db *sql.DB, query string, args ...any) map[string]float64 {
++	t.Helper()
++	rows, err := db.QueryContext(ctx, query, args...)
++	require.NoError(t, err)
++	defer func() { _ = rows.Close() }()
++	buckets := make(map[string]float64)
++	for rows.Next() {
++		var bucketDate string
++		var groupID int64
++		var cost float64
++		require.NoError(t, rows.Scan(&bucketDate, &groupID, &cost))
++		buckets[fmt.Sprintf("%s/%d", bucketDate, groupID)] = cost
++	}
++	require.NoError(t, rows.Err())
++	return buckets
++}
++
++// groupUsageSummaryByGroup 返回 group_id → [total, today, yesterday]。
++func groupUsageSummaryByGroup(t *testing.T, ctx context.Context, db *sql.DB, todayStart time.Time) map[int64][3]float64 {
++	t.Helper()
++	result, err := newUsageLogRepositoryWithSQL(nil, db).GetAllGroupUsageSummary(ctx, todayStart)
++	require.NoError(t, err)
++	summary := make(map[int64][3]float64, len(result))
++	for _, row := range result {
++		summary[row.GroupID] = [3]float64{row.TotalCost, row.TodayCost, row.YesterdayCost}
++	}
++	return summary
++}
++
++// 重建进行中的大批量删除：脏日期已覆盖的行不写状态行，状态行在事务内只更新一次。
++func TestGroupUsageRollupBulkDeleteDuringBuildWritesStateOnce(t *testing.T) {
++	ctx := context.Background()
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	tx := beginGroupUsageRollupTriggerTestTx(t, ctx, schema)
++	defer func() { _ = tx.Rollback() }()
++	require.NoError(t, setGroupUsageRollupTriggerTimeZone(ctx, tx, "Asia/Shanghai"))
++
++	_, err := tx.ExecContext(ctx, `
++		INSERT INTO groups (id) VALUES (10);
++		INSERT INTO users (id) VALUES (1);
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at)
++		SELECT n, 1, 10, 1, TIMESTAMPTZ '2020-01-15 08:00:00+08' + n * INTERVAL '1 second'
++		FROM generate_series(1, 2000) AS n;
++		UPDATE usage_group_rollup_state
++		SET closed_before = DATE '2020-01-10',
++			building_until = DATE '2020-02-01'
++		WHERE id = 1;
++	`)
++	require.NoError(t, err)
++
++	var updatesBefore int64
++	require.NoError(t, tx.QueryRowContext(ctx, `
++		SELECT n_tup_upd FROM pg_stat_xact_user_tables
++		WHERE schemaname = current_schema() AND relname = 'usage_group_rollup_state'
++	`).Scan(&updatesBefore))
++
++	_, err = tx.ExecContext(ctx, `DELETE FROM usage_logs`)
++	require.NoError(t, err)
++
++	var updatesAfter int64
++	require.NoError(t, tx.QueryRowContext(ctx, `
++		SELECT n_tup_upd FROM pg_stat_xact_user_tables
++		WHERE schemaname = current_schema() AND relname = 'usage_group_rollup_state'
++	`).Scan(&updatesAfter))
++	require.Equal(t, int64(1), updatesAfter-updatesBefore)
++
++	state := readGroupUsageRollupTestStateTx(t, ctx, tx)
++	require.Equal(t, "2020-01-10", state.closedBefore)
++	require.Equal(t, "2020-01-15", state.buildDirtyFrom.String)
++}
++
++// 应用侧失效的起点早于保留下界时，从保留下界所在日开始失效。
++func TestGroupUsageRollupInvalidateAtStartsFromExpiredFloor(t *testing.T) {
++	ctx := context.Background()
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	tx := beginGroupUsageRollupTriggerTestTx(t, ctx, schema)
++	defer func() { _ = tx.Rollback() }()
++
++	_, err := tx.ExecContext(ctx, `
++		UPDATE usage_group_rollup_state
++		SET closed_before = DATE '2020-03-01',
++			expired_before = TIMESTAMPTZ '2020-02-01 00:00:00+08'
++		WHERE id = 1;
++		SELECT invalidate_group_usage_rollups_at(TIMESTAMPTZ '2020-01-10 08:00:00+08', 'Asia/Shanghai');
++	`)
++	require.NoError(t, err)
++	require.Equal(t, "2020-02-01", readGroupUsageRollupTestStateTx(t, ctx, tx).closedBefore)
++
++	_, err = tx.ExecContext(ctx, `
++		SELECT invalidate_group_usage_rollups_at(TIMESTAMPTZ '2020-02-10 08:00:00+08', 'Asia/Shanghai')
++	`)
++	require.NoError(t, err)
++	require.Equal(t, "2020-02-01", readGroupUsageRollupTestStateTx(t, ctx, tx).closedBefore)
++}
++
++// 夏令时在零点跳变的日期（America/Santiago 2026-09-06 没有 00:00）：从该日续建时不覆盖前一天的日桶。
++func TestGroupUsageRollupSyncKeepsPreviousDayBucketAcrossMidnightDSTGap(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
++	defer cancel()
++	useGroupUsageRepositoryTestTimezone(t, "America/Santiago")
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, false)
++	db := openGroupUsageRollupSchemaDB(t, schema, "America/Santiago")
++	santiago, err := time.LoadLocation("America/Santiago")
++	require.NoError(t, err)
++	todayStart := time.Date(2026, 9, 8, 0, 0, 0, 0, santiago)
++
++	execGroupUsageRollupSQL(t, ctx, db, `
++		INSERT INTO groups (id) VALUES (10);
++		INSERT INTO users (id) VALUES (1);
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at) VALUES
++			(1, 1, 10, 1, TIMESTAMPTZ '2026-09-06 02:30:00+00'),
++			(2, 1, 10, 2, TIMESTAMPTZ '2026-09-06 03:30:00+00'),
++			(3, 1, 10, 4, TIMESTAMPTZ '2026-09-06 05:00:00+00'),
++			(4, 1, 10, 8, TIMESTAMPTZ '2026-09-07 13:00:00+00');
++		INSERT INTO usage_group_daily_rollups (bucket_date, group_id, actual_cost)
++		VALUES (DATE '2026-09-05', 10, 3);
++		UPDATE usage_group_rollup_state
++		SET closed_before = DATE '2026-09-06',
++			retained_from = TIMESTAMPTZ '2026-09-06 02:30:00+00',
++			timezone_name = 'America/Santiago'
++		WHERE id = 1;
++	`)
++
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	require.NoError(t, repo.SyncGroupUsageRollups(ctx, todayStart))
++
++	state := readGroupUsageRollupTestState(t, ctx, db)
++	require.Equal(t, "2026-09-08", state.closedBefore)
++	requireGroupUsageRollupsMatchUsageLogs(t, ctx, db, "America/Santiago", state.retainedFrom, todayStart)
++	var previousDay float64
++	require.NoError(t, db.QueryRowContext(ctx, `
++		SELECT actual_cost::float8 FROM usage_group_daily_rollups
++		WHERE bucket_date = DATE '2026-09-05' AND group_id = 10
++	`).Scan(&previousDay))
++	require.InDelta(t, 3, previousDay, 1e-9)
++}
++
++// 有长读者持有 usage_logs 的 ACCESS SHARE 时，删除分区在锁等待超时后跳过；
++// 过期记录由按行删除清理，清理整体成功，分组日汇总保持一致。
++func TestGroupUsageRollupRetentionCleanupSkipsPartitionDropOnLockTimeout(t *testing.T) {
++	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
++	defer cancel()
++	useGroupUsageRepositoryTestTimezone(t, "Asia/Shanghai")
++	schema := createGroupUsageRollupTriggerTestSchema(t, ctx, true)
++	db := openGroupUsageRollupSchemaDB(t, schema, "Asia/Shanghai")
++	todayStart := time.Date(2026, 8, 9, 16, 0, 0, 0, time.UTC)
++
++	execGroupUsageRollupSQL(t, ctx, db, `
++		CREATE TABLE usage_logs_202605 PARTITION OF usage_logs
++			FOR VALUES FROM ('2026-05-01') TO ('2026-06-01');
++		INSERT INTO groups (id) VALUES (10);
++		INSERT INTO users (id) VALUES (1);
++		INSERT INTO usage_logs (id, user_id, group_id, actual_cost, created_at) VALUES
++			(1, 1, 10, 1, TIMESTAMPTZ '2026-05-10 10:00:00+08'),
++			(2, 1, 10, 2, TIMESTAMPTZ '2026-07-20 10:00:00+08'),
++			(3, 1, 10, 4, TIMESTAMPTZ '2026-08-05 10:00:00+08');
++	`)
++	repo := newDashboardAggregationRepositoryWithSQL(db)
++	repo.clock = func() time.Time { return todayStart.Add(10 * time.Hour) }
++	require.NoError(t, repo.SyncGroupUsageRollups(ctx, todayStart))
++
++	reader, err := db.BeginTx(ctx, nil)
++	require.NoError(t, err)
++	defer func() { _ = reader.Rollback() }()
++	var count int
++	require.NoError(t, reader.QueryRowContext(ctx, "SELECT COUNT(*) FROM usage_logs").Scan(&count))
++	require.Equal(t, 3, count)
++
++	shanghai, err := time.LoadLocation("Asia/Shanghai")
++	require.NoError(t, err)
++	require.NoError(t, repo.CleanupUsageLogs(ctx, time.Date(2026, 7, 1, 0, 0, 0, 0, shanghai)))
++	require.NoError(t, reader.Rollback())
++
++	var partitionExists bool
++	require.NoError(t, db.QueryRowContext(ctx, "SELECT to_regclass('usage_logs_202605') IS NOT NULL").Scan(&partitionExists))
++	require.True(t, partitionExists)
++	require.NoError(t, db.QueryRowContext(ctx, "SELECT COUNT(*) FROM usage_logs").Scan(&count))
++	require.Equal(t, 2, count)
++
++	state := readGroupUsageRollupTestState(t, ctx, db)
++	require.Equal(t, "2026-08-10", state.closedBefore)
++	requireGroupUsageRollupsMatchUsageLogs(t, ctx, db, "Asia/Shanghai", state.retainedFrom, todayStart)
++	summary := groupUsageSummaryByGroup(t, ctx, db, todayStart)
++	require.InDelta(t, 6, summary[10][0], 1e-9)
++}
+diff --git a/backend/internal/repository/group_usage_rollup_trigger_integration_test.go b/backend/internal/repository/group_usage_rollup_trigger_integration_test.go
+index 32016e3c0..c145bef4e 100644
+--- a/backend/internal/repository/group_usage_rollup_trigger_integration_test.go
++++ b/backend/internal/repository/group_usage_rollup_trigger_integration_test.go
+@@ -451,6 +451,7 @@ func createGroupUsageRollupTriggerTestSchema(t *testing.T, ctx context.Context,
+ 	for _, migrationName := range []string{
+ 		"222_group_usage_daily_rollups.sql",
+ 		"223_group_usage_rollup_timezone.sql",
++		"251_group_usage_rollup_nonblocking_build.sql",
+ 	} {
+ 		migrationSQL, readErr := migrations.FS.ReadFile(migrationName)
+ 		require.NoError(t, readErr)
+diff --git a/backend/internal/repository/integration_harness_test.go b/backend/internal/repository/integration_harness_test.go
+index 46f18598f..d33b22944 100644
+--- a/backend/internal/repository/integration_harness_test.go
++++ b/backend/internal/repository/integration_harness_test.go
+@@ -36,6 +36,7 @@ const (
+ 
+ var (
+ 	integrationDB        *sql.DB
++	integrationDSN       string
+ 	integrationEntClient *dbent.Client
+ 	integrationRedis     *redisclient.Client
+ 
+@@ -91,6 +92,7 @@ func TestMain(m *testing.M) {
+ 		os.Exit(1)
+ 	}
+ 
++	integrationDSN = dsn
+ 	integrationDB, err = openSQLWithRetry(ctx, dsn, 30*time.Second)
+ 	if err != nil {
+ 		log.Printf("failed to open sql db: %v", err)
+diff --git a/backend/internal/repository/usage_cleanup_repo.go b/backend/internal/repository/usage_cleanup_repo.go
+index f8aa67477..a9b184a18 100644
+--- a/backend/internal/repository/usage_cleanup_repo.go
++++ b/backend/internal/repository/usage_cleanup_repo.go
+@@ -291,9 +291,7 @@ func (r *usageCleanupRepository) DeleteUsageLogsBatch(ctx context.Context, filte
+ 		return 0, fmt.Errorf("cleanup filters missing time range")
+ 	}
+ 	args = append(args, limit)
+-	if db, ok := r.sql.(*sql.DB); ok {
+-		return r.deleteUsageLogsBatchWithRollupInvalidation(ctx, db, whereClause, args)
+-	}
++	// usage_logs 的行级触发器按被删记录的日期使分组日桶失效。
+ 	query := fmt.Sprintf(`
+ 		WITH target AS (
+ 			SELECT id
+@@ -323,68 +321,6 @@ func (r *usageCleanupRepository) DeleteUsageLogsBatch(ctx context.Context, filte
+ 	return deleted, nil
+ }
+ 
+-func (r *usageCleanupRepository) deleteUsageLogsBatchWithRollupInvalidation(ctx context.Context, db *sql.DB, whereClause string, args []any) (int64, error) {
+-	tx, err := db.BeginTx(ctx, nil)
+-	if err != nil {
+-		return 0, err
+-	}
+-	rollback := func(err error) (int64, error) {
+-		_ = tx.Rollback()
+-		return 0, err
+-	}
+-
+-	if err := lockGroupUsageRollupState(ctx, tx); err != nil {
+-		return rollback(err)
+-	}
+-	query := fmt.Sprintf(`
+-		WITH target AS (
+-			SELECT id
+-			FROM usage_logs
+-			WHERE %s
+-			ORDER BY created_at ASC, id ASC
+-			LIMIT $%d
+-		)
+-		DELETE FROM usage_logs
+-		WHERE id IN (SELECT id FROM target)
+-		RETURNING created_at
+-	`, whereClause, len(args))
+-	rows, err := tx.QueryContext(ctx, query, args...)
+-	if err != nil {
+-		return rollback(err)
+-	}
+-
+-	var deleted int64
+-	var earliestDeletedAt time.Time
+-	for rows.Next() {
+-		var deletedAt time.Time
+-		if err := rows.Scan(&deletedAt); err != nil {
+-			_ = rows.Close()
+-			return rollback(err)
+-		}
+-		deleted++
+-		if earliestDeletedAt.IsZero() || deletedAt.Before(earliestDeletedAt) {
+-			earliestDeletedAt = deletedAt
+-		}
+-	}
+-	if err := rows.Err(); err != nil {
+-		_ = rows.Close()
+-		return rollback(err)
+-	}
+-	if err := rows.Close(); err != nil {
+-		return rollback(err)
+-	}
+-
+-	if deleted > 0 {
+-		if err := invalidateGroupUsageRollupsAt(ctx, tx, earliestDeletedAt); err != nil {
+-			return rollback(err)
+-		}
+-	}
+-	if err := tx.Commit(); err != nil {
+-		return 0, err
+-	}
+-	return deleted, nil
+-}
+-
+ func buildUsageCleanupWhere(filters service.UsageCleanupFilters) (string, []any) {
+ 	conditions := make([]string, 0, 8)
+ 	args := make([]any, 0, 8)
+diff --git a/backend/internal/repository/usage_cleanup_repo_test.go b/backend/internal/repository/usage_cleanup_repo_test.go
+index b147d03a4..4b0034ca0 100644
+--- a/backend/internal/repository/usage_cleanup_repo_test.go
++++ b/backend/internal/repository/usage_cleanup_repo_test.go
+@@ -418,16 +418,9 @@ func TestUsageCleanupRepositoryDeleteUsageLogsBatch(t *testing.T) {
+ 		Model:     &model,
+ 	}
+ 
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+ 	mock.ExpectQuery("DELETE FROM usage_logs").
+ 		WithArgs(start, end, userID, "gpt-4", 2).
+ 		WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(start.Add(time.Hour)).AddRow(start.Add(2 * time.Hour)))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(start.Add(time.Hour), "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectCommit()
+ 
+ 	deleted, err := repo.DeleteUsageLogsBatch(context.Background(), filters, 2)
+ 	require.NoError(t, err)
+@@ -435,29 +428,22 @@ func TestUsageCleanupRepositoryDeleteUsageLogsBatch(t *testing.T) {
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
+-func TestUsageCleanupRepositoryDeleteUsageLogsBatchAtomicallyInvalidatesGroupRollups(t *testing.T) {
++// 分组日桶失效由 usage_logs 的行级触发器完成，删除批次不显式锁定汇总状态行，
++// 因而不与 usage_logs 写入串行。
++func TestUsageCleanupRepositoryDeleteUsageLogsBatchDoesNotLockGroupRollupState(t *testing.T) {
+ 	setUsageCleanupRollupTestTimezone(t)
+ 	db, mock := newSQLMock(t)
+ 	repo := &usageCleanupRepository{sql: db}
+ 
+ 	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+ 	end := start.Add(24 * time.Hour)
+-	firstDeletedAt := time.Date(2026, 8, 1, 3, 0, 0, 0, time.UTC)
+-	secondDeletedAt := firstDeletedAt.Add(time.Hour)
+ 	filters := service.UsageCleanupFilters{StartTime: start, EndTime: end}
+ 
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectQuery(`(?s)DELETE FROM usage_logs.*RETURNING created_at`).
++	mock.ExpectQuery(`(?s)WITH target AS.*DELETE FROM usage_logs.*RETURNING created_at`).
+ 		WithArgs(start, end, 2).
+ 		WillReturnRows(sqlmock.NewRows([]string{"created_at"}).
+-			AddRow(firstDeletedAt).
+-			AddRow(secondDeletedAt))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(firstDeletedAt, "Asia/Shanghai").
+-		WillReturnResult(sqlmock.NewResult(0, 1))
+-	mock.ExpectCommit()
++			AddRow(start.Add(3 * time.Hour)).
++			AddRow(start.Add(4 * time.Hour)))
+ 
+ 	deleted, err := repo.DeleteUsageLogsBatch(context.Background(), filters, 2)
+ 	require.NoError(t, err)
+@@ -465,32 +451,6 @@ func TestUsageCleanupRepositoryDeleteUsageLogsBatchAtomicallyInvalidatesGroupRol
+ 	require.NoError(t, mock.ExpectationsWereMet())
+ }
+ 
+-func TestUsageCleanupRepositoryDeleteUsageLogsBatchRollsBackWhenInvalidationFails(t *testing.T) {
+-	setUsageCleanupRollupTestTimezone(t)
+-	db, mock := newSQLMock(t)
+-	repo := &usageCleanupRepository{sql: db}
+-
+-	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+-	end := start.Add(24 * time.Hour)
+-	deletedAt := time.Date(2026, 8, 1, 3, 0, 0, 0, time.UTC)
+-	filters := service.UsageCleanupFilters{StartTime: start, EndTime: end}
+-
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+-	mock.ExpectQuery(`(?s)DELETE FROM usage_logs.*RETURNING created_at`).
+-		WithArgs(start, end, 1).
+-		WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(deletedAt))
+-	mock.ExpectExec(`UPDATE usage_group_rollup_state`).
+-		WithArgs(deletedAt, "Asia/Shanghai").
+-		WillReturnError(sql.ErrConnDone)
+-	mock.ExpectRollback()
+-
+-	_, err := repo.DeleteUsageLogsBatch(context.Background(), filters, 1)
+-	require.ErrorIs(t, err, sql.ErrConnDone)
+-	require.NoError(t, mock.ExpectationsWereMet())
+-}
+-
+ func TestUsageCleanupRepositoryDeleteUsageLogsBatchQueryError(t *testing.T) {
+ 	db, mock := newSQLMock(t)
+ 	repo := &usageCleanupRepository{sql: db}
+@@ -499,13 +459,9 @@ func TestUsageCleanupRepositoryDeleteUsageLogsBatchQueryError(t *testing.T) {
+ 	end := start.Add(24 * time.Hour)
+ 	filters := service.UsageCleanupFilters{StartTime: start, EndTime: end}
+ 
+-	mock.ExpectBegin()
+-	mock.ExpectQuery(`SELECT id FROM usage_group_rollup_state.*FOR UPDATE`).
+-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+ 	mock.ExpectQuery("DELETE FROM usage_logs").
+ 		WithArgs(start, end, 5).
+ 		WillReturnError(sql.ErrConnDone)
+-	mock.ExpectRollback()
+ 
+ 	_, err := repo.DeleteUsageLogsBatch(context.Background(), filters, 5)
+ 	require.Error(t, err)
+diff --git a/backend/internal/repository/usage_log_repo_group_summary_test.go b/backend/internal/repository/usage_log_repo_group_summary_test.go
+index 676a252ab..986616736 100644
+--- a/backend/internal/repository/usage_log_repo_group_summary_test.go
++++ b/backend/internal/repository/usage_log_repo_group_summary_test.go
+@@ -20,8 +20,8 @@ func TestUsageLogRepositoryGetAllGroupUsageSummaryUsesRollupTail(t *testing.T) {
+ 
+ 	// 水位有效：closed_before = 2026-03-07（≤ today），时区与配置一致。
+ 	mock.ExpectQuery(`(?s)COUNT\(\*\).*usage_group_rollup_state.*WHERE id = 1`).
+-		WillReturnRows(sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
+-			AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York"))
++		WillReturnRows(sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
++			AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York", time.Unix(0, 0).UTC()))
+ 
+ 	// 尾段起点必须以参数形式进 WHERE —— 这正是把 usage_logs 全表扫换回
+ 	// idx_usage_logs_created_at 索引扫的那一步。
+@@ -61,18 +61,18 @@ func TestUsageLogRepositoryGetAllGroupUsageSummaryFallsBackWhenWatermarkInvalid(
+ 	}{
+ 		{
+ 			name: "水位行缺失",
+-			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
+-				AddRow(0, nil, nil, nil),
++			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
++				AddRow(0, nil, nil, nil, nil),
+ 		},
+ 		{
+ 			name: "时区与当前配置不一致",
+-			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
+-				AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "Asia/Shanghai"),
++			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
++				AddRow(1, "2026-03-07", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "Asia/Shanghai", time.Unix(0, 0).UTC()),
+ 		},
+ 		{
+ 			name: "水位位于未来",
+-			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name"}).
+-				AddRow(1, "2026-03-10", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York"),
++			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
++				AddRow(1, "2026-03-10", time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC), "America/New_York", time.Unix(0, 0).UTC()),
+ 		},
+ 	}
+ 
+@@ -94,3 +94,66 @@ func TestUsageLogRepositoryGetAllGroupUsageSummaryFallsBackWhenWatermarkInvalid(
+ 		})
+ 	}
+ }
++
++// 尾段不早于保留下界：水位落后于保留下界时（例如清理已推进下界而重建尚未完成），
++// 尚未删除的过期记录也不计入。
++func TestUsageLogRepositoryGetAllGroupUsageSummaryTailStartsAtExpiredBefore(t *testing.T) {
++	todayStart := time.Date(2026, 3, 9, 4, 0, 0, 0, time.UTC)
++	yesterdayStart := time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC)
++	expiredBefore := time.Date(2026, 2, 10, 5, 0, 0, 0, time.UTC)
++
++	cases := []struct {
++		name      string
++		rows      *sqlmock.Rows
++		valid     bool
++		retained  string
++		closed    string
++		tailStart time.Time
++	}{
++		{
++			name: "水位有效但早于保留下界",
++			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
++				AddRow(1, "2026-02-01", expiredBefore, "America/New_York", expiredBefore),
++			valid:     true,
++			retained:  "2026-02-10",
++			closed:    "2026-02-01",
++			tailStart: expiredBefore,
++		},
++		{
++			name: "retained_from 早于保留下界",
++			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
++				AddRow(1, "2026-03-07", time.Date(2026, 1, 20, 5, 0, 0, 0, time.UTC), "America/New_York", expiredBefore),
++			valid:     true,
++			retained:  "2026-02-10",
++			closed:    "2026-03-07",
++			tailStart: time.Date(2026, 3, 7, 5, 0, 0, 0, time.UTC),
++		},
++		{
++			name: "水位无效",
++			rows: sqlmock.NewRows([]string{"count", "closed_before", "retained_from", "timezone_name", "expired_before"}).
++				AddRow(1, "2026-03-07", expiredBefore, "Asia/Shanghai", expiredBefore),
++			valid:     false,
++			retained:  "1970-01-01",
++			closed:    "1970-01-01",
++			tailStart: expiredBefore,
++		},
++	}
++
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			db, mock := newSQLMock(t)
++			repo := newUsageLogRepositoryWithSQL(nil, db)
++			useGroupUsageRepositoryTestTimezone(t, "America/New_York")
++
++			mock.ExpectQuery(`(?s)COUNT\(\*\).*MAX\(expired_before\).*usage_group_rollup_state.*WHERE id = 1`).
++				WillReturnRows(tc.rows)
++			mock.ExpectQuery(`(?s)usage_group_daily_rollups.*FROM usage_logs ul\s+WHERE ul\.created_at >= \$7`).
++				WithArgs(todayStart, yesterdayStart, "2026-03-08", tc.valid, tc.retained, tc.closed, tc.tailStart).
++				WillReturnRows(sqlmock.NewRows([]string{"group_id", "total_cost", "today_cost", "yesterday_cost"}))
++
++			_, err := repo.GetAllGroupUsageSummary(context.Background(), todayStart)
++			require.NoError(t, err)
++			require.NoError(t, mock.ExpectationsWereMet())
++		})
++	}
++}
+diff --git a/backend/internal/service/custom_group_usage_rollup.go b/backend/internal/service/custom_group_usage_rollup.go
+index d14dc9bfd..79123c8be 100644
+--- a/backend/internal/service/custom_group_usage_rollup.go
++++ b/backend/internal/service/custom_group_usage_rollup.go
+@@ -21,12 +21,14 @@ func GroupUsageTimezoneName() string {
+ 
+ // GroupUsageTodayStart 返回指定时刻在服务端配置时区内的自然日 UTC 起点。
+ func GroupUsageTodayStart(at time.Time) time.Time {
+-	return appTimezone.StartOfDay(at).UTC()
++	year, month, day := at.In(appTimezone.Location()).Date()
++	return groupUsageDayStart(year, month, day).UTC()
+ }
+ 
+ // GroupUsageYesterdayStart 返回指定时刻前一个本地日历日的 UTC 起点。
+ func GroupUsageYesterdayStart(at time.Time) time.Time {
+-	return appTimezone.StartOfDay(at).AddDate(0, 0, -1).UTC()
++	// 任一本地日至少 22 小时，当日起点前 12 小时必落在前一个日历日内。
++	return GroupUsageTodayStart(GroupUsageTodayStart(at).Add(-12 * time.Hour))
+ }
+ 
+ // GroupUsageDate 返回指定时刻在服务端配置时区内的日期。
+@@ -34,7 +36,44 @@ func GroupUsageDate(at time.Time) string {
+ 	return at.In(appTimezone.Location()).Format(groupUsageDateFormat)
+ }
+ 
+-// ParseGroupUsageDate 解析服务端配置时区内的日期并返回其零点。
++// ParseGroupUsageDate 解析服务端配置时区内的日期并返回该日期的起点。
+ func ParseGroupUsageDate(value string) (time.Time, error) {
+-	return appTimezone.ParseInLocation(groupUsageDateFormat, value)
++	date, err := time.Parse(groupUsageDateFormat, value)
++	if err != nil {
++		return time.Time{}, err
++	}
++	year, month, day := date.Date()
++	return groupUsageDayStart(year, month, day), nil
++}
++
++// groupUsageDayStart 返回本地日期 year-month-day 的第一个时刻（服务端配置时区）。
++// 夏令时在零点跳变的日期，00:00 可能不存在或出现两次，此时返回该日期实际开始的时刻。
++func groupUsageDayStart(year int, month time.Month, day int) time.Time {
++	loc := appTimezone.Location()
++	target := groupUsageDateOrdinal(year, month, day)
++	start := time.Date(year, month, day, 0, 0, 0, 0, loc)
++	if localGroupUsageDateOrdinal(start) == target && localGroupUsageDateOrdinal(start.Add(-time.Nanosecond)) < target {
++		return start
++	}
++	// 在 [前一日正午, 当日正午] 内二分出本地日期首次到达目标日期的时刻。
++	low := time.Date(year, month, day-1, 12, 0, 0, 0, loc)
++	high := time.Date(year, month, day, 12, 0, 0, 0, loc)
++	for high.Sub(low) > time.Nanosecond {
++		mid := low.Add(high.Sub(low) / 2)
++		if localGroupUsageDateOrdinal(mid) >= target {
++			high = mid
++		} else {
++			low = mid
++		}
++	}
++	return high
++}
++
++func localGroupUsageDateOrdinal(at time.Time) int {
++	year, month, day := at.In(appTimezone.Location()).Date()
++	return groupUsageDateOrdinal(year, month, day)
++}
++
++func groupUsageDateOrdinal(year int, month time.Month, day int) int {
++	return year*10000 + int(month)*100 + day
+ }
+diff --git a/backend/internal/service/dashboard_aggregation_service.go b/backend/internal/service/dashboard_aggregation_service.go
+index c85dec07a..82b0a9488 100644
+--- a/backend/internal/service/dashboard_aggregation_service.go
++++ b/backend/internal/service/dashboard_aggregation_service.go
+@@ -373,13 +373,18 @@ func (s *DashboardAggregationService) maybeCleanupRetention(ctx context.Context,
+ 	}
+ 	hourlyCutoff := now.AddDate(0, 0, -s.cfg.Retention.HourlyDays)
+ 	dailyCutoff := now.AddDate(0, 0, -s.cfg.Retention.DailyDays)
+-	usageCutoff := now.AddDate(0, 0, -usageDays)
++	// usage_logs 按服务端配置时区整日保留，与分组日桶的日界对齐。
++	usageCutoff := GroupUsageTodayStart(now.AddDate(0, 0, -usageDays))
+ 	dedupDays := s.cfg.Retention.UsageBillingDedupDays
+ 	if dedupDays <= 0 {
+ 		dedupDays = 365
+ 	}
+ 	dedupDays = max(dedupDays, usageDays)
++	// 计费去重记录的保留不短于 usage_logs。
+ 	dedupCutoff := now.AddDate(0, 0, -dedupDays)
++	if usageDays > 0 && dedupCutoff.After(usageCutoff) {
++		dedupCutoff = usageCutoff
++	}
+ 
+ 	var aggErr, usageErr, dedupErr error
+ 	if s.cfg.Enabled {
+diff --git a/backend/internal/service/request_log_retention_test.go b/backend/internal/service/request_log_retention_test.go
+index 4cc8955f7..a41c5bd2c 100644
+--- a/backend/internal/service/request_log_retention_test.go
++++ b/backend/internal/service/request_log_retention_test.go
+@@ -9,6 +9,7 @@ import (
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
+@@ -40,8 +41,13 @@ func TestRequestLogRetention_RuntimePolicy(t *testing.T) {
+ 			svc.maybeCleanupRetention(context.Background(), now)
+ 			if tt.wantCleanup {
+ 				require.Equal(t, 1, repo.cleanupUsageCalls)
+-				require.Equal(t, now.AddDate(0, 0, -tt.wantDays), repo.cleanupUsageCutoff)
+-				require.Equal(t, now.AddDate(0, 0, -max(365, tt.wantDays)), repo.cleanupDedupCutoff)
++				wantUsageCutoff := GroupUsageTodayStart(now.AddDate(0, 0, -tt.wantDays))
++				wantDedupCutoff := now.AddDate(0, 0, -max(365, tt.wantDays))
++				if wantDedupCutoff.After(wantUsageCutoff) {
++					wantDedupCutoff = wantUsageCutoff
++				}
++				require.Equal(t, wantUsageCutoff, repo.cleanupUsageCutoff)
++				require.Equal(t, wantDedupCutoff, repo.cleanupDedupCutoff)
+ 			} else {
+ 				require.Zero(t, repo.cleanupUsageCalls)
+ 				require.Zero(t, repo.cleanupDedupCalls)
+@@ -53,7 +59,7 @@ func TestRequestLogRetention_RuntimePolicy(t *testing.T) {
+ 			settings.values[SettingKeyOpsRuntimeLogConfig] = `{"request_retention_days":180}`
+ 			next := now.Add(dashboardAggregationRetentionInterval)
+ 			svc.maybeCleanupRetention(context.Background(), next)
+-			require.Equal(t, next.AddDate(0, 0, -180), repo.cleanupUsageCutoff)
++			require.Equal(t, GroupUsageTodayStart(next.AddDate(0, 0, -180)), repo.cleanupUsageCutoff)
+ 		})
+ 	}
+ }
+@@ -107,3 +113,70 @@ func TestRuntimeLogConfig_RequestRetentionCompatibility(t *testing.T) {
+ 	require.NoError(t, err)
+ 	require.Equal(t, 90, *reset.RequestRetentionDays)
+ }
++
++func TestRequestLogRetention_CutoffAlignsToConfiguredDayStart(t *testing.T) {
++	previous := timezone.Name()
++	require.NoError(t, timezone.Init("Asia/Shanghai"))
++	t.Cleanup(func() { require.NoError(t, timezone.Init(previous)) })
++
++	for _, tt := range []struct {
++		name      string
++		dedupDays int
++		wantDedup time.Time
++	}{
++		// 2026-09-15 20:00 +08 往前 90 天是 2026-06-17 20:00 +08，对齐到 2026-06-17 00:00 +08。
++		{"dedup longer than usage", 365, time.Date(2025, 9, 15, 12, 0, 0, 0, time.UTC)},
++		{"dedup equal to usage keeps whole days", 90, time.Date(2026, 6, 16, 16, 0, 0, 0, time.UTC)},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			repo := &dashboardAggregationRepoTestStub{}
++			svc := NewDashboardAggregationService(repo, nil, &config.Config{DashboardAgg: config.DashboardAggregationConfig{
++				Enabled:   true,
++				Retention: config.DashboardAggregationRetentionConfig{UsageLogsDays: 90, UsageBillingDedupDays: tt.dedupDays, HourlyDays: 180, DailyDays: 730},
++			}})
++			now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
++			svc.maybeCleanupRetention(context.Background(), now)
++
++			require.Equal(t, time.Date(2026, 6, 16, 16, 0, 0, 0, time.UTC), repo.cleanupUsageCutoff)
++			require.Equal(t, tt.wantDedup, repo.cleanupDedupCutoff)
++		})
++	}
++}
++
++// 夏令时在零点跳变的日期没有 00:00：日界取该日期实际开始的时刻，而不是前一天的 23:00。
++func TestGroupUsageDayBoundariesSkipMidnightDSTGap(t *testing.T) {
++	previous := timezone.Name()
++	require.NoError(t, timezone.Init("America/Santiago"))
++	t.Cleanup(func() { require.NoError(t, timezone.Init(previous)) })
++	loc := timezone.Location()
++
++	noon := time.Date(2026, 9, 6, 12, 0, 0, 0, loc)
++	start := GroupUsageTodayStart(noon)
++	require.Equal(t, "2026-09-06", GroupUsageDate(start))
++	require.Equal(t, "2026-09-05", GroupUsageDate(start.Add(-time.Nanosecond)))
++
++	parsed, err := ParseGroupUsageDate("2026-09-06")
++	require.NoError(t, err)
++	require.True(t, parsed.Equal(start), "parsed=%s start=%s", parsed, start)
++
++	nextNoon := time.Date(2026, 9, 7, 12, 0, 0, 0, loc)
++	require.True(t, GroupUsageYesterdayStart(nextNoon).Equal(start))
++
++	// 普通日期仍是本地零点。
++	regular, err := ParseGroupUsageDate("2026-09-08")
++	require.NoError(t, err)
++	require.True(t, regular.Equal(time.Date(2026, 9, 8, 0, 0, 0, 0, loc)))
++}
++
++// 零点出现两次的日期（Asia/Gaza 2020-10-24 在 01:00 回拨到 00:00）：日界取第一次出现的 00:00。
++func TestGroupUsageDayBoundariesUseFirstOfRepeatedMidnight(t *testing.T) {
++	previous := timezone.Name()
++	require.NoError(t, timezone.Init("Asia/Gaza"))
++	t.Cleanup(func() { require.NoError(t, timezone.Init(previous)) })
++
++	start, err := ParseGroupUsageDate("2020-10-24")
++	require.NoError(t, err)
++	require.Equal(t, "2020-10-24", GroupUsageDate(start))
++	require.Equal(t, "2020-10-23", GroupUsageDate(start.Add(-time.Nanosecond)))
++	require.True(t, GroupUsageTodayStart(start.Add(90*time.Minute)).Equal(start))
++}
+diff --git a/backend/migrations/251_group_usage_rollup_nonblocking_build.sql b/backend/migrations/251_group_usage_rollup_nonblocking_build.sql
+new file mode 100644
+index 000000000..279c95b20
+--- /dev/null
++++ b/backend/migrations/251_group_usage_rollup_nonblocking_build.sql
+@@ -0,0 +1,159 @@
++-- /admin/groups 分组日汇总的过期下界与重建登记。
++-- expired_before 之前的 usage_logs 已超出保留期，不属于任何可读日桶，其变更不触发失效。
++-- 重建期间登记 building_until；落在该日期之前的源记录变更记入 build_dirty_from，
++-- 发布时水位不越过 build_dirty_from，因此重建计算阶段无需排斥 usage_logs 写入。
++
++SET LOCAL lock_timeout = '5s';
++
++ALTER TABLE usage_group_rollup_state
++    ADD COLUMN IF NOT EXISTS expired_before TIMESTAMPTZ NOT NULL DEFAULT TIMESTAMPTZ '1970-01-01 00:00:00+00',
++    ADD COLUMN IF NOT EXISTS building_until DATE,
++    ADD COLUMN IF NOT EXISTS build_dirty_from DATE;
++
++COMMENT ON COLUMN usage_group_rollup_state.expired_before IS '早于该时刻的 usage_logs 已超出保留期，不计入分组日汇总，也不触发失效。';
++COMMENT ON COLUMN usage_group_rollup_state.building_until IS '进行中重建的目标日期（排他上界）；没有重建时为 NULL。';
++COMMENT ON COLUMN usage_group_rollup_state.build_dirty_from IS '重建期间源记录发生变化的最早日期；发布水位不越过该日期。';
++
++-- 按受影响日期后退发布水位，并在重建进行中记录脏日期；水位与脏日期都已不晚于该日期时不写状态行。
++-- 调用方必须已对状态行持有 FOR KEY SHARE 或更强的行锁：重建的登记与发布持有 FOR UPDATE，
++-- 由此保证每次源记录变更要么先于登记提交、被重建快照看到，要么看到登记并记入脏日期。
++CREATE OR REPLACE FUNCTION apply_group_usage_rollup_invalidation(affected_date DATE)
++RETURNS VOID
++LANGUAGE plpgsql
++AS $$
++BEGIN
++    UPDATE usage_group_rollup_state
++    SET closed_before = LEAST(closed_before, affected_date),
++        build_dirty_from = CASE
++            WHEN building_until > affected_date THEN LEAST(build_dirty_from, affected_date)
++            ELSE build_dirty_from
++        END,
++        updated_at = NOW()
++    WHERE id = 1
++        AND (
++            closed_before > affected_date
++            OR (
++                building_until > affected_date
++                AND (build_dirty_from IS NULL OR build_dirty_from > affected_date)
++            )
++        );
++END;
++$$;
++
++-- 供应用侧调用：使 affected_at 在 bucket_timezone 中的日期及之后的日桶失效；
++-- 早于 expired_before 的部分不属于任何可读日桶，失效从 expired_before 起算。
++CREATE OR REPLACE FUNCTION invalidate_group_usage_rollups_at(affected_at TIMESTAMPTZ, bucket_timezone TEXT)
++RETURNS VOID
++LANGUAGE plpgsql
++AS $$
++DECLARE
++    state_expired_before TIMESTAMPTZ;
++BEGIN
++    SELECT expired_before
++    INTO state_expired_before
++    FROM usage_group_rollup_state
++    WHERE id = 1
++    FOR KEY SHARE;
++
++    IF NOT FOUND OR affected_at IS NULL THEN
++        RETURN;
++    END IF;
++
++    PERFORM apply_group_usage_rollup_invalidation(
++        (GREATEST(affected_at, state_expired_before) AT TIME ZONE bucket_timezone)::date
++    );
++END;
++$$;
++
++-- DELETE/UPDATE 行级触发器。FOR KEY SHARE 与 usage_logs 写入及其他失效互相兼容，只与重建的登记、发布串行。
++CREATE OR REPLACE FUNCTION invalidate_group_usage_rollup_state()
++RETURNS TRIGGER
++LANGUAGE plpgsql
++AS $$
++DECLARE
++    configured_timezone TEXT := current_setting('TimeZone');
++    old_date DATE;
++    new_date DATE;
++    affected_date DATE;
++    state_closed_before DATE;
++    state_building_until DATE;
++    state_build_dirty_from DATE;
++    state_expired_before TIMESTAMPTZ;
++BEGIN
++    SELECT closed_before, building_until, build_dirty_from, expired_before
++    INTO state_closed_before, state_building_until, state_build_dirty_from, state_expired_before
++    FROM usage_group_rollup_state
++    WHERE id = 1
++    FOR KEY SHARE;
++
++    IF FOUND THEN
++        IF OLD.group_id IS NOT NULL AND OLD.created_at >= state_expired_before THEN
++            old_date := (OLD.created_at AT TIME ZONE configured_timezone)::date;
++        END IF;
++        IF TG_OP = 'UPDATE' THEN
++            IF NEW.group_id IS NOT NULL AND NEW.created_at >= state_expired_before THEN
++                new_date := (NEW.created_at AT TIME ZONE configured_timezone)::date;
++            END IF;
++        END IF;
++
++        affected_date := LEAST(old_date, new_date);
++        IF state_closed_before > affected_date
++            OR (
++                state_building_until > affected_date
++                AND (state_build_dirty_from IS NULL OR state_build_dirty_from > affected_date)
++            ) THEN
++            PERFORM apply_group_usage_rollup_invalidation(affected_date);
++        END IF;
++    END IF;
++
++    IF TG_OP = 'DELETE' THEN
++        RETURN OLD;
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++-- INSERT 语句级触发器：每个批量 INSERT 只读一次状态行；当天写入既不后退水位也不记脏。
++CREATE OR REPLACE FUNCTION invalidate_group_usage_rollup_state_after_insert()
++RETURNS TRIGGER
++LANGUAGE plpgsql
++AS $$
++DECLARE
++    configured_timezone TEXT := current_setting('TimeZone');
++    affected_date DATE;
++    state_closed_before DATE;
++    state_building_until DATE;
++    state_build_dirty_from DATE;
++    state_expired_before TIMESTAMPTZ;
++BEGIN
++    IF NOT EXISTS (SELECT 1 FROM inserted_usage_logs WHERE group_id IS NOT NULL) THEN
++        RETURN NULL;
++    END IF;
++
++    SELECT closed_before, building_until, build_dirty_from, expired_before
++    INTO state_closed_before, state_building_until, state_build_dirty_from, state_expired_before
++    FROM usage_group_rollup_state
++    WHERE id = 1
++    FOR KEY SHARE;
++
++    IF NOT FOUND THEN
++        RETURN NULL;
++    END IF;
++
++    SELECT MIN((created_at AT TIME ZONE configured_timezone)::date)
++    INTO affected_date
++    FROM inserted_usage_logs
++    WHERE group_id IS NOT NULL
++        AND created_at >= state_expired_before;
++
++    IF state_closed_before > affected_date
++        OR (
++            state_building_until > affected_date
++            AND (state_build_dirty_from IS NULL OR state_build_dirty_from > affected_date)
++        ) THEN
++        PERFORM apply_group_usage_rollup_invalidation(affected_date);
++    END IF;
++
++    RETURN NULL;
++END;
++$$;
+diff --git a/backend/migrations/group_usage_rollup_migration_test.go b/backend/migrations/group_usage_rollup_migration_test.go
+index f2e9a5d0a..006a0b35c 100644
+--- a/backend/migrations/group_usage_rollup_migration_test.go
++++ b/backend/migrations/group_usage_rollup_migration_test.go
+@@ -50,3 +50,22 @@ func TestMigration223TracksConfiguredTimezone(t *testing.T) {
+ 	require.Contains(t, sql, "CREATE OR REPLACE FUNCTION invalidate_group_usage_rollup_state")
+ 	require.Contains(t, sql, "CREATE OR REPLACE FUNCTION invalidate_group_usage_rollup_state_after_insert")
+ }
++
++func TestMigration251AddsExpiredFloorAndNonBlockingBuildMarks(t *testing.T) {
++	content, err := FS.ReadFile("251_group_usage_rollup_nonblocking_build.sql")
++	require.NoError(t, err)
++
++	sql := string(content)
++	require.Contains(t, sql, "SET LOCAL lock_timeout")
++	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS expired_before TIMESTAMPTZ NOT NULL")
++	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS building_until DATE")
++	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS build_dirty_from DATE")
++	require.Contains(t, sql, "CREATE OR REPLACE FUNCTION apply_group_usage_rollup_invalidation")
++	require.Contains(t, sql, "CREATE OR REPLACE FUNCTION invalidate_group_usage_rollups_at")
++	require.Contains(t, sql, "CREATE OR REPLACE FUNCTION invalidate_group_usage_rollup_state()")
++	require.Contains(t, sql, "CREATE OR REPLACE FUNCTION invalidate_group_usage_rollup_state_after_insert()")
++	require.Contains(t, sql, "created_at >= state_expired_before")
++	// 源记录变更只对状态行持 KEY SHARE，与 usage_logs 写入互不阻塞。
++	require.Contains(t, sql, "FOR KEY SHARE")
++	require.NotContains(t, sql, "FOR UPDATE;")
++}

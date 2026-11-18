@@ -1,0 +1,137 @@
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index 37340fe65..8e526ec48 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -545,6 +545,16 @@ func (s *BillingService) initFallbackPricing() {
+ 		SupportsCacheBreakdown: false,
+ 	}
+ 
++	// Gemini 4 Hydrogen (Google AI pricing: $1.50 input / $7.50 output /
++	// $0.075 cached input per MTok; Priority is 1.8x). One rate covers every
++	// prompt length.
++	s.fallbackPrices["gemini-4-hydrogen"] = pricingWithPriorityMultiplier(&ModelPricing{
++		InputPricePerToken:     1.5e-6,
++		OutputPricePerToken:    7.5e-6,
++		CacheReadPricePerToken: 0.075e-6,
++		SupportsCacheBreakdown: false,
++	}, 1.8)
++
+ 	// OpenAI GPT-5.4（业务指定价格）
+ 	s.fallbackPrices["gpt-5.4"] = &ModelPricing{
+ 		InputPricePerToken:             2.5e-6,  // $2.5 per MTok
+@@ -1153,6 +1163,9 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
+ 	if strings.Contains(modelLower, "gemini-4-argon") {
+ 		return s.fallbackPrices["gemini-4-argon"]
+ 	}
++	if strings.Contains(modelLower, "gemini-4-hydrogen") {
++		return s.fallbackPrices["gemini-4-hydrogen"]
++	}
+ 
+ 	// DeepSeek 系列：官方模型 V4 Pro/Flash（含 vision-exp）按各自价卡；
+ 	// 其余 deepseek-*（含已停服的 deepseek-chat / deepseek-reasoner 与未知型号）
+diff --git a/backend/internal/service/gemini_cache_storage_pricing_test.go b/backend/internal/service/gemini_cache_storage_pricing_test.go
+index 97a8aef6a..49cddb508 100644
+--- a/backend/internal/service/gemini_cache_storage_pricing_test.go
++++ b/backend/internal/service/gemini_cache_storage_pricing_test.go
+@@ -43,10 +43,12 @@ func TestBuiltinGeminiCacheStoragePrice(t *testing.T) {
+ 		{"gemini-flash-latest", 1e-6},
+ 		{"gemini-flash-lite-latest", 1e-6},
+ 		{"gemini-pro-latest", 4.5e-6},
+-		// 无存储价（Gemini 4 Argon 仅支持隐式缓存）
++		// 无存储价（Gemini 4 Argon / Hydrogen 仅支持隐式缓存）
+ 		{"gemini-4-argon", 0},
+ 		{"gemini-4-argon-high", 0},
+ 		{"gemini-4-argon-cyber-permissive", 0},
++		{"gemini-4-hydrogen", 0},
++		{"models/gemini-4-hydrogen", 0},
+ 		{"gemini-embedding-001", 0},
+ 		{"gemini-unknown-model", 0},
+ 		{"claude-sonnet-5-5", 0},
+diff --git a/backend/internal/service/pricing_service_test.go b/backend/internal/service/pricing_service_test.go
+index d72e2f121..42570746e 100644
+--- a/backend/internal/service/pricing_service_test.go
++++ b/backend/internal/service/pricing_service_test.go
+@@ -819,6 +819,55 @@ func TestDefaultPricingIncludesGemini4ArgonRates(t *testing.T) {
+ 	require.Contains(t, pricingSvc.ListModelNamesByProvider("gemini"), "gemini-4-argon")
+ }
+ 
++func TestBillingService_Gemini4HydrogenFallbackIsBillable(t *testing.T) {
++	svc := NewBillingService(&config.Config{}, nil)
++	tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000}
++
++	for _, tc := range []struct {
++		model               string
++		serviceTier         string
++		input, output, read float64
++	}{
++		{"gemini-4-hydrogen", "", 1.5, 7.5, 0.075},
++		{"models/gemini-4-hydrogen", "", 1.5, 7.5, 0.075},
++		{"projects/p/locations/global/publishers/google/models/gemini-4-hydrogen", "", 1.5, 7.5, 0.075},
++		{"gemini-4-hydrogen", "priority", 2.7, 13.5, 0.135},
++	} {
++		t.Run(tc.model+"/"+tc.serviceTier, func(t *testing.T) {
++			cost, err := svc.CalculateCostWithServiceTier(tc.model, tokens, 1, tc.serviceTier)
++			require.NoError(t, err)
++			require.InDelta(t, tc.input, cost.InputCost, 1e-12)
++			require.InDelta(t, tc.output, cost.OutputCost, 1e-12)
++			require.InDelta(t, tc.read, cost.CacheReadCost, 1e-12)
++			require.InDelta(t, tc.input+tc.output+tc.read, cost.TotalCost, 1e-12)
++		})
++	}
++}
++
++func TestDefaultPricingIncludesGemini4HydrogenRates(t *testing.T) {
++	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
++	require.NoError(t, err)
++
++	pricingSvc := &PricingService{}
++	pricingData, err := pricingSvc.parsePricingData(data)
++	require.NoError(t, err)
++	pricingSvc.pricingData = pricingData
++
++	pricing := pricingSvc.GetModelPricing("gemini-4-hydrogen")
++	require.NotNil(t, pricing)
++	require.Equal(t, "gemini", pricing.LiteLLMProvider)
++	require.InDelta(t, 1.5e-6, pricing.InputCostPerToken, 1e-15)
++	require.InDelta(t, 7.5e-6, pricing.OutputCostPerToken, 1e-15)
++	require.InDelta(t, 0.075e-6, pricing.CacheReadInputTokenCost, 1e-15)
++	// Priority 档为标准价的 1.8 倍；单一价档不分提示词长度，显式缓存不可用故无存储价。
++	require.InDelta(t, 2.7e-6, pricing.InputCostPerTokenPriority, 1e-15)
++	require.InDelta(t, 13.5e-6, pricing.OutputCostPerTokenPriority, 1e-15)
++	require.InDelta(t, 0.135e-6, pricing.CacheReadInputTokenCostPriority, 1e-15)
++	require.Zero(t, pricing.LongContextInputTokenThreshold)
++	require.Zero(t, pricing.CacheStorageCostPerTokenPerHour)
++	require.Contains(t, pricingSvc.ListModelNamesByProvider("gemini"), "gemini-4-hydrogen")
++}
++
+ func TestDefaultPricingIncludesGrok47FastRates(t *testing.T) {
+ 	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+ 	require.NoError(t, err)
+diff --git a/backend/resources/model-pricing/model_prices_and_context_window.json b/backend/resources/model-pricing/model_prices_and_context_window.json
+index 0f48dc14f..733cc0995 100644
+--- a/backend/resources/model-pricing/model_prices_and_context_window.json
++++ b/backend/resources/model-pricing/model_prices_and_context_window.json
+@@ -2777,6 +2777,23 @@
+     "supports_reasoning": true,
+     "supports_service_tier": true
+   },
++  "gemini-4-hydrogen": {
++    "cache_read_input_token_cost": 7.5e-08,
++    "cache_read_input_token_cost_priority": 1.35e-07,
++    "input_cost_per_token": 1.5e-06,
++    "input_cost_per_token_priority": 2.7e-06,
++    "litellm_provider": "gemini",
++    "max_input_tokens": 1048576,
++    "max_output_tokens": 65536,
++    "max_tokens": 65536,
++    "mode": "chat",
++    "output_cost_per_token": 7.5e-06,
++    "output_cost_per_token_priority": 1.35e-05,
++    "source": "https://aistudio.google.com/docs/pricing#gemini-4-hydrogen",
++    "supports_prompt_caching": true,
++    "supports_reasoning": true,
++    "supports_service_tier": true
++  },
+   "gemini-embedding-001": {
+     "input_cost_per_token": 1.5e-07,
+     "litellm_provider": "vertex_ai-embedding-models",

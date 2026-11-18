@@ -1,5 +1,16 @@
 # 上游合并指南
 
+最新评估（2026-11-18）：[PORTING-0.2.23.md](./PORTING-0.2.23.md)，覆盖v0.2.22/v0.2.23，基线v1.1.25+用量排行修复`7a0b78fe5` / Go1.27.3 / SQLite229 / auth21。128非merge、78PR+4直接提交，524文件态A0/C269/X199/N56。建议[第一档21簇](../../openspec/changes/port-upstream-0.2.23-tier1/README.md)、[第二档23簇](../../openspec/changes/port-upstream-0.2.23-tier2/README.md)，选55PR中的既有消费者维护，**两批未实施，70/76任务全未勾选**。[来源/失败/测量索引](./evidence-0.2.23/MANIFEST.md)。六份旧活动change共180完成checkbox、零未完成，等待归档；下方历史时点原文保留。
+
+- [x] 冻结fork/release/tag/main，整PR覆盖与全部文件先反后正，保护历史和产品哈希。
+- [x] 全候选分档，复查真实消费者/最小前置及旧按需项，优先Claude/Codex/Grok和SQLite数据完整性。
+- [x] backend定向/前端89基线通过；6包overlay26目标失败/20对照通过，含实际SQLite/Ent/embed；临时前端9失败/11通过。
+- [x] Go1.27.4只读embed/3包可行性与Ollama单P函数PoC；来源SSE转义字段漏判已保留，不作为可直接移植证据。
+- [x] 两份OpenSpec评估方案、全部任务未勾选和实施验收空槽；严格校验/链接/范围见证据。
+- [ ] 按后续选定范围实施；新能力独立按需，支付排除，发布/部署另行处理。
+
+本轮教训：同PR最终提交可能推翻release摘要（Gemini ForceCacheBilling）；ALREADY=0也可能已手工实现RPM/刷新/override语义；cache presence/TTL/差额需联合检验；SSE字节predicate必须处理JSON转义；首内容hold需有界；SQLite失败原子性和临时测试runner须实际检查；新Go编译不等于新CI/codegen验收。见[§9](./PORTING-0.2.23.md#9-本轮通用教训)。
+
 v0.2.21第二档已完成（2026-11-12）：S01–S12，42/42任务；[验收](../../openspec/changes/port-upstream-0.2.21-tier2/verification.md) / [实施证据](./implementation-0.2.21-tier2/README.md)。实际起点`4f4c80c3c`加已有第一档代码，第一档在期间由独立流程提交`63c764704`；本批实现随本次提交保存，等待归档。覆盖WS会话/搜索/TTFT、模型冷却、兼容错误/effort、token原子轮换、Key独立用量/SQLite覆盖索引、账号刷新、Desktop页面上下文、审计worker唤醒和Claude2.1.321。后端全量unit/embed build/lint0、五包race、真实HTTP/SQLite/miniredis结算去重/Fast/固定配额通过；前端2197/2既有跳过、critical179/2、typecheck/lint/build及桌面/390px移动验收通过。新增SQLite229；1GiB/1CPU临时夹具峰值66850816字节，索引查询/写入/大小成本已记录，不能外推生产。S11另修真实SQLite混合时间格式claim比较。VERSION1.1.24/Go1.27.3/auth snapshot21、依赖/生成代码与64MiB/40MiB/120s保留。无支付、新能力、推送/发布或业务部署；下方来源/评估/历史状态不回写。
 
 v0.2.21第一档已完成（2026-11-11）：F01–F11，39/39任务；[验收](../../openspec/changes/port-upstream-0.2.21-tier1/verification.md) / [实施证据](./implementation-0.2.21-tier1/README.md)。基于`4f4c80c3c`，独立tier1快照54包unit、embed build、lint0、五包race126顶层测试及实际HTTP/SQLite/miniredis通过。覆盖Codex协议/会话/错误状态、并发槽释放、定价hash与缓存读价、Gemini思考与工具媒体、UTF-8边界。共享工作区出现并行tier2改动，额外修改不归入本批验收；完整tier1 patch仍在共享工作区。保持VERSION1.1.24/Go1.27.3/SQLite228/auth snapshot21、依赖/前端/生成代码及64MiB/40MiB/120s默认值。实现随本次提交保存，未发布/推送/业务部署；下方评估状态保留原始时点含义。

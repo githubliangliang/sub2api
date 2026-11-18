@@ -1,0 +1,464 @@
+diff --git a/backend/internal/service/composite_platform.go b/backend/internal/service/composite_platform.go
+index b7fcfd345..ddaf2d83a 100644
+--- a/backend/internal/service/composite_platform.go
++++ b/backend/internal/service/composite_platform.go
+@@ -6,6 +6,8 @@ import (
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/domain"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
+ )
+ 
+ // WithResolvedTargetPlatform stores the concrete provider chosen for a request
+@@ -73,6 +75,33 @@ func RequestedPublicModelFromContext(ctx context.Context) (string, bool) {
+ 	return model, true
+ }
+ 
++// compositeClientModel returns the public model the client asked for when a
++// composite route sent a different model upstream, and fallback otherwise. The
++// response reports that public name whatever model the upstream says served it.
++func compositeClientModel(ctx context.Context, fallback string) string {
++	publicModel, ok := RequestedPublicModelFromContext(ctx)
++	if !ok {
++		return fallback
++	}
++	if upstreamModel, ok := ResolvedUpstreamModelFromContext(ctx); !ok || upstreamModel == publicModel {
++		return fallback
++	}
++	return publicModel
++}
++
++// restoreCompositeClientModel reports the client's public model in an Anthropic
++// response body when a composite route rewrote the model.
++func restoreCompositeClientModel(ctx context.Context, body []byte) []byte {
++	clientModel := compositeClientModel(ctx, "")
++	if clientModel == "" || !gjson.GetBytes(body, "model").Exists() {
++		return body
++	}
++	if rewritten, err := sjson.SetBytes(body, "model", clientModel); err == nil {
++		return rewritten
++	}
++	return body
++}
++
+ func CompositeRouteSourceFromContext(ctx context.Context) (string, bool) {
+ 	if ctx == nil {
+ 		return "", false
+diff --git a/backend/internal/service/composite_route_client_model_test.go b/backend/internal/service/composite_route_client_model_test.go
+new file mode 100644
+index 000000000..48444e2c1
+--- /dev/null
++++ b/backend/internal/service/composite_route_client_model_test.go
+@@ -0,0 +1,299 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strconv"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// publicModelRoute serves requests for public-model with claude-opus-5-5.
++func publicModelRoute() CompositeModelRoute {
++	return CompositeModelRoute{
++		ID:             1,
++		GroupID:        11,
++		PublicModel:    "public-model",
++		MatchType:      CompositeRouteMatchExact,
++		TargetPlatform: PlatformAnthropic,
++		UpstreamModel:  "claude-opus-5-5",
++		Endpoint:       CompositeRouteEndpointAny,
++		Priority:       100,
++		Enabled:        true,
++	}
++}
++
++// routeCompositeBody resolves body's model against route and rewrites the
++// model the way the composite middleware does before any handler runs.
++func routeCompositeBody(t *testing.T, route CompositeModelRoute, endpoint string, body []byte) (context.Context, []byte) {
++	t.Helper()
++	resolver := NewCompositeRouteResolver(compositeRouteRepoStub{routes: []CompositeModelRoute{route}})
++	decision, err := resolver.Resolve(context.Background(), route.GroupID, gjson.GetBytes(body, "model").String(), endpoint)
++	require.NoError(t, err)
++	require.True(t, decision.Matched)
++	body, err = sjson.SetBytes(body, "model", decision.UpstreamModel)
++	require.NoError(t, err)
++	return WithCompositeRouteDecision(context.Background(), decision), body
++}
++
++func anthropicMessageStartModel(t *testing.T, sse string) string {
++	t.Helper()
++	for _, line := range strings.Split(sse, "\n") {
++		data, ok := strings.CutPrefix(line, "data: ")
++		if ok && gjson.Get(data, "type").String() == "message_start" {
++			return gjson.Get(data, "message.model").String()
++		}
++	}
++	t.Fatalf("no message_start event in stream:\n%s", sse)
++	return ""
++}
++
++func TestCompositeRouteRestoresPublicModelOnAnthropicForward(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	accounts := map[string]func() *Account{
++		"oauth":              newAnthropicOAuthAccountForPartialUsageTest,
++		"apikey-passthrough": newAnthropicAPIKeyAccountForTest,
++	}
++	for accountName, newAccount := range accounts {
++		for _, stream := range []bool{false, true} {
++			t.Run(accountName+"/stream="+strconv.FormatBool(stream), func(t *testing.T) {
++				client := []byte(`{"model":"public-model","max_tokens":16,"stream":` + strconv.FormatBool(stream) +
++					`,"messages":[{"role":"user","content":"hi"}]}`)
++				ctx, body := routeCompositeBody(t, publicModelRoute(), CompositeRouteEndpointMessages, client)
++
++				// The upstream reports its own dated id: the client still sees
++				// the public name it asked for.
++				upstreamBody := `{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5-5-20260901","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":1,"output_tokens":1}}`
++				contentType := "application/json"
++				if stream {
++					upstreamBody = strings.Join([]string{
++						`event: message_start`,
++						`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5-5-20260901","content":[],"usage":{"input_tokens":1}}}`,
++						"",
++						`event: message_delta`,
++						`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`,
++						"",
++						`event: message_stop`,
++						`data: {"type":"message_stop"}`,
++						"",
++						"",
++					}, "\n")
++					contentType = "text/event-stream"
++				}
++				upstream := &anthropicHTTPUpstreamRecorder{resp: &http.Response{
++					StatusCode: http.StatusOK,
++					Header:     http.Header{"Content-Type": []string{contentType}},
++					Body:       io.NopCloser(strings.NewReader(upstreamBody)),
++				}}
++				svc := newForwardPartialUsageServiceForTest(upstream)
++
++				rec := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(rec)
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil).WithContext(ctx)
++				parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), PlatformAnthropic)
++				require.NoError(t, err)
++
++				_, err = svc.Forward(ctx, c, newAccount(), parsed)
++				require.NoError(t, err)
++
++				require.Equal(t, "claude-opus-5-5", gjson.GetBytes(upstream.lastBody, "model").String())
++				if stream {
++					require.Equal(t, "public-model", anthropicMessageStartModel(t, rec.Body.String()))
++				} else {
++					require.Equal(t, "public-model", gjson.GetBytes(rec.Body.Bytes(), "model").String())
++					require.Equal(t, "hi", gjson.GetBytes(rec.Body.Bytes(), "content.0.text").String())
++				}
++			})
++		}
++	}
++}
++
++func TestCompositeRouteRestoresPublicModelOnResponsesBridge(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	route := publicModelRoute()
++	route.TargetPlatform = PlatformOpenAI
++	route.UpstreamModel = "gpt-5.6-sol"
++	for _, stream := range []bool{false, true} {
++		t.Run("stream="+strconv.FormatBool(stream), func(t *testing.T) {
++			client := []byte(`{"model":"public-model","max_tokens":16,"stream":` + strconv.FormatBool(stream) +
++				`,"messages":[{"role":"user","content":"hello"}]}`)
++			ctx, body := routeCompositeBody(t, route, CompositeRouteEndpointMessages, client)
++
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(rec)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(string(body))).WithContext(ctx)
++			c.Request.Header.Set("Content-Type", "application/json")
++			upstream := &httpUpstreamRecorder{resp: openAICompatSSECompletedResponse("resp_route", route.UpstreamModel)}
++			upstream.resp.Body = io.NopCloser(io.MultiReader(
++				strings.NewReader(`data: {"type":"response.created","response":{"id":"resp_route","model":"`+route.UpstreamModel+`"}}`+"\n\n"),
++				upstream.resp.Body,
++			))
++			svc := &OpenAIGatewayService{httpUpstream: upstream, cfg: rawChatCompletionsTestConfig()}
++
++			_, err := svc.ForwardAsAnthropic(ctx, c, rawGPT56ResponsesOAuthAccount(route.UpstreamModel, route.UpstreamModel), body, "", "")
++			require.NoError(t, err)
++
++			require.Equal(t, route.UpstreamModel, gjson.GetBytes(upstream.lastBody, "model").String())
++			if stream {
++				require.Equal(t, "public-model", anthropicMessageStartModel(t, rec.Body.String()))
++			} else {
++				require.Equal(t, "public-model", gjson.GetBytes(rec.Body.Bytes(), "model").String())
++			}
++		})
++	}
++}
++
++func TestCompositeRouteRestoresPublicModelOnChatCompletionsBridge(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	route := publicModelRoute()
++	route.TargetPlatform = PlatformOpenAI
++	route.UpstreamModel = "gpt-5.6-luna"
++	for _, stream := range []bool{false, true} {
++		t.Run("stream="+strconv.FormatBool(stream), func(t *testing.T) {
++			client := []byte(`{"model":"public-model","max_tokens":16,"messages":[{"role":"user","content":"hello"}],"stream":` + strconv.FormatBool(stream) + `}`)
++			ctx, body := routeCompositeBody(t, route, CompositeRouteEndpointMessages, client)
++
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(rec)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(string(body))).WithContext(ctx)
++			c.Request.Header.Set("Content-Type", "application/json")
++			upstreamBody := `{"id":"chatcmpl_route","object":"chat.completion","model":"gpt-5.6-luna","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}`
++			contentType := "application/json"
++			if stream {
++				upstreamBody = strings.Join([]string{
++					`data: {"id":"chatcmpl_route","object":"chat.completion.chunk","model":"gpt-5.6-luna","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":null}]}`,
++					"",
++					`data: {"id":"chatcmpl_route","object":"chat.completion.chunk","model":"gpt-5.6-luna","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}`,
++					"",
++					"data: [DONE]",
++					"",
++				}, "\n")
++				contentType = "text/event-stream"
++			}
++			upstream := &httpUpstreamRecorder{resp: &http.Response{
++				StatusCode: http.StatusOK,
++				Header:     http.Header{"Content-Type": []string{contentType}},
++				Body:       io.NopCloser(strings.NewReader(upstreamBody)),
++			}}
++			account := forceChatMessagesFallbackAccount()
++			svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
++
++			_, err := svc.ForwardAsAnthropic(ctx, c, account, body, "", "")
++			require.NoError(t, err)
++			require.Equal(t, "gpt-5.6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
++			if stream {
++				require.Equal(t, "public-model", anthropicMessageStartModel(t, rec.Body.String()))
++			} else {
++				require.Equal(t, "public-model", gjson.GetBytes(rec.Body.Bytes(), "model").String())
++			}
++		})
++	}
++}
++
++func TestRestoreCompositeClientModelOnlyWhenRouteRewroteModel(t *testing.T) {
++	body := []byte(`{"id":"msg_1","type":"message","model":"claude-opus-5-5-20260901"}`)
++	route := publicModelRoute()
++
++	renamedCtx, _ := routeCompositeBody(t, route, CompositeRouteEndpointMessages, []byte(`{"model":"public-model"}`))
++	require.Equal(t, "public-model", gjson.GetBytes(restoreCompositeClientModel(renamedCtx, body), "model").String())
++	require.Equal(t, "public-model", compositeClientModel(renamedCtx, "claude-opus-5-5"))
++
++	route.PublicModel = route.UpstreamModel
++	sameCtx, _ := routeCompositeBody(t, route, CompositeRouteEndpointMessages, []byte(`{"model":"claude-opus-5-5"}`))
++	require.Equal(t, string(body), string(restoreCompositeClientModel(sameCtx, body)))
++	require.Equal(t, "claude-opus-5-5", compositeClientModel(sameCtx, "claude-opus-5-5"))
++
++	require.Equal(t, string(body), string(restoreCompositeClientModel(context.Background(), body)))
++	require.Equal(t, "claude-opus-5-5", compositeClientModel(context.Background(), "claude-opus-5-5"))
++
++	noModel := []byte(`{"type":"error"}`)
++	require.Equal(t, string(noModel), string(restoreCompositeClientModel(renamedCtx, noModel)))
++}
++
++func forwardCompositeAnthropicStream(t *testing.T, newAccount func() *Account, upstreamSSE string) string {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	client := []byte(`{"model":"public-model","max_tokens":16,"stream":true,"messages":[{"role":"user","content":"hi"}]}`)
++	ctx, body := routeCompositeBody(t, publicModelRoute(), CompositeRouteEndpointMessages, client)
++	upstream := &anthropicHTTPUpstreamRecorder{resp: &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
++	}}
++	svc := newForwardPartialUsageServiceForTest(upstream)
++
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil).WithContext(ctx)
++	parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), PlatformAnthropic)
++	require.NoError(t, err)
++
++	_, err = svc.Forward(ctx, c, newAccount(), parsed)
++	require.NoError(t, err)
++	return rec.Body.String()
++}
++
++func anthropicStreamEventData(t *testing.T, sse, eventType string) string {
++	t.Helper()
++	for _, line := range strings.Split(sse, "\n") {
++		data, ok := strings.CutPrefix(line, "data:")
++		data = strings.TrimSpace(data)
++		if ok && gjson.Get(data, "type").String() == eventType {
++			return data
++		}
++	}
++	t.Fatalf("no %s event in stream:\n%s", eventType, sse)
++	return ""
++}
++
++func TestCompositeRouteStreamRewritesOnlyMessageStartModel(t *testing.T) {
++	accounts := map[string]func() *Account{
++		"oauth":              newAnthropicOAuthAccountForPartialUsageTest,
++		"apikey-passthrough": newAnthropicAPIKeyAccountForTest,
++	}
++	for accountName, newAccount := range accounts {
++		t.Run(accountName, func(t *testing.T) {
++			sse := forwardCompositeAnthropicStream(t, newAccount, strings.Join([]string{
++				`event: message_start`,
++				`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5-5-20260901","content":[],"usage":{"input_tokens":1}}}`,
++				"",
++				`event: ping`,
++				`data: {"type":"ping","message":{"model":"other-model"}}`,
++				"",
++				`event: message_delta`,
++				`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`,
++				"",
++				`event: message_stop`,
++				`data: {"type":"message_stop"}`,
++				"",
++				"",
++			}, "\n"))
++
++			require.Equal(t, "public-model", gjson.Get(anthropicStreamEventData(t, sse, "message_start"), "message.model").String())
++			require.Equal(t, "other-model", gjson.Get(anthropicStreamEventData(t, sse, "ping"), "message.model").String())
++		})
++	}
++}
++
++func TestCompositeRoutePassthroughStreamKeepsMessageStartWithoutModel(t *testing.T) {
++	sse := forwardCompositeAnthropicStream(t, newAnthropicAPIKeyAccountForTest, strings.Join([]string{
++		`event: message_start`,
++		`data:{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"usage":{"input_tokens":1}}}`,
++		"",
++		`event: message_stop`,
++		`data: {"type":"message_stop"}`,
++		"",
++		"",
++	}, "\n"))
++
++	require.False(t, gjson.Get(anthropicStreamEventData(t, sse, "message_start"), "message.model").Exists())
++}
+diff --git a/backend/internal/service/gateway_anthropic_passthrough.go b/backend/internal/service/gateway_anthropic_passthrough.go
+index a1f792282..a781b6991 100644
+--- a/backend/internal/service/gateway_anthropic_passthrough.go
++++ b/backend/internal/service/gateway_anthropic_passthrough.go
+@@ -501,6 +501,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
+ 		keepaliveTimer.Reset(keepaliveInterval)
+ 	}
+ 	inPartialEvent := false
++	clientModel := compositeClientModel(ctx, "")
+ 
+ 	for {
+ 		select {
+@@ -560,6 +561,12 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
+ 				}
+ 			}
+ 
++			if data, ok := extractAnthropicSSEDataLine(line); ok && clientModel != "" && gjson.Get(data, "type").String() == "message_start" && gjson.Get(data, "message.model").Exists() {
++				if rewritten, err := sjson.Set(data, "message.model", clientModel); err == nil {
++					line = "data: " + rewritten
++				}
++			}
++
+ 			if !clientDisconnected {
+ 				restored := reverseToolNamesIfPresentString(c, line)
+ 				if _, err := io.WriteString(w, restored); err != nil {
+@@ -894,6 +901,7 @@ func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
+ 	if contentType == "" {
+ 		contentType = "application/json"
+ 	}
++	body = restoreCompositeClientModel(ctx, body)
+ 	body = reverseToolNamesIfPresent(c, body)
+ 	c.Data(resp.StatusCode, contentType, body)
+ 	return usage, nil
+diff --git a/backend/internal/service/gateway_upstream_response.go b/backend/internal/service/gateway_upstream_response.go
+index 61ea2f7be..45059d877 100644
+--- a/backend/internal/service/gateway_upstream_response.go
++++ b/backend/internal/service/gateway_upstream_response.go
+@@ -889,6 +889,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+ 	}
+ 
+ 	needModelReplace := originalModel != mappedModel
++	clientModel := compositeClientModel(ctx, "")
+ 	clientDisconnected := false // 客户端断开标志，断开后继续读取上游以获取完整usage
+ 	sawTerminalEvent := false
+ 	useNoopDeltaKeepalive := c != nil && c.Request != nil && shouldUseClaudeCodeNoopDeltaKeepalive(c.GetHeader("User-Agent"))
+@@ -1045,6 +1046,14 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
+ 				}
+ 			}
+ 		}
++		if clientModel != "" && eventType == "message_start" {
++			if msg, ok := event["message"].(map[string]any); ok {
++				if _, ok := msg["model"].(string); ok {
++					msg["model"] = clientModel
++					eventChanged = true
++				}
++			}
++		}
+ 
+ 		usagePatch := s.extractSSEUsagePatch(event)
+ 		if anthropicStreamEventIsTerminal(eventName, dataLine) {
+@@ -1519,6 +1528,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
+ 	if originalModel != mappedModel {
+ 		body = s.replaceModelInResponseBody(body, mappedModel, originalModel)
+ 	}
++	body = restoreCompositeClientModel(ctx, body)
+ 
+ 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+ 
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index 32f9c8aaf..2284f2b3f 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -679,7 +679,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
+ 	// accumulated delta events so the client receives the full content.
+ 	acc.SupplementResponseOutput(finalResponse)
+ 
+-	anthropicResp := apicompat.ResponsesToAnthropic(finalResponse, originalModel)
++	anthropicResp := apicompat.ResponsesToAnthropic(finalResponse, compositeClientModel(c.Request.Context(), originalModel))
+ 
+ 	if s.responseHeaderFilter != nil {
+ 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+@@ -1019,7 +1019,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
+ 
+ 	state := apicompat.NewResponsesEventToAnthropicState()
+-	state.Model = originalModel
++	state.Model = compositeClientModel(c.Request.Context(), originalModel)
+ 	var usage OpenAIUsage
+ 	responseID := ""
+ 	var firstTokenMs *int
+diff --git a/backend/internal/service/openai_gateway_messages_chat_fallback.go b/backend/internal/service/openai_gateway_messages_chat_fallback.go
+index 2b96f35be..9a04d3fd7 100644
+--- a/backend/internal/service/openai_gateway_messages_chat_fallback.go
++++ b/backend/internal/service/openai_gateway_messages_chat_fallback.go
+@@ -170,7 +170,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsAnthropic(
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, originalModel)
++	anthropicResp := apicompat.ChatCompletionsResponseToAnthropic(ccResp, compositeClientModel(c.Request.Context(), originalModel))
+ 
+ 	if s.responseHeaderFilter != nil {
+ 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+@@ -207,7 +207,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsAnthropic(
+ 	requestID := resp.Header.Get("x-request-id")
+ 	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
+ 
+-	anthropicState := apicompat.NewChatCompletionsToAnthropicStreamState(originalModel)
++	anthropicState := apicompat.NewChatCompletionsToAnthropicStreamState(compositeClientModel(c.Request.Context(), originalModel))
+ 	clientDisconnected := false
+ 
+ 	// 与 responses 兄弟不同：客户端断开后仍继续做事件转换（喂 anthropicState），

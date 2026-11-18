@@ -1158,18 +1158,10 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
     delete featuresConfig.codex_image_generation_bridge
   }
 
-  const bedrockCCCompat: Record<string, boolean> = {}
-  for (const section of form.platforms) {
-    if (!section.enabled) continue
-    if (section.platform === 'anthropic') {
-      bedrockCCCompat[section.platform] = !!section.bedrock_cc_compat
-    }
-  }
-  if (Object.keys(bedrockCCCompat).length > 0) {
-    featuresConfig.bedrock_cc_compat = bedrockCCCompat
-  } else {
-    delete featuresConfig.bedrock_cc_compat
-  }
+  // The backend reads a boolean; an explicit false clears a saved value.
+  featuresConfig.bedrock_cc_compat = form.platforms.some(
+    section => section.enabled && section.platform === 'anthropic' && section.bedrock_cc_compat
+  )
 
   return { group_ids: uniqueGroupIds, model_pricing, model_mapping, features_config: featuresConfig }
 }

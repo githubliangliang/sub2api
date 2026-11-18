@@ -206,6 +206,8 @@ func anthropicMsgToResponsesItems(m AnthropicMessage) ([]ResponsesInputItem, err
 		return anthropicUserToResponses(m.Content)
 	case "assistant":
 		return anthropicAssistantToResponses(m.Content)
+	case "system":
+		return anthropicContentToResponses(m.Content, "developer")
 	default:
 		return anthropicUserToResponses(m.Content)
 	}
@@ -215,6 +217,11 @@ func anthropicMsgToResponsesItems(m AnthropicMessage) ([]ResponsesInputItem, err
 // plain string or an array of blocks. tool_result blocks are extracted into
 // function_call_output items. Image blocks are converted to input_image parts.
 func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error) {
+	return anthropicContentToResponses(raw, "user")
+}
+
+// System text retains developer authority while tool-result media stays user input.
+func anthropicContentToResponses(raw json.RawMessage, role string) ([]ResponsesInputItem, error) {
 	// Try plain string.
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
@@ -223,7 +230,7 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
 		if err != nil {
 			return nil, err
 		}
-		return []ResponsesInputItem{{Type: "message", Role: "user", Content: partsJSON}}, nil
+		return []ResponsesInputItem{{Type: "message", Role: role, Content: partsJSON}}, nil
 	}
 
 	var blocks []AnthropicContentBlock
@@ -265,10 +272,19 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
 			}
 		}
 	}
-	parts = append(parts, toolResultImageParts...)
+	if role == "user" {
+		parts = append(parts, toolResultImageParts...)
+	}
 
 	if len(parts) > 0 {
 		content, err := json.Marshal(parts)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ResponsesInputItem{Type: "message", Role: role, Content: content})
+	}
+	if role != "user" && len(toolResultImageParts) > 0 {
+		content, err := json.Marshal(toolResultImageParts)
 		if err != nil {
 			return nil, err
 		}

@@ -1,0 +1,629 @@
+[
+  {
+    "id": "F01",
+    "tier": 1,
+    "title": "Responses 密封调用内容",
+    "candidates": [
+      "PR8682"
+    ],
+    "behaviour": "函数调用的 delta 回退重建 SHALL 保留 encrypted_content。",
+    "evidence": "apicompat overlay 丢失 sealed-content；namespace/密封参数对照通过。",
+    "patch_sites": "backend/internal/pkg/apicompat/responses_to_chatcompletions.go: bufferedFuncCall、ProcessEvent、BuildOutput",
+    "acceptance": "terminal/item.done/delta 三路比对调用 ID、密封内容和原参数。",
+    "boundary": "保留上一轮已实现的 namespace、encrypted_function_args 与参数完成事件语义。",
+    "prerequisites": "本地 accumulator 完整存在；只缺一个字段及两个赋值。"
+  },
+  {
+    "id": "F02",
+    "tier": 1,
+    "title": "对话中途 system 权限",
+    "candidates": [
+      "PR8703"
+    ],
+    "behaviour": "Chat/Anthropic 中途 system 消息转 Responses SHALL 保持 developer 权限。",
+    "evidence": "MidSystemAuthority overlay 实际 role=user。",
+    "patch_sites": "backend/internal/pkg/apicompat/anthropic_to_responses.go: anthropicMsgToResponsesItems",
+    "acceptance": "首部系统提示及中途 hook 文本、工具历史的权限与顺序。",
+    "boundary": "不把用户文本或工具结果提升为系统权限。",
+    "prerequisites": "既有 user/assistant 转换存在；新增窄 system 分支。"
+  },
+  {
+    "id": "F03",
+    "tier": 1,
+    "title": "JSON Schema 默认 strict",
+    "candidates": [
+      "PR8761"
+    ],
+    "behaviour": "Chat json_schema 未设置 strict 时转 Responses SHALL 显式写 false。",
+    "evidence": "StrictDefault overlay 缺 strict；显式 true 对照通过。",
+    "patch_sites": "backend/internal/pkg/apicompat/response_format.go: chatResponseFormatToResponsesTextFormat",
+    "acceptance": "缺省/true/false/null、schema 原值和普通 text/json_object 对照。",
+    "boundary": "不覆盖客户端显式值，不新增结构化输出能力。",
+    "prerequisites": "既有格式转换函数存在；五行默认值维护。"
+  },
+  {
+    "id": "F04",
+    "tier": 1,
+    "title": "Codex HTTP 外部上下文",
+    "candidates": [
+      "PR8769"
+    ],
+    "behaviour": "无对应调用的 agent browser_info/goal_objective/untrusted_context 输出 SHALL 转为不可信用户文本。",
+    "evidence": "handler overlay browser_info 未转换；真实 call_id 对照通过。",
+    "patch_sites": "backend/internal/handler/openai_page_context.go、openai_gateway_handler.go: normalizeCodexPageContext/Responses",
+    "acceptance": "三种上下文及已有 page 快照、空输出、重复成员、真实调用、未知名称。",
+    "boundary": "保留 page 快照严格校验和 user 权限，不能吞正常 function_call_output。",
+    "prerequisites": "上一轮 page normalizer 已存在；扩大名称集合，不导入账号命名空间。"
+  },
+  {
+    "id": "F05",
+    "tier": 1,
+    "title": "Claude per-turn beta",
+    "candidates": [
+      "PR8742"
+    ],
+    "behaviour": "任一已支持的 per-turn/mid-conversation beta SHALL 保留消息级 output_config。",
+    "evidence": "PerTurnBeta overlay 被净化；原 beta 和无 beta 对照通过。",
+    "patch_sites": "backend/internal/pkg/claude/constants.go；backend/internal/service/gateway_request.go: stripAnthropicMessageOutputConfigUnlessBeta",
+    "acceptance": "API Key/OAuth、空 system 控制消息、有正文消息和顶层 output_config。",
+    "boundary": "无相关 beta 仍执行既有净化，不能放开全部消息字段。",
+    "prerequisites": "现有 beta 净化函数存在；新增常量及一次精确 token 判断。"
+  },
+  {
+    "id": "F06",
+    "tier": 1,
+    "title": "count_tokens 请求头唯一性",
+    "candidates": [
+      "PR8788"
+    ],
+    "behaviour": "Anthropic count_tokens 透传 SHALL 以原始大小写无关读取/写入避免重复默认头。",
+    "evidence": "修正 DI 夹具后 header overlay 复现同名头计数为2。",
+    "patch_sites": "backend/internal/service/gateway_count_tokens.go: buildCountTokensRequestAnthropicAPIKeyPassthrough；gateway_service.go 调试头读取",
+    "acceptance": "真实 HTTP 线格式大小写/多值、覆写和缺省头各只有预期值。",
+    "boundary": "保持账号鉴权、beta 净化与覆写的最终优先级。",
+    "prerequisites": "getHeaderRaw/setHeaderRaw 已存在；不能改回 net/http 的大小写假设。"
+  },
+  {
+    "id": "F07",
+    "tier": 1,
+    "title": "输出后的兼容流账号副作用",
+    "candidates": [
+      "PR8814"
+    ],
+    "behaviour": "OpenAI Chat/Messages 已输出后的流错误 SHALL 执行既有账号/模型错误副作用。",
+    "evidence": "静态：两 reader 在早期 failover 分支之后直接记录错误，缺副作用调用。",
+    "patch_sites": "backend/internal/service/openai_gateway_chat_completions.go: handleChatStreamingResponse；openai_gateway_messages.go: handleAnthropicStreamingResponse",
+    "acceptance": "文本/工具输出后 401/429/overload、模型规则、普通请求错误与取消。",
+    "boundary": "已输出后不跨账号重放；沿用模型作用域，不扩大整号冷却。",
+    "prerequisites": "handleOpenAIStreamTerminalAccountSideEffects 和模型规则已有消费者。"
+  },
+  {
+    "id": "F08",
+    "tier": 1,
+    "title": "既有 Sol Ultra Fast 倍率",
+    "candidates": [
+      "PR8812"
+    ],
+    "behaviour": "已支持的 GPT-6.1 Sol Ultra Fast SHALL 使用冻结 tag 的6倍模型倍率。",
+    "evidence": "SolUltrafast overlay 实际缺模型倍率；Astra6倍对照通过。",
+    "patch_sites": "backend/internal/service/billing_service.go: applyModelSpecificPricingPolicy；openai_model_alias.go 既有型号判断",
+    "acceptance": "Sol/Astra、别名、HTTP/WS结算、Fast2倍、Free Fast、自定义0和长期上下文。",
+    "boundary": "只摘既有型号的倍率修复；强制 Ultra Fast 分组、新渠道倍率和 GPT-6.2 不随行。",
+    "prerequisites": "本地完整 Fast 已实现；Sol 型号 helper 已有，源新增支持谓词可窄适配。"
+  },
+  {
+    "id": "F09",
+    "tier": 1,
+    "title": "登录身份回填空指针",
+    "candidates": [
+      "PR8684"
+    ],
+    "behaviour": "登录邮箱身份回填失败返回 nil 时 SHALL 安全跳过默认设置判断。",
+    "evidence": "LoginNilIdentity overlay 捕获 panic；历史回填来源对照通过。",
+    "patch_sites": "backend/internal/service/auth_service.go: shouldApplyEmailFirstBindDefaults",
+    "acceptance": "身份创建/查询失败、既有身份、回填/首次绑定来源与正常登录。",
+    "boundary": "不引入新的注册、赠额或支付策略。",
+    "prerequisites": "函数在 nil 检查前读 Metadata；三行 guard 即可。"
+  },
+  {
+    "id": "F10",
+    "tier": 1,
+    "title": "5h 滚动保留有效周用量",
+    "candidates": [
+      "PR8723"
+    ],
+    "behaviour": "Claude 5h 窗口滚动 SHALL 仅清除已过期的周读数。",
+    "evidence": "WeeklySurvivesFiveHourRollover overlay 清空未到期7d读数。",
+    "patch_sites": "backend/internal/service/ratelimit_service.go: UpdateSessionWindow",
+    "acceptance": "未来/过期/缺 reset、仅7d响应、秒/毫秒重置和样本时间。",
+    "boundary": "只清5h和过期周值；Fable 模型/新额度接口仍独立按需。",
+    "prerequisites": "既有通用7d被动采样存在；源 rollover helper30行可独立适配。"
+  },
+  {
+    "id": "F11",
+    "tier": 1,
+    "title": "账号5h窗口上下界",
+    "candidates": [
+      "PR8698"
+    ],
+    "behaviour": "主动读取更新5h窗口 end 时 SHALL 同步 start=end-5h。",
+    "evidence": "实际 modernc SQLite/Ent overlay 更新 end 后 start 仍在旧窗口。",
+    "patch_sites": "backend/internal/repository/account_repo.go: UpdateSessionWindowEnd",
+    "acceptance": "正常滚动、毫秒格式读入、outbox传播和新窗口费用查询。",
+    "boundary": "账号窗口修复不改变用户平台固定 quota 窗口、软删除或重置策略。",
+    "prerequisites": "本地 Ent更新和 outbox 存在；无 schema 前置。"
+  },
+  {
+    "id": "F12",
+    "tier": 1,
+    "title": "首输出临时文件不可用",
+    "candidates": [
+      "PR8808"
+    ],
+    "behaviour": "首输出暂存无法创建临时文件时 SHALL 在同一容量上限内回退内存。",
+    "evidence": "SpoolUnavailable overlay 返回错误；stage上限拒绝对照通过。",
+    "patch_sites": "backend/internal/service/openai_first_output_timeout.go: openAIFirstOutputStage.prepareWrite",
+    "acceptance": "无权限/目录不可用、commit/drop/取消、上限拒绝及清理。",
+    "boundary": "保留8MiB stage上限、无具名明文残留和预算释放。",
+    "prerequisites": "既有 unlink 失败回退已存在；创建失败缺同样处理。"
+  },
+  {
+    "id": "F13",
+    "tier": 1,
+    "title": "Claude 默认测试模型维护",
+    "candidates": [
+      "PR8757"
+    ],
+    "behaviour": "内置 Claude 默认测试模型 SHALL 与冻结 tag 的 claude-sonnet-4-6 一致。",
+    "evidence": "静态常量差异；基线相关测试通过，未调用真实 Anthropic 核实退役公告。",
+    "patch_sites": "backend/internal/pkg/claude/constants.go: DefaultTestModel",
+    "acceptance": "默认账号测试使用已有4-6；显式模型和其它平台默认值不被覆盖。",
+    "boundary": "属于默认值维护，不新增模型目录/定价，也不宣称独立市场验证。",
+    "prerequisites": "本地4-6已有兼容和价格消费者；仅改常量及相关期望。"
+  },
+  {
+    "id": "F14",
+    "tier": 1,
+    "title": "Grok 媒体扁平错误",
+    "candidates": [
+      "PR8669"
+    ],
+    "behaviour": "Grok 既有媒体错误 SHALL 保留 xAI 扁平 error/code，保持脱敏与可配置错误规则。",
+    "evidence": "GrokFlatMediaMessage overlay 丢失字符串；嵌套/未知对象对照通过。",
+    "patch_sites": "backend/internal/service/grok_upstream_errors.go、grok_media.go、error_passthrough_runtime.go",
+    "acceptance": "嵌套优先、扁平字符串/数字code、内容策略、自定义规则和未知对象。",
+    "boundary": "仅 Grok 扩展提取器；不改变其它平台的模型不存在/停号判断。",
+    "prerequisites": "源两个窄提取器和带提取器的规则入口需新增；既有媒体路由已存在。"
+  },
+  {
+    "id": "F15",
+    "tier": 1,
+    "title": "Gemini 非数组 items",
+    "candidates": [
+      "PR8759"
+    ],
+    "behaviour": "既有 Gemini schema 清理 SHALL 删除非 array 的 items，并保持合法数组 schema。",
+    "evidence": "SchemaNonArrayItems overlay 失败；tuple/default及合法数组对照已经通过。",
+    "patch_sites": "backend/internal/pkg/antigravity/schema_cleaner.go: cleanJSONSchemaRecursive",
+    "acceptance": "嵌套对象/数组、非法items、工具schema及实例 default/enum 的保护。",
+    "boundary": "不把本地已经处理的 tuple 情形描述成新缺陷，不引入新 Gemini 模型。",
+    "prerequisites": "清理器完整存在；窄类型条件修复。"
+  },
+  {
+    "id": "F16",
+    "tier": 1,
+    "title": "白名单精确模型输入",
+    "candidates": [
+      "PR8736"
+    ],
+    "behaviour": "模型白名单添加操作 SHALL 拒绝含星号的条目并保留输入草稿。",
+    "evidence": "临时前端4个来源新增测试失败；原11个控件测试通过。",
+    "patch_sites": "frontend/src/components/account/ModelWhitelistSelector.vue；zh/en admin/accounts 文案",
+    "acceptance": "点击/Enter、首尾空白、纠正后添加、重复/映射冲突提示。",
+    "boundary": "不引入 glob 或透传白名单调度新开关。",
+    "prerequisites": "共享控件和提示API已有；来源测试需按本地位置插入。"
+  },
+  {
+    "id": "F17",
+    "tier": 1,
+    "title": "渠道 Bedrock 兼容开关类型",
+    "candidates": [
+      "PR8840"
+    ],
+    "behaviour": "渠道编辑 SHALL 用 boolean 保存/清除 bedrock_cc_compat，并保留其它 features。",
+    "evidence": "临时前端5个来源测试失败，实际保存的是 {anthropic:true/false}。",
+    "patch_sites": "frontend/src/views/admin/ChannelsView.vue: formToAPI",
+    "acceptance": "创建/编辑/重开/显式false/移除Anthropic区段及其它features。",
+    "boundary": "保留本地 run_mode/菜单限制，不新增平台或商业配置。",
+    "prerequisites": "后端读 boolean、本地前端写对象；现有开关消费者已核实。"
+  },
+  {
+    "id": "F18",
+    "tier": 1,
+    "title": "调度快照端点能力",
+    "candidates": [
+      "PR8837"
+    ],
+    "behaviour": "调度快照 SHALL 保留已有 openai_capabilities 声明并据此过滤既有端点。",
+    "evidence": "repository overlay 丢键；实际 Account 能力判断由禁用 embeddings 变成允许。",
+    "patch_sites": "backend/internal/repository/scheduler_cache.go: filterSchedulerCredentials；既有 Account/调度器能力消费者",
+    "acceptance": "chat/embeddings/Responses生图意图、未配置、空配置、hydrate及WS读取。",
+    "boundary": "来源标题提及 Seedance，但本地现有能力消费者独立适用；不引入 Seedance。",
+    "prerequisites": "键读取/普通端点过滤存在；只需补投影白名单。"
+  },
+  {
+    "id": "F19",
+    "tier": 1,
+    "title": "设置注入 HTML 与 CSP nonce",
+    "candidates": [
+      "PR8775"
+    ],
+    "behaviour": "设置注入 HTML SHALL 禁止共享/浏览器缓存，携带请求 nonce 时不得按旧 ETag 返回304。",
+    "evidence": "embed overlay 复现nonce仍304、缺no-store；无nonce304对照通过。",
+    "patch_sites": "backend/internal/web/embed_on.go: serveIndexHTML；新增窄HTML头 helper",
+    "acceptance": "两请求不同nonce、设置变更/回退、无nonce条件请求、静态hash资源。",
+    "boundary": "不承诺所有浏览器 bfcache 行为；仅约定响应头和 nonce/HTML 一致性。",
+    "prerequisites": "现有HTML cache及注入存在；18行头helper可独立采用。"
+  },
+  {
+    "id": "F20",
+    "tier": 1,
+    "title": "Chat 客户端 metadata.user_id",
+    "candidates": [
+      "PR8786"
+    ],
+    "behaviour": "API Key 的 Chat转Anthropic SHALL 补回已识别格式的客户端 metadata.user_id。",
+    "evidence": "静态：DTO转换丢metadata，两个转发路径没有补回；尚无专用转发探针。",
+    "patch_sites": "backend/internal/service/gateway_forward_as_chat_completions.go、openai_gateway_chat_completions_anthropic_native.go；窄metadata helper",
+    "acceptance": "合法JSON/legacy会话ID、空值/错误类型、两路径和OAuth负对照。",
+    "boundary": "只保留识别到的user_id字符串原字节，OAuth仍使用账号拟态身份。",
+    "prerequisites": "ParseMetadataUserID存在；源helper32行，不需账号命名空间基座。"
+  },
+  {
+    "id": "F21",
+    "tier": 1,
+    "title": "完成转发后的粘性绑定",
+    "candidates": [
+      "PR8726"
+    ],
+    "behaviour": "完成转发后的粘性写入 SHALL 不随客户端取消，且受5秒截止限制。",
+    "evidence": "静态：handler用请求ctx绑定；service原样交给cache，无内部脱离取消。",
+    "patch_sites": "backend/internal/handler/gateway_handler.go: Messages 完成后的绑定点",
+    "acceptance": "完成后断开仍写入、超时返回、换号不覆盖原绑定和正常请求。",
+    "boundary": "保留本地 profit admission/既有绑定条件；只脱离这一收尾写入。",
+    "prerequisites": "WithoutCancel/WithTimeout和既有绑定helper均已有；无需新调度架构。"
+  },
+  {
+    "id": "S01",
+    "tier": 2,
+    "title": "5m/1h 缓存明细与互斥计费",
+    "candidates": [
+      "PR8174"
+    ],
+    "behaviour": "既有转换、读流及结算 SHALL 保留5m/1h明细和聚合presence，差额按5m计价，输入桶互斥。",
+    "evidence": "DTO往返/presence及缓存差额overlay失败；完整明细/显式0对照通过。",
+    "patch_sites": "backend/internal/pkg/apicompat/types.go及三协议桥；backend/internal/service/*native*、gateway_*usage*、billing_service.go、account_stats_pricing.go",
+    "acceptance": "HTTP/普通与透传SSE/缓冲/WS、缓存字段单独更新、矛盾明细、1h费用、SQLite结算+去重。",
+    "boundary": "只用既有5m/1h列；不导入30m/12h字段、迁移或未选价格策略；自定义0/Fast保留。",
+    "prerequisites": "5m/1h UsageTokens/SQLite列已有；OpenAIUsage及Anthropic DTO/流合并需手工贯通。"
+  },
+  {
+    "id": "S02",
+    "tier": 2,
+    "title": "Claude 并发 token 轮换恢复",
+    "candidates": [
+      "PR8737"
+    ],
+    "behaviour": "Claude OAuth 的旧token401 SHALL 仅在数据库证明有新有效token时同号重试一次。",
+    "evidence": "静态追踪三转发路径；上一轮原子refresh仍存在，未跑新401并发传输探针。",
+    "patch_sites": "backend/internal/service/gateway_forward.go、gateway_forward_as_chat_completions.go、gateway_forward_as_responses.go",
+    "acceptance": "barrier控制旧token在途/新token落库、cache旧值、一次重试、同token/错误类型/取消/预算。",
+    "boundary": "比对实际发送token；不在401路径刷新/持久化凭据，不绕过重试上限或正常401策略。",
+    "prerequisites": "仓储GetByID/token cache已有；31行恢复helper及三路径重发适配。"
+  },
+  {
+    "id": "S03",
+    "tier": 2,
+    "title": "SQLite 分组倍率/RPM 原子同步",
+    "candidates": [
+      "PR8659"
+    ],
+    "behaviour": "单次分组倍率或RPM同步 SHALL 在一个事务内清空/删除/写入，失败保留旧配置。",
+    "evidence": "两份真实modernc SQLite trigger故障探针复现旧行丢失；零倍率成功对照通过。",
+    "patch_sites": "backend/internal/repository/user_group_rate_repo.go: SyncGroupRateMultipliers/SyncGroupRPMOverrides",
+    "acceptance": "事务失败/取消回滚、重复用户last-wins、另一列保留、bind-safe大批次、提交后cache。",
+    "boundary": "不得复制PG ANY/ALL/unnest/强制类型转换；不更改历史迁移或用户固定quota。",
+    "prerequisites": "本地已有SQLite SQL；增加事务与去重并保持本地SQL构造，无schema前置。"
+  },
+  {
+    "id": "S04",
+    "tier": 2,
+    "title": "首内容前换号与 keepalive 错误",
+    "candidates": [
+      "PR8811",
+      "PR8813",
+      "PR8724"
+    ],
+    "behaviour": "首内容前仅keepalive输出 SHALL 不阻断安全换号；已提交SSE后的错误必须为SSE事件。",
+    "evidence": "SSEErrorAfterPing overlay仍写裸JSON；源码确认Messages前奏立即写出和keepalive被stage扣住。",
+    "patch_sites": "backend/internal/service/openai_gateway_messages.go、openai_gateway_response_handling.go、gateway_upstream_response.go；backend/internal/handler/openai_gateway_handler.go",
+    "acceptance": "created/item-added后失败→成功账号、keepalive前后耗尽、错误规则、取消/终态/槽位释放。",
+    "boundary": "前奏需沿用8MiB有界暂存，不能原样引入无界strings.Builder；私有账号头不得提前泄露。",
+    "prerequisites": "本地keepalive调整大小、首输出预算/规则/暂存已有；hold与耗尽规则需要适配。"
+  },
+  {
+    "id": "S05",
+    "tier": 2,
+    "title": "空闲超时与一次换号预算",
+    "candidates": [
+      "PR8577",
+      "PR8920"
+    ],
+    "behaviour": "OpenAI 首输出前空闲超时 SHALL 进入最多一次换号预算，计时按最后上游读取截止。",
+    "evidence": "两PR最终代码联合静态审查；未执行新超时/两账号HTTP探针。",
+    "patch_sites": "backend/internal/service/openai_gateway_response_handling.go: interval计时/timeout；既有handler首输出预算",
+    "acceptance": "持续数据/注释、无内容超时、keepalive已写、两号都超时、已有内容与Grok负对照。",
+    "boundary": "保留配置的idle默认及既有模型冷却；不要把惩罚扩散到整个池。",
+    "prerequisites": "SafeToFailoverAfterWrite及一次预算已有；不可只取#8577漏#8920。"
+  },
+  {
+    "id": "S06",
+    "tier": 2,
+    "title": "Codex additional_tools 声明 ID",
+    "candidates": [
+      "PR8754"
+    ],
+    "behaviour": "Codex additional_tools 的声明ID SHALL 与引用一起保留，仅规范已识别UUID形态。",
+    "evidence": "AdditionalToolsDeclarationID overlay 实际id缺失。",
+    "patch_sites": "backend/internal/service/openai_codex_transform.go: filterCodexInputWithOptions；现有HTTP/透传/WS兼容调用点",
+    "acceptance": "UUID声明/引用、opaque ID、store=false、完整工具回放、普通callID/UTF8。",
+    "boundary": "不剥离声明ID、不改普通工具身份；不导入完整账号命名空间或ojson基座。",
+    "prerequisites": "decoded过滤器已有；raw局部输入重建helper/实际调用点需补，不覆盖整来源文件。"
+  },
+  {
+    "id": "S07",
+    "tier": 2,
+    "title": "Grok 服务端搜索调用",
+    "candidates": [
+      "PR8834"
+    ],
+    "behaviour": "Grok xs_/as_ 服务端 custom 搜索 SHALL 不下发为客户端调用，并计入原生搜索次数。",
+    "evidence": "GrokServerSearchCount overlay 实际0期望2；普通custom/web_search对照通过。",
+    "patch_sites": "backend/internal/pkg/apicompat/responses_to_anthropic.go、responses_to_chatcompletions.go；backend/internal/service/grok_search_count.go及流/缓冲消费者",
+    "acceptance": "Grok Chat/Messages/Responses、终态与delta回退、搜索去重、普通custom工具和非Grok前缀。",
+    "boundary": "仅Grok启用prefix规则；不引入通用工具桥或新搜索平台。",
+    "prerequisites": "源24行predicate可复用；需贯通state/accumulator/provider标记，不只补计数。"
+  },
+  {
+    "id": "S08",
+    "tier": 2,
+    "title": "原文模型和真实端点观测",
+    "candidates": [
+      "PR8727",
+      "PR8728",
+      "PR8745",
+      "PR8741"
+    ],
+    "behaviour": "原生Anthropic和Chat/Responses桥 SHALL 把原文模型及冲突带到用量边界，并记录真实/messages端点。",
+    "evidence": "ChatFallbackResponseModel overlay丢模型；现有observer/response_model计费消费者已定位。",
+    "patch_sites": "backend/internal/service/openai_gateway_*anthropic_native.go、*chat_fallback.go、gateway_forward_as_*.go；既有upstream_response_model.go",
+    "acceptance": "流/非流/中断、多模型冲突、一次attempt隔离、端点错误日志、SQLite计费回退。",
+    "boundary": "先观察原文再还原公开名；保留本地价格来源准入及已解析Fast tier，不为模型修复重做tier基座。",
+    "prerequisites": "本地observer已有约束；源部分ServiceTier观察接口缺失，按本地结果字段适配。"
+  },
+  {
+    "id": "S09",
+    "tier": 2,
+    "title": "Composite 公开模型名还原",
+    "candidates": [
+      "PR8796"
+    ],
+    "behaviour": "Composite 响应 SHALL 还原客户端公开模型名，同时保留原文上游模型用于审计/计费。",
+    "evidence": "静态核对本地公开/已解析模型ctx；当前Anthropic响应仍使用转发模型，未跑新别名HTTP探针。",
+    "patch_sites": "backend/internal/service/composite_platform.go、gateway_anthropic_passthrough.go、gateway_upstream_response.go、openai_gateway_messages*.go",
+    "acceptance": "原生/拟态/Chat/Responses的流与非流、仅message_start.model、模型冲突及SQLite费用。",
+    "boundary": "先观测后改名；不得替换正文/工具参数中的同名字符串，不影响非Composite响应。",
+    "prerequisites": "本地RequestedPublicModel/ResolvedUpstreamModel上下文已有；源窄helper需适配。"
+  },
+  {
+    "id": "S10",
+    "tier": 2,
+    "title": "Anthropic 兼容入口 effort 策略",
+    "candidates": [
+      "PR8739"
+    ],
+    "behaviour": "Anthropic组的Chat/Responses兼容入口 SHALL 执行现有group effort策略并一致返回错误。",
+    "evidence": "静态：通用OpenAI入口有policy，两个Anthropic兼容handler没有调用。",
+    "patch_sites": "backend/internal/handler/gateway_handler_chat_completions.go、gateway_handler_responses.go",
+    "acceptance": "deny/map/ceiling、显式非法值、禁用/省略、转换后最终effort和费用、count_tokens邻近。",
+    "boundary": "保留上一轮合成none/最终校验和GLM通用兼容；不复制缺失原生平台闸门。",
+    "prerequisites": "applyOpenAIReasoningEffortPolicyForRequest已有；本地handler次序需手工适配。"
+  },
+  {
+    "id": "S11",
+    "tier": 2,
+    "title": "Bedrock 错误语义与部分用量",
+    "candidates": [
+      "PR8675"
+    ],
+    "behaviour": "Bedrock SHALL 区分封号/缺用例/请求过滤/模型429，并在中断时返回已观测用量。",
+    "evidence": "静态核对既有Bedrock路由、部分流用量helper和模型限流仓储；未跑新完整错误探针。",
+    "patch_sites": "backend/internal/service/gateway_bedrock.go、gateway_upstream_response.go、ratelimit_service.go；窄ratelimit_bedrock helper；Messages调度模型ctx",
+    "acceptance": "精确400/404、反射字段负对照、429多模型、渠道映射键、5xx过滤、截断SQLite结算。",
+    "boundary": "请求内容错误不换号；只模型冷却，沿用现有显式规则及SQLite单键更新。",
+    "prerequisites": "110行语义helper及调度键ctx需适配；不导入新Bedrock平台/模型。"
+  },
+  {
+    "id": "S12",
+    "tier": 2,
+    "title": "Gemini 并行与分片工具",
+    "candidates": [
+      "PR8828"
+    ],
+    "behaviour": "Gemini流 SHALL 按调用身份而非仅名称划分工具块，保留字符串分片和终态快照。",
+    "evidence": "静态：两个现有reader只以name判断边界；65行来源helper已量测。",
+    "patch_sites": "backend/internal/service/gemini_messages_compat_service.go、gemini_chat_completions_compat_service.go",
+    "acceptance": "同名/同参并行、不同/相同ID、完整首片字符串、重传/快照、无ID歧义及结束事件。",
+    "boundary": "无ID的字符串快照与新相同调用不可区分时采用来源保守策略，不猜造调用。",
+    "prerequisites": "现有delta累计器存在；两reader添加统一boundary，不需要新模型。"
+  },
+  {
+    "id": "S13",
+    "tier": 2,
+    "title": "Gemini Chat 结构化响应格式",
+    "candidates": [
+      "PR8662"
+    ],
+    "behaviour": "Gemini Chat兼容 SHALL 传递已声明json_object/json_schema格式，并保留schema字面量。",
+    "evidence": "静态：当前Chat→Anthropic转换后丢response_format；真实消费者存在。",
+    "patch_sites": "backend/internal/service/gemini_chat_completions_compat_service.go；窄gemini_compat_response_format helper",
+    "acceptance": "两个既有认证入口、属性顺序/大数、工具/图片互斥、文本/缺省/无效格式。",
+    "boundary": "采用responseJsonSchema，不扩展Gemini新模型或cache CRUD；保留资源限制。",
+    "prerequisites": "源helper50行；CLI wrapper需原文嵌入而非整请求map重编码。"
+  },
+  {
+    "id": "S14",
+    "tier": 2,
+    "title": "Antigravity 兼容思考/等待/空流",
+    "candidates": [
+      "PR8673",
+      "PR8826"
+    ],
+    "behaviour": "既有Antigravity兼容 SHALL 对齐思考配置、按响应头到达锚定等待，空流仅释放对应粘性会话。",
+    "evidence": "静态核对现有adapter/keepalive；专用时间锚和sticky释放尚未执行。",
+    "patch_sites": "backend/internal/service/antigravity_gateway_compat*.go、antigravity_gemini_thinking_variant.go；两兼容handler错误收尾",
+    "acceptance": "slow headers/有效thought/连续ping/empty timeout、无内容已提交、绑定已改变、取消/用量。",
+    "boundary": "保留既有timeout默认，不导入Carbon等模型和完整新thinking策略；绑定检查需防并发误删。",
+    "prerequisites": "adapter和thinking意图parser已有；源16行effort helper可摘，缺配置helper需窄补。"
+  },
+  {
+    "id": "S15",
+    "tier": 2,
+    "title": "Gemini 原生稳定前缀会话",
+    "candidates": [
+      "PR8822"
+    ],
+    "behaviour": "Gemini原生会话回退 SHALL 按API Key、模型、tools/system和首用户parts生成稳定哈希。",
+    "evidence": "静态：本地仍通用ParseGatewayRequest回退；完整PR最后恢复ForceCacheBilling。",
+    "patch_sites": "backend/internal/handler/gemini_v1beta_handler.go；backend/internal/service/gemini_session.go",
+    "acceptance": "首用户/省略role、后续tool回合、模型/Key隔离、空parts、显式客户端ID优先。",
+    "boundary": "不按发布摘要删除ForceCacheBilling；两个微提交必须以最终PR状态解释。",
+    "prerequisites": "内容种子归一和xxhash已有相邻消费者；缺helper需适配，不能套来源未有的完整raw基座。"
+  },
+  {
+    "id": "S16",
+    "tier": 2,
+    "title": "冷却账号快照成员",
+    "candidates": [
+      "PR8729"
+    ],
+    "behaviour": "快照 SHALL 保留配置启用的完整账号池，并在每次读时判断临时冷却/expiry。",
+    "evidence": "静态：本地loadAccountsFromDB仍用ListSchedulable*；完整候选仓储接口已存在。",
+    "patch_sites": "backend/internal/service/scheduler_snapshot_service.go: loadAccountsFromDB/ListSchedulableAccounts",
+    "acceptance": "快照构建时冷却→自然到期无outbox、真正禁用、simple/混排、取消和未就绪回源。",
+    "boundary": "不随行#8833的20s stale grace或合并回源；保留revision/retire/单节点缓存契约。",
+    "prerequisites": "ListModelAvailabilityCandidates已有；差异是缓存成员与读取过滤。"
+  },
+  {
+    "id": "S17",
+    "tier": 2,
+    "title": "OpenAI 用量观测新鲜度",
+    "candidates": [
+      "PR8747"
+    ],
+    "behaviour": "额度查询 SHALL 区分真实上游观测、陈旧读数和本地未知统计，刷新失败不得伪造新时间。",
+    "evidence": "静态：当前读操作生成UpdatedAt；现有用量/监控消费者都有可复用接口。",
+    "patch_sites": "backend/internal/service/account_usage_service.go、channel_monitor_quota_fetcher.go；frontend UsageProgressBar/AccountUsageCell/types",
+    "acceptance": "主动失败/无quota/显式0、legacy无时间、被动缓存、unknown窗口、UI不误停账号。",
+    "boundary": "不引入新quota-summary或恢复监控v2整页；缺失Spark专用前置不作为依赖导入。",
+    "prerequisites": "源8行观测predicate及unknown字段需贯通已有UI；保留上一轮已实现的刷新留行。"
+  },
+  {
+    "id": "S18",
+    "tier": 2,
+    "title": "实际扣除与账号成本统计",
+    "candidates": [
+      "PR8806"
+    ],
+    "behaviour": "按account过滤的模型/端点统计 SHALL 分列actual_cost和account_cost，Gemini账号配额使用账号成本。",
+    "evidence": "静态核实本地条件覆盖actualCost；SQLite查询/字段和Gemini聚合均已有。",
+    "patch_sites": "backend/internal/repository/usage_log_repo_stats.go、usage_log_repo_trend.go；gemini_quota.go、usage_handler.go；EndpointDistributionChart/types/user UsageView",
+    "acceptance": "合成不同标准/实际/账号价、所有筛选/端点来源、管理员/用户redaction与Gemini批量一致。",
+    "boundary": "只增DTO字段，无新DB列；user API/UI不能泄露账号成本；保持model_source等维度。",
+    "prerequisites": "源PG ARRAY查询不能覆盖本地SQLite SQL；需同时改查询、consumer和redaction。"
+  },
+  {
+    "id": "S19",
+    "tier": 2,
+    "title": "价格启动不阻塞远端哈希",
+    "candidates": [
+      "PR8798"
+    ],
+    "behaviour": "已加载本地有效价格后 SHALL 不阻塞启动等待远端hash，并保持可停止的后台同步。",
+    "evidence": "静态：Initialize同步fetchRemoteHash；本地正文实际hash修复已存在。",
+    "patch_sites": "backend/internal/service/pricing_service.go: Initialize/checkAndUpdatePricing/Stop",
+    "acceptance": "慢/失败hash不挡启动，下载hash一致、并发同步、Stop/取消、fallback/override。",
+    "boundary": "不能只加无管理goroutine；不改变已有目录实际正文hash和零覆盖优先级。",
+    "prerequisites": "现有价格生命周期和远端client存在；需绑定worker所有权/截止/停止。"
+  },
+  {
+    "id": "S20",
+    "tier": 2,
+    "title": "上游 TCP 死连接检测",
+    "candidates": [
+      "PR8800"
+    ],
+    "behaviour": "既有标准上游dialer SHALL 使用15s idle/5s interval/3 probes，Linux user-timeout设置失败仍拨号。",
+    "evidence": "静态socket实现审查；未做丢包/死peer真实计时实验。",
+    "patch_sites": "backend/internal/repository/http_upstream.go: newUpstreamDialer；平台专用keepalive helper",
+    "acceptance": "Linux实际socket选项、错误降级、非Linux编译、proxy/TLS配置和取消。",
+    "boundary": "30秒是来源参数推算，不是本次实测断线耗时；应用层120s idle保留。",
+    "prerequisites": "Go1.27.3支持该标准API；不依赖Go1.27.4或新x/sys版本。"
+  },
+  {
+    "id": "S21",
+    "tier": 2,
+    "title": "OpenAI 工具 schema 正则适配",
+    "candidates": [
+      "PR8772"
+    ],
+    "behaviour": "现有OpenAI工具schema SHALL 窄处理来源不支持的regexp，并保留实例值与仍有效的schema约束。",
+    "evidence": "静态：本地只有null-type/required清理，没有来源完整regexp parser；未向远端发送新样例。",
+    "patch_sites": "backend/internal/service/openai_responses_tool_schema.go；HTTP/透传/WS实际schema规范化点",
+    "acceptance": "pattern/patternProperties、不支持转义/组、嵌套编辑、实例default/enum、有效Python形态及非OpenAI。",
+    "boundary": "不能把来源约899行parser整体覆盖本地窄sanitizer；需测实际适配规模和编辑重叠。",
+    "prerequisites": "基础工具消费者在此；新正则能力不能凭CLEAN判编译，jsonschema-go0.4.2已在本地图中。"
+  },
+  {
+    "id": "S22",
+    "tier": 2,
+    "title": "既有流与请求热点窄优化",
+    "candidates": [
+      "PR8653",
+      "PR8667",
+      "PR8903",
+      "PR8904"
+    ],
+    "behaviour": "选定热点优化 SHALL 保持原字节、工具顺序、错误/用量语义和有界生命周期。",
+    "evidence": "Ollama200消息PoC语义对照通过，7.92ms→0.34ms、12.56MB→0.26MB分配；来源SSE escaped-usage predicate失败。",
+    "patch_sites": "backend/internal/service/gateway_tool_rewrite.go、gateway_upstream_response.go、gateway_claude_oauth_body.go、gateway_billing_header.go、openai_gateway_chat_completions_raw.go、openai_gateway_ollama_cloud_cc_reasoning.go",
+    "acceptance": "每个采用hunk做单P成本/字节对照，escaped type/model/usage、read前flush/EOF/断开、cache TTL次序。",
+    "boundary": "补转义回退；不导入DeepSeek缺失placeholder消费者、无管理的懒日志全body保活、#8816账务lane或完整COW。",
+    "prerequisites": "raw view已存在；字符串reverse/helper88行/flush-reader16行可窄适配，完整根文件不能覆盖。"
+  },
+  {
+    "id": "S23",
+    "tier": 2,
+    "title": "Go工具链与时钟测试维护",
+    "candidates": [
+      "PR8767",
+      "PR8743"
+    ],
+    "behaviour": "Go维护 SHALL 对齐1.27.4声明/CI/工具，并让已有峰谷价格测试使用固定PricingAt。",
+    "evidence": "只读Go1.27.4 embed构建及config/apicompat/claude三包通过；首次下载网络超时另存。",
+    "patch_sites": "backend/go.mod、本地CI/Docker/开发版本断言；两个现有*_record_usage_test.go",
+    "acceptance": "全量unit/lint/race/embed、同版本lint重建、隔离Ent/Wire兼容及固定23:59边界。",
+    "boundary": "不升级库版本、上游PG依赖、fork VERSION或历史记录；codegen/CI尚不是本轮已验收项。",
+    "prerequisites": "范围内go.sum/前端依赖无变；jsonschema-go只是同版本direct标记，非新依赖前置。"
+  }
+]

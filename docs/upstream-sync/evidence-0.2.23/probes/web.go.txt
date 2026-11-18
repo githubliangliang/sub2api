@@ -1,0 +1,54 @@
+//go:build embed
+
+package web
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+)
+
+func intake023HTMLContext(nonce, etag string) (*gin.Context, *httptest.ResponseRecorder) {
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	if nonce != "" { c.Set(middleware.CSPNonceKey, nonce) }
+	if etag != "" { c.Request.Header.Set("If-None-Match", etag) }
+	return c, rec
+}
+
+func intake023CachedHTML() *FrontendServer {
+	cache := NewHTMLCache()
+	cache.Set([]byte("<html><script nonce=\""+NonceHTMLPlaceholder+"\">window.settings={}</script></html>"), []byte("{}"))
+	return &FrontendServer{cache:cache}
+}
+
+func TestIntake023HTMLNonceRevalidation(t *testing.T) {
+	server := intake023CachedHTML()
+	first, firstResponse := intake023HTMLContext("first-nonce", "")
+	server.serveIndexHTML(first)
+	require.Contains(t, firstResponse.Body.String(), "first-nonce")
+	next, nextResponse := intake023HTMLContext("second-nonce", firstResponse.Header().Get("ETag"))
+	server.serveIndexHTML(next)
+	next.Writer.WriteHeaderNow()
+	require.Equal(t, http.StatusOK, nextResponse.Code)
+	require.Contains(t, nextResponse.Body.String(), "second-nonce")
+}
+
+func TestIntake023HTMLNoStore(t *testing.T) {
+	c, rec := intake023HTMLContext("nonce", "")
+	intake023CachedHTML().serveIndexHTML(c)
+	require.Contains(t, rec.Header().Get("Cache-Control"), "no-store")
+}
+
+func TestIntake023HTMLNonceFreeControl(t *testing.T) {
+	server := intake023CachedHTML()
+	c, rec := intake023HTMLContext("", server.cache.Get().ETag)
+	server.serveIndexHTML(c)
+	c.Writer.WriteHeaderNow()
+	require.Equal(t, http.StatusNotModified, rec.Code)
+}

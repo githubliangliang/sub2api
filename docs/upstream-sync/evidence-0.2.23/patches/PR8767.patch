@@ -1,0 +1,109 @@
+diff --git a/.github/workflows/backend-ci.yml b/.github/workflows/backend-ci.yml
+index d1b420aa9..751f1fb0f 100644
+--- a/.github/workflows/backend-ci.yml
++++ b/.github/workflows/backend-ci.yml
+@@ -35,7 +35,7 @@ jobs:
+           cache-dependency-path: backend/go.sum
+       - name: Verify Go version
+         run: |
+-          go version | grep -q 'go1.27.3'
++          go version | grep -q 'go1.27.4'
+       - name: Unit tests
+         working-directory: backend
+         run: make test-unit
+@@ -75,7 +75,7 @@ jobs:
+           cache-dependency-path: backend/go.sum
+       - name: Verify Go version
+         run: |
+-          go version | grep -q 'go1.27.3'
++          go version | grep -q 'go1.27.4'
+       - name: golangci-lint
+         uses: golangci/golangci-lint-action@v9
+         with:
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 9f2ef5dd7..b5780a6be 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -137,7 +137,7 @@ jobs:
+           check-latest: false
+           cache: false
+       - name: Verify Go version
+-        run: go version | grep -q 'go1.27.3'
++        run: go version | grep -q 'go1.27.4'
+       - name: Restore target-specific Go cache
+         id: go-cache
+         uses: actions/cache/restore@v6
+diff --git a/.github/workflows/security-scan.yml b/.github/workflows/security-scan.yml
+index 703e10354..19893aae9 100644
+--- a/.github/workflows/security-scan.yml
++++ b/.github/workflows/security-scan.yml
+@@ -23,7 +23,7 @@ jobs:
+           cache-dependency-path: backend/go.sum
+       - name: Verify Go version
+         run: |
+-          go version | grep -q 'go1.27.3'
++          go version | grep -q 'go1.27.4'
+       - name: Run govulncheck
+         working-directory: backend
+         run: |
+diff --git a/DEV_GUIDE.md b/DEV_GUIDE.md
+index 2f440d0f6..f01d59e48 100644
+--- a/DEV_GUIDE.md
++++ b/DEV_GUIDE.md
+@@ -53,7 +53,7 @@ npm install -g pnpm
+ 
+ ### CI 要求
+ 
+-- Go 版本必须是 **1.27.0**：三个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.0'`。升级 Go 时要同时改 `backend/go.mod`、`backend-ci.yml`（两处）、`release.yml`、`security-scan.yml` 里的这句断言，**以及三个 Dockerfile 里的 Go 构建镜像**（`Dockerfile` / `deploy/Dockerfile` 的 `ARG GOLANG_IMAGE`、`backend/Dockerfile` 的 `FROM golang:`）。前者漏了 CI 会在版本校验步骤直接失败；**后者漏了 CI 不会报，而是等到有人用这些 Dockerfile 构建时才失败**（`go.mod requires go >= X (running Y; GOTOOLCHAIN=local)`）。
++- Go 版本必须是 **1.27.4**：三个 workflow 都用 `go-version-file: backend/go.mod` 取版本，随后硬断言 `go version | grep -q 'go1.27.4'`。升级 Go 时要同时改 `backend/go.mod`、`backend-ci.yml`（两处）、`release.yml`、`security-scan.yml` 里的这句断言，**以及三个 Dockerfile 里的 Go 构建镜像**（`Dockerfile` / `deploy/Dockerfile` 的 `ARG GOLANG_IMAGE`、`backend/Dockerfile` 的 `FROM golang:`）。前者漏了 CI 会在版本校验步骤直接失败；**后者漏了 CI 不会报，而是等到有人用这些 Dockerfile 构建时才失败**（`go.mod requires go >= X (running Y; GOTOOLCHAIN=local)`）。
+ - 前端使用 `pnpm install --frozen-lockfile`，必须提交 `pnpm-lock.yaml`
+ 
+ ### 本地测试命令
+diff --git a/Dockerfile b/Dockerfile
+index 0242d6f13..0c9e43885 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -8,7 +8,7 @@
+ # =============================================================================
+ 
+ ARG NODE_IMAGE=node:24-alpine
+-ARG GOLANG_IMAGE=golang:1.27.3-alpine
++ARG GOLANG_IMAGE=golang:1.27.4-alpine
+ ARG ALPINE_IMAGE=alpine:3.21
+ ARG POSTGRES_IMAGE=postgres:18-alpine
+ ARG GOPROXY=https://goproxy.cn,direct
+diff --git a/backend/Dockerfile b/backend/Dockerfile
+index 40e228cd3..52bcb43dc 100644
+--- a/backend/Dockerfile
++++ b/backend/Dockerfile
+@@ -1,4 +1,4 @@
+-FROM golang:1.27.2-alpine
++FROM golang:1.27.4-alpine
+ 
+ WORKDIR /app
+ 
+diff --git a/backend/go.mod b/backend/go.mod
+index 91db5d03b..8163fbea1 100644
+--- a/backend/go.mod
++++ b/backend/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/Wei-Shaw/sub2api
+ 
+-go 1.27.3
++go 1.27.4
+ 
+ require (
+ 	entgo.io/ent v0.14.5
+diff --git a/deploy/Dockerfile b/deploy/Dockerfile
+index d5c580b46..e0e8fbf03 100644
+--- a/deploy/Dockerfile
++++ b/deploy/Dockerfile
+@@ -7,7 +7,7 @@
+ # =============================================================================
+ 
+ ARG NODE_IMAGE=node:24-alpine
+-ARG GOLANG_IMAGE=golang:1.27.2-alpine
++ARG GOLANG_IMAGE=golang:1.27.4-alpine
+ ARG ALPINE_IMAGE=alpine:3.20
+ ARG GOPROXY=https://goproxy.cn,direct
+ ARG GOSUMDB=sum.golang.google.cn

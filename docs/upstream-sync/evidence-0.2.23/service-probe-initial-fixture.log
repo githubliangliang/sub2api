@@ -1,0 +1,37 @@
+2026/11/18 04:48:06 Timezone initialized: UTC (UTC offset: +00:00)
+=== RUN   TestIntake023PerTurnBeta
+    intake023_release_test.go:33: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:33
+        	Error:      	Should be false
+        	Test:       	TestIntake023PerTurnBeta
+--- FAIL: TestIntake023PerTurnBeta (0.00s)
+=== RUN   TestIntake023PerTurnBetaControl
+--- PASS: TestIntake023PerTurnBetaControl (0.00s)
+=== RUN   TestIntake023CountTokensHeaderDuplicates
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+--- FAIL: TestIntake023CountTokensHeaderDuplicates (0.00s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x178 pc=0x276297b]
+
+goroutine 7 [running]:
+testing.tRunner.func1.2({0x7476fa0, 0x7a3eba0})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2125 +0x232
+testing.tRunner.func1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2128 +0x329
+panic({0x7476fa0?, 0x7a3eba0?})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/panic.go:859 +0x125
+github.com/Wei-Shaw/sub2api/internal/service.(*GatewayService).validateUpstreamBaseURL(0x1a25b503cd8?, {0x3ba08ea?, 0x70f8d756d160?})
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_upstream_request.go:984 +0xdb
+github.com/Wei-Shaw/sub2api/internal/service.(*GatewayService).buildCountTokensRequestAnthropicAPIKeyPassthrough(0x1a25b503b50, {0x788a9c0, 0x7b24420}, 0x1a25b6e3300, 0x1a25bb2dcd8, {0x1a25b54b2f0, 0x2b, 0x2b}, {0x3b62e65, 0x11})
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/gateway_count_tokens.go:403 +0x8b
+github.com/Wei-Shaw/sub2api/internal/service.TestIntake023CountTokensHeaderDuplicates(0x1a25b717688)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/intake023_release_test.go:50 +0x2c5
+testing.tRunner(0x1a25b717688, 0x78bc738)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195 +0xea
+created by testing.(*T).Run in goroutine 1
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x4d4
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.016s
+FAIL

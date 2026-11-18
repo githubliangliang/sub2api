@@ -1,0 +1,49 @@
+=== RUN   TestSolUltrafastHTTPAndWSSettlementSQLite
+=== RUN   TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.1-sol/ultrafast
+2026/11/18 14:53:11 [OpenAI WS Mode][openai_ws_mode=true] bootstrap enabled=false oauth_enabled=false apikey_enabled=false force_http=false responses_websockets_v2=false responses_websockets=false payload_log_sample_rate=0.000 event_flush_batch_size=0 event_flush_interval_ms=0 prewarm_cooldown_ms=0 retry_backoff_initial_ms=0 retry_backoff_max_ms=0 retry_jitter_ratio=0.000 retry_total_budget_ms=0 ws_read_limit_bytes=16777216
+2026/11/18 14:53:11 [OpenAI] Model mapping applied: public-sol -> gpt-6.1-sol (account: , isCodexCLI: false)
+2026/11/18 14:53:11 [Billing] Using fallback pricing for model: gpt-6.1-sol
+    sol_ultrafast_sqlite_test.go:148: 
+        	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/sol_ultrafast_sqlite_test.go:148
+        	Error:      	Max difference between 0.01134 and 0.01122 allowed is 1e-12, but difference was 0.00011999999999999858
+        	Test:       	TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.1-sol/ultrafast
+--- FAIL: TestSolUltrafastHTTPAndWSSettlementSQLite (1.42s)
+    --- FAIL: TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.1-sol/ultrafast (0.04s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x237d9c6]
+
+goroutine 306 [running]:
+testing.tRunner.func1.2({0x6009ab0, 0x653e510})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2125 +0x232
+testing.tRunner.func1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2128 +0x329
+panic({0x6009ab0?, 0x653e510?})
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/panic.go:859 +0x125
+github.com/Wei-Shaw/sub2api/internal/service.(*TimingWheelService).Cancel(...)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/timing_wheel_service.go:71
+github.com/Wei-Shaw/sub2api/internal/service.(*DeferredService).Stop(0xf1e58458dc0)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/deferred_service.go:36 +0x26
+testing.(*common).Cleanup.func1()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:1462 +0x109
+testing.(*common).runCleanup(0xf1e580df688, 0xf1e57ffc3c0?)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:1822 +0xea
+testing.tRunner.func2()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2189 +0x25
+runtime.Goexit()
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/runtime/panic.go:694 +0x54
+testing.(*common).FailNow(0xf1e580df688)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:1106 +0x4a
+github.com/stretchr/testify/require.InDelta({0x63a5050, 0xf1e580df688}, {0x5f4bc10, 0xf1e583b01d0}, {0x5f4bc10, 0xf1e583b01d8}, 0x3d719799812dea11, {0x0, 0x0, 0x0})
+	/home/liang/go/pkg/mod/github.com/stretchr/testify@v1.11.1/require/require.go:890 +0x113
+github.com/Wei-Shaw/sub2api/internal/handler.TestSolUltrafastHTTPAndWSSettlementSQLite.func1(0xf1e580df688)
+	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/handler/sol_ultrafast_sqlite_test.go:148 +0x1ec5
+testing.tRunner(0xf1e580df688, 0xf1e580e6b80)
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2195 +0xea
+created by testing.(*T).Run in goroutine 35
+	/home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.3.linux-amd64/src/testing/testing.go:2260 +0x4d4
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler	1.446s
+=== RUN   TestFrontendHTMLRealHTTPNonceSettingsAndAssets
+--- PASS: TestFrontendHTMLRealHTTPNonceSettingsAndAssets (0.01s)
+PASS
+ok  	github.com/Wei-Shaw/sub2api/internal/web	0.023s
+FAIL

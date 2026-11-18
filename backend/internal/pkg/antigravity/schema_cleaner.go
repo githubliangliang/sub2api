@@ -376,24 +376,15 @@ func cleanJSONSchemaRecursive(value any) any {
 			}
 		}
 
-		// 8. [SAFETY] 处理缺失 items 的 Array (Gemini 严苛要求 array 必须声明 items Schema)
+		// 8. Only arrays may carry items, and their items must be a non-empty schema.
 		if t, _ := schemaMap["type"].(string); t == "array" {
-			itemsVal, hasItems := schemaMap["items"]
-			needDefaultItems := false
-			if !hasItems || itemsVal == nil {
-				needDefaultItems = true
-			} else if itemsMap, ok := itemsVal.(map[string]any); ok {
-				if len(itemsMap) == 0 {
-					needDefaultItems = true
-				}
-			} else if _, isBool := itemsVal.(bool); isBool {
-				needDefaultItems = true
-			}
-			if needDefaultItems {
+			if items, ok := schemaMap["items"].(map[string]any); !ok || len(items) == 0 {
 				schemaMap["items"] = map[string]any{
 					"type": "string",
 				}
 			}
+		} else {
+			delete(schemaMap, "items")
 		}
 
 		// 9. [SAFETY] Required 字段对齐

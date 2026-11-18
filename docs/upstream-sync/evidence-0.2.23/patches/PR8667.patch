@@ -1,0 +1,1171 @@
+diff --git a/backend/internal/service/gateway_billing_header.go b/backend/internal/service/gateway_billing_header.go
+index a794af0d2..fff59bacc 100644
+--- a/backend/internal/service/gateway_billing_header.go
++++ b/backend/internal/service/gateway_billing_header.go
+@@ -44,12 +44,17 @@ func syncBillingHeaderVersion(body []byte, userAgent string) []byte {
+ 	}
+ 
+ 	replacement := "cc_version=" + version
++	// The fingerprint depends only on the original messages and version, so it
++	// is the same for every billing block. Compute it lazily, at most once.
++	fingerprintedReplacement := ""
+ 	idx := 0
+ 	systemResult.ForEach(func(_, item gjson.Result) bool {
+ 		text := item.Get("text")
+ 		if text.Exists() && text.Type == gjson.String &&
+ 			strings.HasPrefix(text.String(), "x-anthropic-billing-header") {
+-			fingerprintedReplacement := replacement + "." + computeClaudeCodeFingerprint(body, version)
++			if fingerprintedReplacement == "" {
++				fingerprintedReplacement = replacement + "." + computeClaudeCodeFingerprint(body, version)
++			}
+ 			newText := ccVersionWithFingerprintInBillingRe.ReplaceAllString(text.String(), fingerprintedReplacement)
+ 			newText = ccVersionInBillingRe.ReplaceAllString(newText, replacement)
+ 			if newText != text.String() {
+diff --git a/backend/internal/service/gateway_claude_oauth_body.go b/backend/internal/service/gateway_claude_oauth_body.go
+index 44e9aaaac..eb4faac46 100644
+--- a/backend/internal/service/gateway_claude_oauth_body.go
++++ b/backend/internal/service/gateway_claude_oauth_body.go
+@@ -307,7 +307,8 @@ func normalizeClaudeOAuthRequestBody(body []byte, modelID string, opts claudeOAu
+ 	//   applyToolNameRewriteToBody 同步映射为假名
+ 	// - 其他形态（auto/any/none）原样透传
+ 	// 如果 body 里完全没有 tools（空数组），tool_choice 没意义时才删除
+-	if !gjson.GetBytes(out, "tools").IsArray() || len(gjson.GetBytes(out, "tools").Array()) == 0 {
++	toolsResult := gjson.GetBytes(out, "tools")
++	if !toolsResult.IsArray() || !toolsResult.Get("0").Exists() {
+ 		if !isClaude55SignedThinkingModel(modelID) && gjson.GetBytes(out, "tool_choice").Exists() {
+ 			if next, ok := deleteJSONPathBytes(out, "tool_choice"); ok {
+ 				out = next
+@@ -1059,9 +1060,37 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath,
+ 	return invalidThinking, messagePaths, toolPaths, systemPaths
+ }
+ 
++var (
++	cacheControlKeyBytes   = []byte(`"cache_control"`)
++	thinkingBlockTypeBytes = []byte(`"thinking"`)
++	cacheTTL1hJSONBytes    = []byte(`"1h"`)
++	jsonUnicodeEscapeBytes = []byte(`\u`)
++)
++
+ // enforceCacheControlLimit 让出站 cache_control 满足上游约束：
+ // 先执行块数量限制，再修正 TTL 顺序。
++//
++// 大多数请求的 cache_control 块不超过 4 个、没有 thinking 块、也没有 1h TTL，
++// 此时两步都是 no-op。用字节级预检查跳过两次 collectCacheControlPaths 遍历。
++// 预检查只会多算（把请求送回原路径），不会漏判；含 \u 转义的 body 可能把
++// 键名或值写成转义形式，字节匹配看不到，因此直接走原路径。
+ func enforceCacheControlLimit(body []byte) []byte {
++	if len(body) == 0 {
++		return body
++	}
++	if bytes.Contains(body, jsonUnicodeEscapeBytes) {
++		return normalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
++	}
++	if !bytes.Contains(body, cacheControlKeyBytes) {
++		return body
++	}
++	if bytes.Count(body, cacheControlKeyBytes) <= maxCacheControlBlocks &&
++		!bytes.Contains(body, thinkingBlockTypeBytes) {
++		if !bytes.Contains(body, cacheTTL1hJSONBytes) {
++			return body
++		}
++		return normalizeCacheControlTTLOrder(body)
++	}
+ 	return normalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
+ }
+ 
+diff --git a/backend/internal/service/gateway_count_tokens.go b/backend/internal/service/gateway_count_tokens.go
+index a6a493e25..9718ef3e0 100644
+--- a/backend/internal/service/gateway_count_tokens.go
++++ b/backend/internal/service/gateway_count_tokens.go
+@@ -614,7 +614,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
+ 	filterSonnet55ToolsetBetaHeader(req.Header, body, modelID)
+ 
+ 	if c != nil && tokenType == "oauth" {
+-		c.Set(claudeMimicDebugInfoKey, buildClaudeMimicDebugLine(req, body, account, tokenType, mimicClaudeCode))
++		c.Set(claudeMimicDebugInfoKey, newClaudeMimicDebugLine(req, body, account, tokenType, mimicClaudeCode))
+ 	}
+ 	if s.debugClaudeMimicEnabled() {
+ 		logClaudeMimicDebug(req, body, account, tokenType, mimicClaudeCode)
+diff --git a/backend/internal/service/gateway_request_json_bench_test.go b/backend/internal/service/gateway_request_json_bench_test.go
+new file mode 100644
+index 000000000..d56064a09
+--- /dev/null
++++ b/backend/internal/service/gateway_request_json_bench_test.go
+@@ -0,0 +1,133 @@
++package service
++
++import (
++	"fmt"
++	"net/http"
++	"strings"
++	"testing"
++)
++
++// claudeCodeLikeBody builds a ~32KB request shaped like a Claude Code turn:
++// 20 tools, a system prompt, and 40 messages with 4 content blocks each.
++func claudeCodeLikeBody(cacheControls int, with1h bool) []byte {
++	var b strings.Builder
++	_, _ = b.WriteString(`{"model":"claude-sonnet-5-5","max_tokens":32000,"stream":true,"tools":[`)
++	for i := 0; i < 20; i++ {
++		if i > 0 {
++			_ = b.WriteByte(',')
++		}
++		fmt.Fprintf(&b, `{"name":"tool_%d","description":"%s","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}`, i, strings.Repeat("d", 40))
++		if i == 19 && cacheControls > 0 {
++			_, _ = b.WriteString(`,"cache_control":{"type":"ephemeral"}`)
++			cacheControls--
++		}
++		_ = b.WriteByte('}')
++	}
++	_, _ = b.WriteString(`],"system":[{"type":"text","text":"You are Claude Code, Anthropic's official CLI for Claude."`)
++	if cacheControls > 0 {
++		_, _ = b.WriteString(`,"cache_control":{"type":"ephemeral"}`)
++		cacheControls--
++	}
++	_, _ = b.WriteString(`}],"messages":[`)
++	for m := 0; m < 40; m++ {
++		if m > 0 {
++			_ = b.WriteByte(',')
++		}
++		role := "user"
++		if m%2 == 1 {
++			role = "assistant"
++		}
++		fmt.Fprintf(&b, `{"role":%q,"content":[`, role)
++		for c := 0; c < 4; c++ {
++			if c > 0 {
++				_ = b.WriteByte(',')
++			}
++			fmt.Fprintf(&b, `{"type":"text","text":"%s"`, strings.Repeat("x", 120))
++			if m >= 38 && c == 3 && cacheControls > 0 {
++				ttl := ""
++				if with1h && m == 39 {
++					ttl = `,"ttl":"1h"`
++				}
++				fmt.Fprintf(&b, `,"cache_control":{"type":"ephemeral"%s}`, ttl)
++				cacheControls--
++			}
++			_ = b.WriteByte('}')
++		}
++		_, _ = b.WriteString(`]}`)
++	}
++	_, _ = b.WriteString(`]}`)
++	return []byte(b.String())
++}
++
++func BenchmarkEnforceCacheControlLimit(b *testing.B) {
++	cases := []struct {
++		name string
++		body []byte
++	}{
++		{"common_4cc_no1h", claudeCodeLikeBody(4, false)},
++		{"with_1h", claudeCodeLikeBody(4, true)},
++	}
++	for _, tc := range cases {
++		b.Run(tc.name+"/legacy", func(b *testing.B) {
++			b.SetBytes(int64(len(tc.body)))
++			b.ReportAllocs()
++			for i := 0; i < b.N; i++ {
++				_ = legacyEnforceCacheControlLimit(tc.body)
++			}
++		})
++		b.Run(tc.name+"/optimized", func(b *testing.B) {
++			b.SetBytes(int64(len(tc.body)))
++			b.ReportAllocs()
++			for i := 0; i < b.N; i++ {
++				_ = enforceCacheControlLimit(tc.body)
++			}
++		})
++	}
++}
++
++func BenchmarkRequestToolHelpers(b *testing.B) {
++	body := claudeCodeLikeBody(4, false)
++	b.Run("legacy", func(b *testing.B) {
++		b.ReportAllocs()
++		for i := 0; i < b.N; i++ {
++			_ = legacyRequestNeedsBetaFeatures(body)
++			_ = legacyFilterSonnet55ToolsetBeta("fine-grained-tool-streaming-2025-05-14", body, "claude-sonnet-5-5")
++			_ = legacyIsOnlyWebSearchToolInBody(body)
++			_ = legacyBuildToolNameRewriteFromBody(body)
++			_ = legacyApplyToolsLastCacheBreakpoint(body)
++			_ = legacyExtractSystemPreviewFromBody(body)
++		}
++	})
++	b.Run("optimized", func(b *testing.B) {
++		b.ReportAllocs()
++		for i := 0; i < b.N; i++ {
++			_ = requestNeedsBetaFeatures(body)
++			_ = filterSonnet55ToolsetBeta("fine-grained-tool-streaming-2025-05-14", body, "claude-sonnet-5-5")
++			_ = isOnlyWebSearchToolInBody(body)
++			_ = buildToolNameRewriteFromBody(body)
++			_ = applyToolsLastCacheBreakpoint(body)
++			_ = extractSystemPreviewFromBody(body)
++		}
++	})
++}
++
++func BenchmarkClaudeMimicDebugLine(b *testing.B) {
++	req, _ := http.NewRequest(http.MethodPost, "https://api.anthropic.com/v1/messages?beta=true", nil)
++	for _, h := range []string{"User-Agent", "X-App", "Anthropic-Version", "Anthropic-Beta", "X-Stainless-Lang", "X-Stainless-Os", "Authorization", "Content-Type", "Accept"} {
++		req.Header.Set(h, "value-"+h)
++	}
++	body := claudeCodeLikeBody(4, false)
++	account := &Account{ID: 1, Name: "acc"}
++	b.Run("eager", func(b *testing.B) {
++		b.ReportAllocs()
++		for i := 0; i < b.N; i++ {
++			_ = buildClaudeMimicDebugLine(req, body, account, "oauth", true)
++		}
++	})
++	b.Run("lazy_unused", func(b *testing.B) {
++		b.ReportAllocs()
++		for i := 0; i < b.N; i++ {
++			_ = newClaudeMimicDebugLine(req, body, account, "oauth", true)
++		}
++	})
++}
+diff --git a/backend/internal/service/gateway_request_json_equivalence_test.go b/backend/internal/service/gateway_request_json_equivalence_test.go
+new file mode 100644
+index 000000000..e8fc31be3
+--- /dev/null
++++ b/backend/internal/service/gateway_request_json_equivalence_test.go
+@@ -0,0 +1,424 @@
++package service
++
++import (
++	"bytes"
++	"fmt"
++	"math/rand"
++	"net/http"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// legacyEnforceCacheControlLimit / legacyNormalizeCacheControlTTLOrder /
++// legacyForceEphemeralCacheControlTTL are verbatim copies of the
++// implementations before the fast path was introduced. The tests below compare
++// the optimized code against them byte for byte.
++func legacyEnforceCacheControlLimit(body []byte) []byte {
++	return legacyNormalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
++}
++
++func legacyNormalizeCacheControlTTLOrder(body []byte) []byte {
++	_, messagePaths, toolPaths, systemPaths := collectCacheControlPaths(body)
++	paths := make([]string, 0, len(toolPaths)+len(systemPaths)+len(messagePaths)+1)
++	paths = append(paths, toolPaths...)
++	paths = append(paths, systemPaths...)
++	paths = append(paths, messagePaths...)
++	if gjson.GetBytes(body, "cache_control").Exists() {
++		paths = append(paths, "cache_control")
++	}
++	last1h := -1
++	for i, path := range paths {
++		if gjson.GetBytes(body, path+".ttl").String() == cacheTTLTarget1h {
++			last1h = i
++		}
++	}
++	out := body
++	for _, path := range paths[:last1h+1] {
++		cc := gjson.GetBytes(out, path)
++		if cc.Get("type").String() != "ephemeral" || cc.Get("ttl").String() == cacheTTLTarget1h {
++			continue
++		}
++		if next, err := sjson.SetBytes(out, path+".ttl", cacheTTLTarget1h); err == nil {
++			out = next
++		}
++	}
++	return out
++}
++
++func cacheControlEquivalenceCases() map[string]string {
++	return map[string]string{
++		"empty":         ``,
++		"no_cc":         `{"model":"claude","messages":[{"role":"user","content":"hi"}]}`,
++		"one_cc":        `{"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":"hi"}]}`,
++		"four_cc":       `{"tools":[{"name":"a","cache_control":{"type":"ephemeral"}}],"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral"}},{"type":"text","text":"b","cache_control":{"type":"ephemeral"}}]}]}`,
++		"five_cc":       `{"tools":[{"name":"a","cache_control":{"type":"ephemeral"}},{"name":"b","cache_control":{"type":"ephemeral"}}],"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral"}},{"type":"text","text":"b","cache_control":{"type":"ephemeral"}}]}]}`,
++		"thinking_cc":   `{"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"x","cache_control":{"type":"ephemeral"}}]}]}`,
++		"thinking_text": `{"messages":[{"role":"user","content":[{"type":"text","text":"thinking about it","cache_control":{"type":"ephemeral"}}]}]}`,
++		"ttl_order":     `{"tools":[{"name":"a","cache_control":{"type":"ephemeral","ttl":"5m"}}],"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`,
++		"ttl_all_1h":    `{"tools":[{"name":"a","cache_control":{"type":"ephemeral","ttl":"1h"}}],"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`,
++		"top_level_1h":  `{"cache_control":{"type":"ephemeral","ttl":"1h"},"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":"hi"}]}`,
++		"1h_in_text":    `{"system":[{"type":"text","text":"\"1h\"","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":"1h"}]}`,
++		"escaped_key":   `{"messages":[{"role":"user","content":[{"type":"text","text":"a","cache\u005fcontrol":{"type":"ephemeral","ttl":"1h"}}]}],"tools":[{"name":"t","cache_control":{"type":"ephemeral"}}]}`,
++		"escaped_ttl":   `{"tools":[{"name":"t","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral","ttl":"\u0031h"}}]}]}`,
++		"escaped_think": `{"messages":[{"role":"assistant","content":[{"type":"\u0074hinking","thinking":"x","cache_control":{"type":"ephemeral"}}]}]}`,
++		"non_ephemeral": `{"tools":[{"name":"a","cache_control":{"type":"persistent"}}],"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`,
++		"cc_in_string":  `{"messages":[{"role":"user","content":"please explain \"cache_control\" and \"thinking\""}]}`,
++		"duplicate_key": `{"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral"},"cache_control":{"type":"ephemeral","ttl":"1h"}}]}],"tools":[{"name":"t","cache_control":{"type":"ephemeral"}}]}`,
++		"invalid_json":  `{"messages":[`,
++	}
++}
++
++func TestEnforceCacheControlLimitMatchesLegacy(t *testing.T) {
++	for name, raw := range cacheControlEquivalenceCases() {
++		t.Run(name, func(t *testing.T) {
++			body := []byte(raw)
++			want := legacyEnforceCacheControlLimit(append([]byte(nil), body...))
++			got := enforceCacheControlLimit(append([]byte(nil), body...))
++			require.Equal(t, string(want), string(got))
++		})
++	}
++}
++
++func TestEnforceCacheControlLimitMatchesLegacyRandomized(t *testing.T) {
++	rng := rand.New(rand.NewSource(20261111))
++	for i := 0; i < 3000; i++ {
++		body := randomCacheControlBody(rng)
++		want := legacyEnforceCacheControlLimit(append([]byte(nil), body...))
++		got := enforceCacheControlLimit(append([]byte(nil), body...))
++		require.Equal(t, string(want), string(got), "case %d body=%s", i, body)
++	}
++}
++
++func TestEnforceCacheControlLimitDoesNotMutateInput(t *testing.T) {
++	for name, raw := range cacheControlEquivalenceCases() {
++		t.Run(name, func(t *testing.T) {
++			body := []byte(raw)
++			before := append([]byte(nil), body...)
++			_ = enforceCacheControlLimit(body)
++			require.Equal(t, string(before), string(body))
++		})
++	}
++}
++
++func TestNormalizeCacheControlTTLOrderMatchesLegacy(t *testing.T) {
++	rng := rand.New(rand.NewSource(7))
++	cases := cacheControlEquivalenceCases()
++	for i := 0; i < 2000; i++ {
++		cases[fmt.Sprintf("random_%d", i)] = string(randomCacheControlBody(rng))
++	}
++	for name, raw := range cases {
++		body := []byte(raw)
++		before := append([]byte(nil), body...)
++		want := legacyNormalizeCacheControlTTLOrder(append([]byte(nil), body...))
++		got := normalizeCacheControlTTLOrder(body)
++		require.Equal(t, string(want), string(got), name)
++		require.Equal(t, string(before), string(body), "%s: input must not be mutated", name)
++	}
++}
++
++func TestForceEphemeralCacheControlTTLDoesNotMutateInput(t *testing.T) {
++	body := []byte(`{"cache_control":{"type":"ephemeral"},"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral","ttl":"5m"}}],"messages":[{"role":"user","content":[{"type":"text","text":"a","cache_control":{"type":"ephemeral"}}]}],"tools":[{"name":"t","cache_control":{"type":"ephemeral"}}]}`)
++	before := append([]byte(nil), body...)
++	got := forceEphemeralCacheControlTTL(body, cacheTTLTarget1h)
++	require.Equal(t, string(before), string(body))
++	require.Equal(t, 4, strings.Count(string(got), `"ttl":"1h"`))
++	require.True(t, gjson.ValidBytes(got))
++}
++
++func randomCacheControlBody(rng *rand.Rand) []byte {
++	cc := func() string {
++		switch rng.Intn(7) {
++		case 0:
++			return `,"cache_control":{"type":"ephemeral"}`
++		case 1:
++			return `,"cache_control":{"type":"ephemeral","ttl":"5m"}`
++		case 2:
++			return `,"cache_control":{"type":"ephemeral","ttl":"1h"}`
++		case 3:
++			return `,"cache_control":{"type":"persistent","ttl":"1h"}`
++		default:
++			return ""
++		}
++	}
++	var b bytes.Buffer
++	_, _ = b.WriteString(`{"model":"claude-sonnet"`)
++	if rng.Intn(5) == 0 {
++		_, _ = b.WriteString(`,"cache_control":{"type":"ephemeral","ttl":"1h"}`)
++	}
++	if rng.Intn(2) == 0 {
++		_, _ = b.WriteString(`,"tools":[`)
++		n := rng.Intn(4)
++		for i := 0; i < n; i++ {
++			if i > 0 {
++				_ = b.WriteByte(',')
++			}
++			fmt.Fprintf(&b, `{"name":"tool_%d"%s}`, i, cc())
++		}
++		_ = b.WriteByte(']')
++	}
++	if rng.Intn(2) == 0 {
++		_, _ = b.WriteString(`,"system":[`)
++		n := rng.Intn(3)
++		for i := 0; i < n; i++ {
++			if i > 0 {
++				_ = b.WriteByte(',')
++			}
++			fmt.Fprintf(&b, `{"type":"text","text":"sys %d"%s}`, i, cc())
++		}
++		_ = b.WriteByte(']')
++	}
++	_, _ = b.WriteString(`,"messages":[`)
++	m := rng.Intn(4)
++	for i := 0; i < m; i++ {
++		if i > 0 {
++			_ = b.WriteByte(',')
++		}
++		_, _ = b.WriteString(`{"role":"user","content":[`)
++		c := rng.Intn(3) + 1
++		for j := 0; j < c; j++ {
++			if j > 0 {
++				_ = b.WriteByte(',')
++			}
++			blockType := "text"
++			if rng.Intn(6) == 0 {
++				blockType = "thinking"
++			}
++			fmt.Fprintf(&b, `{"type":%q,"text":"m%d-%d"%s}`, blockType, i, j, cc())
++		}
++		_, _ = b.WriteString(`]}`)
++	}
++	_, _ = b.WriteString(`]}`)
++	return b.Bytes()
++}
++
++// ---- legacy copies of the array-materializing helpers ----
++
++func legacyIsOnlyWebSearchToolInBody(body []byte) bool {
++	tools := gjson.GetBytes(body, "tools")
++	if !tools.IsArray() {
++		return false
++	}
++	arr := tools.Array()
++	if len(arr) != 1 {
++		return false
++	}
++	return isWebSearchToolJSON(arr[0])
++}
++
++func legacyExtractSearchQueryFromBody(body []byte) string {
++	messages := gjson.GetBytes(body, "messages")
++	if !messages.IsArray() {
++		return ""
++	}
++	arr := messages.Array()
++	if len(arr) == 0 {
++		return ""
++	}
++	lastMsg := arr[len(arr)-1]
++	if lastMsg.Get("role").String() != "user" {
++		return ""
++	}
++	content := lastMsg.Get("content")
++	if content.Type == gjson.String {
++		return content.String()
++	}
++	if content.IsArray() {
++		for _, block := range content.Array() {
++			if block.Get("type").String() == "text" {
++				if text := block.Get("text").String(); text != "" {
++					return text
++				}
++			}
++		}
++	}
++	return ""
++}
++
++func legacyExtractSystemPreviewFromBody(body []byte) string {
++	if len(body) == 0 {
++		return ""
++	}
++	sys := gjson.GetBytes(body, "system")
++	if !sys.Exists() {
++		return ""
++	}
++	switch {
++	case sys.IsArray():
++		for _, item := range sys.Array() {
++			if !item.IsObject() {
++				continue
++			}
++			if strings.EqualFold(item.Get("type").String(), "text") {
++				if t := item.Get("text").String(); strings.TrimSpace(t) != "" {
++					return t
++				}
++			}
++		}
++		return ""
++	case sys.Type == gjson.String:
++		return sys.String()
++	default:
++		return ""
++	}
++}
++
++func legacyRequestNeedsBetaFeatures(body []byte) bool {
++	tools := gjson.GetBytes(body, "tools")
++	if tools.Exists() && tools.IsArray() && len(tools.Array()) > 0 {
++		return true
++	}
++	thinkingType := gjson.GetBytes(body, "thinking.type").String()
++	return strings.EqualFold(thinkingType, "enabled") || strings.EqualFold(thinkingType, "adaptive")
++}
++
++func requestHelperEquivalenceBodies() []string {
++	return []string{
++		``,
++		`{}`,
++		`{"tools":[]}`,
++		`{"tools":{}}`,
++		`{"tools":null}`,
++		`{"tools":[null]}`,
++		`{"tools":[{"type":"web_search_20250305","name":"web_search"}]}`,
++		`{"tools":[{"name":"web_search"}]}`,
++		`{"tools":[{"name":"google_search"}]}`,
++		`{"tools":[{"type":"web_search_20250305"},{"name":"bash"}]}`,
++		`{"tools":[{"name":"bash"}]}`,
++		`{"tools":[{"type":"computer_toolset_20260801"},{"type":"x"}]}`,
++		`{"tools":[{"type":"x"},{"type":"browser_toolset_20260801"}]}`,
++		`{"thinking":{"type":"adaptive"}}`,
++		`{"messages":[]}`,
++		`{"messages":[{"role":"assistant","content":"x"}]}`,
++		`{"messages":[{"role":"user","content":"hello"}]}`,
++		`{"messages":[{"role":"user","content":[{"type":"image"},{"type":"text","text":""},{"type":"text","text":"q"}]}]}`,
++		`{"messages":[{"role":"user","content":"a"},{"role":"user","content":[{"type":"text","text":"last"}]}]}`,
++		`{"messages":[{"role":"user","content":"a"},null]}`,
++		`{"system":"plain system"}`,
++		`{"system":[]}`,
++		`{"system":[1,"x",{"type":"TEXT","text":"  "},{"type":"text","text":"first"},{"type":"text","text":"second"}]}`,
++		`{"system":{"type":"text"}}`,
++		`{"messages":[`,
++	}
++}
++
++func TestRequestJSONHelpersMatchLegacy(t *testing.T) {
++	for _, raw := range requestHelperEquivalenceBodies() {
++		body := []byte(raw)
++		require.Equal(t, legacyIsOnlyWebSearchToolInBody(body), isOnlyWebSearchToolInBody(body), "isOnlyWebSearchToolInBody %s", raw)
++		require.Equal(t, legacyExtractSearchQueryFromBody(body), extractSearchQueryFromBody(body), "extractSearchQueryFromBody %s", raw)
++		require.Equal(t, legacyExtractSystemPreviewFromBody(body), extractSystemPreviewFromBody(body), "extractSystemPreviewFromBody %s", raw)
++		require.Equal(t, legacyRequestNeedsBetaFeatures(body), requestNeedsBetaFeatures(body), "requestNeedsBetaFeatures %s", raw)
++	}
++}
++
++func TestClaudeMimicDebugLineIsLazyAndMatchesEager(t *testing.T) {
++	req, err := http.NewRequest(http.MethodPost, "https://api.anthropic.com/v1/messages", nil)
++	require.NoError(t, err)
++	req.Header.Set("User-Agent", "claude-cli/2.1.200")
++	req.Header.Set("Authorization", "Bearer secret-token")
++	body := []byte(`{"metadata":{"user_id":"user_1"},"system":[{"type":"text","text":"You are Claude Code"}]}`)
++	account := &Account{ID: 7, Name: "acc"}
++
++	want := buildClaudeMimicDebugLine(req, body, account, "oauth", true)
++	lazy := newClaudeMimicDebugLine(req, body, account, "oauth", true)
++	require.Empty(t, lazy.line, "line must not be built eagerly")
++	require.Equal(t, want, lazy.String())
++	require.Equal(t, want, lazy.String(), "second call returns cached line")
++	require.Nil(t, lazy.req, "request reference is released after building")
++	require.Nil(t, lazy.body, "body reference is released after building")
++
++	c := &ginContextStub{values: map[string]any{claudeMimicDebugInfoKey: newClaudeMimicDebugLine(req, body, account, "oauth", true)}}
++	require.Equal(t, want, claudeMimicDebugLineFromContext(c))
++	c.values[claudeMimicDebugInfoKey] = "legacy string"
++	require.Equal(t, "legacy string", claudeMimicDebugLineFromContext(c))
++	delete(c.values, claudeMimicDebugInfoKey)
++	require.Empty(t, claudeMimicDebugLineFromContext(c))
++	require.Empty(t, claudeMimicDebugLineFromContext(nil))
++}
++
++type ginContextStub struct {
++	values map[string]any
++}
++
++func (c *ginContextStub) Get(key string) (any, bool) {
++	v, ok := c.values[key]
++	return v, ok
++}
++
++func toolBodiesForEquivalence() []string {
++	return []string{
++		`{}`,
++		`{"tools":[]}`,
++		`{"tools":{}}`,
++		`{"tools":[{"name":"bash"}]}`,
++		`{"tools":[{"name":"sessions_list"},{"name":"session_get","type":"custom"},{"name":"web_search","type":"web_search_20250305"}]}`,
++		`{"tools":[{"name":"a"},{"name":"b"},{"name":"c"},{"name":"d"},{"name":"e"},{"name":"f"},{"name":"g"}],"tool_choice":{"type":"tool","name":"c"}}`,
++		`{"tools":[{"name":"a","defer_loading":true,"cache_control":{"type":"ephemeral"}},{"name":"b"}]}`,
++		`{"tools":[{"name":"a"},{"name":"b","custom":{"defer_loading":true},"cache_control":{"type":"ephemeral"}}]}`,
++		`{"tools":[{"name":"a","defer_loading":true},{"name":"b","defer_loading":true}]}`,
++		`{"tools":[{"name":"a","cache_control":{"type":"ephemeral","ttl":"1h"}}]}`,
++		`{"tools":[{"name":"a","cache_control":{"type":"ephemeral"}}]}`,
++		`{"tools":[{"name":"a","defer_loading":"true","cache_control":{"type":"ephemeral"}}]}`,
++		`{"tools":[{"type":"computer_toolset_20260801"}]}`,
++		`{"tools":[{"type":"browser_toolset_20260801"},{"type":"computer_toolset_20260801"}]}`,
++	}
++}
++
++func TestToolHelpersMatchLegacy(t *testing.T) {
++	headers := []string{"", "fine-grained-tool-streaming-2025-05-14", "a,fine-grained-tool-streaming-2025-05-14,b"}
++	models := []string{"claude-sonnet-5-5", "claude-haiku-5-5@20260101", "claude-opus-5-5"}
++	for _, raw := range toolBodiesForEquivalence() {
++		body := []byte(raw)
++
++		requireEquivalentToolNameRewrite(t, legacyBuildToolNameRewriteFromBody(body), buildToolNameRewriteFromBody(body), raw)
++		require.Equal(t,
++			string(legacyApplyToolsLastCacheBreakpoint(append([]byte(nil), body...))),
++			string(applyToolsLastCacheBreakpoint(append([]byte(nil), body...))), raw)
++		require.Equal(t,
++			string(legacyStripDeferredToolCacheControl(append([]byte(nil), body...))),
++			string(stripDeferredToolCacheControl(append([]byte(nil), body...))), raw)
++		for _, h := range headers {
++			for _, m := range models {
++				require.Equal(t, legacyFilterSonnet55ToolsetBeta(h, body, m), filterSonnet55ToolsetBeta(h, body, m), "%s %s %s", raw, h, m)
++			}
++		}
++	}
++}
++
++func TestSyncBillingHeaderVersionMatchesLegacy(t *testing.T) {
++	bodies := []string{
++		`{"system":"plain"}`,
++		`{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.0.0.abc; cc_entrypoint=cli"}],"messages":[{"role":"user","content":"hello world from a long prompt"}]}`,
++		`{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.0.0; cc_entrypoint=cli"},{"type":"text","text":"x-anthropic-billing-header: cc_version=1.0.0.xyz"}],"messages":[{"role":"user","content":[{"type":"text","text":"你好世界🙂"}]}]}`,
++		`{"system":[{"type":"text","text":"other"}]}`,
++	}
++	for _, raw := range bodies {
++		for _, ua := range []string{"", "claude-cli/2.1.200 (external, cli)", "curl/8"} {
++			want := legacySyncBillingHeaderVersion(append([]byte(nil), raw...), ua)
++			got := syncBillingHeaderVersion(append([]byte(nil), raw...), ua)
++			require.Equal(t, string(want), string(got), "%s ua=%s", raw, ua)
++		}
++	}
++}
++
++// ReverseOrdered is built from map iteration, so entries with equal fake-name
++// length come out in random order (both before and after this change). Equal
++// length distinct names cannot be substrings of each other, so that order does
++// not affect replacement; compare the set and the length ordering instead.
++func requireEquivalentToolNameRewrite(t *testing.T, want, got *ToolNameRewrite, msg string) {
++	t.Helper()
++	if want == nil || got == nil {
++		require.Equal(t, want, got, msg)
++		return
++	}
++	require.Equal(t, want.Forward, got.Forward, msg)
++	require.Equal(t, want.Reverse, got.Reverse, msg)
++	require.ElementsMatch(t, want.ReverseOrdered, got.ReverseOrdered, msg)
++	for i := 1; i < len(got.ReverseOrdered); i++ {
++		require.GreaterOrEqual(t, len(got.ReverseOrdered[i-1][0]), len(got.ReverseOrdered[i][0]), msg)
++	}
++}
+diff --git a/backend/internal/service/gateway_request_json_legacy_test.go b/backend/internal/service/gateway_request_json_legacy_test.go
+new file mode 100644
+index 000000000..a57dc75bd
+--- /dev/null
++++ b/backend/internal/service/gateway_request_json_legacy_test.go
+@@ -0,0 +1,170 @@
++package service
++
++import (
++	"fmt"
++	"sort"
++	"strings"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// Verbatim legacy copies used only by equivalence tests.
++
++func legacyBuildToolNameRewriteFromBody(body []byte) *ToolNameRewrite {
++	tools := gjson.GetBytes(body, "tools")
++	if !tools.IsArray() {
++		return nil
++	}
++
++	mimicableNames := make([]string, 0)
++	toolsArr := tools.Array()
++	for _, t := range toolsArr {
++		if !shouldMimicToolName(t.Get("type").String()) {
++			continue
++		}
++		name := t.Get("name").String()
++		if name == "" {
++			continue
++		}
++		mimicableNames = append(mimicableNames, name)
++	}
++
++	dynamic := buildDynamicToolMap(mimicableNames)
++
++	rw := &ToolNameRewrite{
++		Forward: make(map[string]string),
++		Reverse: make(map[string]string),
++	}
++	for _, name := range mimicableNames {
++		fake := sanitizeToolName(name, dynamic)
++		if fake == name {
++			continue
++		}
++		rw.Forward[name] = fake
++		rw.Reverse[fake] = name
++	}
++	if len(rw.Forward) == 0 {
++		return nil
++	}
++
++	rw.ReverseOrdered = make([][2]string, 0, len(rw.Reverse))
++	for fake, real := range rw.Reverse {
++		rw.ReverseOrdered = append(rw.ReverseOrdered, [2]string{fake, real})
++	}
++	sort.SliceStable(rw.ReverseOrdered, func(i, j int) bool {
++		return len(rw.ReverseOrdered[i][0]) > len(rw.ReverseOrdered[j][0])
++	})
++
++	return rw
++}
++
++func legacyApplyToolsLastCacheBreakpoint(body []byte) []byte {
++	body = legacyStripDeferredToolCacheControl(body)
++	tools := gjson.GetBytes(body, "tools")
++	if !tools.IsArray() {
++		return body
++	}
++	arr := tools.Array()
++	if len(arr) == 0 {
++		return body
++	}
++	lastIdx := -1
++	for idx, tool := range arr {
++		if isDeferredLoadingTool(tool) {
++			continue
++		}
++		lastIdx = idx
++	}
++	if lastIdx == -1 {
++		return body
++	}
++
++	existingCC := arr[lastIdx].Get("cache_control")
++
++	if existingCC.Exists() && existingCC.Get("ttl").String() != "" {
++		return body
++	}
++
++	if existingCC.Exists() {
++		if next, err := sjson.SetBytes(body, fmt.Sprintf("tools.%d.cache_control.ttl", lastIdx), claude.DefaultCacheControlTTL); err == nil {
++			body = next
++		}
++		return body
++	}
++
++	raw := fmt.Sprintf(`{"type":"ephemeral","ttl":%q}`, claude.DefaultCacheControlTTL)
++	if next, err := sjson.SetRawBytes(body, fmt.Sprintf("tools.%d.cache_control", lastIdx), []byte(raw)); err == nil {
++		body = next
++	}
++	return body
++}
++
++func legacyStripDeferredToolCacheControl(body []byte) []byte {
++	tools := gjson.GetBytes(body, "tools")
++	if !tools.IsArray() {
++		return body
++	}
++	for idx, tool := range tools.Array() {
++		if !isDeferredLoadingTool(tool) || !tool.Get("cache_control").Exists() {
++			continue
++		}
++		if next, err := sjson.DeleteBytes(body, fmt.Sprintf("tools.%d.cache_control", idx)); err == nil {
++			body = next
++		}
++	}
++	return body
++}
++
++func legacyFilterSonnet55ToolsetBeta(header string, body []byte, modelID string) string {
++	if at := strings.IndexByte(modelID, '@'); at >= 0 {
++		modelID = modelID[:at] // Vertex's dated model ID
++	}
++	if !claude.IsSonnet55(modelID) && !claude.IsHaiku55(modelID) {
++		return header
++	}
++	for _, tool := range gjson.GetBytes(body, "tools").Array() {
++		switch tool.Get("type").String() {
++		case "computer_toolset_20260801", "browser_toolset_20260801":
++			if !containsBetaToken(header, claude.BetaFineGrainedToolStreaming) {
++				return header
++			}
++			return stripBetaTokensWithSet(header, map[string]struct{}{claude.BetaFineGrainedToolStreaming: {}})
++		}
++	}
++	return header
++}
++
++func legacySyncBillingHeaderVersion(body []byte, userAgent string) []byte {
++	version := ExtractCLIVersion(userAgent)
++	if version == "" {
++		return body
++	}
++
++	systemResult := gjson.GetBytes(body, "system")
++	if !systemResult.Exists() || !systemResult.IsArray() {
++		return body
++	}
++
++	replacement := "cc_version=" + version
++	idx := 0
++	systemResult.ForEach(func(_, item gjson.Result) bool {
++		text := item.Get("text")
++		if text.Exists() && text.Type == gjson.String &&
++			strings.HasPrefix(text.String(), "x-anthropic-billing-header") {
++			fingerprintedReplacement := replacement + "." + computeClaudeCodeFingerprint(body, version)
++			newText := ccVersionWithFingerprintInBillingRe.ReplaceAllString(text.String(), fingerprintedReplacement)
++			newText = ccVersionInBillingRe.ReplaceAllString(newText, replacement)
++			if newText != text.String() {
++				if updated, err := sjson.SetBytes(body, fmt.Sprintf("system.%d.text", idx), newText); err == nil {
++					body = updated
++				}
++			}
++		}
++		idx++
++		return true
++	})
++
++	return body
++}
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index 9186ddffb..25467588a 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -15,6 +15,7 @@ import (
+ 	"sort"
+ 	"strconv"
+ 	"strings"
++	"sync"
+ 	"sync/atomic"
+ 	"time"
+ 	"unsafe"
+@@ -303,17 +304,20 @@ func extractSystemPreviewFromBody(body []byte) string {
+ 
+ 	switch {
+ 	case sys.IsArray():
+-		for _, item := range sys.Array() {
++		var preview string
++		sys.ForEach(func(_, item gjson.Result) bool {
+ 			if !item.IsObject() {
+-				continue
++				return true
+ 			}
+ 			if strings.EqualFold(item.Get("type").String(), "text") {
+ 				if t := item.Get("text").String(); strings.TrimSpace(t) != "" {
+-					return t
++					preview = t
++					return false
+ 				}
+ 			}
+-		}
+-		return ""
++			return true
++		})
++		return preview
+ 	case sys.Type == gjson.String:
+ 		return sys.String()
+ 	default:
+@@ -385,6 +389,64 @@ func buildClaudeMimicDebugLine(req *http.Request, body []byte, account *Account,
+ 	)
+ }
+ 
++// claudeMimicDebugLine defers building the diagnostics line until an error
++// path actually needs it. The line is read only on Claude Code credential-scope
++// errors, so building it eagerly cost every OAuth request a header walk, a
++// system-prompt scan and several fmt.Sprintf calls for nothing.
++type claudeMimicDebugLine struct {
++	once            sync.Once
++	req             *http.Request
++	body            []byte
++	account         *Account
++	tokenType       string
++	mimicClaudeCode bool
++	line            string
++}
++
++func newClaudeMimicDebugLine(req *http.Request, body []byte, account *Account, tokenType string, mimicClaudeCode bool) *claudeMimicDebugLine {
++	return &claudeMimicDebugLine{
++		req:             req,
++		body:            body,
++		account:         account,
++		tokenType:       tokenType,
++		mimicClaudeCode: mimicClaudeCode,
++	}
++}
++
++func (l *claudeMimicDebugLine) String() string {
++	if l == nil {
++		return ""
++	}
++	l.once.Do(func() {
++		l.line = buildClaudeMimicDebugLine(l.req, l.body, l.account, l.tokenType, l.mimicClaudeCode)
++		// Drop references so the request/body are not retained after use.
++		l.req, l.body, l.account = nil, nil, nil
++	})
++	return l.line
++}
++
++// claudeMimicDebugLineFromContext returns the stored diagnostics line, building
++// it on first use. It also accepts a plain string for compatibility.
++func claudeMimicDebugLineFromContext(c interface {
++	Get(string) (any, bool)
++}) string {
++	if c == nil {
++		return ""
++	}
++	v, ok := c.Get(claudeMimicDebugInfoKey)
++	if !ok {
++		return ""
++	}
++	switch line := v.(type) {
++	case *claudeMimicDebugLine:
++		return line.String()
++	case string:
++		return line
++	default:
++		return ""
++	}
++}
++
+ func logClaudeMimicDebug(req *http.Request, body []byte, account *Account, tokenType string, mimicClaudeCode bool) {
+ 	line := buildClaudeMimicDebugLine(req, body, account, tokenType, mimicClaudeCode)
+ 	if line == "" {
+diff --git a/backend/internal/service/gateway_tool_rewrite.go b/backend/internal/service/gateway_tool_rewrite.go
+index 31991fd9d..0a114ec6a 100644
+--- a/backend/internal/service/gateway_tool_rewrite.go
++++ b/backend/internal/service/gateway_tool_rewrite.go
+@@ -128,17 +128,15 @@ func buildToolNameRewriteFromBody(body []byte) *ToolNameRewrite {
+ 	}
+ 
+ 	mimicableNames := make([]string, 0)
+-	toolsArr := tools.Array()
+-	for _, t := range toolsArr {
++	tools.ForEach(func(_, t gjson.Result) bool {
+ 		if !shouldMimicToolName(t.Get("type").String()) {
+-			continue
++			return true
+ 		}
+-		name := t.Get("name").String()
+-		if name == "" {
+-			continue
++		if name := t.Get("name").String(); name != "" {
++			mimicableNames = append(mimicableNames, name)
+ 		}
+-		mimicableNames = append(mimicableNames, name)
+-	}
++		return true
++	})
+ 
+ 	dynamic := buildDynamicToolMap(mimicableNames)
+ 
+@@ -269,22 +267,22 @@ func applyToolsLastCacheBreakpoint(body []byte) []byte {
+ 	if !tools.IsArray() {
+ 		return body
+ 	}
+-	arr := tools.Array()
+-	if len(arr) == 0 {
+-		return body
+-	}
++	idx := 0
+ 	lastIdx := -1
+-	for idx, tool := range arr {
+-		if isDeferredLoadingTool(tool) {
+-			continue
++	lastTool := gjson.Result{}
++	tools.ForEach(func(_, tool gjson.Result) bool {
++		if !isDeferredLoadingTool(tool) {
++			lastIdx = idx
++			lastTool = tool
+ 		}
+-		lastIdx = idx
+-	}
++		idx++
++		return true
++	})
+ 	if lastIdx == -1 {
+ 		return body
+ 	}
+ 
+-	existingCC := arr[lastIdx].Get("cache_control")
++	existingCC := lastTool.Get("cache_control")
+ 
+ 	if existingCC.Exists() && existingCC.Get("ttl").String() != "" {
+ 		return body
+@@ -316,14 +314,16 @@ func stripDeferredToolCacheControl(body []byte) []byte {
+ 	if !tools.IsArray() {
+ 		return body
+ 	}
+-	for idx, tool := range tools.Array() {
+-		if !isDeferredLoadingTool(tool) || !tool.Get("cache_control").Exists() {
+-			continue
+-		}
+-		if next, err := sjson.DeleteBytes(body, fmt.Sprintf("tools.%d.cache_control", idx)); err == nil {
+-			body = next
++	idx := 0
++	tools.ForEach(func(_, tool gjson.Result) bool {
++		if isDeferredLoadingTool(tool) && tool.Get("cache_control").Exists() {
++			if next, err := sjson.DeleteBytes(body, fmt.Sprintf("tools.%d.cache_control", idx)); err == nil {
++				body = next
++			}
+ 		}
+-	}
++		idx++
++		return true
++	})
+ 	return body
+ }
+ 
+diff --git a/backend/internal/service/gateway_upstream_request.go b/backend/internal/service/gateway_upstream_request.go
+index beb6fc47e..a159c867b 100644
+--- a/backend/internal/service/gateway_upstream_request.go
++++ b/backend/internal/service/gateway_upstream_request.go
+@@ -248,7 +248,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
+ 	// Always capture a compact fingerprint line for later error diagnostics.
+ 	// We only print it when needed (or when the explicit debug flag is enabled).
+ 	if c != nil && tokenType == "oauth" {
+-		c.Set(claudeMimicDebugInfoKey, buildClaudeMimicDebugLine(req, body, account, tokenType, mimicClaudeCode))
++		c.Set(claudeMimicDebugInfoKey, newClaudeMimicDebugLine(req, body, account, tokenType, mimicClaudeCode))
+ 	}
+ 	if s.debugClaudeMimicEnabled() {
+ 		logClaudeMimicDebug(req, body, account, tokenType, mimicClaudeCode)
+@@ -441,7 +441,7 @@ func (s *GatewayService) getBetaHeader(modelID string, clientBetaHeader string)
+ 
+ func requestNeedsBetaFeatures(body []byte) bool {
+ 	tools := gjson.GetBytes(body, "tools")
+-	if tools.Exists() && tools.IsArray() && len(tools.Array()) > 0 {
++	if tools.Exists() && tools.IsArray() && tools.Get("0").Exists() {
+ 		return true
+ 	}
+ 	thinkingType := gjson.GetBytes(body, "thinking.type").String()
+@@ -470,9 +470,18 @@ func filterSonnet55ToolsetBeta(header string, body []byte, modelID string) strin
+ 	if !claude.IsSonnet55(modelID) && !claude.IsHaiku55(modelID) {
+ 		return header
+ 	}
+-	for _, tool := range gjson.GetBytes(body, "tools").Array() {
+-		switch tool.Get("type").String() {
+-		case "computer_toolset_20260801", "browser_toolset_20260801":
++	tools := gjson.GetBytes(body, "tools")
++	if tools.IsArray() {
++		matched := false
++		tools.ForEach(func(_, tool gjson.Result) bool {
++			switch tool.Get("type").String() {
++			case "computer_toolset_20260801", "browser_toolset_20260801":
++				matched = true
++				return false
++			}
++			return true
++		})
++		if matched {
+ 			if !containsBetaToken(header, claude.BetaFineGrainedToolStreaming) {
+ 				return header
+ 			}
+diff --git a/backend/internal/service/gateway_upstream_response.go b/backend/internal/service/gateway_upstream_response.go
+index 86900cbe3..9749a8b4d 100644
+--- a/backend/internal/service/gateway_upstream_response.go
++++ b/backend/internal/service/gateway_upstream_response.go
+@@ -383,14 +383,12 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
+ 	// Print a compact upstream request fingerprint when we hit the Claude Code OAuth
+ 	// credential scope error. This avoids requiring env-var tweaks in a fixed deploy.
+ 	if isClaudeCodeCredentialScopeError(upstreamMsg) && c != nil {
+-		if v, ok := c.Get(claudeMimicDebugInfoKey); ok {
+-			if line, ok := v.(string); ok && strings.TrimSpace(line) != "" {
+-				logger.LegacyPrintf("service.gateway", "[ClaudeMimicDebugOnError] status=%d request_id=%s %s",
+-					resp.StatusCode,
+-					resp.Header.Get("x-request-id"),
+-					line,
+-				)
+-			}
++		if line := claudeMimicDebugLineFromContext(c); strings.TrimSpace(line) != "" {
++			logger.LegacyPrintf("service.gateway", "[ClaudeMimicDebugOnError] status=%d request_id=%s %s",
++				resp.StatusCode,
++				resp.Header.Get("x-request-id"),
++				line,
++			)
+ 		}
+ 	}
+ 
+@@ -572,14 +570,12 @@ func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *ht
+ 	upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
+ 
+ 	if isClaudeCodeCredentialScopeError(upstreamMsg) && c != nil {
+-		if v, ok := c.Get(claudeMimicDebugInfoKey); ok {
+-			if line, ok := v.(string); ok && strings.TrimSpace(line) != "" {
+-				logger.LegacyPrintf("service.gateway", "[ClaudeMimicDebugOnError] status=%d request_id=%s %s",
+-					resp.StatusCode,
+-					resp.Header.Get("x-request-id"),
+-					line,
+-				)
+-			}
++		if line := claudeMimicDebugLineFromContext(c); strings.TrimSpace(line) != "" {
++			logger.LegacyPrintf("service.gateway", "[ClaudeMimicDebugOnError] status=%d request_id=%s %s",
++				resp.StatusCode,
++				resp.Header.Get("x-request-id"),
++				line,
++			)
+ 		}
+ 	}
+ 
+diff --git a/backend/internal/service/gateway_websearch_emulation.go b/backend/internal/service/gateway_websearch_emulation.go
+index 842510901..c359433d2 100644
+--- a/backend/internal/service/gateway_websearch_emulation.go
++++ b/backend/internal/service/gateway_websearch_emulation.go
+@@ -100,11 +100,10 @@ func isOnlyWebSearchToolInBody(body []byte) bool {
+ 	if !tools.IsArray() {
+ 		return false
+ 	}
+-	arr := tools.Array()
+-	if len(arr) != 1 {
++	if !tools.Get("0").Exists() || tools.Get("1").Exists() {
+ 		return false
+ 	}
+-	return isWebSearchToolJSON(arr[0])
++	return isWebSearchToolJSON(tools.Get("0"))
+ }
+ 
+ func isWebSearchToolJSON(tool gjson.Result) bool {
+@@ -125,12 +124,14 @@ func extractSearchQueryFromBody(body []byte) string {
+ 	if !messages.IsArray() {
+ 		return ""
+ 	}
+-	arr := messages.Array()
+-	if len(arr) == 0 {
+-		return ""
+-	}
+-	lastMsg := arr[len(arr)-1]
+-	if lastMsg.Get("role").String() != "user" {
++	var lastMsg gjson.Result
++	found := false
++	messages.ForEach(func(_, msg gjson.Result) bool {
++		lastMsg = msg
++		found = true
++		return true
++	})
++	if !found || lastMsg.Get("role").String() != "user" {
+ 		return ""
+ 	}
+ 	return extractWebSearchTextFromContent(lastMsg.Get("content"))
+@@ -141,13 +142,17 @@ func extractWebSearchTextFromContent(content gjson.Result) string {
+ 		return content.String()
+ 	}
+ 	if content.IsArray() {
+-		for _, block := range content.Array() {
++		var result string
++		content.ForEach(func(_, block gjson.Result) bool {
+ 			if block.Get("type").String() == "text" {
+ 				if text := block.Get("text").String(); text != "" {
+-					return text
++					result = text
++					return false
+ 				}
+ 			}
+-		}
++			return true
++		})
++		return result
+ 	}
+ 	return ""
+ }

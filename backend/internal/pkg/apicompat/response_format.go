@@ -23,6 +23,10 @@ func chatResponseFormatToResponsesTextFormat(raw json.RawMessage) json.RawMessag
 		return raw
 	}
 	schema["type"] = rawJSONString("json_schema")
+	// Chat defaults strict to false; Responses needs that choice explicitly.
+	if _, ok := schema["strict"]; !ok {
+		schema["strict"] = json.RawMessage("false")
+	}
 
 	out, err := json.Marshal(schema)
 	if err != nil {

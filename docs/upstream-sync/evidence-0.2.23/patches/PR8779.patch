@@ -1,0 +1,565 @@
+diff --git a/backend/internal/repository/account_repo.go b/backend/internal/repository/account_repo.go
+index c348af3c3..eddd4614d 100644
+--- a/backend/internal/repository/account_repo.go
++++ b/backend/internal/repository/account_repo.go
+@@ -2690,6 +2690,49 @@ func (r *accountRepository) ClearModelRateLimits(ctx context.Context, id int64)
+ 	return nil
+ }
+ 
++// ClearModelRateLimit 删除 model_rate_limits 中指定的单个 scope。
++// 与 ClearModelRateLimits 的全量清除不同，这里只解封一个模型窗口，
++// 不会把其他模型或并发新写入的限流一起抹掉。
++func (r *accountRepository) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
++	if strings.TrimSpace(scope) == "" {
++		return nil
++	}
++	if scoped := r.accountTransactionScope(ctx); scoped != r {
++		return scoped.ClearModelRateLimit(ctx, id, scope)
++	}
++	client := clientFromContext(ctx, r.client)
++	result, err := client.ExecContext(
++		ctx,
++		`UPDATE accounts SET
++			extra = jsonb_set(
++				COALESCE(extra, '{}'::jsonb),
++				'{model_rate_limits}'::text[],
++				COALESCE(extra->'model_rate_limits', '{}'::jsonb) - $1::text,
++				true
++			),
++			updated_at = NOW()
++		WHERE id = $2 AND deleted_at IS NULL`,
++		strings.TrimSpace(scope),
++		id,
++	)
++	if err != nil {
++		return err
++	}
++
++	affected, err := result.RowsAffected()
++	if err != nil {
++		return err
++	}
++	if affected == 0 {
++		return service.ErrAccountNotFound
++	}
++	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
++		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue clear model rate limit scope failed: account=%d err=%v", id, err)
++	}
++	r.syncSchedulerAccountSnapshot(ctx, id)
++	return nil
++}
++
+ func (r *accountRepository) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
+ 	builder := r.client.Account.Update().
+ 		Where(dbaccount.IDEQ(id)).
+diff --git a/backend/internal/server/api_contract_test.go b/backend/internal/server/api_contract_test.go
+index 81d3d9185..df8bf1dd8 100644
+--- a/backend/internal/server/api_contract_test.go
++++ b/backend/internal/server/api_contract_test.go
+@@ -2047,6 +2047,10 @@ func (s *stubAccountRepo) ClearModelRateLimits(ctx context.Context, id int64) er
+ 	return errors.New("not implemented")
+ }
+ 
++func (s *stubAccountRepo) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
++	return errors.New("not implemented")
++}
++
+ func (s *stubAccountRepo) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
+ 	return errors.New("not implemented")
+ }
+diff --git a/backend/internal/service/account_service.go b/backend/internal/service/account_service.go
+index e2fa3ed08..541d6abd7 100644
+--- a/backend/internal/service/account_service.go
++++ b/backend/internal/service/account_service.go
+@@ -108,6 +108,9 @@ type AccountRepository interface {
+ 	ClearRateLimit(ctx context.Context, id int64) error
+ 	ClearAntigravityQuotaScopes(ctx context.Context, id int64) error
+ 	ClearModelRateLimits(ctx context.Context, id int64) error
++	// ClearModelRateLimit 只清除指定 scope 的模型级限流，用于单个模型窗口恢复后
++	// 定向解封，不影响其他模型与并发生效的限流。
++	ClearModelRateLimit(ctx context.Context, id int64, scope string) error
+ 	UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error
+ 	// UpdateSessionWindowEnd 仅更新 5h 窗口的结束时间，不动 start / status。
+ 	// 用于 active poll 拿到新 ResetsAt 后回写，避免覆盖请求路径上记录的 status。
+diff --git a/backend/internal/service/account_service_delete_test.go b/backend/internal/service/account_service_delete_test.go
+index ed65c25c1..80c4ff6e6 100644
+--- a/backend/internal/service/account_service_delete_test.go
++++ b/backend/internal/service/account_service_delete_test.go
+@@ -195,6 +195,10 @@ func (s *accountRepoStub) ClearModelRateLimits(ctx context.Context, id int64) er
+ 	panic("unexpected ClearModelRateLimits call")
+ }
+ 
++func (s *accountRepoStub) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
++	panic("unexpected ClearModelRateLimit call")
++}
++
+ func (s *accountRepoStub) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
+ 	panic("unexpected UpdateSessionWindow call")
+ }
+diff --git a/backend/internal/service/account_usage_service.go b/backend/internal/service/account_usage_service.go
+index 9fb4b74a8..9e30d64ee 100644
+--- a/backend/internal/service/account_usage_service.go
++++ b/backend/internal/service/account_usage_service.go
+@@ -495,8 +495,9 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
+ 		// 4. 添加窗口统计（有独立缓存，1 分钟）
+ 		s.addWindowStats(ctx, account, usage)
+ 
+-		// 5. 将主动查询结果同步到被动缓存，下次 passive 加载即为最新值
+-		s.syncActiveToPassive(ctx, account.ID, usage)
++		// 5. 将主动查询结果同步到被动缓存，下次 passive 加载即为最新值；
++		// 其中还会在上游明确给出已回落的 7d_oi 用量时撤销窗口耗尽写入的模型级限流。
++		s.syncActiveToPassive(ctx, account, usage)
+ 
+ 		// 6. 上游 usage API 目前不一定下发 Fable 7d 窗口；缺失时回填被动采样
+ 		// （7d_oi 响应头）的数据，避免主动查询后 7d F 进度条丢失。
+@@ -727,7 +728,15 @@ func buildPassiveUsageWindow(extra map[string]any, utilKey, resetKey string) *Us
+ 
+ // syncActiveToPassive 将主动查询的最新数据回写到 Extra 被动缓存，
+ // 这样下次被动加载时能看到最新值。
+-func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, accountID int64, usage *UsageInfo) {
++//
++// 主动查询是“重置卡生效后额度已恢复”最直接的观测点：这里在拿到 API 明确回报的
++// 7d_oi 用量后，顺手撤销窗口耗尽写入的模型级限流。回填被动采样发生在调用方，
++// 因此本函数的 usage.SevenDayFable 一定是上游返回值，不会把旧采样当成恢复依据。
++func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, account *Account, usage *UsageInfo) {
++	if account == nil {
++		return
++	}
++	accountID := account.ID
+ 	extraUpdates := make(map[string]any, 4)
+ 
+ 	if usage.FiveHour != nil {
+@@ -760,6 +769,10 @@ func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, accountID
+ 			slog.Warn("sync_active_to_passive_session_window_end_failed", "account_id", accountID, "error", err)
+ 		}
+ 	}
++
++	if usage.SevenDayFable != nil {
++		recoverAnthropicFableWindowLimit(ctx, s.accountRepo, account, usage.SevenDayFable.Utilization/100)
++	}
+ }
+ 
+ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {
+diff --git a/backend/internal/service/account_usage_service_fable_test.go b/backend/internal/service/account_usage_service_fable_test.go
+index 072979198..71b8a003a 100644
+--- a/backend/internal/service/account_usage_service_fable_test.go
++++ b/backend/internal/service/account_usage_service_fable_test.go
+@@ -163,7 +163,7 @@ func TestSyncActiveToPassive_WritesFableExtras(t *testing.T) {
+ 		},
+ 	}
+ 
+-	svc.syncActiveToPassive(t.Context(), 1, usage)
++	svc.syncActiveToPassive(t.Context(), &Account{ID: 1}, usage)
+ 
+ 	select {
+ 	case updates := <-repo.updateExtraCh:
+diff --git a/backend/internal/service/account_usage_session_window_test.go b/backend/internal/service/account_usage_session_window_test.go
+index 779a5974f..bca6a456d 100644
+--- a/backend/internal/service/account_usage_session_window_test.go
++++ b/backend/internal/service/account_usage_session_window_test.go
+@@ -97,7 +97,7 @@ func TestSyncActiveToPassive_WritesFiveHourSessionWindowEnd(t *testing.T) {
+ 	repo := &sessionWindowSyncRepo{}
+ 	svc := &AccountUsageService{accountRepo: repo}
+ 	resetsAt := time.Now().Add(3 * time.Hour).UTC().Truncate(time.Second)
+-	svc.syncActiveToPassive(context.Background(), 42, &UsageInfo{
++	svc.syncActiveToPassive(context.Background(), &Account{ID: 42}, &UsageInfo{
+ 		FiveHour: &UsageProgress{
+ 			Utilization: 53,
+ 			ResetsAt:    &resetsAt,
+@@ -123,7 +123,7 @@ func TestSyncActiveToPassive_SkipsSessionWindowEndWhenResetMissing(t *testing.T)
+ 
+ 	repo := &sessionWindowSyncRepo{}
+ 	svc := &AccountUsageService{accountRepo: repo}
+-	svc.syncActiveToPassive(context.Background(), 99, &UsageInfo{
++	svc.syncActiveToPassive(context.Background(), &Account{ID: 99}, &UsageInfo{
+ 		FiveHour: &UsageProgress{Utilization: 10},
+ 	})
+ 
+diff --git a/backend/internal/service/admin_service_clear_error_test.go b/backend/internal/service/admin_service_clear_error_test.go
+index 41418c4f9..d4ae092e2 100644
+--- a/backend/internal/service/admin_service_clear_error_test.go
++++ b/backend/internal/service/admin_service_clear_error_test.go
+@@ -48,6 +48,10 @@ func (r *accountRepoStubForClearAccountError) ClearModelRateLimits(ctx context.C
+ 	return nil
+ }
+ 
++func (r *accountRepoStubForClearAccountError) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
++	return nil
++}
++
+ func (r *accountRepoStubForClearAccountError) ClearTempUnschedulable(ctx context.Context, id int64) error {
+ 	r.clearTempUnschedCalls++
+ 	r.account.TempUnschedulableUntil = nil
+diff --git a/backend/internal/service/gateway_multiplatform_test.go b/backend/internal/service/gateway_multiplatform_test.go
+index 05b7f2f85..de8fc0c7f 100644
+--- a/backend/internal/service/gateway_multiplatform_test.go
++++ b/backend/internal/service/gateway_multiplatform_test.go
+@@ -211,6 +211,10 @@ func (m *mockAccountRepoForPlatform) ClearAntigravityQuotaScopes(ctx context.Con
+ func (m *mockAccountRepoForPlatform) ClearModelRateLimits(ctx context.Context, id int64) error {
+ 	return nil
+ }
++
++func (m *mockAccountRepoForPlatform) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
++	return nil
++}
+ func (m *mockAccountRepoForPlatform) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
+ 	return nil
+ }
+diff --git a/backend/internal/service/gemini_multiplatform_test.go b/backend/internal/service/gemini_multiplatform_test.go
+index 3c26f8f2c..63ac4a6f5 100644
+--- a/backend/internal/service/gemini_multiplatform_test.go
++++ b/backend/internal/service/gemini_multiplatform_test.go
+@@ -172,6 +172,10 @@ func (m *mockAccountRepoForGemini) ClearAntigravityQuotaScopes(ctx context.Conte
+ func (m *mockAccountRepoForGemini) ClearModelRateLimits(ctx context.Context, id int64) error {
+ 	return nil
+ }
++
++func (m *mockAccountRepoForGemini) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
++	return nil
++}
+ func (m *mockAccountRepoForGemini) UpdateSessionWindow(ctx context.Context, id int64, start, end *time.Time, status string) error {
+ 	return nil
+ }
+diff --git a/backend/internal/service/model_rate_limit.go b/backend/internal/service/model_rate_limit.go
+index fc181de07..1081f4846 100644
+--- a/backend/internal/service/model_rate_limit.go
++++ b/backend/internal/service/model_rate_limit.go
+@@ -244,3 +244,27 @@ func setAccountModelRateLimitSnapshot(account *Account, scope string, resetAt ti
+ 	extra[modelRateLimitsKey] = limits
+ 	account.Extra = extra
+ }
++
++// clearAccountModelRateLimitSnapshot 从本账号对象的 Extra 快照中删除指定 scope，
++// 让当前实例立刻停止跳过该模型，而不必等下一次快照重建。
++// 与 setAccountModelRateLimitSnapshot 一样写时复制，不修改可能共享的旧 map。
++func clearAccountModelRateLimitSnapshot(account *Account, scope string) {
++	if account == nil || strings.TrimSpace(scope) == "" {
++		return
++	}
++	oldLimits, ok := account.Extra[modelRateLimitsKey].(map[string]any)
++	if !ok {
++		return
++	}
++	if _, exists := oldLimits[scope]; !exists {
++		return
++	}
++	limits := make(map[string]any, len(oldLimits))
++	maps.Copy(limits, oldLimits)
++	delete(limits, scope)
++
++	extra := make(map[string]any, len(account.Extra))
++	maps.Copy(extra, account.Extra)
++	extra[modelRateLimitsKey] = limits
++	account.Extra = extra
++}
+diff --git a/backend/internal/service/ratelimit_fable_recovery_test.go b/backend/internal/service/ratelimit_fable_recovery_test.go
+new file mode 100644
+index 000000000..dab59c922
+--- /dev/null
++++ b/backend/internal/service/ratelimit_fable_recovery_test.go
+@@ -0,0 +1,195 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"errors"
++	"net/http"
++	"strconv"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++// 上游 7d_oi 窗口耗尽会给账号写入 model_rate_limits["claude-fable-5"]，冷却到窗口重置时间。
++// 如果期间用户用重置卡让上游额度提前归零，本地原本没有任何撤销路径：请求一直在本地
++// 被判为 model_rate_limited，直到旧的 rate_limit_reset_at 到期为止。
++//
++// 下面锁定恢复规则：只有上游**明确**回报 7d_oi 用量回落到耗尽线以下、且已有记录来自
++// 窗口耗尽时，才按单 key 撤销；缺失数据、积分不足、窗口仍被拒、以及其它模型都不受影响。
++
++type fableRecoveryRepo struct {
++	sessionWindowMockRepo
++	clearedScopes []string
++	clearErr      error
++}
++
++func (r *fableRecoveryRepo) ClearModelRateLimit(_ context.Context, _ int64, scope string) error {
++	r.clearedScopes = append(r.clearedScopes, scope)
++	return r.clearErr
++}
++
++func newFableRecoveryAccount(reason string, extraLimits map[string]any) *Account {
++	limits := map[string]any{
++		anthropicFableRateLimitKey: map[string]any{
++			"rate_limited_at":     time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339),
++			"rate_limit_reset_at": time.Now().Add(3 * 24 * time.Hour).UTC().Format(time.RFC3339),
++			"reason":              reason,
++		},
++	}
++	for scope, payload := range extraLimits {
++		limits[scope] = payload
++	}
++	return &Account{
++		ID:       42,
++		Platform: PlatformAnthropic,
++		Type:     AccountTypeOAuth,
++		Extra:    map[string]any{modelRateLimitsKey: limits},
++	}
++}
++
++func fableUsageHeaders(utilization string, rejected bool) http.Header {
++	headers := http.Header{}
++	headers.Set("anthropic-ratelimit-unified-5h-status", "allowed")
++	if rejected {
++		headers.Set("anthropic-ratelimit-unified-7d_oi-status", "rejected")
++	}
++	if utilization != "" {
++		headers.Set("anthropic-ratelimit-unified-7d_oi-utilization", utilization)
++	}
++	headers.Set("anthropic-ratelimit-unified-7d_oi-reset", strconv.FormatInt(time.Now().Add(7*24*time.Hour).Unix(), 10))
++	return headers
++}
++
++func TestPassiveUsageClearsExhaustedFableLimitAfterQuotaReset(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{}
++	svc := &RateLimitService{accountRepo: repo}
++	account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
++
++	require.True(t, account.isModelRateLimitedWithContext(ctx, "claude-fable-5-2"),
++		"前提：窗口耗尽后 Fable 请求被本地拦截")
++
++	// 重置卡生效：上游回报该窗口 0%。
++	svc.samplePassiveUsageFromHeaders(ctx, account, fableUsageHeaders("0", false))
++
++	require.Equal(t, []string{anthropicFableRateLimitKey}, repo.clearedScopes,
++		"必须只按 claude-fable-5 这一个 scope 撤销")
++	require.False(t, account.isModelRateLimitedWithContext(ctx, "claude-fable-5-2"),
++		"本实例的账号快照要同步解除，否则当前实例仍会继续跳过该账号")
++}
++
++func TestPassiveUsageKeepsFableLimitWhenUtilizationMissing(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{}
++	svc := &RateLimitService{accountRepo: repo}
++	account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
++
++	// 缺失不等于 0：上游没给 7d_oi 用量时不得撤销。
++	svc.samplePassiveUsageFromHeaders(ctx, account, fableUsageHeaders("", false))
++
++	require.Empty(t, repo.clearedScopes)
++	require.True(t, account.isModelRateLimitedWithContext(ctx, "claude-fable-5-2"))
++}
++
++func TestPassiveUsageKeepsFableLimitWhileWindowStillRejected(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{}
++	svc := &RateLimitService{accountRepo: repo}
++	account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
++
++	// 窗口仍是 rejected 时，即使 utilization 因为口径差异低于 1.0 也不能撤销。
++	svc.samplePassiveUsageFromHeaders(ctx, account, fableUsageHeaders("0.5", true))
++
++	require.Empty(t, repo.clearedScopes)
++	require.True(t, account.isModelRateLimitedWithContext(ctx, "claude-fable-5-2"))
++}
++
++func TestPassiveUsageKeepsFableLimitWhenUtilizationStillHigh(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{}
++	svc := &RateLimitService{accountRepo: repo}
++	account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
++
++	svc.samplePassiveUsageFromHeaders(ctx, account, fableUsageHeaders("0.98", false))
++
++	require.Empty(t, repo.clearedScopes, "利用率仍接近耗尽线时不撤销")
++}
++
++func TestPassiveUsageKeepsCreditsRequiredLimit(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{}
++	svc := &RateLimitService{accountRepo: repo}
++	account := newFableRecoveryAccount(anthropicFableCreditsRequiredReason, nil)
++
++	// 积分不足（credits required）与窗口耗尽语义不同，不能被窗口用量顺手清掉。
++	svc.samplePassiveUsageFromHeaders(ctx, account, fableUsageHeaders("0", false))
++
++	require.Empty(t, repo.clearedScopes)
++	require.True(t, account.isModelRateLimitedWithContext(ctx, "claude-fable-5-2"))
++}
++
++func TestPassiveUsageKeepsOtherModelLimitsWhenRecoveringFable(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{}
++	svc := &RateLimitService{accountRepo: repo}
++	otherLimit := map[string]any{
++		"rate_limited_at":     time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
++		"rate_limit_reset_at": time.Now().Add(6 * time.Hour).UTC().Format(time.RFC3339),
++		"reason":              anthropicFableWindowReason,
++	}
++	account := newFableRecoveryAccount(anthropicFableWindowReason, map[string]any{
++		"claude-opus-4-1": otherLimit,
++	})
++
++	svc.samplePassiveUsageFromHeaders(ctx, account, fableUsageHeaders("0", false))
++
++	require.Equal(t, []string{anthropicFableRateLimitKey}, repo.clearedScopes)
++	require.False(t, account.isRateLimitActiveForKey(anthropicFableRateLimitKey))
++	require.True(t, account.isRateLimitActiveForKey("claude-opus-4-1"),
++		"其它模型的限流必须原样保留")
++}
++
++func TestPassiveUsageKeepsLimitWhenClearFails(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{clearErr: errors.New("db unavailable")}
++	svc := &RateLimitService{accountRepo: repo}
++	account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
++
++	svc.samplePassiveUsageFromHeaders(ctx, account, fableUsageHeaders("0", false))
++
++	require.Equal(t, []string{anthropicFableRateLimitKey}, repo.clearedScopes)
++	require.True(t, account.isModelRateLimitedWithContext(ctx, "claude-fable-5-2"),
++		"写库失败时不能只改内存快照，否则本实例放行而调度快照仍拦截")
++}
++
++// 主动用量刷新（管理端「刷新额度」）是另一个观测点：上游 usage API 明确给出
++// 已回落的 7d_oi 用量时同样要撤销；API 没给这个窗口时保持原状。
++func TestSyncActiveToPassiveClearsExhaustedFableLimit(t *testing.T) {
++	ctx := context.Background()
++	repo := &fableRecoveryRepo{}
++	svc := &AccountUsageService{accountRepo: repo}
++
++	t.Run("api reports recovery", func(t *testing.T) {
++		account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
++		usage := &UsageInfo{SevenDayFable: &UsageProgress{Utilization: 3}}
++
++		svc.syncActiveToPassive(ctx, account, usage)
++
++		require.Equal(t, []string{anthropicFableRateLimitKey}, repo.clearedScopes)
++		require.False(t, account.isRateLimitActiveForKey(anthropicFableRateLimitKey))
++	})
++
++	t.Run("api omits the fable window", func(t *testing.T) {
++		repo.clearedScopes = nil
++		account := newFableRecoveryAccount(anthropicFableWindowReason, nil)
++		usage := &UsageInfo{SevenDayFable: nil}
++
++		svc.syncActiveToPassive(ctx, account, usage)
++
++		require.Empty(t, repo.clearedScopes, "上游未下发该窗口时不能当成 0")
++		require.True(t, account.isRateLimitActiveForKey(anthropicFableRateLimitKey))
++	})
++}
+diff --git a/backend/internal/service/ratelimit_service.go b/backend/internal/service/ratelimit_service.go
+index c2d6a1d40..c3cacf760 100644
+--- a/backend/internal/service/ratelimit_service.go
++++ b/backend/internal/service/ratelimit_service.go
+@@ -1603,8 +1603,49 @@ func (s *RateLimitService) persistAnthropicExhaustedWindowLimit(ctx context.Cont
+ const (
+ 	anthropicFableWindowReason          = "anthropic_7d_oi_window_exhausted"
+ 	anthropicFableCreditsRequiredReason = "anthropic_fable_credits_required"
++
++	// anthropicFableWindowRecoveredUtilization 是判定 7d_oi 窗口已恢复的用量上限。
++	// 上游明确回报利用率低于该值（重置卡生效、窗口滚动）时撤销窗口耗尽写入的限流；
++	// 留出余量避免贴着 1.0 的采样来回抖动。
++	anthropicFableWindowRecoveredUtilization = 0.95
+ )
+ 
++// recoverAnthropicFableWindowLimit 在上游明确回报 7d_oi 用量已回落到耗尽线以下时，
++// 撤销此前由窗口耗尽写入的 claude-fable-5 模型级限流。
++//
++// 三条约束：
++//  1. 只有明确拿到利用率才判断；缺失一律不动，缺失不等于 0；
++//  2. 只撤销 anthropicFableWindowReason 来源的限流——积分不足（credits required）
++//     与管理端阈值来源的语义不同，不能被窗口用量顺手清掉；
++//  3. 只清 claude-fable-5 这一个 scope，不影响其他模型与并发新写入的限流。
++func recoverAnthropicFableWindowLimit(ctx context.Context, repo AccountRepository, account *Account, utilization float64) bool {
++	if repo == nil || account == nil || account.ID <= 0 {
++		return false
++	}
++	if utilization < 0 || utilization >= anthropicFableWindowRecoveredUtilization {
++		return false
++	}
++	if !account.isRateLimitActiveForKey(anthropicFableRateLimitKey) {
++		return false
++	}
++	if account.modelRateLimitReason(anthropicFableRateLimitKey) != anthropicFableWindowReason {
++		return false
++	}
++	if err := repo.ClearModelRateLimit(ctx, account.ID, anthropicFableRateLimitKey); err != nil {
++		slog.Warn("anthropic_fable_window_recovery_clear_failed",
++			"account_id", account.ID,
++			"utilization", utilization,
++			"error", err)
++		return false
++	}
++	clearAccountModelRateLimitSnapshot(account, anthropicFableRateLimitKey)
++	slog.Info("anthropic_fable_window_recovered",
++		"account_id", account.ID,
++		"scope", anthropicFableRateLimitKey,
++		"utilization", utilization)
++	return true
++}
++
+ // persistAnthropicFableCreditsRequired handles Anthropic's credits_required
+ // response for Fable. Although the upstream status is 429, this response only
+ // says that the organization cannot use Fable; marking the whole account rate
+@@ -2186,9 +2227,11 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
+ 		}
+ 	}
+ 	// 7d_oi (Fable 专属 7d 窗口) utilization（0-1 小数）
++	var fableUtil *float64
+ 	if utilStr := headers.Get("anthropic-ratelimit-unified-7d_oi-utilization"); utilStr != "" {
+ 		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
+ 			extraUpdates["passive_usage_7d_oi_utilization"] = util
++			fableUtil = &util
+ 		}
+ 	}
+ 	// 7d_oi reset timestamp
+@@ -2206,6 +2249,13 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
+ 			slog.Warn("passive_usage_update_failed", "account_id", account.ID, "error", err)
+ 		}
+ 	}
++
++	// 上游已明确回报 7d_oi 用量回落到耗尽线以下（额度重置或窗口滚动）时，
++	// 撤销此前窗口耗尽写入的模型级限流，避免重置卡生效后仍被本地拦到原
++	// rate_limit_reset_at 才解封。窗口仍处于 rejected/exceeded 时不撤销。
++	if fableUtil != nil && !isAnthropicWindowRejected(headers, "7d_oi") && !isAnthropicWindowExceeded(headers, "7d_oi") {
++		recoverAnthropicFableWindowLimit(ctx, s.accountRepo, account, *fableUtil)
++	}
+ }
+ 
+ // ClearRateLimit 清除账号的限流状态
+diff --git a/backend/internal/service/ratelimit_service_clear_test.go b/backend/internal/service/ratelimit_service_clear_test.go
+index e8d312f9b..c3f4538cb 100644
+--- a/backend/internal/service/ratelimit_service_clear_test.go
++++ b/backend/internal/service/ratelimit_service_clear_test.go
+@@ -57,6 +57,10 @@ func (r *rateLimitClearRepoStub) ClearModelRateLimits(ctx context.Context, id in
+ 	return r.clearModelRateLimitErr
+ }
+ 
++func (r *rateLimitClearRepoStub) ClearModelRateLimit(ctx context.Context, id int64, scope string) error {
++	return nil
++}
++
+ func (r *rateLimitClearRepoStub) ClearTempUnschedulable(ctx context.Context, id int64) error {
+ 	r.clearTempUnschedCalls++
+ 	return r.clearTempUnschedulableErr
+diff --git a/backend/internal/service/ratelimit_session_window_test.go b/backend/internal/service/ratelimit_session_window_test.go
+index bf7cc2bf0..d3de55622 100644
+--- a/backend/internal/service/ratelimit_session_window_test.go
++++ b/backend/internal/service/ratelimit_session_window_test.go
+@@ -54,6 +54,10 @@ func (m *sessionWindowMockRepo) ClearAntigravityQuotaScopes(_ context.Context, _
+ func (m *sessionWindowMockRepo) ClearModelRateLimits(_ context.Context, _ int64) error {
+ 	return nil
+ }
++
++func (m *sessionWindowMockRepo) ClearModelRateLimit(_ context.Context, _ int64, _ string) error {
++	return nil
++}
+ func (m *sessionWindowMockRepo) ClearTempUnschedulable(_ context.Context, _ int64) error {
+ 	return nil
+ }

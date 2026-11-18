@@ -1,0 +1,26 @@
+diff --git a/backend/internal/service/gateway_record_usage_test.go b/backend/internal/service/gateway_record_usage_test.go
+index 9dfa55629..d97aad6af 100644
+--- a/backend/internal/service/gateway_record_usage_test.go
++++ b/backend/internal/service/gateway_record_usage_test.go
+@@ -362,6 +362,8 @@ func TestGatewayServiceRecordUsage_PeakRateAffectsTokenModeImageOutputTokens(t *
+ 		},
+ 		User:    &User{ID: 602},
+ 		Account: &Account{ID: 702},
++		// The peak window excludes 23:59, so do not depend on the wall clock.
++		PricingAt: time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC),
+ 	})
+ 
+ 	require.NoError(t, err)
+diff --git a/backend/internal/service/openai_gateway_record_usage_test.go b/backend/internal/service/openai_gateway_record_usage_test.go
+index be4cf1850..b1e2bde2f 100644
+--- a/backend/internal/service/openai_gateway_record_usage_test.go
++++ b/backend/internal/service/openai_gateway_record_usage_test.go
+@@ -476,6 +476,8 @@ func TestOpenAIGatewayServiceRecordUsage_PeakRateAffectsTokenModeImageOutputToke
+ 		},
+ 		User:    &User{ID: 2004},
+ 		Account: &Account{ID: 3004},
++		// The peak window excludes 23:59, so do not depend on the wall clock.
++		PricingAt: time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC),
+ 	})
+ 
+ 	require.NoError(t, err)

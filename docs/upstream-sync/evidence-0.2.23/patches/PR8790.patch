@@ -1,0 +1,50 @@
+diff --git a/backend/internal/service/account.go b/backend/internal/service/account.go
+index 8899c2d70..be94a95ed 100644
+--- a/backend/internal/service/account.go
++++ b/backend/internal/service/account.go
+@@ -2410,10 +2410,8 @@ const (
+ // 三态：default（跟随渠道）/ enabled（强制开启）/ disabled（强制关闭）。
+ // 兼容旧 bool 值：true→enabled, false→default（并记录 debug 日志）。
+ func (a *Account) GetWebSearchEmulationMode() string {
+-	// OpenAI API Key accounts reach this via /v1/messages; their upstreams
+-	// (DeepSeek etc. over Chat Completions) have no web_search tool.
+ 	if a == nil || a.Type != AccountTypeAPIKey || a.Extra == nil ||
+-		(a.Platform != PlatformAnthropic && a.Platform != PlatformOpenAI) {
++		!webSearchEmulationPlatformEnabled(a.Platform) {
+ 		return WebSearchModeDefault
+ 	}
+ 	raw := a.Extra[featureKeyWebSearchEmulation]
+@@ -2437,6 +2435,17 @@ func (a *Account) GetWebSearchEmulationMode() string {
+ 	}
+ }
+ 
++// webSearchEmulationPlatformEnabled reports whether API key accounts of the
++// platform can set the account-level web search emulation mode. Keep it in sync
++// with WEB_SEARCH_EMULATION_PLATFORMS in frontend/src/views/admin/ChannelsView.vue.
++func webSearchEmulationPlatformEnabled(platform string) bool {
++	switch platform {
++	case PlatformAnthropic, PlatformOpenAI, PlatformZhipu, PlatformCommandCode, PlatformOpenCodeGo, PlatformMiniMax:
++		return true
++	}
++	return false
++}
++
+ // IsCodexCLIOnlyEnabled 返回 OpenAI OAuth 账号是否启用"仅允许 Codex 官方客户端"。
+ // 字段：accounts.extra.codex_cli_only。
+ // 字段缺失或类型不正确时，按 false（关闭）处理。
+diff --git a/backend/internal/service/gateway_websearch_emulation_test.go b/backend/internal/service/gateway_websearch_emulation_test.go
+index 0c05563f6..2577e38dc 100644
+--- a/backend/internal/service/gateway_websearch_emulation_test.go
++++ b/backend/internal/service/gateway_websearch_emulation_test.go
+@@ -418,7 +418,10 @@ func TestShouldEmulateWebSearchFor_AccountChannelModes(t *testing.T) {
+ 
+ 	settingSvc := newSettingServiceForWebSearchTest(true)
+ 	groupID := int64(42)
+-	for _, platform := range []string{PlatformOpenAI, PlatformAnthropic} {
++	platforms := []string{
++		PlatformOpenAI, PlatformAnthropic, PlatformZhipu, PlatformCommandCode, PlatformOpenCodeGo, PlatformMiniMax,
++	}
++	for _, platform := range platforms {
+ 		for _, accountType := range []string{AccountTypeAPIKey, AccountTypeOAuth, AccountTypeSetupToken} {
+ 			for _, mode := range []string{WebSearchModeDefault, WebSearchModeEnabled, WebSearchModeDisabled} {
+ 				for _, channelEnabled := range []bool{false, true} {

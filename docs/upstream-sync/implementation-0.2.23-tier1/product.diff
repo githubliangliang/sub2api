@@ -1,0 +1,3775 @@
+diff --git a/backend/internal/handler/gateway_handler.go b/backend/internal/handler/gateway_handler.go
+index 60d2b837a..28b808fcb 100644
+--- a/backend/internal/handler/gateway_handler.go
++++ b/backend/internal/handler/gateway_handler.go
+@@ -1095,7 +1095,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
+ 			// - 粘性账号因负载/RPM 被跳过、选中了其他账号：不覆盖原绑定，
+ 			//   下次请求粘性账号恢复后仍可命中
+ 			if sessionKey != "" && (sessionBoundAccountID == 0 || sessionBoundAccountID == account.ID) {
+-				bindCtx, cancelBind := postForwardContext(c.Request.Context())
++				bindCtx, cancelBind := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 5*time.Second)
+ 				if err := h.gatewayService.BindStickySession(bindCtx, currentAPIKey.GroupID, sessionKey, account.ID); err != nil {
+ 					reqLog.Warn("gateway.bind_sticky_session_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+ 				}
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index f6ced1921..60b2b3b1d 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -393,7 +393,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+ 	}
+ 	if normalizedBody, changed := normalizeCodexPageContext(body); changed {
+ 		body = normalizedBody
+-		reqLog.Info("openai.codex_page_context_normalized",
++		reqLog.Info("openai.codex_untrusted_context_normalized",
+ 			zap.String("normalization", "call_output_to_user_message"),
+ 		)
+ 	}
+diff --git a/backend/internal/handler/openai_page_context.go b/backend/internal/handler/openai_page_context.go
+index c61e83042..ee107dcc7 100644
+--- a/backend/internal/handler/openai_page_context.go
++++ b/backend/internal/handler/openai_page_context.go
+@@ -11,10 +11,10 @@ import (
+ 
+ var codexSelectedPageName = regexp.MustCompile(`^codex_apps_selected_page_part_([1-9][0-9]*)_of_([1-9][0-9]*)$`)
+ 
+-// Desktop injects page snapshots as standalone outputs, without a model tool call.
+-// Keep them as untrusted user text, including on history replay and mixed bootstrap turns.
++// Codex injects external context without a model tool call. Keep it as untrusted
++// user text, including on history replay and mixed bootstrap turns.
+ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
+-	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_") || !hasUniqueJSONMembers(body) {
++	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context") || !hasUniqueJSONMembers(body) {
+ 		return body, false
+ 	}
+ 	var request map[string]json.RawMessage
+@@ -46,15 +46,19 @@ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
+ 			}
+ 		}
+ 		name, output := readString("name"), readString("output")
+-		if !validCodexPageContext(name, output) {
++		if !validCodexUntrustedContext(name, output) {
+ 			continue
+ 		}
++		text := "<external_" + name + ">" + output + "</external_" + name + ">"
++		if validCodexPageContext(name, output) {
++			text = "<external_" + name + ">\n" + output + "\n</external_" + name + ">"
++		}
+ 		message := map[string]any{
+ 			"type": "message",
+ 			"role": "user",
+ 			"content": []map[string]string{{
+ 				"type": "input_text",
+-				"text": "<external_" + name + ">\n" + output + "\n</external_" + name + ">",
++				"text": text,
+ 			}},
+ 		}
+ 		encoded, err := json.Marshal(message)
+@@ -79,6 +83,15 @@ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
+ 	return encoded, true
+ }
+ 
++func validCodexUntrustedContext(name, output string) bool {
++	switch name {
++	case "browser_info", "goal_objective", "untrusted_context":
++		return strings.TrimSpace(output) != ""
++	default:
++		return validCodexPageContext(name, output)
++	}
++}
++
+ func validCodexPageContext(name, output string) bool {
+ 	if name == "codex_apps_open_page" {
+ 		return validCodexPageSnapshot(output)
+diff --git a/backend/internal/handler/openai_page_context_http_test.go b/backend/internal/handler/openai_page_context_http_test.go
+index 006e4ef89..e14cae180 100644
+--- a/backend/internal/handler/openai_page_context_http_test.go
++++ b/backend/internal/handler/openai_page_context_http_test.go
+@@ -48,7 +48,7 @@ func TestCodexPageContextRealHTTPFirstRequest(t *testing.T) {
+ 	router.POST("/v1/responses", h.Responses)
+ 	server := httptest.NewServer(router)
+ 	defer server.Close()
+-	body := pageContextRequest(t, pageContextItem("codex_apps_open_page", `{"page_id":"page-fixture","text":"untrusted page content"}`), pageContextItem("codex_apps_selected_page_part_1_of_1", "Companion Page snapshot part 1 of 1:\n"+`{"page_id":null}`), map[string]any{"role": "user", "content": "hello"})
++	body := pageContextRequest(t, pageContextItem("codex_apps_open_page", `{"page_id":"page-fixture","text":"untrusted page content"}`), pageContextItem("codex_apps_selected_page_part_1_of_1", "Companion Page snapshot part 1 of 1:\n"+`{"page_id":null}`), pageContextItem("browser_info", "active browser"), pageContextItem("goal_objective", "current objective"), pageContextItem("untrusted_context", "external context"), map[string]any{"role": "user", "content": "hello"})
+ 	response, err := server.Client().Post(server.URL+"/v1/responses", "application/json", strings.NewReader(string(body)))
+ 	require.NoError(t, err)
+ 	raw, err := io.ReadAll(response.Body)
+@@ -58,14 +58,14 @@ func TestCodexPageContextRealHTTPFirstRequest(t *testing.T) {
+ 	select {
+ 	case forwarded := <-captured:
+ 		items := gjson.GetBytes(forwarded, "input").Array()
+-		require.Len(t, items, 3)
+-		for _, item := range items[:2] {
++		require.Len(t, items, 6)
++		for _, item := range items[:5] {
+ 			require.Equal(t, "user", item.Get("role").String())
+ 			require.Equal(t, "message", item.Get("type").String())
+-			require.Contains(t, item.Get("content.0.text").String(), "<external_codex_apps_")
++			require.Contains(t, item.Get("content.0.text").String(), "<external_")
+ 		}
+ 		require.Contains(t, items[0].Get("content.0.text").String(), "untrusted page content")
+-		require.Equal(t, "hello", items[2].Get("content").String())
++		require.Equal(t, "hello", items[5].Get("content").String())
+ 	case <-time.After(time.Second):
+ 		t.Fatal("the first request never reached the HTTP upstream")
+ 	}
+diff --git a/backend/internal/handler/openai_page_context_test.go b/backend/internal/handler/openai_page_context_test.go
+index dccdc6fd8..7a04a064b 100644
+--- a/backend/internal/handler/openai_page_context_test.go
++++ b/backend/internal/handler/openai_page_context_test.go
+@@ -54,6 +54,122 @@ func TestNormalizeCodexPageContextFirstMessage(t *testing.T) {
+ 	require.Equal(t, got, again)
+ }
+ 
++func TestNormalizeCodexAdditionalUntrustedContext(t *testing.T) {
++	// AdditionalContextToolOutput derives names from caller-provided context keys.
++	// Codex 0.169.0 enables this representation by default (openai/codex#60487).
++	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++		t.Run(name, func(t *testing.T) {
++			output := "external context\nline two"
++			body := pageContextRequest(t, pageContextItem(name, output),
++				map[string]any{"role": "user", "content": "continue"})
++			h := &OpenAIGatewayHandler{}
++			w := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(w)
++			require.False(t, h.validateFunctionCallOutputRequest(c, body, zap.NewNop()))
++
++			got, changed := normalizeCodexPageContext(body)
++			require.True(t, changed)
++			w = httptest.NewRecorder()
++			c, _ = gin.CreateTestContext(w)
++			require.True(t, h.validateFunctionCallOutputRequest(c, got, zap.NewNop()))
++			require.False(t, c.Writer.Written())
++			item := gjson.GetBytes(got, "input.0")
++			require.Equal(t, "message", item.Get("type").String())
++			require.Equal(t, "user", item.Get("role").String())
++			require.Equal(t, "<external_"+name+">"+output+"</external_"+name+">", item.Get("content.0.text").String())
++			require.False(t, item.Get("call_id").Exists())
++			require.Equal(t, "continue", gjson.GetBytes(got, "input.1.content").String())
++			again, changed := normalizeCodexPageContext(got)
++			require.False(t, changed)
++			require.Equal(t, got, again)
++		})
++	}
++}
++
++func TestNormalizeCodexAdditionalUntrustedContextPreservesRealAndMalformedOutputs(t *testing.T) {
++	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++		for _, override := range []map[string]any{
++			{"call_id": "call_real"},
++			{"call_id": nil},
++			{"call_id": 42},
++			{"namespace": "other"},
++			{"namespace": nil},
++			{"namespace": 42},
++			{"output": []any{map[string]any{"type": "encrypted_content", "encrypted_content": "sealed"}}},
++			{"output": " "},
++			{"output": nil},
++		} {
++			item := pageContextItem(name, "context")
++			for key, value := range override {
++				item[key] = value
++			}
++			body := pageContextRequest(t, item)
++			got, changed := normalizeCodexPageContext(body)
++			require.False(t, changed, "name=%s override=%v", name, override)
++			require.Equal(t, body, got)
++		}
++		item := pageContextItem(name, "context")
++		delete(item, "namespace")
++		body := pageContextRequest(t, item)
++		got, changed := normalizeCodexPageContext(body)
++		require.False(t, changed)
++		require.Equal(t, body, got)
++	}
++	// Recognized external context cannot make an unrelated tool result valid.
++	body := pageContextRequest(t, pageContextItem("browser_info", "tab"),
++		pageContextItem("read_file", "result"))
++	got, changed := normalizeCodexPageContext(body)
++	require.True(t, changed)
++	h := &OpenAIGatewayHandler{}
++	w := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(w)
++	require.False(t, h.validateFunctionCallOutputRequest(c, got, zap.NewNop()))
++	require.Equal(t, 400, w.Code)
++
++	// Keep historical calls, prior response and exact numeric metadata intact.
++	body = []byte(`{"model":"gpt-5","previous_response_id":"resp_history","metadata":{"large":9007199254740993},"input":[{"type":"function_call","name":"read_file","call_id":"call_real","arguments":"{}"},{"type":"function_call_output","call_id":"call_real","output":"result"},{"type":"function_call_output","namespace":"agent","name":"goal_objective","output":"finish"}]}`)
++	got, changed = normalizeCodexPageContext(body)
++	require.True(t, changed)
++	require.Equal(t, "resp_history", gjson.GetBytes(got, "previous_response_id").String())
++	require.Equal(t, "9007199254740993", gjson.GetBytes(got, "metadata.large").Raw)
++	for _, index := range []string{"input.0", "input.1"} {
++		require.JSONEq(t, gjson.GetBytes(body, index).Raw, gjson.GetBytes(got, index).Raw)
++	}
++}
++
++func TestNormalizeCodexAdditionalUntrustedContextBlankCallIDsAndMixedInput(t *testing.T) {
++	names := []string{"browser_info", "goal_objective", "untrusted_context"}
++	for _, callID := range []string{"", " \t\n"} {
++		items := make([]any, 0, len(names))
++		for _, name := range names {
++			item := pageContextItem(name, "context for "+name)
++			item["call_id"] = callID
++			delete(item, "id")
++			items = append(items, item)
++		}
++		got, changed := normalizeCodexPageContext(pageContextRequest(t, items...))
++		require.True(t, changed)
++		require.Len(t, gjson.GetBytes(got, "input").Array(), len(names))
++		for i, item := range gjson.GetBytes(got, "input").Array() {
++			require.Equal(t, "user", item.Get("role").String())
++			require.Equal(t, "<external_"+names[i]+">context for "+names[i]+"</external_"+names[i]+">", item.Get("content.0.text").String())
++		}
++	}
++}
++
++func TestNormalizeCodexAdditionalUntrustedContextRejectsDuplicateMembers(t *testing.T) {
++	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++		for _, body := range []string{
++			`{"input":[{"type":"function_call_output","namespace":"agent","name":"` + name + `","call_id":"real","call_id":"","output":"context"}]}`,
++			`{"input":[{"type":"function_call_output","namespace":"agent","name":"` + name + `","output":"first","output":"second"}]}`,
++		} {
++			got, changed := normalizeCodexPageContext([]byte(body))
++			require.False(t, changed)
++			require.Equal(t, body, string(got))
++		}
++	}
++}
++
+ func TestNormalizeCodexPageContextPreservesHistoryAndToolValidation(t *testing.T) {
+ 	body := []byte(`{"model":"gpt-5","previous_response_id":"resp_history","metadata":{"large":9007199254740993},"input":[{"type":"function_call","name":"read_file","call_id":"call_real","arguments":"{}"},{"type":"function_call_output","call_id":"call_real","output":"result"},{"type":"function_call_output","namespace":"agent","name":"codex_apps_open_page","output":"{\"page_id\":\"page_1\"}"}]}`)
+ 	got, changed := normalizeCodexPageContext(body)
+diff --git a/backend/internal/pkg/antigravity/schema_cleaner.go b/backend/internal/pkg/antigravity/schema_cleaner.go
+index 73cf36256..e22338a58 100644
+--- a/backend/internal/pkg/antigravity/schema_cleaner.go
++++ b/backend/internal/pkg/antigravity/schema_cleaner.go
+@@ -376,24 +376,15 @@ func cleanJSONSchemaRecursive(value any) any {
+ 			}
+ 		}
+ 
+-		// 8. [SAFETY] 处理缺失 items 的 Array (Gemini 严苛要求 array 必须声明 items Schema)
++		// 8. Only arrays may carry items, and their items must be a non-empty schema.
+ 		if t, _ := schemaMap["type"].(string); t == "array" {
+-			itemsVal, hasItems := schemaMap["items"]
+-			needDefaultItems := false
+-			if !hasItems || itemsVal == nil {
+-				needDefaultItems = true
+-			} else if itemsMap, ok := itemsVal.(map[string]any); ok {
+-				if len(itemsMap) == 0 {
+-					needDefaultItems = true
+-				}
+-			} else if _, isBool := itemsVal.(bool); isBool {
+-				needDefaultItems = true
+-			}
+-			if needDefaultItems {
++			if items, ok := schemaMap["items"].(map[string]any); !ok || len(items) == 0 {
+ 				schemaMap["items"] = map[string]any{
+ 					"type": "string",
+ 				}
+ 			}
++		} else {
++			delete(schemaMap, "items")
+ 		}
+ 
+ 		// 9. [SAFETY] Required 字段对齐
+diff --git a/backend/internal/pkg/apicompat/anthropic_to_responses.go b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+index b326241aa..548f08882 100644
+--- a/backend/internal/pkg/apicompat/anthropic_to_responses.go
++++ b/backend/internal/pkg/apicompat/anthropic_to_responses.go
+@@ -206,6 +206,8 @@ func anthropicMsgToResponsesItems(m AnthropicMessage) ([]ResponsesInputItem, err
+ 		return anthropicUserToResponses(m.Content)
+ 	case "assistant":
+ 		return anthropicAssistantToResponses(m.Content)
++	case "system":
++		return anthropicContentToResponses(m.Content, "developer")
+ 	default:
+ 		return anthropicUserToResponses(m.Content)
+ 	}
+@@ -215,6 +217,11 @@ func anthropicMsgToResponsesItems(m AnthropicMessage) ([]ResponsesInputItem, err
+ // plain string or an array of blocks. tool_result blocks are extracted into
+ // function_call_output items. Image blocks are converted to input_image parts.
+ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error) {
++	return anthropicContentToResponses(raw, "user")
++}
++
++// System text retains developer authority while tool-result media stays user input.
++func anthropicContentToResponses(raw json.RawMessage, role string) ([]ResponsesInputItem, error) {
+ 	// Try plain string.
+ 	var s string
+ 	if err := json.Unmarshal(raw, &s); err == nil {
+@@ -223,7 +230,7 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+-		return []ResponsesInputItem{{Type: "message", Role: "user", Content: partsJSON}}, nil
++		return []ResponsesInputItem{{Type: "message", Role: role, Content: partsJSON}}, nil
+ 	}
+ 
+ 	var blocks []AnthropicContentBlock
+@@ -265,13 +272,22 @@ func anthropicUserToResponses(raw json.RawMessage) ([]ResponsesInputItem, error)
+ 			}
+ 		}
+ 	}
+-	parts = append(parts, toolResultImageParts...)
++	if role == "user" {
++		parts = append(parts, toolResultImageParts...)
++	}
+ 
+ 	if len(parts) > 0 {
+ 		content, err := json.Marshal(parts)
+ 		if err != nil {
+ 			return nil, err
+ 		}
++		out = append(out, ResponsesInputItem{Type: "message", Role: role, Content: content})
++	}
++	if role != "user" && len(toolResultImageParts) > 0 {
++		content, err := json.Marshal(toolResultImageParts)
++		if err != nil {
++			return nil, err
++		}
+ 		out = append(out, ResponsesInputItem{Type: "message", Role: "user", Content: content})
+ 	}
+ 
+diff --git a/backend/internal/pkg/apicompat/response_format.go b/backend/internal/pkg/apicompat/response_format.go
+index afb5c3e2f..7e1a5d9e1 100644
+--- a/backend/internal/pkg/apicompat/response_format.go
++++ b/backend/internal/pkg/apicompat/response_format.go
+@@ -23,6 +23,10 @@ func chatResponseFormatToResponsesTextFormat(raw json.RawMessage) json.RawMessag
+ 		return raw
+ 	}
+ 	schema["type"] = rawJSONString("json_schema")
++	// Chat defaults strict to false; Responses needs that choice explicitly.
++	if _, ok := schema["strict"]; !ok {
++		schema["strict"] = json.RawMessage("false")
++	}
+ 
+ 	out, err := json.Marshal(schema)
+ 	if err != nil {
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index c79a72a00..4b7628665 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -501,6 +501,7 @@ type bufferedFuncCall struct {
+ 	Name                  string
+ 	Namespace             string
+ 	EncryptedFunctionArgs json.RawMessage
++	EncryptedContent      string
+ 	Args                  strings.Builder
+ }
+ 
+@@ -545,6 +546,7 @@ func (a *BufferedResponseAccumulator) ProcessEvent(event *ResponsesStreamEvent)
+ 				Name:                  event.Item.Name,
+ 				Namespace:             event.Item.Namespace,
+ 				EncryptedFunctionArgs: event.Item.EncryptedFunctionArgs,
++				EncryptedContent:      event.Item.EncryptedContent,
+ 			})
+ 		}
+ 	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
+@@ -614,6 +616,7 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
+ 			Name:                  a.funcCalls[i].Name,
+ 			Namespace:             a.funcCalls[i].Namespace,
+ 			EncryptedFunctionArgs: a.funcCalls[i].EncryptedFunctionArgs,
++			EncryptedContent:      a.funcCalls[i].EncryptedContent,
+ 			Arguments:             a.funcCalls[i].Args.String(),
+ 		})
+ 	}
+diff --git a/backend/internal/pkg/claude/constants.go b/backend/internal/pkg/claude/constants.go
+index 0718a2cb0..b0f6bb165 100644
+--- a/backend/internal/pkg/claude/constants.go
++++ b/backend/internal/pkg/claude/constants.go
+@@ -30,6 +30,7 @@ const (
+ 	BetaContextManagement           = "context-management-2025-06-27"
+ 	BetaThinkingBindingControls     = "thinking-binding-controls-2026-08-01"
+ 	BetaMidConversationOutputConfig = "mid-conversation-output-config-2026-07-01"
++	BetaPerTurnControl              = "per-turn-control-2026-07-01"
+ 	BetaExtendedCacheTTL            = "extended-cache-ttl-2025-04-11"
+ 
+ 	// server-side refusal fallback beta 字段族（beta Messages API 专有）。
+@@ -229,7 +230,7 @@ func DefaultModelIDs() []string {
+ }
+ 
+ // DefaultTestModel 测试时使用的默认模型
+-const DefaultTestModel = "claude-sonnet-4-5-20250929"
++const DefaultTestModel = "claude-sonnet-4-6"
+ 
+ // ModelIDOverrides Claude OAuth 请求需要的模型 ID 映射
+ var ModelIDOverrides = map[string]string{
+diff --git a/backend/internal/repository/account_repo.go b/backend/internal/repository/account_repo.go
+index 350589d14..4b4a60b42 100644
+--- a/backend/internal/repository/account_repo.go
++++ b/backend/internal/repository/account_repo.go
+@@ -2428,8 +2428,10 @@ func (r *accountRepository) UpdateSessionWindow(ctx context.Context, id int64, s
+ }
+ 
+ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64, end time.Time) error {
++	// Active quota reads advance both bounds so old-window cost is excluded.
+ 	_, err := r.client.Account.Update().
+ 		Where(dbaccount.IDEQ(id)).
++		SetSessionWindowStart(end.Add(-5 * time.Hour)).
+ 		SetSessionWindowEnd(end).
+ 		Save(ctx)
+ 	if err != nil {
+diff --git a/backend/internal/repository/scheduler_cache.go b/backend/internal/repository/scheduler_cache.go
+index 99a5ac37d..395f6fa63 100644
+--- a/backend/internal/repository/scheduler_cache.go
++++ b/backend/internal/repository/scheduler_cache.go
+@@ -964,7 +964,7 @@ func filterSchedulerCredentials(credentials map[string]any) map[string]any {
+ 	if len(credentials) == 0 {
+ 		return nil
+ 	}
+-	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type", "account_scheduling_threshold"}
++	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type", "account_scheduling_threshold", "openai_capabilities"}
+ 	filtered := make(map[string]any)
+ 	for _, key := range keys {
+ 		if value, ok := credentials[key]; ok && value != nil {
+diff --git a/backend/internal/service/antigravity_gateway_compat_test.go b/backend/internal/service/antigravity_gateway_compat_test.go
+index cc1984f9a..e7588000f 100644
+--- a/backend/internal/service/antigravity_gateway_compat_test.go
++++ b/backend/internal/service/antigravity_gateway_compat_test.go
+@@ -118,6 +118,74 @@ func antigravityCompatSuccessResponse() *http.Response {
+ 	}
+ }
+ 
++func TestAntigravityCompatToolSchemaItemsMatchSelectedType(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const schema = `{"type":"object","properties":{
++		"uri":{"type":["string","array"],"items":{"type":"string"}},
++		"paths":{"type":["array","string"],"items":{"type":"integer"}},
++		"nested":{"type":"array","items":{"type":"object","properties":{
++			"uri":{"type":["string","array"],"items":{"type":"string"}}
++		}}},
++		"fallback":{"type":"array","items":17},
++		"inferred":{"items":{"type":"integer"}},
++		"items":{"type":"string"}
++	}}`
++	const expected = `{"type":"object","properties":{
++		"uri":{"type":"string"},
++		"paths":{"type":"array","items":{"type":"integer"}},
++		"nested":{"type":"array","items":{"type":"object","properties":{
++			"uri":{"type":"string"}
++		}}},
++		"fallback":{"type":"array","items":{"type":"string"}},
++		"inferred":{"type":"array","items":{"type":"integer"}},
++		"items":{"type":"string"}
++	}}`
++	for _, protocol := range []string{"chat", "responses", "messages"} {
++		t.Run(protocol, func(t *testing.T) {
++			var parameters map[string]any
++			require.NoError(t, json.Unmarshal([]byte(schema), &parameters))
++			tool := map[string]any{"name": "inspect", "parameters": parameters}
++			request := map[string]any{"model": "gemini-3.1-pro-high", "max_tokens": 128}
++			switch protocol {
++			case "chat":
++				request["messages"] = []map[string]any{{"role": "user", "content": "inspect URI"}}
++				request["tools"] = []any{map[string]any{"type": "function", "function": tool}}
++			case "responses":
++				request["input"] = "inspect URI"
++				tool["type"] = "function"
++				request["tools"] = []any{tool}
++			case "messages":
++				request["messages"] = []map[string]any{{"role": "user", "content": "inspect URI"}}
++				request["tools"] = []any{map[string]any{"name": "inspect", "input_schema": parameters}}
++			}
++			body, err := json.Marshal(request)
++			require.NoError(t, err)
++			var forwarded []byte
++			upstream := &queuedHTTPUpstreamStub{
++				responses: []*http.Response{antigravityCompatSuccessResponse()},
++				onCall: func(req *http.Request, _ *queuedHTTPUpstreamStub) {
++					forwarded, err = io.ReadAll(req.Body)
++					require.NoError(t, err)
++				},
++			}
++			svc := newAntigravityCompatService(config.GatewayConfig{MaxLineSize: defaultMaxLineSize}, upstream)
++			account := newAntigravityCompatAccount(AccountTypeOAuth)
++			c, recorder := newAntigravityCompatContext(http.MethodPost, "/v1/"+protocol, body)
++			switch protocol {
++			case "chat":
++				_, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, nil)
++			case "responses":
++				_, err = svc.ForwardAsResponses(context.Background(), c, account, body, nil)
++			case "messages":
++				_, err = svc.Forward(context.Background(), c, account, body, false)
++			}
++			require.NoError(t, err)
++			require.Equal(t, http.StatusOK, recorder.Code)
++			require.JSONEq(t, expected, gjson.GetBytes(forwarded, "request.tools.0.functionDeclarations.0.parameters").Raw)
++		})
++	}
++}
++
+ func TestAntigravitySystemIdentityAcrossProtocols(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	const task = "\nKeep GPT-5.6, gpt-6 and Claude model ids unchanged."
+diff --git a/backend/internal/service/auth_service.go b/backend/internal/service/auth_service.go
+index f07b0551b..bc40a649e 100644
+--- a/backend/internal/service/auth_service.go
++++ b/backend/internal/service/auth_service.go
+@@ -1050,6 +1050,9 @@ func (s *AuthService) shouldApplyEmailFirstBindDefaults(
+ 	identity *dbent.AuthIdentity,
+ 	created bool,
+ ) bool {
++	if identity == nil {
++		return false
++	}
+ 	source := emailAuthIdentitySource(identity.Metadata)
+ 	if source == "auth_service_login_backfill" {
+ 		return false
+@@ -1057,7 +1060,7 @@ func (s *AuthService) shouldApplyEmailFirstBindDefaults(
+ 	if created {
+ 		return true
+ 	}
+-	if s == nil || s.entClient == nil || userID <= 0 || identity == nil || identity.UserID != userID {
++	if s == nil || s.entClient == nil || userID <= 0 || identity.UserID != userID {
+ 		return false
+ 	}
+ 	if source != "auth_service_dual_write" {
+diff --git a/backend/internal/service/auth_service_identity_sync_test.go b/backend/internal/service/auth_service_identity_sync_test.go
+index d8c084fa4..e714c7a9c 100644
+--- a/backend/internal/service/auth_service_identity_sync_test.go
++++ b/backend/internal/service/auth_service_identity_sync_test.go
+@@ -292,6 +292,53 @@ func TestAuthServiceRecordSuccessfulLoginBackfillsEmailIdentity(t *testing.T) {
+ 	require.Equal(t, user.ID, identity.UserID)
+ }
+ 
++func TestAuthServiceRecordSuccessfulLogin_EmailIdentityOwnedByAnotherUser(t *testing.T) {
++	assigner := &authIdentityDefaultSubAssignerStub{}
++	svc, _, client := newAuthServiceWithEnt(t, map[string]string{
++		service.SettingKeyRegistrationEnabled:                    "true",
++		service.SettingKeyAuthSourceDefaultEmailBalance:          "8.5",
++		service.SettingKeyAuthSourceDefaultEmailGrantOnFirstBind: "true",
++	}, assigner)
++	ctx := context.Background()
++
++	// users.email 唯一索引区分大小写，email 身份按小写邮箱唯一：只差大小写的两个账号共用一条身份。
++	owner, err := client.User.Create().
++		SetEmail("Shared@Example.com").
++		SetPasswordHash("hash").
++		SetBalance(1).
++		SetConcurrency(1).
++		SetRole(service.RoleUser).
++		SetStatus(service.StatusActive).
++		Save(ctx)
++	require.NoError(t, err)
++	user, err := client.User.Create().
++		SetEmail("shared@example.com").
++		SetPasswordHash("hash").
++		SetBalance(1).
++		SetConcurrency(1).
++		SetRole(service.RoleUser).
++		SetStatus(service.StatusActive).
++		Save(ctx)
++	require.NoError(t, err)
++	require.NoError(t, client.AuthIdentity.Create().
++		SetUserID(owner.ID).
++		SetProviderType("email").
++		SetProviderKey("email").
++		SetProviderSubject("shared@example.com").
++		SetVerifiedAt(time.Now().UTC()).
++		SetMetadata(map[string]any{"source": "auth_service_dual_write"}).
++		Exec(ctx))
++
++	require.NotPanics(t, func() { svc.RecordSuccessfulLogin(ctx, user.ID) })
++
++	storedUser, err := client.User.Get(ctx, user.ID)
++	require.NoError(t, err)
++	require.NotNil(t, storedUser.LastLoginAt)
++	require.Equal(t, 1.0, storedUser.Balance)
++	require.Empty(t, assigner.calls)
++	require.Equal(t, 0, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
++}
++
+ func TestAuthServiceLogin_DoesNotApplyEmailFirstBindDefaultsWhenBackfillingLegacyEmailIdentity(t *testing.T) {
+ 	assigner := &authIdentityDefaultSubAssignerStub{}
+ 	svc, _, client := newAuthServiceWithEnt(t, map[string]string{
+diff --git a/backend/internal/service/billing_service.go b/backend/internal/service/billing_service.go
+index 7e1d723c4..099c66f86 100644
+--- a/backend/internal/service/billing_service.go
++++ b/backend/internal/service/billing_service.go
+@@ -1606,7 +1606,7 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
+ 		return pricing
+ 	}
+ 	cloned := *pricing
+-	if isOpenAIGPT6AstraModel(normalized) {
++	if isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6.1-sol" {
+ 		cloned.UltrafastMultiplier = 6
+ 	}
+ 	if fastRatio > 0 {
+diff --git a/backend/internal/service/error_passthrough_runtime.go b/backend/internal/service/error_passthrough_runtime.go
+index 011c3ce4d..0a6038be3 100644
+--- a/backend/internal/service/error_passthrough_runtime.go
++++ b/backend/internal/service/error_passthrough_runtime.go
+@@ -36,6 +36,20 @@ func applyErrorPassthroughRule(
+ 	defaultStatus int,
+ 	defaultErrType string,
+ 	defaultErrMsg string,
++) (status int, errType string, errMsg string, matched bool) {
++	return applyErrorPassthroughRuleWithMessage(c, platform, upstreamStatus, responseBody, defaultStatus, defaultErrType, defaultErrMsg, ExtractUpstreamErrorMessage)
++}
++
++// Grok media supplies its own extractor for xAI's flat error fields.
++func applyErrorPassthroughRuleWithMessage(
++	c *gin.Context,
++	platform string,
++	upstreamStatus int,
++	responseBody []byte,
++	defaultStatus int,
++	defaultErrType string,
++	defaultErrMsg string,
++	extractMessage func([]byte) string,
+ ) (status int, errType string, errMsg string, matched bool) {
+ 	status = defaultStatus
+ 	errType = defaultErrType
+@@ -56,7 +70,7 @@ func applyErrorPassthroughRule(
+ 		status = *rule.ResponseCode
+ 	}
+ 
+-	errMsg = ExtractUpstreamErrorMessage(responseBody)
++	errMsg = extractMessage(responseBody)
+ 	if !rule.PassthroughBody && rule.CustomMessage != nil {
+ 		errMsg = *rule.CustomMessage
+ 	}
+diff --git a/backend/internal/service/gateway_count_tokens.go b/backend/internal/service/gateway_count_tokens.go
+index b6b42057e..062fa6e39 100644
+--- a/backend/internal/service/gateway_count_tokens.go
++++ b/backend/internal/service/gateway_count_tokens.go
+@@ -445,11 +445,11 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
+ 	req.Header.Del("cookie")
+ 	setAnthropicAPIKeyAuthHeader(req.Header, account, token)
+ 
+-	if req.Header.Get("content-type") == "" {
+-		req.Header.Set("content-type", "application/json")
++	if getHeaderRaw(req.Header, "content-type") == "" {
++		setHeaderRaw(req.Header, "content-type", "application/json")
+ 	}
+-	if req.Header.Get("anthropic-version") == "" {
+-		req.Header.Set("anthropic-version", "2023-06-01")
++	if getHeaderRaw(req.Header, "anthropic-version") == "" {
++		setHeaderRaw(req.Header, "anthropic-version", "2023-06-01")
+ 	}
+ 
+ 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+diff --git a/backend/internal/service/gateway_forward_as_chat_completions.go b/backend/internal/service/gateway_forward_as_chat_completions.go
+index ced6c8d4c..76a0b9863 100644
+--- a/backend/internal/service/gateway_forward_as_chat_completions.go
++++ b/backend/internal/service/gateway_forward_as_chat_completions.go
+@@ -99,6 +99,9 @@ func (s *GatewayService) ForwardAsChatCompletions(
+ 	if err != nil {
+ 		return nil, fmt.Errorf("marshal anthropic request: %w", err)
+ 	}
++	if account.Type == AccountTypeAPIKey {
++		anthropicBody = withChatCompletionsMetadataUserID(body, anthropicBody)
++	}
+ 
+ 	// 6. Apply Claude Code mimicry for OAuth accounts.
+ 	// Chat Completions 协议进来的请求永远不是 Claude Code 客户端，所以对 OAuth 账号
+diff --git a/backend/internal/service/gateway_mid_conversation_output_config_test.go b/backend/internal/service/gateway_mid_conversation_output_config_test.go
+index d551fae78..2c563c177 100644
+--- a/backend/internal/service/gateway_mid_conversation_output_config_test.go
++++ b/backend/internal/service/gateway_mid_conversation_output_config_test.go
+@@ -5,8 +5,10 @@ package service
+ import (
+ 	"bytes"
+ 	"context"
++	"io"
+ 	"net/http"
+ 	"net/http/httptest"
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+@@ -17,7 +19,7 @@ import (
+ )
+ 
+ // ============================================================================
+-// message-level output_config ↔ mid-conversation-output-config beta
++// message-level output_config ↔ mid-conversation-output-config / per-turn-control beta
+ // ============================================================================
+ //
+ // 背景：pi-ai（Harness 使用的 Anthropic provider）会为 opus5 生成形如
+@@ -32,11 +34,11 @@ import (
+ //	"output_config: Extra inputs are not permitted"
+ //
+ // 修复策略（剥字段，不注入 beta）：
+-//   - header 缺该 token：仅为携带 message-level output_config 的消息剥此字段；
++//   - header 缺这两种 token：仅为携带 message-level output_config 的消息剥此字段；
+ //     role=system 且 content 无正文（缺失 / null / 空 string / 空 array / 仅空
+ //     text 块）时整条删除；system 有正文保留正文与其余字段；user/assistant 只剥
+ //     字段，绝不整条删除。
+-//   - header 含该 token：完全保留。
++//   - header 含任一 token：完全保留。
+ //   - 无任何 message-level output_config：字节 no-op。
+ //   - 顶层 output_config / effort 不受该 beta 约束，本增量不触碰。
+ //
+@@ -154,10 +156,120 @@ func TestSanitizeAnthropicBodyForBetaTokens_MidConversationOutputConfig_SystemWi
+ // header 含该 beta → 完全保留，字节 no-op（即使是空控制 system 消息）。
+ func TestSanitizeAnthropicBodyForBetaTokens_MidConversationOutputConfig_ByteNoopWhenBetaPresent(t *testing.T) {
+ 	body := []byte(`{"model":"claude-opus-5","output_config":{"effort":"high"},"messages":[{"role":"system","content":[],"output_config":{"effort":"high"}},{"role":"user","content":"hi"}]}`)
+-	out, changed := sanitizeAnthropicBodyForBetaTokens(body,
+-		"claude-code-20250219,oauth-2025-04-20,"+claude.BetaMidConversationOutputConfig)
+-	require.False(t, changed, "header 含 mid-conversation-output-config beta → 完全保留")
+-	require.True(t, bytes.Equal(body, out), "含 beta 时必须字节 no-op")
++	for _, beta := range []string{
++		claude.BetaMidConversationOutputConfig,
++		"per-turn-control-2026-07-01",
++		"per-turn-control-2026-07-01," + claude.BetaMidConversationOutputConfig,
++	} {
++		t.Run(beta, func(t *testing.T) {
++			out, changed := sanitizeAnthropicBodyForBetaTokens(body, "claude-code-20250219, "+beta+" ")
++			require.False(t, changed, "a supported beta must preserve message-level output_config")
++			require.True(t, bytes.Equal(body, out), "含 beta 时必须字节 no-op")
++		})
++	}
++}
++
++func TestForward_PerTurnControlMessageOutputConfig(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const perTurnBeta = "per-turn-control-2026-07-01"
++	const body = `{"model":"claude-opus-5","max_tokens":256,"output_config":{"effort":"high"},` +
++		`"metadata":{"user_id":"user_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2_account_550e8400-e29b-41d4-a716-446655440000_session_123e4567-e89b-12d3-a456-426614174000"},` +
++		`"messages":[{"role":"user","content":"Hello"},{"role":"assistant","content":"Hi"},` +
++		`{"role":"system","content":[],"output_config":{"effort":"low"}},` +
++		`{"role":"user","content":"Summarize that in one sentence."}]}`
++	for _, mode := range []string{"oauth_claude_code", "oauth_mimic", "apikey", "apikey_passthrough"} {
++		for _, withBeta := range []bool{true, false} {
++			name := "without_beta"
++			if withBeta {
++				name = "with_beta"
++			}
++			t.Run(mode+"/"+name, func(t *testing.T) {
++				c, _ := gin.CreateTestContext(httptest.NewRecorder())
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
++				c.Request.Header.Set("User-Agent", "claude-cli/2.1.321")
++				if mode == "oauth_mimic" {
++					c.Request.Header.Set("User-Agent", "third-party-client/1.0")
++				}
++				if withBeta {
++					c.Request.Header.Set("Anthropic-Beta", "claude-code-20250219,"+perTurnBeta)
++				}
++				account := newAnthropicAPIKeyAccountForTest()
++				account.Extra["anthropic_passthrough"] = mode == "apikey_passthrough"
++				if strings.HasPrefix(mode, "oauth") {
++					account = newAnthropicOAuthAccountForPartialUsageTest()
++				}
++				upstream := &anthropicHTTPUpstreamRecorder{resp: &http.Response{
++					StatusCode: http.StatusOK,
++					Header:     http.Header{"Content-Type": []string{"application/json"}},
++					Body: io.NopCloser(strings.NewReader(`{"id":"msg_test","type":"message","role":"assistant",` +
++						`"model":"claude-opus-5","content":[{"type":"text","text":"OK"}],"stop_reason":"end_turn",` +
++						`"usage":{"input_tokens":10,"output_tokens":1}}`)),
++				}}
++				parsed, err := ParseGatewayRequest(NewRequestBodyRef([]byte(body)), PlatformAnthropic)
++				require.NoError(t, err)
++				svc := newForwardPartialUsageServiceForTest(upstream)
++				_, err = svc.Forward(context.Background(), c, account, parsed)
++				require.NoError(t, err)
++				require.NotNil(t, upstream.lastReq)
++
++				beta := getHeaderRaw(upstream.lastReq.Header, "anthropic-beta")
++				require.Equal(t, withBeta && mode != "oauth_mimic", anthropicBetaTokensContains(beta, perTurnBeta))
++				wantControl := withBeta || mode == "oauth_mimic"
++				messages := gjson.GetBytes(upstream.lastBody, "messages").Array()
++				if wantControl {
++					require.Len(t, messages, 4)
++					require.Equal(t, "system", messages[2].Get("role").String())
++					require.Equal(t, "[]", messages[2].Get("content").Raw)
++					require.Equal(t, "low", messages[2].Get("output_config.effort").String())
++				} else {
++					require.Len(t, messages, 3)
++				}
++				require.Equal(t, "Hello", messages[0].Get("content").String())
++				require.Equal(t, "Hi", messages[1].Get("content").String())
++				require.Equal(t, "Summarize that in one sentence.", messages[len(messages)-1].Get("content").String())
++				require.Equal(t, "high", gjson.GetBytes(upstream.lastBody, "output_config.effort").String())
++			})
++		}
++	}
++}
++
++func TestBuildUpstreamRequest_PerTurnControlPolicyFilter(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	const perTurnBeta = "per-turn-control-2026-07-01"
++	const midConversationBeta = "mid-conversation-output-config-2026-07-01"
++	body := []byte(`{"model":"claude-opus-5","messages":[{"role":"user","content":"Hello"},` +
++		`{"role":"system","content":[],"output_config":{"effort":"low"}}]}`)
++	for _, tc := range []struct {
++		name string
++		drop []string
++		keep bool
++	}{
++		{"drop_per_turn_only", []string{perTurnBeta}, true},
++		{"drop_mid_conversation_only", []string{midConversationBeta}, true},
++		{"drop_both", []string{perTurnBeta, midConversationBeta}, false},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			c, _ := gin.CreateTestContext(httptest.NewRecorder())
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
++			c.Request.Header.Set("Anthropic-Beta", "claude-code-20250219,"+perTurnBeta+","+midConversationBeta)
++			c.Set(betaPolicyFilterSetKey, buildBetaTokenSet(tc.drop))
++			svc := &GatewayService{cfg: &config.Config{}}
++			req, _, err := svc.buildUpstreamRequest(context.Background(), c,
++				newAnthropicOAuthAccountForPartialUsageTest(), body,
++				"oauth-token", "oauth", "claude-opus-5", false, false)
++			require.NoError(t, err)
++			for _, token := range tc.drop {
++				require.False(t, anthropicBetaTokensContains(getHeaderRaw(req.Header, "anthropic-beta"), token))
++			}
++			out := readUpstreamBodyForTest(t, req)
++			require.Equal(t, tc.keep, gjson.GetBytes(out, "messages.1.output_config").Exists())
++			if tc.keep {
++				require.Equal(t, "low", gjson.GetBytes(out, "messages.1.output_config.effort").String())
++			} else {
++				require.Len(t, gjson.GetBytes(out, "messages").Array(), 1)
++			}
++		})
++	}
+ }
+ 
+ // 无 message-level output_config（仅有顶层 output_config，或完全没有）→ 字节 no-op。
+diff --git a/backend/internal/service/gateway_request.go b/backend/internal/service/gateway_request.go
+index d82fe99b0..15be7395f 100644
+--- a/backend/internal/service/gateway_request.go
++++ b/backend/internal/service/gateway_request.go
+@@ -1032,7 +1032,7 @@ func sanitizeAnthropicBodyForBetaTokens(body []byte, anthropicBetaHeader string)
+ 		body, changed = b, true
+ 	}
+ 
+-	// messages[].output_config：mid-conversation-output-config beta 专属字段。
++	// messages[].output_config：需要 mid-conversation-output-config 或 per-turn-control beta。
+ 	// 顶层 output_config / effort 不受该 beta 约束，本分支只净化消息内字段。
+ 	if b, deleted := stripAnthropicMessageOutputConfigUnlessBeta(body, anthropicBetaHeader); deleted {
+ 		body, changed = b, true
+@@ -1081,17 +1081,18 @@ func anthropicBetaTokensContains(header, token string) bool {
+ }
+ 
+ // stripAnthropicMessageOutputConfigUnlessBeta 在 anthropic-beta header 缺
+-// mid-conversation-output-config beta 时，净化 **messages[].output_config**：
++// mid-conversation-output-config 和 per-turn-control 两种 beta 时，净化 **messages[].output_config**：
+ //   - 仅为携带 message-level output_config 的消息剥该字段；
+ //   - 若该消息 role=system 且 content 无正文（缺失 / null / 空 string / 空 array /
+ //     仅空 text 块），整条删除（pi-ai 为 opus5 生成的空 system 控制消息即此形态）；
+ //   - system 有正文则保留正文与其余字段；user/assistant 只剥字段，绝不整条删除；
+ //   - 无任何消息携带该字段时返回原 body（字节 no-op）。
+ //
+-// header 含该 beta 时完全保留。顶层 output_config / effort 不属于该 beta 保护范围，
++// header 含任一 beta 时完全保留。顶层 output_config / effort 不属于这些 beta 保护范围，
+ // 本函数不做任何处理。多条删除用「稳健重建」实现，保留其余字段与消息先后顺序。
+ func stripAnthropicMessageOutputConfigUnlessBeta(body []byte, anthropicBetaHeader string) ([]byte, bool) {
+-	if anthropicBetaTokensContains(anthropicBetaHeader, claude.BetaMidConversationOutputConfig) {
++	if anthropicBetaTokensContains(anthropicBetaHeader, claude.BetaMidConversationOutputConfig) ||
++		anthropicBetaTokensContains(anthropicBetaHeader, claude.BetaPerTurnControl) {
+ 		return body, false
+ 	}
+ 	// 快速路径：body 中不含 output_config 字面量时无需解析。
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index eac9daa33..14e252c14 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -349,7 +349,7 @@ func buildClaudeMimicDebugLine(req *http.Request, body []byte, account *Account,
+ 
+ 	h := make([]string, 0, len(interesting))
+ 	for _, k := range interesting {
+-		if v := req.Header.Get(k); v != "" {
++		if v := getHeaderRaw(req.Header, k); v != "" {
+ 			h = append(h, fmt.Sprintf("%s=%q", k, safeHeaderValueForLog(k, v)))
+ 		}
+ 	}
+diff --git a/backend/internal/service/grok_media.go b/backend/internal/service/grok_media.go
+index 4f9639732..81a2119e8 100644
+--- a/backend/internal/service/grok_media.go
++++ b/backend/internal/service/grok_media.go
+@@ -1244,7 +1244,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 	// Reconcile readiness before configurable passthrough branches can return;
+ 	// otherwise a Grok 429 can remain schedulable.
+ 	s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
+-	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(body)))
++	upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokUpstreamErrorMessage(body)))
+ 	if upstreamMsg == "" {
+ 		upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
+ 	}
+@@ -1271,11 +1271,11 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 			Detail:             upstreamDetail,
+ 		})
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, http.StatusForbidden, "invalid_request_error", clientMsg)
++		writeGrokMediaErrorResponse(c, http.StatusForbidden, "invalid_request_error", clientMsg, grokUpstreamErrorCode(body))
+ 		return nil, fmt.Errorf("grok content policy rejection: %s", clientMsg)
+ 	}
+ 
+-	if status, errType, errMsg, matched := applyErrorPassthroughRule(
++	if status, errType, errMsg, matched := applyErrorPassthroughRuleWithMessage(
+ 		c,
+ 		account.Platform,
+ 		resp.StatusCode,
+@@ -1283,9 +1283,10 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 		http.StatusBadGateway,
+ 		"upstream_error",
+ 		"Upstream request failed",
++		grokUpstreamErrorMessage,
+ 	); matched {
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, status, errType, errMsg)
++		writeGrokMediaErrorResponse(c, status, errType, errMsg, "")
+ 		return nil, fmt.Errorf("upstream error: %d (passthrough rule matched) message=%s", resp.StatusCode, upstreamMsg)
+ 	}
+ 
+@@ -1301,7 +1302,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 			Detail:             upstreamDetail,
+ 		})
+ 		MarkResponseCommitted(c)
+-		writeGrokMediaErrorResponse(c, http.StatusInternalServerError, "upstream_error", "Upstream gateway error")
++		writeGrokMediaErrorResponse(c, http.StatusInternalServerError, "upstream_error", "Upstream gateway error", "")
+ 		return nil, fmt.Errorf("upstream error: %d (not in custom error codes) message=%s", resp.StatusCode, upstreamMsg)
+ 	}
+ 
+@@ -1329,7 +1330,7 @@ func (s *OpenAIGatewayService) handleGrokMediaErrorResponse(
+ 	}
+ 
+ 	MarkResponseCommitted(c)
+-	writeGrokMediaErrorResponse(c, resp.StatusCode, grokMediaErrorType(resp.StatusCode), upstreamMsg)
++	writeGrokMediaErrorResponse(c, resp.StatusCode, grokMediaErrorType(resp.StatusCode), upstreamMsg, grokUpstreamErrorCode(body))
+ 	return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
+ }
+ 
+@@ -1346,16 +1347,18 @@ func grokMediaErrorType(statusCode int) string {
+ 	}
+ }
+ 
+-func writeGrokMediaErrorResponse(c *gin.Context, statusCode int, errType, message string) {
++func writeGrokMediaErrorResponse(c *gin.Context, statusCode int, errType, message, code string) {
+ 	if c == nil || c.Writer == nil || c.Writer.Written() {
+ 		return
+ 	}
+-	c.JSON(statusCode, gin.H{
+-		"error": gin.H{
+-			"type":    strings.TrimSpace(errType),
+-			"message": strings.TrimSpace(message),
+-		},
+-	})
++	payload := gin.H{
++		"type":    strings.TrimSpace(errType),
++		"message": sanitizeUpstreamErrorMessage(strings.TrimSpace(message)),
++	}
++	if code = sanitizeUpstreamErrorMessage(strings.TrimSpace(code)); code != "" {
++		payload["code"] = code
++	}
++	c.JSON(statusCode, gin.H{"error": payload})
+ }
+ 
+ func writeGrokMediaResponse(c *gin.Context, resp *http.Response, body []byte, filter *responseheaders.CompiledHeaderFilter) {
+diff --git a/backend/internal/service/grok_upstream_errors.go b/backend/internal/service/grok_upstream_errors.go
+index 0039ea4cd..00b305910 100644
+--- a/backend/internal/service/grok_upstream_errors.go
++++ b/backend/internal/service/grok_upstream_errors.go
+@@ -6,6 +6,8 @@ import (
+ 	"net/http"
+ 	"strings"
+ 	"time"
++
++	"github.com/tidwall/gjson"
+ )
+ 
+ // isGrokContentPolicyRejection identifies request-scoped safety refusals from
+@@ -181,13 +183,35 @@ func grokContentPolicyMessage(value string) bool {
+ }
+ 
+ func grokContentPolicyClientMessage(responseBody []byte) string {
+-	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)))
++	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokUpstreamErrorMessage(responseBody)))
+ 	if message == "" {
+ 		return "Request blocked by upstream content policy"
+ 	}
+ 	return message
+ }
+ 
++// xAI's flat error fields are handled only by Grok; shared account and model
++// classifiers retain the existing nested-error contract.
++func grokUpstreamErrorMessage(body []byte) string {
++	if message := extractUpstreamErrorMessage(body); strings.TrimSpace(message) != "" {
++		return message
++	}
++	if value := gjson.GetBytes(body, "error"); value.Type == gjson.String {
++		return value.String()
++	}
++	return ""
++}
++
++func grokUpstreamErrorCode(body []byte) string {
++	if code := strings.TrimSpace(extractUpstreamErrorCode(body)); code != "" {
++		return code
++	}
++	if code := gjson.GetBytes(body, "code"); code.Type == gjson.String || code.Type == gjson.Number {
++		return strings.TrimSpace(code.String())
++	}
++	return ""
++}
++
+ // shouldFailoverGrokUpstreamError is the body-aware counterpart of the
+ // status-only failover helper. Grok content refusals must stay on the current
+ // account and be returned to the caller instead of consuming the account pool.
+diff --git a/backend/internal/service/openai_first_output_timeout.go b/backend/internal/service/openai_first_output_timeout.go
+index fbd985d06..66b6c674d 100644
+--- a/backend/internal/service/openai_first_output_timeout.go
++++ b/backend/internal/service/openai_first_output_timeout.go
+@@ -145,7 +145,9 @@ func (s *openAIFirstOutputStage) prepareWrite(incoming int) error {
+ 	}
+ 	file, err := s.createTemp()
+ 	if err != nil {
+-		return fmt.Errorf("create first-output spool: %w", err)
++		// Keep the same bounded stage when temporary storage is unavailable.
++		s.memoryOnly = true
++		return nil
+ 	}
+ 	path := file.Name()
+ 	// Unlink before writing any request data. Unix keeps the file descriptor
+diff --git a/backend/internal/service/openai_first_output_timeout_test.go b/backend/internal/service/openai_first_output_timeout_test.go
+index 5ebe47f67..59ca52e96 100644
+--- a/backend/internal/service/openai_first_output_timeout_test.go
++++ b/backend/internal/service/openai_first_output_timeout_test.go
+@@ -4,10 +4,12 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"io"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"os"
++	"path/filepath"
+ 	"runtime"
+ 	"strings"
+ 	"sync"
+@@ -295,6 +297,84 @@ func TestOpenAIFirstOutputStageCommitCopiesSpoolAndRemovesTemp(t *testing.T) {
+ 	require.NoError(t, stage.Close())
+ }
+ 
++func TestOpenAIFirstOutputStageCreateFailurePreservesBoundedBuffer(t *testing.T) {
++	for _, useWriteString := range []bool{false, true} {
++		t.Run(fmt.Sprintf("write_string_%t", useWriteString), func(t *testing.T) {
++			stage := newOpenAIFirstOutputStage(70 * 1024)
++			stage.memoryOnly = false
++			t.Cleanup(func() { require.NoError(t, stage.Close()) })
++			createCalls := 0
++			stage.createTemp = func() (*os.File, error) {
++				createCalls++
++				return nil, &os.PathError{Op: "open", Path: "unwritable/spool", Err: os.ErrPermission}
++			}
++			stage.removeFile = func(string) error {
++				t.Fatal("failed creation must not leave a spool to remove")
++				return nil
++			}
++			write := func(value string) (int, error) {
++				if useWriteString {
++					return stage.WriteString(value)
++				}
++				return stage.Write([]byte(value))
++			}
++
++			payload := ""
++			for _, chunk := range []string{strings.Repeat("a", 32*1024), strings.Repeat("b", 36*1024), strings.Repeat("c", 2*1024)} {
++				n, err := write(chunk)
++				require.NoError(t, err)
++				require.Equal(t, len(chunk), n)
++				payload += chunk
++			}
++			require.Equal(t, 1, createCalls, "fallback must not retry CreateTemp on later writes")
++			require.EqualValues(t, len(payload), stage.Buffered())
++
++			n, err := write("overflow")
++			require.Zero(t, n)
++			require.ErrorIs(t, err, errOpenAIFirstOutputStageLimit)
++			require.EqualValues(t, len(payload), stage.Buffered())
++			var downstream bytes.Buffer
++			require.NoError(t, stage.CommitTo(&downstream))
++			require.Equal(t, payload, downstream.String())
++			require.Zero(t, stage.Buffered())
++		})
++	}
++}
++
++func TestOpenAINativeFirstOutputWithUnavailableTempDir(t *testing.T) {
++	missingDir := filepath.Join(t.TempDir(), "missing")
++	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
++		t.Setenv(name, missingDir)
++	}
++	cfg := &config.Config{Gateway: config.GatewayConfig{
++		OpenAIFirstOutputTimeoutSeconds: 30,
++		MaxLineSize:                     defaultMaxLineSize,
++	}}
++	svc := &OpenAIGatewayService{cfg: cfg, responseHeaderFilter: compileResponseHeaderFilter(cfg)}
++	// Cross the disk-spill threshold before any semantic output is available.
++	preamble := `data: {"type":"response.created","response":{"id":"resp_no_temp","created_at":1700000000,"padding":"` + strings.Repeat("x", 68*1024) + `"}}` + "\n\n"
++	delta := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n"
++	payload := preamble + delta +
++		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_no_temp\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n"
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{
++		"X-Request-Id": []string{"request-no-temp"},
++	}, Body: io.NopCloser(strings.NewReader(payload))}
++
++	result, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI}, time.Now(), "model", "model")
++
++	require.NoError(t, err)
++	require.NotNil(t, result)
++	require.NotNil(t, result.firstTokenMs)
++	require.True(t, strings.HasPrefix(rec.Body.String(), preamble+delta), "buffered preamble and first output must be forwarded intact")
++	require.Contains(t, rec.Body.String(), `"type":"response.completed"`)
++	require.Equal(t, 3, result.usage.InputTokens)
++	require.Equal(t, 2, result.usage.OutputTokens)
++	require.Equal(t, "request-no-temp", rec.Header().Get("X-Request-Id"))
++}
++
+ func TestOpenAIFirstOutputStageUnlinkFailurePermanentlyFallsBackToMemoryAndRetriesCleanup(t *testing.T) {
+ 	stage := newDefaultOpenAIFirstOutputStage()
+ 	stage.memoryOnly = false
+diff --git a/backend/internal/service/openai_gateway_chat_completions.go b/backend/internal/service/openai_gateway_chat_completions.go
+index e8c272a7c..a1c824966 100644
+--- a/backend/internal/service/openai_gateway_chat_completions.go
++++ b/backend/internal/service/openai_gateway_chat_completions.go
+@@ -890,7 +890,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
+ 				usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
+ 			}
+ 		}
+-		if strings.TrimSpace(event.Type) == "response.failed" {
++		if eventType := strings.TrimSpace(event.Type); eventType == "response.failed" || eventType == "error" {
+ 			payloadBytes := []byte(payload)
+ 			message := extractOpenAISSEErrorMessage(payloadBytes)
+ 			if hit, code, msg := detectOpenAICyberPolicy(payloadBytes); hit {
+@@ -924,10 +924,11 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
+ 				}
+ 				return true
+ 			}
+-			if openAIStreamFailedEventShouldFailover(payloadBytes, message) {
++			if !clientOutputStarted && openAIStreamFailedEventShouldFailover(payloadBytes, message) {
+ 				streamFailoverErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, requestID, payloadBytes, message, upstreamModel, resp.Header)
+ 				return true
+ 			}
++			s.handleOpenAIStreamTerminalAccountSideEffects(c, account, payloadBytes, message, resp.Header, upstreamModel)
+ 			message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)
+ 			defaultStatus, defaultErrType, defaultMsg := http.StatusBadGateway, "upstream_error", message
+ 			// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index bfebd7112..c29315a07 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -1090,6 +1090,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
+ 					streamFailoverErr = s.newOpenAIStreamFailoverErrorWithModel(c, account, false, requestID, payloadBytes, message, upstreamModel, resp.Header)
+ 					return true
+ 				}
++				s.handleOpenAIStreamTerminalAccountSideEffects(c, account, payloadBytes, message, resp.Header, upstreamModel)
+ 				message = s.recordOpenAIStreamUpstreamError(c, account, false, requestID, "http_error", payloadBytes, message)
+ 				errStatus, errType, errMsg := http.StatusBadGateway, "api_error", message
+ 				// 统一走语义状态推断 + body 归一化（与 /v1/responses 路径一致），
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index 5e6748080..120c5204f 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -1400,6 +1400,27 @@ func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []b
+ 		isOpenAITransientProcessingError(http.StatusBadRequest, message, payload)
+ }
+ 
++// Apply health updates without replaying a stream that already reached the client.
++// Capacity errors retain the existing explicit model-only cooldown policy.
++func (s *OpenAIGatewayService) handleOpenAIStreamTerminalAccountSideEffects(
++	c *gin.Context, account *Account, payload []byte, message string, headers http.Header, canonicalModel string,
++) {
++	if s == nil || account == nil {
++		return
++	}
++	ctx := context.Background()
++	if c != nil && c.Request != nil {
++		ctx = c.Request.Context()
++	}
++	status := openAIStreamFailedEventSemanticStatus(payload, message)
++	if account.Platform == PlatformOpenAI && status == http.StatusServiceUnavailable {
++		s.handleOpenAIExplicitModelCooldown(ctx, account, status, payload, canonicalModel)
++		return
++	}
++	body := openAIStreamFailedEventPassthroughBody(payload, message)
++	s.handleOpenAIAccountUpstreamError(ctx, account, status, headers, body, canonicalModel)
++}
++
+ func (s *OpenAIGatewayService) recordOpenAIStreamUpstreamError(
+ 	c *gin.Context,
+ 	account *Account,
+diff --git a/backend/internal/service/openai_responses_sealed_call_test.go b/backend/internal/service/openai_responses_sealed_call_test.go
+index 4c27ae288..a51434e70 100644
+--- a/backend/internal/service/openai_responses_sealed_call_test.go
++++ b/backend/internal/service/openai_responses_sealed_call_test.go
+@@ -8,6 +8,7 @@ import (
+ 	"net/http/httptest"
+ 	"strings"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/stretchr/testify/require"
+@@ -18,20 +19,17 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	const arguments = `{"message":"synthetic-sealed-message"}`
+ 	for _, marker := range []struct {
+-		name string
+-		raw  string
++		name             string
++		raw              string
++		encryptedContent string
+ 	}{
+-		{name: "encrypted", raw: `["message"]`},
++		{name: "encrypted", raw: `["message"]`, encryptedContent: "synthetic-call-ciphertext"},
+ 		{name: "plaintext", raw: `[]`},
+ 		{name: "null", raw: `null`},
+-		{name: "absent"},
++		{name: "absent", encryptedContent: "synthetic-call-ciphertext"},
+ 	} {
+ 		for _, shape := range []string{"terminal_output", "item_done", "delta_fallback"} {
+-			for _, passthrough := range []bool{false, true} {
+-				mode := "normal"
+-				if passthrough {
+-					mode = "passthrough"
+-				}
++			for _, mode := range []string{"normal", "passthrough", "streaming"} {
+ 				t.Run(marker.name+"/"+shape+"/"+mode, func(t *testing.T) {
+ 					item := map[string]any{
+ 						"type": "function_call", "call_id": "call_sealed", "name": "send_message",
+@@ -40,6 +38,9 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 					if marker.raw != "" {
+ 						item["encrypted_function_args"] = json.RawMessage(marker.raw)
+ 					}
++					if marker.encryptedContent != "" {
++						item["encrypted_content"] = marker.encryptedContent
++					}
+ 					output := []any{}
+ 					var frames []string
+ 					addFrame := func(event map[string]any) {
+@@ -75,20 +76,33 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 					}
+ 					account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+ 					svc := newCompactBridgeTestService()
+-					if passthrough {
++					switch mode {
++					case "streaming":
++						result, err := svc.handleStreamingResponse(context.Background(), resp, c, account, time.Now(), "test-model", "test-model")
++						require.NoError(t, err)
++						require.Equal(t, 7, result.usage.InputTokens)
++						require.Equal(t, 3, result.usage.OutputTokens)
++					case "passthrough":
+ 						result, err := svc.handleNonStreamingResponsePassthrough(context.Background(), resp, c, account, "test-model", "test-model")
+ 						require.NoError(t, err)
+ 						require.Equal(t, 7, result.usage.InputTokens)
+ 						require.Equal(t, 3, result.usage.OutputTokens)
+-					} else {
++					default:
+ 						result, err := svc.handleNonStreamingResponse(context.Background(), resp, c, account, "test-model", "test-model")
+ 						require.NoError(t, err)
+ 						require.Equal(t, 7, result.usage.InputTokens)
+ 						require.Equal(t, 3, result.usage.OutputTokens)
+ 					}
+ 					require.Equal(t, http.StatusOK, rec.Code)
+-					require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+ 					body := rec.Body.Bytes()
++					if mode == "streaming" {
++						require.Contains(t, rec.Header().Get("Content-Type"), "text/event-stream")
++						_, terminal, ok := extractOpenAISSETerminalEvent(string(body))
++						require.True(t, ok)
++						body = []byte(gjson.GetBytes(terminal, "response").Raw)
++					} else {
++						require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
++					}
+ 					require.Len(t, gjson.GetBytes(body, "output").Array(), 1)
+ 					call := gjson.GetBytes(body, "output.0")
+ 					require.Equal(t, "function_call", call.Get("type").String())
+@@ -100,6 +114,11 @@ func TestOpenAIResponsesSealedFunctionCallRoundTrip(t *testing.T) {
+ 					} else {
+ 						require.Equal(t, marker.raw, call.Get("encrypted_function_args").Raw)
+ 					}
++					if marker.encryptedContent == "" {
++						require.False(t, call.Get("encrypted_content").Exists())
++					} else {
++						require.Equal(t, marker.encryptedContent, call.Get("encrypted_content").String())
++					}
+ 					require.Equal(t, "collaboration", call.Get("namespace").String())
+ 				})
+ 			}
+diff --git a/backend/internal/service/ratelimit_service.go b/backend/internal/service/ratelimit_service.go
+index cc5bb265a..275ec273f 100644
+--- a/backend/internal/service/ratelimit_service.go
++++ b/backend/internal/service/ratelimit_service.go
+@@ -1983,16 +1983,9 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
+ 		slog.Info("account_session_window_initialized", "account_id", account.ID, "window_start", start, "window_end", end, "status", status)
+ 	}
+ 
+-	// 窗口重置时清除旧的 utilization 和被动采样数据，避免残留上个窗口的数据
++	// 5h utilization belongs to the old window; weekly readings expire independently.
+ 	if windowEnd != nil && needInitWindow {
+-		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+-			"session_window_utilization":      nil,
+-			"passive_usage_7d_utilization":    nil,
+-			"passive_usage_7d_reset":          nil,
+-			"passive_usage_7d_oi_utilization": nil,
+-			"passive_usage_7d_oi_reset":       nil,
+-			"passive_usage_sampled_at":        nil,
+-		})
++		_ = s.accountRepo.UpdateExtra(ctx, account.ID, rolloverPassiveUsageClears(account.Extra, time.Now()))
+ 	}
+ 
+ 	if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, windowStart, windowEnd, status); err != nil {
+@@ -2010,6 +2003,32 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
+ 	}
+ }
+ 
++// rolloverPassiveUsageClears preserves weekly readings until their own reset.
++// The sample time remains meaningful while either existing weekly bucket survives.
++func rolloverPassiveUsageClears(extra map[string]any, now time.Time) map[string]any {
++	updates := map[string]any{"session_window_utilization": nil}
++	kept := false
++	for _, keys := range [][2]string{
++		{"passive_usage_7d_utilization", "passive_usage_7d_reset"},
++		{"passive_usage_7d_oi_utilization", "passive_usage_7d_oi_reset"},
++	} {
++		reset := parseExtraFloat64(extra[keys[1]])
++		if reset > 1e11 {
++			reset /= 1000
++		}
++		if reset > 0 && time.Unix(int64(reset), 0).After(now) {
++			kept = true
++			continue
++		}
++		updates[keys[0]] = nil
++		updates[keys[1]] = nil
++	}
++	if !kept {
++		updates["passive_usage_sampled_at"] = nil
++	}
++	return updates
++}
++
+ // samplePassiveUsageFromHeaders 从 Anthropic 响应头收集 5h/7d/7d_oi 的
+ // utilization 与 reset 被动采样数据，合并为一次 Extra 写入。无数据时不写。
+ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, account *Account, headers http.Header) {
+diff --git a/backend/internal/web/embed_on.go b/backend/internal/web/embed_on.go
+index 19f07d6d9..cc15d9ab9 100644
+--- a/backend/internal/web/embed_on.go
++++ b/backend/internal/web/embed_on.go
+@@ -143,14 +143,15 @@ func (s *FrontendServer) tryServeOverride(c *gin.Context, cleanPath string) bool
+ }
+ 
+ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
++	applyHTMLNoCacheHeaders(c.Writer.Header())
+ 	// Get nonce from context (generated by SecurityHeaders middleware)
+ 	nonce := middleware.GetNonceFromContext(c)
+ 
+ 	// Check cache first
+ 	cached := s.cache.Get()
+ 	if cached != nil {
+-		// Check If-None-Match for 304 response
+-		if match := c.GetHeader("If-None-Match"); match == cached.ETag {
++		// Nonce-bearing HTML must match this request's CSP, even with the same ETag.
++		if match := c.GetHeader("If-None-Match"); nonce == "" && match == cached.ETag {
+ 			c.Status(http.StatusNotModified)
+ 			c.Abort()
+ 			return
+@@ -160,7 +161,6 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 		content := replaceNoncePlaceholder(cached.Content, nonce)
+ 
+ 		c.Header("ETag", cached.ETag)
+-		c.Header("Cache-Control", "no-cache") // Must revalidate
+ 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+ 		c.Abort()
+ 		return
+@@ -196,7 +196,6 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
+ 	if cached != nil {
+ 		c.Header("ETag", cached.ETag)
+ 	}
+-	c.Header("Cache-Control", "no-cache")
+ 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+ 	c.Abort()
+ }
+diff --git a/backend/internal/web/embed_test.go b/backend/internal/web/embed_test.go
+index 5e996fb06..158e633ad 100644
+--- a/backend/internal/web/embed_test.go
++++ b/backend/internal/web/embed_test.go
+@@ -352,7 +352,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 		assert.True(t, strings.HasSuffix(etag, `"`))
+ 	})
+ 
+-	t.Run("returns_304_for_matching_etag", func(t *testing.T) {
++	t.Run("returns_304_only_when_no_nonce_is_present", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+ 			settings: map[string]string{"test": "value"},
+ 		}
+@@ -360,12 +360,8 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 		server, err := NewFrontendServer(provider)
+ 		require.NoError(t, err)
+ 
+-		// Use a real router for proper 304 handling
++		// No nonce in context means the cached body has no per-request part.
+ 		router := gin.New()
+-		router.Use(func(c *gin.Context) {
+-			c.Set(middleware.CSPNonceKey, "test-nonce")
+-			c.Next()
+-		})
+ 		router.Use(server.Middleware())
+ 
+ 		// First request to populate cache and get ETag
+@@ -383,9 +379,47 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 
+ 		assert.Equal(t, http.StatusNotModified, w2.Code)
+ 		assert.Empty(t, w2.Body.String())
++		assertNoStoreHTMLHeaders(t, w2.Header())
+ 	})
+ 
+-	t.Run("sets_cache_control_header", func(t *testing.T) {
++	t.Run("serves_fresh_html_when_cached_nonce_is_stale", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: map[string]string{"test": "value"},
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		router := gin.New()
++		router.Use(func(c *gin.Context) {
++			c.Set(middleware.CSPNonceKey, c.GetHeader("X-Test-Nonce"))
++			c.Next()
++		})
++		router.Use(server.Middleware())
++
++		w1 := httptest.NewRecorder()
++		req1 := httptest.NewRequest(http.MethodGet, "/", nil)
++		req1.Header.Set("X-Test-Nonce", "first-nonce")
++		router.ServeHTTP(w1, req1)
++		etag := w1.Header().Get("ETag")
++		require.NotEmpty(t, etag)
++		assert.Contains(t, w1.Body.String(), `nonce="first-nonce"`)
++
++		// The document embeds the request nonce, so a matching ETag must not
++		// turn this into a 304 that reuses the previous nonce.
++		w2 := httptest.NewRecorder()
++		req2 := httptest.NewRequest(http.MethodGet, "/", nil)
++		req2.Header.Set("X-Test-Nonce", "second-nonce")
++		req2.Header.Set("If-None-Match", etag)
++		router.ServeHTTP(w2, req2)
++
++		assert.Equal(t, http.StatusOK, w2.Code)
++		assert.Contains(t, w2.Body.String(), `nonce="second-nonce"`)
++		assert.NotContains(t, w2.Body.String(), `nonce="first-nonce"`)
++		assertNoStoreHTMLHeaders(t, w2.Header())
++	})
++
++	t.Run("sets_no_store_cache_headers", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+ 			settings: map[string]string{"test": "value"},
+ 		}
+@@ -400,7 +434,7 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 
+ 		server.serveIndexHTML(c)
+ 
+-		assert.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
++		assertNoStoreHTMLHeaders(t, w.Header())
+ 	})
+ 
+ 	t.Run("fallback_on_settings_error", func(t *testing.T) {
+@@ -427,6 +461,78 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
+ 	})
+ }
+ 
++func assertNoStoreHTMLHeaders(t *testing.T, header http.Header) {
++	t.Helper()
++	assert.Equal(t, "no-cache, no-store, must-revalidate", header.Get("Cache-Control"))
++	assert.Equal(t, "no-cache", header.Get("Pragma"))
++	assert.Equal(t, "0", header.Get("Expires"))
++	assert.Equal(t, "no-store", header.Get("CDN-Cache-Control"))
++	assert.Equal(t, "no-store", header.Get("Surrogate-Control"))
++}
++
++func TestFrontendServer_NoStoreHeadersOnEveryHTMLPath(t *testing.T) {
++	t.Run("cache_hit", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: map[string]string{"test": "value"},
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w1 := httptest.NewRecorder()
++		c1, _ := gin.CreateTestContext(w1)
++		c1.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c1.Set(middleware.CSPNonceKey, "nonce1")
++		server.serveIndexHTML(c1)
++		require.Equal(t, http.StatusOK, w1.Code)
++
++		w2 := httptest.NewRecorder()
++		c2, _ := gin.CreateTestContext(w2)
++		c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c2.Set(middleware.CSPNonceKey, "nonce2")
++		server.serveIndexHTML(c2)
++
++		assert.Equal(t, http.StatusOK, w2.Code)
++		assertNoStoreHTMLHeaders(t, w2.Header())
++	})
++
++	t.Run("settings_error_fallback", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			err: context.DeadlineExceeded,
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(w)
++		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c.Set(middleware.CSPNonceKey, "nonce123")
++		server.serveIndexHTML(c)
++
++		assert.Equal(t, http.StatusOK, w.Code)
++		assertNoStoreHTMLHeaders(t, w.Header())
++	})
++
++	t.Run("settings_marshal_error_fallback", func(t *testing.T) {
++		provider := &mockSettingsProvider{
++			settings: make(chan struct{}),
++		}
++
++		server, err := NewFrontendServer(provider)
++		require.NoError(t, err)
++
++		w := httptest.NewRecorder()
++		c, _ := gin.CreateTestContext(w)
++		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
++		c.Set(middleware.CSPNonceKey, "nonce123")
++		server.serveIndexHTML(c)
++
++		assert.Equal(t, http.StatusOK, w.Code)
++		assertNoStoreHTMLHeaders(t, w.Header())
++	})
++}
++
+ func TestFrontendServer_InvalidateCache(t *testing.T) {
+ 	t.Run("invalidates_cache", func(t *testing.T) {
+ 		provider := &mockSettingsProvider{
+diff --git a/frontend/src/components/account/ModelWhitelistSelector.vue b/frontend/src/components/account/ModelWhitelistSelector.vue
+index 5a4a5f64f..9481d0601 100644
+--- a/frontend/src/components/account/ModelWhitelistSelector.vue
++++ b/frontend/src/components/account/ModelWhitelistSelector.vue
+@@ -269,6 +269,10 @@ const copyModelId = async (model: string) => {
+ const addCustom = () => {
+   const model = customModel.value.trim()
+   if (!model) return
++  if (model.includes('*')) {
++    appStore.showInfo(t('admin.accounts.modelWildcardNotSupported'))
++    return
++  }
+   if (props.modelValue.includes(model)) {
+     appStore.showInfo(t('admin.accounts.modelExists'))
+     return
+diff --git a/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts b/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts
+index 7a96d68fa..f2681d90c 100644
+--- a/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts
++++ b/frontend/src/components/account/__tests__/ModelWhitelistSelector.spec.ts
+@@ -91,6 +91,33 @@ describe('ModelWhitelistSelector', () => {
+     syncUpstreamModelsPreview.mockReset()
+   })
+ 
++  it.each(['claude-*', '*', 'gpt-*-mini'])(
++    'rejects wildcard whitelist entry %s without clearing the input', async (model) => {
++      const wrapper = mountSelector({ modelValue: ['gpt-5'] })
++      const input = wrapper.get('input[placeholder="admin.accounts.enterCustomModelName"]')
++      await input.setValue(model)
++      await wrapper.findAll('button').find(button => button.text() === 'admin.accounts.addModel')!.trigger('click')
++
++      expect(wrapper.emitted('update:modelValue')).toBeUndefined()
++      expect(showInfo).toHaveBeenCalledWith('admin.accounts.modelWildcardNotSupported')
++      expect((input.element as HTMLInputElement).value).toBe(model)
++    }
++  )
++
++  it('rejects wildcard entries submitted with Enter and accepts a corrected exact model', async () => {
++    const wrapper = mountSelector()
++    const input = wrapper.get('input[placeholder="admin.accounts.enterCustomModelName"]')
++    await input.setValue(' claude-* ')
++    await input.trigger('keydown.enter')
++    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
++    expect(showInfo).toHaveBeenCalledWith('admin.accounts.modelWildcardNotSupported')
++
++    await input.setValue(' claude-sonnet-4-5 ')
++    await input.trigger('keydown.enter')
++    expect(wrapper.emitted('update:modelValue')).toEqual([[['claude-sonnet-4-5']]])
++    expect((input.element as HTMLInputElement).value).toBe('')
++  })
++
+   it('rejects a custom whitelist model that is already mapped to a different target', async () => {
+     const wrapper = mountSelector({ modelMappings: [{ from: 'gpt-latest', to: 'deepseek-chat' }] })
+     await wrapper.get('input[placeholder="admin.accounts.enterCustomModelName"]').setValue(' gpt-latest ')
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index e18b0c103..2b52393f9 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -724,6 +724,7 @@ export default {
+       enterCustomModelName: 'Enter custom model name',
+       addModel: 'Add',
+       modelExists: 'Model already exists',
++      modelWildcardNotSupported: 'Wildcards are not supported in the model whitelist. Enter an exact model name.',
+       modelMappingConflict: 'A mapping already exists for {from} → {to}. Modify or remove it under Model Mapping before adding this whitelist model',
+       modelCount: '{count} models',
+       poolMode: 'Pool Mode',
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index 89272ccd2..ebeb7f765 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -789,6 +789,7 @@ export default {
+       enterCustomModelName: '输入自定义模型名称',
+       addModel: '填入',
+       modelExists: '该模型已存在',
++      modelWildcardNotSupported: '模型白名单不支持通配符，请输入完整的模型名称。',
+       modelMappingConflict: '该模型已配置映射 {from} → {to}，请在模型映射中修改或删除后再添加白名单模型',
+       modelCount: '{count} 个模型',
+       poolMode: '池模式',
+diff --git a/frontend/src/views/admin/ChannelsView.vue b/frontend/src/views/admin/ChannelsView.vue
+index dc6025bcd..1c5a56a92 100644
+--- a/frontend/src/views/admin/ChannelsView.vue
++++ b/frontend/src/views/admin/ChannelsView.vue
+@@ -1158,18 +1158,10 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
+     delete featuresConfig.codex_image_generation_bridge
+   }
+ 
+-  const bedrockCCCompat: Record<string, boolean> = {}
+-  for (const section of form.platforms) {
+-    if (!section.enabled) continue
+-    if (section.platform === 'anthropic') {
+-      bedrockCCCompat[section.platform] = !!section.bedrock_cc_compat
+-    }
+-  }
+-  if (Object.keys(bedrockCCCompat).length > 0) {
+-    featuresConfig.bedrock_cc_compat = bedrockCCCompat
+-  } else {
+-    delete featuresConfig.bedrock_cc_compat
+-  }
++  // The backend reads a boolean; an explicit false clears a saved value.
++  featuresConfig.bedrock_cc_compat = form.platforms.some(
++    section => section.enabled && section.platform === 'anthropic' && section.bedrock_cc_compat
++  )
+ 
+   return { group_ids: uniqueGroupIds, model_pricing, model_mapping, features_config: featuresConfig }
+ }
+diff --git a/backend/internal/handler/gateway_sticky_writeback_test.go b/backend/internal/handler/gateway_sticky_writeback_test.go
+new file mode 100644
+index 000000000..c5393d336
+--- /dev/null
++++ b/backend/internal/handler/gateway_sticky_writeback_test.go
+@@ -0,0 +1,204 @@
++//go:build unit
++
++package handler
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	middleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++type stickyWritebackContextKey struct{}
++
++type stickyWritebackCall struct {
++	err       error
++	groupID   int64
++	account   int64
++	session   string
++	ttl       time.Duration
++	value     any
++	deadline  time.Time
++	remaining time.Duration
++}
++
++type stickyWritebackCache struct {
++	service.GatewayCache
++	accountID  int64
++	finished   bool
++	calls      []stickyWritebackCall
++	block      bool
++	blockedErr error
++}
++
++func (s *stickyWritebackCache) GetSessionAccountID(context.Context, int64, string) (int64, error) {
++	return s.accountID, nil
++}
++
++func (s *stickyWritebackCache) SetSessionAccountID(ctx context.Context, groupID int64, session string, account int64, ttl time.Duration) error {
++	if s.finished {
++		deadline, _ := ctx.Deadline()
++		s.calls = append(s.calls, stickyWritebackCall{
++			err: ctx.Err(), groupID: groupID, account: account, session: session, ttl: ttl,
++			value: ctx.Value(stickyWritebackContextKey{}), deadline: deadline,
++			remaining: time.Until(deadline),
++		})
++		if s.block {
++			<-ctx.Done()
++			s.blockedErr = ctx.Err()
++			return ctx.Err()
++		}
++	}
++	if err := ctx.Err(); err != nil {
++		return err
++	}
++	s.accountID = account
++	return nil
++}
++
++func (s *stickyWritebackCache) RefreshSessionTTL(context.Context, int64, string, time.Duration) error {
++	return nil
++}
++
++func (s *stickyWritebackCache) DeleteSessionAccountID(context.Context, int64, string) error {
++	s.accountID = 0
++	return nil
++}
++
++type stickyWritebackBody struct {
++	io.Reader
++	finish func()
++}
++
++func (b *stickyWritebackBody) Close() error {
++	b.finish()
++	return nil
++}
++
++func TestGatewayMessagesStickyWritebackAfterForward(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, stream := range []bool{false, true} {
++		name := "buffered"
++		if stream {
++			name = "streaming"
++		}
++		for _, tt := range []struct {
++			name       string
++			bound      int64
++			cancel     bool
++			fail       bool
++			wantWrites int
++			block      bool
++		}{
++			{name: "new binding", wantWrites: 1},
++			{name: "new binding after disconnect", cancel: true, wantWrites: 1},
++			{name: "refresh binding", bound: 9401, wantWrites: 1},
++			{name: "refresh after disconnect", bound: 9401, cancel: true, wantWrites: 1},
++			{name: "different binding", bound: 9499, cancel: true},
++			{name: "forward failed", cancel: true, fail: true},
++			{name: "blocked write times out", cancel: true, block: true, wantWrites: 1},
++		} {
++			t.Run(name+"/"+tt.name, func(t *testing.T) {
++				groupID := int64(9400)
++				group := &service.Group{ID: groupID, Hydrated: true, Platform: service.PlatformAnthropic, Status: service.StatusActive, RateMultiplier: 1}
++				account := &service.Account{
++					ID: 9401, Platform: service.PlatformAnthropic, Type: service.AccountTypeAPIKey,
++					Status: service.StatusActive, Schedulable: true, Concurrency: 1,
++					Credentials:   map[string]any{"api_key": "test-key"},
++					Extra:         map[string]any{"anthropic_passthrough": true},
++					AccountGroups: []service.AccountGroup{{AccountID: 9401, GroupID: groupID}},
++				}
++				cache := &stickyWritebackCache{accountID: tt.bound, block: tt.block}
++				ctx := context.WithValue(context.Background(), stickyWritebackContextKey{}, "request-scoped value")
++				ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
++				t.Cleanup(cancel)
++				responseBody := `{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4.5","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`
++				contentType := "application/json"
++				if stream {
++					responseBody = compatStreamUsagePartialStream + compatStreamUsageCompletion
++					contentType = "text/event-stream"
++				}
++				status := http.StatusOK
++				if tt.fail {
++					status = http.StatusBadRequest
++					responseBody = `{"type":"error","error":{"type":"invalid_request_error","message":"invalid input"}}`
++				}
++				upstream := &compatStreamUsageUpstream{response: &http.Response{
++					StatusCode: status,
++					Header:     http.Header{"Content-Type": []string{contentType}},
++					Body: &stickyWritebackBody{Reader: strings.NewReader(responseBody), finish: func() {
++						// Forward closes its upstream body on return. Cancel precisely
++						// after that work, before the handler's terminal sticky write.
++						cache.finished = true
++						if tt.cancel {
++							cancel()
++						}
++					}},
++				}}
++				cfg := &config.Config{RunMode: config.RunModeSimple}
++				other := *account
++				other.ID = 9499
++				other.Schedulable = false
++				snapshot := service.NewSchedulerSnapshotService(&fakeSchedulerCache{accounts: []*service.Account{account, &other}}, nil, nil, nil, nil)
++				gw := service.NewGatewayService(
++					nil, &fakeGroupRepo{group: group}, nil, nil, nil, nil, nil, cache, cfg,
++					snapshot, nil, service.NewBillingService(cfg, nil), nil, nil, nil, upstream,
++					&service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
++				)
++				billingCache := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
++				t.Cleanup(billingCache.Stop)
++				h := &GatewayHandler{
++					gatewayService: gw, billingCacheService: billingCache, cfg: cfg, maxAccountSwitches: 1,
++					concurrencyHelper: NewConcurrencyHelper(service.NewConcurrencyService(&fakeConcurrencyCache{}), SSEPingFormatClaude, 0),
++				}
++				requestBody := `{"model":"claude-sonnet-4.5","max_tokens":16,"stream":false,"messages":[{"role":"user","content":"sticky writeback test"}]}`
++				if stream {
++					requestBody = strings.Replace(requestBody, `"stream":false`, `"stream":true`, 1)
++				}
++				rec := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(rec)
++				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(requestBody)).WithContext(ctx)
++				c.Request.Header.Set("Content-Type", "application/json")
++				key := &service.APIKey{ID: 9402, UserID: 9403, GroupID: &groupID, Group: group, User: &service.User{ID: 9403, Balance: 100}}
++				c.Set(string(middleware.ContextKeyAPIKey), key)
++				c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 9403})
++
++				started := time.Now()
++				h.Messages(c)
++				elapsed := time.Since(started)
++
++				require.Equal(t, 1, upstream.calls)
++				require.True(t, cache.finished)
++				require.Equal(t, status, rec.Code)
++				if tt.cancel {
++					require.ErrorIs(t, ctx.Err(), context.Canceled)
++				}
++				require.Len(t, cache.calls, tt.wantWrites)
++				if tt.block {
++					require.ErrorIs(t, cache.blockedErr, context.DeadlineExceeded)
++					require.GreaterOrEqual(t, elapsed, 4800*time.Millisecond)
++					require.Less(t, elapsed, 6*time.Second)
++				}
++				for _, call := range cache.calls {
++					require.NoError(t, call.err, "a completed upstream request must retain its terminal sticky write")
++					require.Equal(t, groupID, call.groupID)
++					require.Equal(t, account.ID, call.account)
++					require.NotEmpty(t, call.session)
++					require.Positive(t, call.ttl)
++					require.Equal(t, "request-scoped value", call.value)
++					require.False(t, call.deadline.IsZero(), "the detached cache write must have a deadline")
++					require.InDelta(t, 5*time.Second, call.remaining, float64(200*time.Millisecond))
++				}
++			})
++		}
++	}
++}
+diff --git a/backend/internal/handler/grok_media_errors_test.go b/backend/internal/handler/grok_media_errors_test.go
+new file mode 100644
+index 000000000..234f37d5b
+--- /dev/null
++++ b/backend/internal/handler/grok_media_errors_test.go
+@@ -0,0 +1,87 @@
++//go:build unit
++
++package handler
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestGrokImagesPreservesUpstreamErrorOnSyncAndAsyncRoutes(t *testing.T) {
++	for _, oauth := range []bool{false, true} {
++		accountType := "api-key"
++		if oauth {
++			accountType = "oauth"
++		}
++		for _, async := range []bool{false, true} {
++			route := "sync"
++			if async {
++				route = "async"
++			}
++			t.Run(accountType+"/"+route, func(t *testing.T) {
++				h, slots, _, upstream := newGrokMediaSlotHandler(t, oauth, false)
++				h.grokMediaEligibilityProber = grokMediaSlotProber(func(context.Context, int64) (bool, string, error) {
++					return true, "test account is eligible", nil
++				})
++				upstream.call = func(req *http.Request, _ int64) (*http.Response, error) {
++					assert.Equal(t, "/v1/images/edits", req.URL.Path)
++					return &http.Response{
++						StatusCode: http.StatusBadRequest,
++						Header:     http.Header{"Content-Type": {"application/json"}},
++						Body:       io.NopCloser(strings.NewReader(`{"code":"invalid_image","error":"Image could not be decoded: https://example.test/image?access_token=secret&size=1","debug":"private upstream diagnostic"}`)),
++					}, nil
++				}
++				c, recorder := grokMediaSlotContext(context.Background(), true)
++				path := "/v1/images/edits"
++				if async {
++					path += "/async"
++				}
++				c.Request = httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"grok-imagine-image","prompt":"test","image":{"url":"https://example.test/input.png"}}`))
++				c.Request.Header.Set("Content-Type", "application/json")
++
++				var responseBody []byte
++				if async {
++					store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
++					tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
++					asyncHandler := NewAsyncImageHandler(tasks, h)
++					asyncHandler.Submit(c)
++					require.Equal(t, http.StatusAccepted, recorder.Code, recorder.Body.String())
++					taskID := gjson.GetBytes(recorder.Body.Bytes(), "task_id").String()
++					owner := service.ImageTaskOwner{UserID: 10, APIKeyID: 20}
++					require.Eventually(t, func() bool {
++						task, err := tasks.Get(context.Background(), owner, taskID)
++						return err == nil && task.Status != service.ImageTaskStatusProcessing
++					}, time.Second, 10*time.Millisecond)
++					poll, pollRecorder := grokMediaSlotContext(context.Background(), false)
++					poll.Params[0].Key, poll.Params[0].Value = "task_id", taskID
++					asyncHandler.Get(poll)
++					require.Equal(t, http.StatusOK, pollRecorder.Code)
++					responseBody = pollRecorder.Body.Bytes()
++					require.Equal(t, service.ImageTaskStatusFailed, gjson.GetBytes(responseBody, "status").String())
++					require.Equal(t, int64(http.StatusBadRequest), gjson.GetBytes(responseBody, "http_status").Int())
++				} else {
++					h.GrokImages(c)
++					require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
++					responseBody = recorder.Body.Bytes()
++				}
++				require.Equal(t, "Image could not be decoded: https://example.test/image?access_token=***&size=1", gjson.GetBytes(responseBody, "error.message").String())
++				require.Equal(t, "invalid_image", gjson.GetBytes(responseBody, "error.code").String())
++				require.Equal(t, "invalid_request_error", gjson.GetBytes(responseBody, "error.type").String())
++				require.NotContains(t, string(responseBody), "secret")
++				require.NotContains(t, string(responseBody), "private upstream diagnostic")
++				require.Equal(t, 1, upstream.calls, "deterministic image errors must not retry another account")
++				slots.assertReleased(t)
++			})
++		}
++	}
++}
+diff --git a/backend/internal/handler/sol_ultrafast_sqlite_test.go b/backend/internal/handler/sol_ultrafast_sqlite_test.go
+new file mode 100644
+index 000000000..c4d972363
+--- /dev/null
++++ b/backend/internal/handler/sol_ultrafast_sqlite_test.go
+@@ -0,0 +1,167 @@
++//go:build unit
++
++package handler
++
++import (
++	"context"
++	"database/sql"
++	"encoding/json"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++
++	"entgo.io/ent/dialect"
++	entsql "entgo.io/ent/dialect/sql"
++	dbent "github.com/Wei-Shaw/sub2api/ent"
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/repository"
++	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/gorilla/websocket"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestSolUltrafastHTTPAndWSSettlementSQLite(t *testing.T) {
++	ctx := context.Background()
++	templatePath := filepath.Join(t.TempDir(), "template.db")
++	templateDB, err := sql.Open("sqlite", "file:"+templatePath+"?_time_format=sqlite")
++	require.NoError(t, err)
++	require.NoError(t, repository.ApplyMigrations(ctx, templateDB))
++	require.NoError(t, repository.EnsureSQLiteAuxTables(ctx, templateDB))
++	require.NoError(t, templateDB.Close())
++	template, err := os.ReadFile(templatePath)
++	require.NoError(t, err)
++	for _, transport := range []string{"http", "ws"} {
++		for _, model := range []struct {
++			name, alias string
++			standard    float64
++		}{
++			{"gpt-6.1-sol", "public-sol", 0.00187}, {"gpt-6-astra", "public-astra", 0.00945},
++		} {
++			for _, scenario := range []struct {
++				name, tier                         string
++				free                               bool
++				upstreamMultiplier, userMultiplier float64
++			}{
++				{"ultrafast", "ultrafast", false, 6, 6}, {"fast", "priority", false, 2, 2}, {"free-fast", "priority", true, 2, 1}, {"free-ultrafast-control", "ultrafast", true, 6, 6},
++			} {
++				t.Run(transport+"/"+model.name+"/"+scenario.name, func(t *testing.T) {
++					dbPath := filepath.Join(t.TempDir(), "settlement.db")
++					require.NoError(t, os.WriteFile(dbPath, template, 0600))
++					db, err := sql.Open("sqlite", "file:"+dbPath+"?_time_format=sqlite&_pragma=foreign_keys(1)")
++					require.NoError(t, err)
++					t.Cleanup(func() { _ = db.Close() })
++					db.SetMaxOpenConns(1)
++					for _, statement := range []string{
++						`INSERT INTO users(id,email,password_hash,role,balance) VALUES(1,'sol@example.test','hash','user',10)`,
++						`INSERT INTO api_keys(id,user_id,key,name,quota,status) VALUES(2,1,'sol-fixture-key','sol',1,'active')`,
++						`INSERT INTO accounts(id,name,platform,type,credentials,extra) VALUES(3,'sol','openai','apikey','{}','{}')`,
++					} {
++						_, err := db.Exec(statement)
++						require.NoError(t, err)
++					}
++					_, err = db.Exec(`INSERT INTO groups(id,name,platform,free_openai_fast) VALUES(4,'fast','openai',?)`, scenario.free)
++					require.NoError(t, err)
++					response := map[string]any{
++						"id": "resp_ultra", "model": model.name, "status": "completed", "service_tier": scenario.tier,
++						"output": []any{map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "answer"}}}},
++						"usage":  map[string]any{"input_tokens": 1000, "output_tokens": 10, "input_tokens_details": map[string]any{"cached_tokens": 200, "cache_write_tokens": 300}},
++					}
++					encoded, err := json.Marshal(response)
++					require.NoError(t, err)
++					captured := make(chan []byte, 1)
++					upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
++					upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++						if transport == "ws" {
++							conn, err := upgrader.Upgrade(w, r, nil)
++							if err != nil {
++								t.Error(err)
++								return
++							}
++							defer conn.Close()
++							_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
++							_, payload, err := conn.ReadMessage()
++							if err != nil {
++								t.Error(err)
++								return
++							}
++							captured <- payload
++							_ = conn.WriteJSON(map[string]any{"type": "response.created", "response": map[string]any{"id": "resp_ultra", "model": model.name}})
++							_ = conn.WriteJSON(map[string]any{"type": "response.completed", "response": response})
++							return
++						}
++						payload, err := io.ReadAll(r.Body)
++						if err != nil {
++							t.Error(err)
++							return
++						}
++						captured <- payload
++						w.Header().Set("Content-Type", "text/event-stream")
++						w.Header().Set("X-Request-Id", "ultra-http")
++						_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":%s}\n\n", encoded)
++					}))
++					t.Cleanup(upstream.Close)
++					cfg := &config.Config{Default: config.DefaultConfig{RateMultiplier: 1}, Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{AllowInsecureHTTP: true}}}
++					if transport == "ws" {
++						cfg.Gateway.OpenAIWS = config.GatewayOpenAIWSConfig{Enabled: true, APIKeyEnabled: true, ResponsesWebsocketsV2: true, MaxConnsPerAccount: 1, QueueLimitPerConn: 2, DialTimeoutSeconds: 3, ReadTimeoutSeconds: 5, WriteTimeoutSeconds: 3}
++					}
++					client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.SQLite, db)))
++					t.Cleanup(func() { _ = client.Close() })
++					deferred := service.NewDeferredService(nil, nil, time.Hour)
++					svc := service.NewOpenAIGatewayService(repository.NewAccountRepository(client, db, nil), repository.NewUsageLogRepository(nil, db), repository.NewUsageBillingRepository(nil, db), nil, nil, nil, nil, cfg, nil, nil, service.NewBillingService(cfg, nil), nil, nil, grokAuditHTTP{upstream.Client()}, deferred, nil, nil, nil, nil, nil, nil, nil)
++					t.Cleanup(svc.CloseOpenAIWSPool)
++					account := &service.Account{ID: 3, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Concurrency: 1,
++						Credentials: map[string]any{"api_key": "sol-fixture-key", "base_url": upstream.URL, "model_mapping": map[string]any{model.alias: model.name}}, Extra: map[string]any{"responses_websockets_v2_enabled": transport == "ws"}}
++					body := fmt.Sprintf(`{"model":%q,"input":"hi","stream":false,"service_tier":%q,"reasoning":{"effort":"none"}}`, model.alias, scenario.tier)
++					c, _ := gin.CreateTestContext(httptest.NewRecorder())
++					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
++					c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 2})
++					result, err := svc.Forward(ctx, c, account, []byte(body))
++					require.NoError(t, err)
++					require.Equal(t, transport == "ws", result.OpenAIWSMode)
++					require.NotNil(t, result.ServiceTier)
++					require.Equal(t, scenario.tier, *result.ServiceTier)
++					select {
++					case payload := <-captured:
++						require.Equal(t, model.name, gjson.GetBytes(payload, "model").String())
++						require.Equal(t, scenario.tier, gjson.GetBytes(payload, "service_tier").String())
++					case <-time.After(time.Second):
++						t.Fatal("upstream did not receive the request")
++					}
++					user := &service.User{ID: 1, Status: service.StatusActive, Balance: 10}
++					groupID := int64(4)
++					key := &service.APIKey{ID: 2, UserID: 1, User: user, Quota: 1, Status: service.StatusActive, GroupID: &groupID, Group: &service.Group{ID: 4, Platform: service.PlatformOpenAI, Hydrated: true, RateMultiplier: 1, FreeOpenAIFast: scenario.free}}
++					input := &service.OpenAIRecordUsageInput{Result: result, User: user, APIKey: key, Account: account, APIKeyService: grokAuditQuotaUpdater{}, BillingModelSource: "response_model"}
++					require.NoError(t, svc.RecordUsage(ctx, input))
++					var cost, total, balance, quota float64
++					var tier string
++					require.NoError(t, db.QueryRow(`SELECT actual_cost,total_cost,service_tier FROM usage_logs`).Scan(&cost, &total, &tier))
++					require.InDelta(t, model.standard*scenario.upstreamMultiplier, total, 1e-12)
++					require.InDelta(t, model.standard*scenario.userMultiplier, cost, 1e-12)
++					require.Equal(t, scenario.tier, tier)
++					require.NoError(t, db.QueryRow(`SELECT balance FROM users WHERE id=1`).Scan(&balance))
++					require.NoError(t, db.QueryRow(`SELECT quota_used FROM api_keys WHERE id=2`).Scan(&quota))
++					require.InDelta(t, 10-cost, balance, 1e-12)
++					require.InDelta(t, cost, quota, 1e-12)
++					require.NoError(t, svc.RecordUsage(ctx, input))
++					var afterBalance, afterQuota float64
++					var dedup int
++					require.NoError(t, db.QueryRow(`SELECT balance FROM users WHERE id=1`).Scan(&afterBalance))
++					require.NoError(t, db.QueryRow(`SELECT quota_used FROM api_keys WHERE id=2`).Scan(&afterQuota))
++					require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM usage_billing_dedup`).Scan(&dedup))
++					require.Equal(t, balance, afterBalance)
++					require.Equal(t, quota, afterQuota)
++					require.Equal(t, 1, dedup)
++				})
++			}
++		}
++	}
++}
+diff --git a/backend/internal/pkg/apicompat/anthropic_translation_fidelity_test.go b/backend/internal/pkg/apicompat/anthropic_translation_fidelity_test.go
+new file mode 100644
+index 000000000..4cdc829fe
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/anthropic_translation_fidelity_test.go
+@@ -0,0 +1,75 @@
++package apicompat
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestAnthropicToResponses_MidConversationSystemAuthority(t *testing.T) {
++	out, err := AnthropicToResponses(&AnthropicRequest{
++		Model: "gpt-6.1-sol", System: json.RawMessage(`"initial instruction"`),
++		Messages: []AnthropicMessage{
++			{Role: "user", Content: json.RawMessage(`"user text"`)},
++			{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","id":"call_1","name":"run","input":{}}]`)},
++			{Role: "system", Content: json.RawMessage(`[{"type":"text","text":"hook output"},{"type":"tool_result","tool_use_id":"call_1","content":"untrusted tool result"}]`)},
++			{Role: "system", Content: json.RawMessage(`"extra instruction"`)},
++			{Role: "user", Content: json.RawMessage(`"last user text"`)},
++		},
++	})
++	require.NoError(t, err)
++	input := gjson.ParseBytes(out.Input).Array()
++	require.Len(t, input, 7)
++	require.Equal(t, "developer", input[0].Get("role").String())
++	require.Equal(t, "initial instruction", input[0].Get("content.0.text").String())
++	require.Equal(t, "user", input[1].Get("role").String())
++	require.Equal(t, "function_call", input[2].Get("type").String())
++	require.Equal(t, "function_call_output", input[3].Get("type").String())
++	require.Equal(t, "call_1", input[3].Get("call_id").String())
++	require.False(t, input[3].Get("role").Exists())
++	require.Contains(t, input[3].Get("output").String(), "untrusted tool result")
++	require.Equal(t, "developer", input[4].Get("role").String())
++	require.Equal(t, "hook output", input[4].Get("content.0.text").String())
++	require.Equal(t, "developer", input[5].Get("role").String())
++	require.Equal(t, "user", input[6].Get("role").String())
++}
++
++func TestAnthropicToResponses_SystemToolResultMediaStaysUser(t *testing.T) {
++	items, err := anthropicMsgToResponsesItems(AnthropicMessage{
++		Role: "system", Content: json.RawMessage(`[{"type":"text","text":"instruction"},{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGVsbG8="}}]}]`),
++	})
++	require.NoError(t, err)
++	require.Len(t, items, 3)
++	require.Equal(t, "function_call_output", items[0].Type)
++	require.Equal(t, "developer", items[1].Role)
++	require.Equal(t, "instruction", gjson.GetBytes(items[1].Content, "0.text").String())
++	require.Equal(t, "user", items[2].Role)
++	require.Equal(t, "input_image", gjson.GetBytes(items[2].Content, "0.type").String())
++}
++
++func TestChatResponseFormatStrictPresence(t *testing.T) {
++	for _, strict := range []string{"", "true", "false", "null"} {
++		t.Run("strict="+strict, func(t *testing.T) {
++			schema := `{"name":"answer","schema":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"]}`
++			if strict != "" {
++				schema += `,"strict":` + strict
++			}
++			schema += `}`
++			raw := json.RawMessage(`{"type":"json_schema","json_schema":` + schema + `}`)
++			original := append(json.RawMessage(nil), raw...)
++			out := chatResponseFormatToResponsesTextFormat(raw)
++			want := strict
++			if want == "" {
++				want = "false"
++			}
++			require.Equal(t, want, gjson.GetBytes(out, "strict").Raw)
++			require.JSONEq(t, gjson.Get(schema, "schema").Raw, gjson.GetBytes(out, "schema").Raw)
++			require.Equal(t, original, raw)
++		})
++	}
++	for _, raw := range []string{`{"type":"text"}`, `{"type":"json_object"}`} {
++		require.Equal(t, json.RawMessage(raw), chatResponseFormatToResponsesTextFormat(json.RawMessage(raw)))
++	}
++}
+diff --git a/backend/internal/repository/account_repo_session_window_sqlite_test.go b/backend/internal/repository/account_repo_session_window_sqlite_test.go
+new file mode 100644
+index 000000000..3a1d5504e
+--- /dev/null
++++ b/backend/internal/repository/account_repo_session_window_sqlite_test.go
+@@ -0,0 +1,55 @@
++package repository
++
++import (
++	"context"
++	"testing"
++	"time"
++
++	"entgo.io/ent/dialect"
++	entsql "entgo.io/ent/dialect/sql"
++	dbent "github.com/Wei-Shaw/sub2api/ent"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++)
++
++func TestActiveFiveHourWindowBoundsAndCostsSQLite(t *testing.T) {
++	ctx := context.Background()
++	db := openUsageStatsSQLite(t)
++	require.NoError(t, EnsureSQLiteAuxTables(ctx, db))
++	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.SQLite, db)))
++	t.Cleanup(func() { _ = client.Close() })
++	repo := newAccountRepositoryWithSQL(client, db, nil)
++	start := time.Now().UTC().Truncate(time.Second).Add(-30 * time.Minute)
++	oldStart, oldEnd := start.Add(-5*time.Hour), start
++	account, err := client.Account.Create().SetName("active window").SetPlatform(service.PlatformAnthropic).
++		SetType(service.AccountTypeOAuth).SetCredentials(map[string]any{}).
++		SetSessionWindowStart(oldStart).SetSessionWindowEnd(oldEnd).SetSessionWindowStatus("allowed").
++		SetExtra(map[string]any{"window_cost_limit": 10.0, "window_cost_sticky_reserve": 1.0}).Save(ctx)
++	require.NoError(t, err)
++	_, err = db.Exec(`INSERT INTO usage_logs (user_id, api_key_id, account_id, request_id, model, input_tokens, output_tokens, total_cost, actual_cost, created_at) VALUES
++		(1, 1, ?, 'previous-window', 'claude-sonnet-4-6', 10, 20, 20, 20, ?),
++		(1, 1, ?, 'current-window', 'claude-sonnet-4-6', 10, 20, 2, 2, ?)`, account.ID, start.Add(-time.Minute), account.ID, start.Add(time.Minute))
++	require.NoError(t, err)
++	end := start.Add(5 * time.Hour)
++	require.NoError(t, repo.UpdateSessionWindowEnd(ctx, account.ID, end))
++	current, err := repo.GetByID(ctx, account.ID)
++	require.NoError(t, err)
++	require.True(t, current.SessionWindowStart.Equal(start))
++	require.True(t, current.SessionWindowEnd.Equal(end))
++	require.Equal(t, "allowed", current.SessionWindowStatus)
++	stats, err := newUsageLogRepositoryWithSQL(client, db).GetAccountWindowStats(ctx, account.ID, current.GetCurrentWindowStartTime())
++	require.NoError(t, err)
++	require.EqualValues(t, 1, stats.Requests)
++	require.Equal(t, 2.0, stats.StandardCost)
++	require.Equal(t, service.WindowCostSchedulable, current.CheckWindowCostSchedulability(stats.StandardCost))
++	var events int
++	require.NoError(t, db.QueryRow(`SELECT count(*) FROM scheduler_outbox WHERE event_type=? AND account_id=?`, service.SchedulerOutboxEventAccountChanged, account.ID).Scan(&events))
++	require.Equal(t, 1, events)
++	// Modernc reads DATETIME values written with millisecond precision as time.Time.
++	_, err = db.Exec(`UPDATE accounts SET session_window_start=?, session_window_end=? WHERE id=?`, start.Format("2006-01-02 15:04:05.000"), end.Format("2006-01-02 15:04:05.000"), account.ID)
++	require.NoError(t, err)
++	current, err = repo.GetByID(ctx, account.ID)
++	require.NoError(t, err)
++	require.True(t, current.SessionWindowStart.Equal(start))
++	require.True(t, current.SessionWindowEnd.Equal(end))
++}
+diff --git a/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go b/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go
+new file mode 100644
+index 000000000..c5924a616
+--- /dev/null
++++ b/backend/internal/repository/scheduler_metadata_capabilities_unit_test.go
+@@ -0,0 +1,70 @@
++//go:build unit
++
++package repository
++
++import (
++	"context"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/stretchr/testify/require"
++)
++
++func TestSchedulerMetadataPreservesExistingEndpointCapabilities(t *testing.T) {
++	for _, scenario := range []string{"unconfigured", "empty", "chat_only", "embeddings_only", "map"} {
++		t.Run(scenario, func(t *testing.T) {
++			credentials := map[string]any{"api_key": "fixture", "base_url": "https://relay.example", "unlisted_secret": "drop"}
++			wantChat, wantEmbeddings := true, true
++			switch scenario {
++			case "empty":
++				credentials["openai_capabilities"] = []string{}
++			case "chat_only":
++				credentials["openai_capabilities"] = []string{"chat_completions"}
++				wantEmbeddings = false
++			case "embeddings_only":
++				credentials["openai_capabilities"] = []string{"embeddings"}
++				wantChat = false
++			case "map":
++				credentials["openai_capabilities"] = map[string]any{"chat_completions": true, "embeddings": false}
++				wantEmbeddings = false
++			}
++			original := service.Account{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Credentials: credentials}
++			projected := buildSchedulerMetadataAccount(original)
++			require.Equal(t, wantChat, original.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityChatCompletions))
++			require.Equal(t, wantChat, projected.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityChatCompletions))
++			require.Equal(t, wantEmbeddings, projected.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityEmbeddings))
++			require.Equal(t, wantChat, projected.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityResponses))
++			require.NotContains(t, projected.Credentials, "unlisted_secret")
++			if scenario == "unconfigured" {
++				require.NotContains(t, projected.Credentials, "openai_capabilities")
++			} else {
++				require.Contains(t, projected.Credentials, "openai_capabilities")
++			}
++		})
++	}
++}
++
++func TestSchedulerMetadataCapabilitiesSurviveRedisSnapshot(t *testing.T) {
++	ctx := context.Background()
++	cache := newSchedulerCacheUnit(t)
++	bucket := service.SchedulerBucket{GroupID: 10, Platform: service.PlatformOpenAI, Mode: "mixed"}
++	account := service.Account{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
++		Status: service.StatusActive, Schedulable: true,
++		Credentials: map[string]any{"api_key": "fixture", "openai_capabilities": map[string]any{"chat_completions": true, "embeddings": false}, "unlisted_secret": "full-account-only"},
++	}
++	token, err := cache.CaptureBucketWriteToken(ctx, bucket)
++	require.NoError(t, err)
++	require.NoError(t, cache.SetSnapshot(ctx, bucket, token, []service.Account{account}))
++	snapshot, ready, err := cache.GetSnapshot(ctx, bucket)
++	require.NoError(t, err)
++	require.True(t, ready)
++	require.Len(t, snapshot, 1)
++	require.True(t, snapshot[0].SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityChatCompletions))
++	require.False(t, snapshot[0].SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityEmbeddings))
++	require.NotContains(t, snapshot[0].Credentials, "unlisted_secret")
++	hydrated, err := cache.GetAccount(ctx, account.ID)
++	require.NoError(t, err)
++	require.NotNil(t, hydrated)
++	require.False(t, hydrated.SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityEmbeddings))
++	require.Equal(t, "full-account-only", hydrated.Credentials["unlisted_secret"])
++}
+diff --git a/backend/internal/service/chat_completions_metadata.go b/backend/internal/service/chat_completions_metadata.go
+new file mode 100644
+index 000000000..b7be524bd
+--- /dev/null
++++ b/backend/internal/service/chat_completions_metadata.go
+@@ -0,0 +1,22 @@
++package service
++
++import (
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// Carry only a recognized metadata.user_id, preserving its original JSON token.
++func withChatCompletionsMetadataUserID(chatBody, anthropicBody []byte) []byte {
++	userID := gjson.GetBytes(chatBody, "metadata.user_id")
++	if userID.Type != gjson.String {
++		return anthropicBody
++	}
++	if parsed := ParseMetadataUserID(userID.String()); parsed == nil || parsed.SessionID == "" {
++		return anthropicBody
++	}
++	out, err := sjson.SetRawBytes(anthropicBody, "metadata", []byte(`{"user_id":`+userID.Raw+`}`))
++	if err != nil {
++		return anthropicBody
++	}
++	return out
++}
+diff --git a/backend/internal/service/chat_completions_metadata_test.go b/backend/internal/service/chat_completions_metadata_test.go
+new file mode 100644
+index 000000000..286d740f7
+--- /dev/null
++++ b/backend/internal/service/chat_completions_metadata_test.go
+@@ -0,0 +1,176 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"encoding/json"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++const (
++	chatMetaSessionID   = "3f0c9a52-7b1e-4d6a-9c38-5e2f0a1b7c44"
++	chatMetaJSONUserID  = `{"device_id":"device-1","session_id":"` + chatMetaSessionID + `"}`
++	chatMetaLegacyUser  = "user_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2_account__session_" + chatMetaSessionID
++	chatMetaConverted   = `{"model":"claude-sonnet-4-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"stream":true}`
++	chatMetaChatPrefix  = `{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}],`
++	chatMetaNoMetaChat  = `{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}]}`
++	chatMetaOnlyUserKey = `{"user_id":`
++)
++
++func chatMetaQuote(t *testing.T, s string) string {
++	t.Helper()
++	b, err := json.Marshal(s)
++	require.NoError(t, err)
++	return string(b)
++}
++
++func chatMetaStreamUpstream() *httpUpstreamRecorder {
++	return &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK,
++		Header: http.Header{"Content-Type": {"text/event-stream"}},
++		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
++			`event: message_start`, `data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4-5","usage":{"input_tokens":10,"output_tokens":0}}}`, "",
++			`event: content_block_start`, `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`, "",
++			`event: content_block_delta`, `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`, "",
++			`event: content_block_stop`, `data: {"type":"content_block_stop","index":0}`, "",
++			`event: message_delta`, `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`, "",
++			`event: message_stop`, `data: {"type":"message_stop"}`, "",
++		}, "\n"))),
++	}}
++}
++
++func chatMetaRequestBody(userID string) []byte {
++	return []byte(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}],"stream":true,` +
++		`"metadata":{"trace":"x","user_id":` + userID + `}}`)
++}
++
++func chatMetaContext(body []byte) *gin.Context {
++	gin.SetMode(gin.TestMode)
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(string(body)))
++	c.Request.Header.Set("Content-Type", "application/json")
++	return c
++}
++
++// The Anthropic-platform path (GatewayService.ForwardAsChatCompletions).
++func TestForwardAsChatCompletions_CarriesMetadataUserID(t *testing.T) {
++	for name, tc := range map[string]struct {
++		userID string
++		want   bool
++	}{
++		"json":    {chatMetaQuote(t, chatMetaJSONUserID), true},
++		"legacy":  {chatMetaQuote(t, chatMetaLegacyUser), true},
++		"bare id": {chatMetaQuote(t, chatMetaSessionID), false},
++		"number":  {`12345`, false},
++	} {
++		t.Run(name, func(t *testing.T) {
++			body := chatMetaRequestBody(tc.userID)
++			upstream := chatMetaStreamUpstream()
++			svc := &GatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
++			account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "sk-test"}}
++			_, err := svc.ForwardAsChatCompletions(context.Background(), chatMetaContext(body), account, body, nil)
++			require.NoError(t, err)
++			require.NotEmpty(t, upstream.lastBody)
++			if !tc.want {
++				require.False(t, gjson.GetBytes(upstream.lastBody, "metadata").Exists(), string(upstream.lastBody))
++				return
++			}
++			require.Equal(t, `{"user_id":`+tc.userID+`}`, gjson.GetBytes(upstream.lastBody, "metadata").Raw, string(upstream.lastBody))
++		})
++	}
++}
++
++// OAuth accounts keep the id the mimicry synthesizes: the client's id is not carried.
++func TestForwardAsChatCompletions_OAuthAccountKeepsSynthesizedMetadataUserID(t *testing.T) {
++	forward := func(t *testing.T, body []byte) []byte {
++		t.Helper()
++		upstream := chatMetaStreamUpstream()
++		svc := &GatewayService{
++			cfg:          rawChatCompletionsTestConfig(),
++			httpUpstream: upstream,
++			identityService: NewIdentityService(&stubIdentityCache{fingerprint: &Fingerprint{
++				UserAgent: "claude-cli/2.9.0 (external, cli)", ClientID: "test-client", UpdatedAt: time.Now().Unix(),
++			}}),
++		}
++		account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "tok"}}
++		_, err := svc.ForwardAsChatCompletions(context.Background(), chatMetaContext(body), account, body, nil)
++		require.NoError(t, err)
++		require.NotEmpty(t, upstream.lastBody)
++		return upstream.lastBody
++	}
++
++	withID := forward(t, chatMetaRequestBody(chatMetaQuote(t, chatMetaJSONUserID)))
++	withoutID := forward(t, []byte(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}],"stream":true,"metadata":{"trace":"x"}}`))
++
++	require.NotEmpty(t, gjson.GetBytes(withoutID, "metadata.user_id").String(), string(withoutID))
++	require.Equal(t, gjson.GetBytes(withoutID, "metadata").Raw, gjson.GetBytes(withID, "metadata").Raw, string(withID))
++	require.NotContains(t, string(withID), "device-1")
++}
++
++func TestWithChatCompletionsMetadataUserID_Carries(t *testing.T) {
++	for name, userID := range map[string]string{"json": chatMetaJSONUserID, "legacy": chatMetaLegacyUser} {
++		t.Run(name, func(t *testing.T) {
++			quoted := chatMetaQuote(t, userID)
++			chat := []byte(chatMetaChatPrefix + `"metadata":{"user_id":` + quoted + `}}`)
++			out := withChatCompletionsMetadataUserID(chat, []byte(chatMetaConverted))
++
++			require.Equal(t, chatMetaOnlyUserKey+quoted+`}`, gjson.GetBytes(out, "metadata").Raw)
++			require.Equal(t, userID, gjson.GetBytes(out, "metadata.user_id").String())
++			rest, err := sjson.DeleteBytes(out, "metadata")
++			require.NoError(t, err)
++			require.Equal(t, chatMetaConverted, string(rest), "everything but metadata is unchanged")
++		})
++	}
++}
++
++func TestWithChatCompletionsMetadataUserID_KeepsEscapesAndOtherKeysOut(t *testing.T) {
++	// The id is carried as the client's own string token, escapes included.
++	userID := `{"device_id":"dév","session_id":"` + chatMetaSessionID + `"}`
++	chat := []byte(chatMetaChatPrefix + `"metadata":{"trace":"x","user_id":"{\"device_id\":\"dév\",\"session_id\":\"` + chatMetaSessionID + `\"}","other":{"a":1}}}`)
++	out := withChatCompletionsMetadataUserID(chat, []byte(chatMetaConverted))
++	require.Equal(t, `{"user_id":"{\"device_id\":\"dév\",\"session_id\":\"`+chatMetaSessionID+`\"}"}`, gjson.GetBytes(out, "metadata").Raw)
++	require.Equal(t, userID, gjson.GetBytes(out, "metadata.user_id").String())
++	require.False(t, gjson.GetBytes(out, "metadata.trace").Exists())
++	require.False(t, gjson.GetBytes(out, "metadata.other").Exists())
++}
++
++func TestWithChatCompletionsMetadataUserID_LeavesBodyAlone(t *testing.T) {
++	cases := map[string]string{
++		"no metadata":             chatMetaNoMetaChat,
++		"metadata string":         chatMetaChatPrefix + `"metadata":"x"}`,
++		"metadata array":          chatMetaChatPrefix + `"metadata":[{"user_id":` + chatMetaQuote(t, chatMetaJSONUserID) + `}]}`,
++		"metadata null":           chatMetaChatPrefix + `"metadata":null}`,
++		"metadata without id":     chatMetaChatPrefix + `"metadata":{"trace":"x"}}`,
++		"user_id number":          chatMetaChatPrefix + `"metadata":{"user_id":12345}}`,
++		"user_id object":          chatMetaChatPrefix + `"metadata":{"user_id":` + chatMetaJSONUserID + `}}`,
++		"user_id array":           chatMetaChatPrefix + `"metadata":{"user_id":[` + chatMetaQuote(t, chatMetaJSONUserID) + `]}}`,
++		"user_id null":            chatMetaChatPrefix + `"metadata":{"user_id":null}}`,
++		"user_id empty":           chatMetaChatPrefix + `"metadata":{"user_id":""}}`,
++		"user_id bare uuid":       chatMetaChatPrefix + `"metadata":{"user_id":"` + chatMetaSessionID + `"}}`,
++		"user_id free text":       chatMetaChatPrefix + `"metadata":{"user_id":"alice"}}`,
++		"json without device_id":  chatMetaChatPrefix + `"metadata":{"user_id":` + chatMetaQuote(t, `{"session_id":"`+chatMetaSessionID+`"}`) + `}}`,
++		"json empty device_id":    chatMetaChatPrefix + `"metadata":{"user_id":` + chatMetaQuote(t, `{"device_id":"","session_id":"`+chatMetaSessionID+`"}`) + `}}`,
++		"json without session_id": chatMetaChatPrefix + `"metadata":{"user_id":` + chatMetaQuote(t, `{"device_id":"device-1"}`) + `}}`,
++		"json empty session_id":   chatMetaChatPrefix + `"metadata":{"user_id":` + chatMetaQuote(t, `{"device_id":"device-1","session_id":""}`) + `}}`,
++		"json malformed":          chatMetaChatPrefix + `"metadata":{"user_id":"{\"device_id\":"}}`,
++		"legacy short session":    chatMetaChatPrefix + `"metadata":{"user_id":"user_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2_account__session_123"}}`,
++		"top-level user only":     chatMetaChatPrefix + `"user":` + chatMetaQuote(t, chatMetaJSONUserID) + `}`,
++	}
++	for name, chat := range cases {
++		t.Run(name, func(t *testing.T) {
++			out := withChatCompletionsMetadataUserID([]byte(chat), []byte(chatMetaConverted))
++			require.Equal(t, chatMetaConverted, string(out))
++			require.False(t, gjson.GetBytes(out, "metadata").Exists())
++		})
++	}
++}
+diff --git a/backend/internal/service/gateway_count_tokens_raw_headers_test.go b/backend/internal/service/gateway_count_tokens_raw_headers_test.go
+new file mode 100644
+index 000000000..0773052e4
+--- /dev/null
++++ b/backend/internal/service/gateway_count_tokens_raw_headers_test.go
+@@ -0,0 +1,146 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func headerKeysFold(h http.Header, name string) []string {
++	var keys []string
++	for k := range h {
++		if strings.EqualFold(k, name) {
++			keys = append(keys, k)
++		}
++	}
++	return keys
++}
++
++// The count_tokens passthrough builder copies client headers under their wire casing
++// (lowercase content-type / anthropic-version). It must look those up under the same
++// key before filling in defaults, so the upstream request carries exactly one of each.
++func TestCountTokensPassthroughSendsOneContentTypeAndVersion(t *testing.T) {
++	tests := []struct {
++		name        string
++		clientSends bool
++		wantType    string
++		wantVersion string
++	}{
++		{"client sent both", true, "application/json; charset=utf-8", "2024-01-01"},
++		{"client sent neither", false, "application/json", "2023-06-01"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			c, _ := gin.CreateTestContext(httptest.NewRecorder())
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", nil)
++			if tt.clientSends {
++				c.Request.Header.Set("Anthropic-Version", tt.wantVersion)
++				c.Request.Header.Set("Content-Type", tt.wantType)
++			}
++			account := &Account{
++				ID:          1,
++				Platform:    PlatformAnthropic,
++				Type:        AccountTypeAPIKey,
++				Credentials: map[string]any{"api_key": "test-key"},
++				Status:      StatusActive,
++				Schedulable: true,
++			}
++			svc := &GatewayService{cfg: &config.Config{}}
++			body := []byte(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}]}`)
++
++			req, err := svc.buildCountTokensRequestAnthropicAPIKeyPassthrough(context.Background(), c, account, body, "test-key")
++			require.NoError(t, err)
++
++			require.Equal(t, []string{"content-type"}, headerKeysFold(req.Header, "content-type"))
++			require.Equal(t, []string{tt.wantType}, req.Header["content-type"])
++			require.Equal(t, []string{"anthropic-version"}, headerKeysFold(req.Header, "anthropic-version"))
++			require.Equal(t, []string{tt.wantVersion}, req.Header["anthropic-version"])
++		})
++	}
++}
++
++// The Claude mimic debug line must report headers stored under their wire casing.
++func TestBuildClaudeMimicDebugLineReadsRawCasedHeaders(t *testing.T) {
++	req := httptest.NewRequest(http.MethodPost, "https://upstream.example/v1/messages", nil)
++	setHeaderRaw(req.Header, "anthropic-version", "2023-06-01")
++	setHeaderRaw(req.Header, "anthropic-beta", "beta-a")
++	setHeaderRaw(req.Header, "content-type", "application/json")
++	setHeaderRaw(req.Header, "x-app", "cli")
++	setHeaderRaw(req.Header, "X-Stainless-OS", "Linux")
++
++	line := buildClaudeMimicDebugLine(req, []byte(`{}`), nil, "oauth", true)
++
++	require.Contains(t, line, `anthropic-version="2023-06-01"`)
++	require.Contains(t, line, `anthropic-beta="beta-a"`)
++	require.Contains(t, line, `content-type="application/json"`)
++	require.Contains(t, line, `x-app="cli"`)
++	require.Contains(t, line, `x-stainless-os="Linux"`)
++}
++
++func TestCountTokensPassthroughHeadersOnHTTPWire(t *testing.T) {
++	for _, mode := range []string{"defaults", "mixed_case_multivalue", "overrides"} {
++		t.Run(mode, func(t *testing.T) {
++			c, _ := gin.CreateTestContext(httptest.NewRecorder())
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", nil)
++			wantType := []string{"application/json"}
++			wantVersion := []string{"2023-06-01"}
++			wantBeta := []string{"per-turn-control-2026-07-01"}
++			account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Credentials: map[string]any{}}
++			if mode != "defaults" {
++				c.Request.Header = http.Header{
++					"CONTENT-TYPE":      {"application/json; charset=utf-8", "application/custom-json"},
++					"anthropic-version": {"2024-01-01", "2025-01-01"},
++					"Anthropic-Beta":    wantBeta, "Authorization": {"Bearer client-secret"}, "Cookie": {"client=secret"},
++				}
++				wantType = c.Request.Header["CONTENT-TYPE"]
++				wantVersion = c.Request.Header["anthropic-version"]
++			} else {
++				c.Request.Header.Set("Anthropic-Beta", wantBeta[0])
++			}
++			if mode == "overrides" {
++				account.Credentials[credKeyHeaderOverrideEnabled] = true
++				account.Credentials[credKeyHeaderOverrides] = map[string]any{"anthropic-version": "override-version", "anthropic-beta": "override-beta"}
++				wantVersion = []string{"override-version"}
++				wantBeta = []string{"override-beta"}
++			}
++			body := []byte(`{"model":"claude-sonnet-4-6","messages":[{"role":"system","content":[],"output_config":{"effort":"high"}}]}`)
++			req, err := (&GatewayService{cfg: &config.Config{}}).buildCountTokensRequestAnthropicAPIKeyPassthrough(context.Background(), c, account, body, "account-key")
++			require.NoError(t, err)
++			type receivedRequest struct {
++				headers http.Header
++				body    []byte
++			}
++			receivedCh := make(chan receivedRequest, 1)
++			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				receivedBody, _ := io.ReadAll(r.Body)
++				receivedCh <- receivedRequest{r.Header.Clone(), receivedBody}
++				w.WriteHeader(http.StatusOK)
++			}))
++			defer upstream.Close()
++			local, err := http.NewRequestWithContext(req.Context(), req.Method, upstream.URL, req.Body)
++			require.NoError(t, err)
++			local.Header = req.Header
++			resp, err := upstream.Client().Do(local)
++			require.NoError(t, err)
++			require.NoError(t, resp.Body.Close())
++			received := <-receivedCh
++			require.Equal(t, wantType, received.headers.Values("Content-Type"))
++			require.Equal(t, wantVersion, received.headers.Values("Anthropic-Version"))
++			require.Equal(t, wantBeta, received.headers.Values("Anthropic-Beta"))
++			require.Equal(t, []string{"account-key"}, received.headers.Values("X-Api-Key"))
++			require.Empty(t, received.headers.Values("Authorization"))
++			require.Empty(t, received.headers.Values("Cookie"))
++			require.Equal(t, mode != "overrides", strings.Contains(string(received.body), "output_config"))
++		})
++	}
++}
+diff --git a/backend/internal/service/grok_media_errors_test.go b/backend/internal/service/grok_media_errors_test.go
+new file mode 100644
+index 000000000..a1de743a6
+--- /dev/null
++++ b/backend/internal/service/grok_media_errors_test.go
+@@ -0,0 +1,127 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/model"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestGrokMediaUpstreamErrorFields(t *testing.T) {
++	for _, tt := range []struct {
++		name        string
++		status      int
++		body        string
++		wantMessage string
++		wantCode    string
++	}{
++		{"flat error", 400, `{"code":"invalid_image","error":"Image could not be decoded."}`, "Image could not be decoded.", "invalid_image"},
++		{"nested error", 400, `{"code":"outer","error":{"code":"invalid_size","message":"Invalid size."}}`, "Invalid size.", "invalid_size"},
++		{"message without code", 400, `{"error":"Invalid size."}`, "Invalid size.", ""},
++		{"redact code query", 400, `{"error":"Invalid size.","code":"https://example.test?key=secret&n=1"}`, "Invalid size.", "https://example.test?key=***&n=1"},
++		{"unknown object", 400, `{"error":{"debug":"private diagnostic"},"code":{"debug":"private code"}}`, "xAI upstream returned status 400", ""},
++		{"content refusal", 403, `{"code":"content_policy_violation","error":"Input violates content policy."}`, "Input violates content policy.", "content_policy_violation"},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			recorder := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(recorder)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
++			repo := &grokQuotaAccountRepo{}
++			svc := &OpenAIGatewayService{accountRepo: repo}
++			account := &Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeOAuth}
++			_, err := svc.handleGrokMediaErrorResponse(context.Background(), &http.Response{
++				StatusCode: tt.status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(tt.body)),
++			}, c, account, "request-id", "grok-imagine-image")
++			require.Error(t, err)
++			var failover *UpstreamFailoverError
++			require.False(t, errors.As(err, &failover))
++			require.True(t, IsResponseCommitted(c))
++			require.Equal(t, tt.status, recorder.Code)
++			require.Equal(t, tt.wantMessage, gjson.GetBytes(recorder.Body.Bytes(), "error.message").String())
++			require.Equal(t, tt.wantCode, gjson.GetBytes(recorder.Body.Bytes(), "error.code").String())
++			if tt.wantCode == "" {
++				require.False(t, gjson.GetBytes(recorder.Body.Bytes(), "error.code").Exists())
++			}
++			require.NotContains(t, recorder.Body.String(), "secret")
++			require.NotContains(t, recorder.Body.String(), "private")
++			require.Zero(t, repo.tempUnschedCalls)
++			require.Zero(t, repo.rateLimitedCalls)
++			require.Zero(t, repo.updateCalls)
++		})
++	}
++}
++
++func TestGrokMediaErrorRewritesKeepPriority(t *testing.T) {
++	for _, tt := range []struct {
++		name            string
++		passthroughRule bool
++		passthroughBody bool
++	}{
++		{name: "account error code filter"},
++		{name: "configured response rule", passthroughRule: true},
++		{name: "configured message passthrough", passthroughRule: true, passthroughBody: true},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			recorder := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(recorder)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
++			account := &Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{
++				"custom_error_codes_enabled": true, "custom_error_codes": []any{float64(http.StatusTooManyRequests)},
++			}}
++			wantStatus, wantMessage := http.StatusInternalServerError, "Upstream gateway error"
++			if tt.passthroughRule {
++				rules := &ErrorPassthroughService{}
++				rule := newNonFailoverPassthroughRule(http.StatusBadRequest, "invalid_image", http.StatusUnprocessableEntity, "Configured error")
++				rule.PassthroughBody = tt.passthroughBody
++				rules.setLocalCache([]*model.ErrorPassthroughRule{rule})
++				BindErrorPassthroughService(c, rules)
++				wantStatus, wantMessage = http.StatusUnprocessableEntity, "Configured error"
++				if tt.passthroughBody {
++					wantMessage = "Original error: https://example.test?access_token=***"
++				}
++			}
++			svc := &OpenAIGatewayService{accountRepo: &grokQuotaAccountRepo{}}
++			_, err := svc.handleGrokMediaErrorResponse(context.Background(), &http.Response{
++				StatusCode: http.StatusBadRequest, Header: http.Header{},
++				Body: io.NopCloser(strings.NewReader(`{"code":"invalid_image","error":"Original error: https://example.test?access_token=secret"}`)),
++			}, c, account, "request-id", "grok-imagine-image")
++			require.Error(t, err)
++			require.Equal(t, wantStatus, recorder.Code)
++			require.Equal(t, wantMessage, gjson.GetBytes(recorder.Body.Bytes(), "error.message").String())
++			require.False(t, gjson.GetBytes(recorder.Body.Bytes(), "error.code").Exists())
++		})
++	}
++}
++
++func TestGrokMediaRetryableErrorKeepsOriginalBody(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	recorder := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(recorder)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", nil)
++	body := `{"code":"temporarily_unavailable","error":"Try again later"}`
++	svc := &OpenAIGatewayService{accountRepo: &grokQuotaAccountRepo{}}
++	_, err := svc.handleGrokMediaErrorResponse(context.Background(), &http.Response{
++		StatusCode: http.StatusServiceUnavailable, Header: http.Header{"X-Request-Id": {"request-id"}},
++		Body: io.NopCloser(strings.NewReader(body)),
++	}, c, &Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeOAuth}, "request-id", "grok-imagine-image")
++	var failover *UpstreamFailoverError
++	require.ErrorAs(t, err, &failover)
++	require.Equal(t, http.StatusServiceUnavailable, failover.StatusCode)
++	require.Equal(t, body, string(failover.ResponseBody))
++	require.Equal(t, "request-id", failover.ResponseHeaders.Get("X-Request-Id"))
++	require.False(t, IsResponseCommitted(c))
++	require.False(t, c.Writer.Written())
++	require.Empty(t, recorder.Body.String())
++}
+diff --git a/backend/internal/service/grok_upstream_error_fields_test.go b/backend/internal/service/grok_upstream_error_fields_test.go
+new file mode 100644
+index 000000000..e656c7f0f
+--- /dev/null
++++ b/backend/internal/service/grok_upstream_error_fields_test.go
+@@ -0,0 +1,82 @@
++//go:build unit
++
++package service
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestGrokUpstreamErrorMessageFormats(t *testing.T) {
++	for _, tt := range []struct {
++		name string
++		body string
++		want string
++	}{
++		{"xai string error", `{"code":"invalid_image","error":"Image could not be decoded."}`, "Image could not be decoded."},
++		{"nested message", `{"error":{"message":"nested"},"detail":"detail","message":"message"}`, "nested"},
++		{"embedded nested message", `{"error":{"message":"{\"error\":{\"message\":\"embedded\"}}"}}`, "embedded"},
++		{"detail retains priority", `{"error":"xai","detail":"detail","message":"message"}`, "detail"},
++		{"message retains priority", `{"error":"xai","message":"message"}`, "message"},
++		{"blank legacy fields", `{"error":"xai","detail":" ","message":" "}`, "xai"},
++		{"unknown error object", `{"error":{"debug":"private diagnostic"}}`, ""},
++		{"error array", `{"error":["private diagnostic"]}`, ""},
++		{"numeric error", `{"error":400}`, ""},
++		{"null error", `{"error":null}`, ""},
++		{"plain text", `upstream internal diagnostic`, ""},
++		{"empty", ``, ""},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, grokUpstreamErrorMessage([]byte(tt.body)))
++		})
++	}
++}
++
++func TestGrokUpstreamErrorCodeFormats(t *testing.T) {
++	for _, tt := range []struct {
++		name string
++		body string
++		want string
++	}{
++		{"xai string code", `{"code":" invalid_image ","error":"Image could not be decoded."}`, "invalid_image"},
++		{"numeric code", `{"code":400,"error":"Bad input"}`, "400"},
++		{"nested code retains priority", `{"error":{"code":"nested"},"code":"top"}`, "nested"},
++		{"embedded code retains priority", `{"error":{"message":"{\"error\":{\"code\":\"embedded\"}}"},"code":"top"}`, "embedded"},
++		{"embedded code with suffix", `{"error":{"message":"{\"error\":{\"code\":\"embedded\"}} (upstream)"},"code":"top"}`, "embedded"},
++		{"embedded message without code", `{"error":{"message":"{\"error\":{\"message\":\"reason\"}}"},"code":"top"}`, "top"},
++		{"blank nested code", `{"error":{"code":" "},"code":"top"}`, "top"},
++		{"object code", `{"code":{"private":"diagnostic"}}`, ""},
++		{"array code", `{"code":["diagnostic"]}`, ""},
++		{"boolean code", `{"code":true}`, ""},
++		{"null code", `{"code":null}`, ""},
++		{"no code", `{"error":{"message":"reason"}}`, ""},
++	} {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, grokUpstreamErrorCode([]byte(tt.body)))
++		})
++	}
++}
++
++// The shared extractors drive failover, model-not-found cooldown and account
++// disable decisions on every platform; xAI's flat shape must stay Grok-only.
++func TestSharedUpstreamErrorExtractorsIgnoreXAIFlatShape(t *testing.T) {
++	flat := []byte(`{"code":"invalid_image","error":"Image could not be decoded."}`)
++	require.Empty(t, extractUpstreamErrorMessage(flat))
++	require.Empty(t, extractUpstreamErrorCode(flat))
++
++	require.Empty(t, extractUpstreamErrorCode([]byte(`{"object":"error","message":"m","code":400}`)))
++	require.Empty(t, extractUpstreamErrorCode([]byte(`{"error":{"message":"m"},"code":"token_revoked"}`)))
++}
++
++func TestOpenAICompatibleModelNotFoundIgnoresTopLevelCode(t *testing.T) {
++	for _, body := range []string{
++		`{"object":"error","message":"model not found: foo","type":"BadRequestError","param":null,"code":400}`,
++		`{"code":"invalid_argument","message":"Unknown model: foo"}`,
++		`{"error":{"message":"The model is not supported"},"code":"bad_request"}`,
++	} {
++		t.Run(body, func(t *testing.T) {
++			require.True(t, isOpenAICompatibleModelNotFoundBody([]byte(body)))
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go b/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go
+new file mode 100644
+index 000000000..29d3d9bcc
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go
+@@ -0,0 +1,229 @@
++package service
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++// compatStreamSideEffectsRepo records the account-health writes made by the rate limit service.
++type compatStreamSideEffectsRepo struct {
++	stubOpenAIAccountRepo
++	rateLimitCalls []time.Time
++	errorCalls     []string
++	modelScopes    []string
++	tempCalls      int
++}
++
++func (r *compatStreamSideEffectsRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
++	r.rateLimitCalls = append(r.rateLimitCalls, resetAt)
++	return nil
++}
++
++func (r *compatStreamSideEffectsRepo) SetError(_ context.Context, _ int64, msg string) error {
++	r.errorCalls = append(r.errorCalls, msg)
++	return nil
++}
++
++func (r *compatStreamSideEffectsRepo) SetModelRateLimit(_ context.Context, _ int64, scope string, _ time.Time, _ ...string) error {
++	r.modelScopes = append(r.modelScopes, scope)
++	return nil
++}
++
++func (r *compatStreamSideEffectsRepo) SetTempUnschedulable(context.Context, int64, time.Time, string) error {
++	r.tempCalls++
++	return nil
++}
++
++func compatStreamSideEffectsAccount() Account {
++	return Account{
++		ID:          601,
++		Name:        "openai-apikey-compat-stream",
++		Platform:    PlatformOpenAI,
++		Type:        AccountTypeAPIKey,
++		Status:      StatusActive,
++		Schedulable: true,
++		Concurrency: 1,
++		Credentials: map[string]any{"api_key": "sk-test"},
++	}
++}
++
++// compatStreamSideEffectsSSE builds an upstream responses stream that fails with errorEvent.
++// With outputFirst the error follows response.created and a text delta, so client output has
++// started (in practice response.created alone already starts it on both compat paths); without,
++// the error is the first event and the request can still fail over.
++func compatStreamSideEffectsSSE(outputFirst bool, errorEvent string) string {
++	var lines []string
++	if outputFirst {
++		lines = append(lines,
++			`data: {"type":"response.created","response":{"id":"resp_side","model":"gpt-5.5","status":"in_progress","output":[]}}`,
++			"",
++			`data: {"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"partial"}`,
++			"",
++		)
++	}
++	lines = append(lines, `event: error`, `data: `+errorEvent, "")
++	return strings.Join(lines, "\n")
++}
++
++const compatStreamAuthErrorEvent = `{"type":"error","status":401,"error":{"code":"invalid_api_key","type":"invalid_request_error","message":"Incorrect API key provided"}}`
++
++func newCompatStreamSideEffectsService(sse string) (*OpenAIGatewayService, *compatStreamSideEffectsRepo, *Account) {
++	account := compatStreamSideEffectsAccount()
++	repo := &compatStreamSideEffectsRepo{stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}}}
++	svc := &OpenAIGatewayService{
++		cfg:              &config.Config{},
++		accountRepo:      repo,
++		rateLimitService: &RateLimitService{accountRepo: repo},
++		httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
++			StatusCode: http.StatusOK,
++			Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_side"}},
++			Body:       io.NopCloser(strings.NewReader(sse)),
++		}},
++	}
++	return svc, repo, &account
++}
++
++func newCompatStreamContext(path string, body []byte) (*gin.Context, *httptest.ResponseRecorder) {
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
++	c.Request.Header.Set("Content-Type", "application/json")
++	return c, rec
++}
++
++// A terminal stream error that arrives after client output started can no longer fail over, but the
++// account health still has to be updated — otherwise the account stays schedulable and every new
++// request routed to it fails the same way.
++func TestForwardAsChatCompletions_StreamErrorAfterOutputAppliesAccountSideEffects(t *testing.T) {
++	svc, repo, account := newCompatStreamSideEffectsService(compatStreamSideEffectsSSE(true, compatStreamAuthErrorEvent))
++	body := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hi"}],"stream":true}`)
++	c, rec := newCompatStreamContext("/v1/chat/completions", body)
++
++	_, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.5")
++	require.Error(t, err)
++	var failoverErr *UpstreamFailoverError
++	require.False(t, errors.As(err, &failoverErr), "output already started: must not fail over")
++	require.Contains(t, rec.Body.String(), "partial", "client output must have started before the error")
++	require.Len(t, repo.errorCalls, 1, "auth failure after output must mark the account exactly once")
++	require.Empty(t, repo.rateLimitCalls)
++}
++
++func TestForwardAsAnthropic_StreamErrorAfterOutputAppliesAccountSideEffects(t *testing.T) {
++	svc, repo, account := newCompatStreamSideEffectsService(compatStreamSideEffectsSSE(true, compatStreamAuthErrorEvent))
++	body := []byte(`{"model":"gpt-5.5","max_tokens":1024,"messages":[{"role":"user","content":"hi"}],"stream":true}`)
++	c, rec := newCompatStreamContext("/v1/messages", body)
++
++	_, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "gpt-5.5")
++	require.Error(t, err)
++	var failoverErr *UpstreamFailoverError
++	require.False(t, errors.As(err, &failoverErr), "output already started: must not fail over")
++	require.Contains(t, rec.Body.String(), "partial", "client output must have started before the error")
++	require.Len(t, repo.errorCalls, 1, "auth failure after output must mark the account exactly once")
++	require.Empty(t, repo.rateLimitCalls)
++}
++
++// Before client output the error fails over; the failover constructor already applies the side
++// effects, so the account is marked once — not once per path.
++func TestForwardAsChatCompletions_StreamErrorBeforeOutputPreservesAccountState(t *testing.T) {
++	payload := strings.Replace(compatStreamAuthErrorEvent, `"type":"error"`, `"type":"response.failed"`, 1)
++	svc, repo, account := newCompatStreamSideEffectsService(compatStreamSideEffectsSSE(false, payload))
++	body := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hi"}],"stream":true}`)
++	c, _ := newCompatStreamContext("/v1/chat/completions", body)
++
++	_, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.5")
++	var failoverErr *UpstreamFailoverError
++	require.True(t, errors.As(err, &failoverErr), "no output yet: must fail over, got %v", err)
++	require.Empty(t, repo.errorCalls, "preserve existing request-local failover before output")
++}
++
++func TestForwardAsAnthropic_StreamErrorBeforeOutputPreservesAccountState(t *testing.T) {
++	svc, repo, account := newCompatStreamSideEffectsService(compatStreamSideEffectsSSE(false, compatStreamAuthErrorEvent))
++	body := []byte(`{"model":"gpt-5.5","max_tokens":1024,"messages":[{"role":"user","content":"hi"}],"stream":true}`)
++	c, _ := newCompatStreamContext("/v1/messages", body)
++
++	_, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "gpt-5.5")
++	var failoverErr *UpstreamFailoverError
++	require.True(t, errors.As(err, &failoverErr), "no output yet: must fail over, got %v", err)
++	require.Empty(t, repo.errorCalls, "preserve existing request-local failover before output")
++}
++
++func TestOpenAICompatStreamAfterOutputPolicies(t *testing.T) {
++	for _, protocol := range []string{"chat", "messages"} {
++		for _, output := range []string{"text", "tool"} {
++			for _, scenario := range []string{"auth", "rate_limit", "model_rate_limit", "overload", "unconfigured_overload", "invalid_request"} {
++				t.Run(protocol+"/"+output+"/"+scenario, func(t *testing.T) {
++					prefix := `data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-6.1-sol"}}` + "\n\n"
++					if output == "text" {
++						prefix += `data: {"type":"response.output_text.delta","delta":"partial"}` + "\n\n"
++					} else {
++						prefix += `data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"run"}}` + "\n\n"
++						prefix += `data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"x\":1}"}` + "\n\n"
++					}
++					payload := compatStreamAuthErrorEvent
++					wantAuth, wantRate, wantModel := 0, 0, 0
++					status, keyword := http.StatusTooManyRequests, "rate_limit"
++					switch scenario {
++					case "auth":
++						wantAuth = 1
++					case "rate_limit", "model_rate_limit":
++						payload = `{"type":"response.failed","response":{"error":{"status":429,"code":"rate_limit_exceeded","message":"rate_limit reached"}}}`
++						if scenario == "rate_limit" {
++							wantRate = 1
++						} else {
++							wantModel = 1
++						}
++					case "overload", "unconfigured_overload":
++						status, keyword = http.StatusServiceUnavailable, "overloaded"
++						payload = `{"type":"response.failed","response":{"error":{"code":"server_is_overloaded","message":"overloaded"}}}`
++						if scenario == "overload" {
++							wantModel = 1
++						}
++					case "invalid_request":
++						payload = `{"type":"response.failed","response":{"error":{"type":"invalid_request_error","message":"invalid input"}}}`
++					}
++					svc, repo, account := newCompatStreamSideEffectsService(prefix + "data: " + payload + "\n\n")
++					if wantModel > 0 {
++						account.Credentials["temp_unschedulable_enabled"] = true
++						account.Credentials["temp_unschedulable_rules"] = []any{map[string]any{
++							"error_code": status, "keywords": []any{keyword}, "duration_minutes": 5, "scope": TempUnschedScopeModel,
++						}}
++					}
++					c, rec := newCompatStreamContext("/v1/"+protocol, nil)
++					upstream, ok := svc.httpUpstream.(*httpUpstreamRecorder)
++					require.True(t, ok)
++					resp := upstream.resp
++					var err error
++					if protocol == "chat" {
++						_, err = svc.handleChatStreamingResponse(resp, c, account, "alias", "gpt-6.1-sol", "gpt-6.1-sol", time.Now(), 0)
++					} else {
++						_, err = svc.handleAnthropicStreamingResponse(resp, c, account, "alias", "gpt-6.1-sol", "gpt-6.1-sol", time.Now())
++					}
++					require.Error(t, err)
++					var failover *UpstreamFailoverError
++					require.False(t, errors.As(err, &failover), "an emitted stream must never be replayed")
++					require.True(t, c.Writer.Written())
++					require.Contains(t, rec.Body.String(), "error")
++					require.Len(t, repo.errorCalls, wantAuth)
++					require.Len(t, repo.rateLimitCalls, wantRate)
++					require.Len(t, repo.modelScopes, wantModel)
++					if wantModel > 0 {
++						require.Equal(t, "gpt-6.1-sol", repo.modelScopes[0])
++					}
++					require.Zero(t, repo.tempCalls)
++				})
++			}
++		}
++	}
++}
+diff --git a/backend/internal/service/tier123_health_billing_test.go b/backend/internal/service/tier123_health_billing_test.go
+new file mode 100644
+index 000000000..2b3744f9d
+--- /dev/null
++++ b/backend/internal/service/tier123_health_billing_test.go
+@@ -0,0 +1,160 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strconv"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestExistingSolUltrafastPricing(t *testing.T) {
++	svc := newTestBillingService()
++	for _, model := range []string{"gpt-6.1-sol", "openai/gpt-6.1-sol-high", "gpt-6.1-sol-max", "gpt-6-astra"} {
++		for _, n := range []int{271999, 272000, 272001} {
++			t.Run(model+"/"+strconv.Itoa(n), func(t *testing.T) {
++				tokens := UsageTokens{InputTokens: n - 3000, CacheReadTokens: 2000, CacheCreationTokens: 1000, OutputTokens: 500}
++				standard, err := svc.CalculateCostWithServiceTier(model, tokens, 1, "")
++				require.NoError(t, err)
++				ultra, err := svc.CalculateCostWithServiceTier(model, tokens, 1, "ultrafast")
++				require.NoError(t, err)
++				fast, err := svc.CalculateCostWithServiceTier(model, tokens, 1, "fast")
++				require.NoError(t, err)
++				require.InDelta(t, standard.InputCost*6, ultra.InputCost, 1e-10)
++				require.InDelta(t, standard.OutputCost*6, ultra.OutputCost, 1e-10)
++				require.InDelta(t, standard.CacheReadCost*6, ultra.CacheReadCost, 1e-10)
++				require.InDelta(t, standard.CacheCreationCost*6, ultra.CacheCreationCost, 1e-10)
++				require.InDelta(t, standard.TotalCost*2, fast.TotalCost, 1e-10)
++				require.Equal(t, standard.LongContextBillingApplied, ultra.LongContextBillingApplied)
++			})
++		}
++		for _, custom := range []float64{0, 1e-6} {
++			fast := 0.0
++			card, err := svc.GetModelPricingWithChannel(model, &ChannelModelPricing{
++				InputPrice: &custom, OutputPrice: &custom, CacheReadPrice: &custom, CacheWritePrice: &custom, FastMultiplier: &fast,
++			})
++			require.NoError(t, err)
++			require.Equal(t, 6.0, configuredServiceTierMultiplier("ultrafast", card))
++			require.Zero(t, configuredServiceTierMultiplier("fast", card))
++			cost := svc.computeTokenBreakdown(card, UsageTokens{InputTokens: 1000, OutputTokens: 1000, CacheReadTokens: 1000, CacheCreationTokens: 1000}, 1, "ultrafast", false)
++			require.InDelta(t, custom*24000, cost.TotalCost, 1e-10)
++		}
++	}
++	for _, model := range []string{"gpt-6-sol", "gpt-6.1-terra", "gpt-5.6-sol"} {
++		card, err := svc.GetModelPricing(model)
++		require.NoError(t, err)
++		require.Equal(t, 2.0, configuredServiceTierMultiplier("ultrafast", card))
++	}
++}
++
++func TestUpdateSessionWindow_WeeklyRolloverBoundaries(t *testing.T) {
++	now := time.Now().UTC().Truncate(time.Second)
++	future, expired := now.Add(24*time.Hour), now.Add(-time.Hour)
++	for _, scenario := range []string{"future_seconds", "future_millis", "expired_seconds", "expired_millis", "missing_reset", "weekly_only"} {
++		t.Run(scenario, func(t *testing.T) {
++			oldEnd := now.Add(-time.Minute)
++			extra := map[string]any{"session_window_utilization": 0.8, "passive_usage_7d_utilization": 0.9, "passive_usage_sampled_at": now.Add(-time.Hour).Format(time.RFC3339)}
++			reset := future.Unix()
++			switch scenario {
++			case "future_millis":
++				reset = future.UnixMilli()
++			case "expired_seconds":
++				reset = expired.Unix()
++			case "expired_millis":
++				reset = expired.UnixMilli()
++			}
++			if scenario != "missing_reset" {
++				extra["passive_usage_7d_reset"] = strconv.FormatInt(reset, 10)
++			}
++			headers := http.Header{}
++			if scenario == "weekly_only" {
++				headers.Set("anthropic-ratelimit-unified-7d-utilization", "0.95")
++				headers.Set("anthropic-ratelimit-unified-7d-reset", strconv.FormatInt(future.UnixMilli(), 10))
++			} else {
++				headers.Set("anthropic-ratelimit-unified-5h-status", "allowed")
++				headers.Set("anthropic-ratelimit-unified-5h-reset", strconv.FormatInt(now.Add(5*time.Hour).UnixMilli(), 10))
++			}
++			repo := &sessionWindowMockRepo{}
++			account := &Account{ID: 7, Platform: PlatformAnthropic, Type: AccountTypeSetupToken, Extra: extra, SessionWindowEnd: &oldEnd}
++			newRateLimitServiceForTest(repo).UpdateSessionWindow(context.Background(), account, headers)
++			for _, call := range repo.updateExtraCalls {
++				for key, value := range call.Updates {
++					extra[key] = value
++				}
++			}
++			kept := strings.HasPrefix(scenario, "future") || scenario == "weekly_only"
++			if kept {
++				require.NotNil(t, extra["passive_usage_7d_utilization"])
++				require.NotNil(t, extra["passive_usage_sampled_at"])
++			} else {
++				require.Nil(t, extra["passive_usage_7d_utilization"])
++				require.Nil(t, extra["passive_usage_7d_reset"])
++				require.Nil(t, extra["passive_usage_sampled_at"])
++			}
++			if scenario == "weekly_only" {
++				require.Empty(t, repo.sessionWindowCalls)
++				require.Equal(t, 0.95, extra["passive_usage_7d_utilization"])
++				require.Equal(t, future.Unix(), extra["passive_usage_7d_reset"])
++			} else {
++				require.Nil(t, extra["session_window_utilization"])
++				require.Len(t, repo.sessionWindowCalls, 1)
++			}
++		})
++	}
++}
++
++func TestUpdateSessionWindow_IndependentWeeklySampleSurvives(t *testing.T) {
++	now := time.Now().UTC().Truncate(time.Second)
++	oldEnd := now.Add(-time.Minute)
++	extra := map[string]any{
++		"passive_usage_7d_utilization": 0.9, "passive_usage_7d_reset": now.Add(-time.Hour).Unix(),
++		"passive_usage_7d_oi_utilization": 0.7, "passive_usage_7d_oi_reset": now.Add(24 * time.Hour).Unix(),
++		"passive_usage_sampled_at": now.Add(-time.Hour).Format(time.RFC3339),
++	}
++	sampledAt := extra["passive_usage_sampled_at"]
++	repo := &sessionWindowMockRepo{}
++	account := &Account{ID: 7, Extra: extra, SessionWindowEnd: &oldEnd}
++	headers := http.Header{}
++	headers.Set("anthropic-ratelimit-unified-5h-status", "allowed")
++	headers.Set("anthropic-ratelimit-unified-5h-reset", strconv.FormatInt(now.Add(5*time.Hour).Unix(), 10))
++	newRateLimitServiceForTest(repo).UpdateSessionWindow(context.Background(), account, headers)
++	for _, call := range repo.updateExtraCalls {
++		for key, value := range call.Updates {
++			extra[key] = value
++		}
++	}
++	require.Nil(t, extra["passive_usage_7d_utilization"])
++	require.Nil(t, extra["passive_usage_7d_reset"])
++	require.Equal(t, 0.7, extra["passive_usage_7d_oi_utilization"])
++	require.Equal(t, sampledAt, extra["passive_usage_sampled_at"])
++}
++
++func TestClaudeAccountDefaultAndExplicitTestModel(t *testing.T) {
++	for _, explicit := range []string{"", "claude-opus-4-6"} {
++		t.Run("model="+explicit, func(t *testing.T) {
++			upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("data: {\"type\":\"message_stop\"}\n\n"))}}
++			account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "fixture-key"}}
++			svc := &AccountTestService{httpUpstream: upstream, cfg: &config.Config{}}
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(rec)
++			c.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
++			require.NoError(t, svc.testClaudeAccountConnection(c, account, explicit))
++			want := explicit
++			if want == "" {
++				want = "claude-sonnet-4-6"
++			}
++			require.Equal(t, want, gjson.GetBytes(upstream.lastBody, "model").String())
++			require.Contains(t, rec.Body.String(), `"model":"`+want+`"`)
++		})
++	}
++}
+diff --git a/backend/internal/service/tier123_resource_cancel_test.go b/backend/internal/service/tier123_resource_cancel_test.go
+new file mode 100644
+index 000000000..aa6a2eb81
+--- /dev/null
++++ b/backend/internal/service/tier123_resource_cancel_test.go
+@@ -0,0 +1,123 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++type compatSideEffectCancelWriter struct {
++	*httptest.ResponseRecorder
++	cancel context.CancelFunc
++}
++
++func (w *compatSideEffectCancelWriter) Write(p []byte) (int, error) {
++	n, err := w.ResponseRecorder.Write(p)
++	if bytes.Contains(p, []byte("partial")) {
++		w.cancel()
++	}
++	return n, err
++}
++
++type compatSideEffectCancelBody struct {
++	io.Reader
++	ctx context.Context
++}
++
++func (b *compatSideEffectCancelBody) Read(p []byte) (int, error) {
++	n, err := b.Reader.Read(p)
++	if err == io.EOF {
++		<-b.ctx.Done()
++		return 0, b.ctx.Err()
++	}
++	return n, err
++}
++
++func (*compatSideEffectCancelBody) Close() error { return nil }
++
++func TestOpenAICompatClientCancellationHasNoAccountSideEffects(t *testing.T) {
++	for _, protocol := range []string{"chat", "messages"} {
++		t.Run(protocol, func(t *testing.T) {
++			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
++			defer cancel()
++			rec := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(&compatSideEffectCancelWriter{rec, cancel})
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/"+protocol, nil).WithContext(ctx)
++			prefix := "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_cancel\"}}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"
++			svc, repo, account := newCompatStreamSideEffectsService("")
++			response := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: &compatSideEffectCancelBody{strings.NewReader(prefix), ctx}}
++			var err error
++			if protocol == "chat" {
++				_, err = svc.handleChatStreamingResponse(response, c, account, "model", "model", "model", time.Now(), 0)
++			} else {
++				_, err = svc.handleAnthropicStreamingResponse(response, c, account, "model", "model", "model", time.Now())
++			}
++			require.Error(t, err)
++			var failover *UpstreamFailoverError
++			require.False(t, errors.As(err, &failover))
++			require.Contains(t, rec.Body.String(), "partial")
++			require.Empty(t, repo.errorCalls)
++			require.Empty(t, repo.rateLimitCalls)
++			require.Empty(t, repo.modelScopes)
++			require.Zero(t, repo.tempCalls)
++		})
++	}
++}
++
++func TestFirstOutputMemoryFallbackEightMiBLifecycle(t *testing.T) {
++	for _, mode := range []string{"commit", "drop"} {
++		t.Run(mode, func(t *testing.T) {
++			stage := newDefaultOpenAIFirstOutputStage()
++			creates := 0
++			stage.createTemp = func() (*os.File, error) { creates++; return nil, os.ErrPermission }
++			chunk := bytes.Repeat([]byte("x"), 32*1024)
++			for i := 0; i < openAIFirstOutputStageMaxBytes/len(chunk); i++ {
++				_, err := stage.Write(chunk)
++				require.NoError(t, err)
++			}
++			require.EqualValues(t, openAIFirstOutputStageMaxBytes, stage.Buffered())
++			require.Equal(t, 1, creates)
++			_, err := stage.WriteString("overflow")
++			require.ErrorIs(t, err, errOpenAIFirstOutputStageLimit)
++			if mode == "commit" {
++				require.NoError(t, stage.CommitTo(io.Discard))
++			}
++			require.NoError(t, stage.Close())
++			require.Zero(t, stage.Buffered())
++			require.NoError(t, stage.Close())
++		})
++	}
++}
++
++func BenchmarkFirstOutputMemoryFallbackEightMiB(b *testing.B) {
++	chunk := bytes.Repeat([]byte("x"), 32*1024)
++	b.SetBytes(openAIFirstOutputStageMaxBytes)
++	b.ReportAllocs()
++	for b.Loop() {
++		stage := newDefaultOpenAIFirstOutputStage()
++		stage.createTemp = func() (*os.File, error) { return nil, os.ErrPermission }
++		for i := 0; i < openAIFirstOutputStageMaxBytes/len(chunk); i++ {
++			if _, err := stage.Write(chunk); err != nil {
++				b.Fatal(err)
++			}
++		}
++		if err := stage.CommitTo(io.Discard); err != nil {
++			b.Fatal(err)
++		}
++		if err := stage.Close(); err != nil {
++			b.Fatal(err)
++		}
++	}
++}
+diff --git a/backend/internal/web/html_cache_headers.go b/backend/internal/web/html_cache_headers.go
+new file mode 100644
+index 000000000..feb712d29
+--- /dev/null
++++ b/backend/internal/web/html_cache_headers.go
+@@ -0,0 +1,14 @@
++//go:build embed
++
++package web
++
++import "net/http"
++
++// Settings-injected HTML varies with settings and the request's CSP nonce.
++func applyHTMLNoCacheHeaders(header http.Header) {
++	header.Set("Cache-Control", "no-cache, no-store, must-revalidate")
++	header.Set("Pragma", "no-cache")
++	header.Set("Expires", "0")
++	header.Set("CDN-Cache-Control", "no-store")
++	header.Set("Surrogate-Control", "no-store")
++}
+diff --git a/backend/internal/web/html_nonce_http_test.go b/backend/internal/web/html_nonce_http_test.go
+new file mode 100644
+index 000000000..a10fe4528
+--- /dev/null
++++ b/backend/internal/web/html_nonce_http_test.go
+@@ -0,0 +1,103 @@
++//go:build embed
++
++package web
++
++import (
++	"context"
++	"io"
++	"io/fs"
++	"net/http"
++	"net/http/httptest"
++	"regexp"
++	"strings"
++	"sync"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++type nonceHTTPSettings struct {
++	sync.Mutex
++	value any
++	err   error
++}
++
++func (s *nonceHTTPSettings) GetPublicSettingsForInjection(context.Context) (any, error) {
++	s.Lock()
++	defer s.Unlock()
++	return s.value, s.err
++}
++
++func TestFrontendHTMLRealHTTPNonceSettingsAndAssets(t *testing.T) {
++	provider := &nonceHTTPSettings{value: map[string]string{"site_name": "initial-023-title"}}
++	frontend, err := NewFrontendServer(provider)
++	require.NoError(t, err)
++	router := gin.New()
++	router.Use(middleware.SecurityHeaders(config.CSPConfig{Enabled: true}, nil), frontend.Middleware())
++	server := httptest.NewServer(router)
++	defer server.Close()
++	read := func(path, etag string) (*http.Response, string) {
++		t.Helper()
++		req, err := http.NewRequest(http.MethodGet, server.URL+path, nil)
++		require.NoError(t, err)
++		if etag != "" {
++			req.Header.Set("If-None-Match", etag)
++		}
++		resp, err := server.Client().Do(req)
++		require.NoError(t, err)
++		body, err := io.ReadAll(resp.Body)
++		require.NoError(t, err)
++		require.NoError(t, resp.Body.Close())
++		return resp, string(body)
++	}
++	first, firstBody := read("/", "")
++	require.Equal(t, http.StatusOK, first.StatusCode)
++	assertNoStoreHTMLHeaders(t, first.Header)
++	noncePattern := regexp.MustCompile(`'nonce-([^']+)'`)
++	firstNonce := noncePattern.FindStringSubmatch(first.Header.Get("Content-Security-Policy"))
++	require.Len(t, firstNonce, 2)
++	require.Contains(t, firstBody, `nonce="`+firstNonce[1]+`"`)
++	require.Contains(t, firstBody, "initial-023-title")
++	second, secondBody := read("/", first.Header.Get("ETag"))
++	require.Equal(t, http.StatusOK, second.StatusCode)
++	assertNoStoreHTMLHeaders(t, second.Header)
++	secondNonce := noncePattern.FindStringSubmatch(second.Header.Get("Content-Security-Policy"))
++	require.Len(t, secondNonce, 2)
++	require.NotEqual(t, firstNonce[1], secondNonce[1])
++	require.Contains(t, secondBody, `nonce="`+secondNonce[1]+`"`)
++	require.NotContains(t, secondBody, firstNonce[1])
++	provider.Lock()
++	provider.value = map[string]string{"site_name": "changed-023-title"}
++	provider.Unlock()
++	frontend.InvalidateCache()
++	third, thirdBody := read("/", first.Header.Get("ETag"))
++	require.Equal(t, http.StatusOK, third.StatusCode)
++	require.NotEqual(t, first.Header.Get("ETag"), third.Header.Get("ETag"))
++	require.Contains(t, thirdBody, "changed-023-title")
++	require.NotContains(t, thirdBody, "initial-023-title")
++	provider.Lock()
++	provider.err = context.DeadlineExceeded
++	provider.Unlock()
++	frontend.InvalidateCache()
++	fallback, fallbackBody := read("/", third.Header.Get("ETag"))
++	require.Equal(t, http.StatusOK, fallback.StatusCode)
++	assertNoStoreHTMLHeaders(t, fallback.Header)
++	require.NotContains(t, fallbackBody, "changed-023-title")
++	require.NotContains(t, fallbackBody, NonceHTMLPlaceholder)
++	assets, err := fs.ReadDir(frontend.distFS, "assets")
++	require.NoError(t, err)
++	for _, asset := range assets {
++		if asset.IsDir() || !strings.HasSuffix(asset.Name(), ".js") {
++			continue
++		}
++		response, _ := read("/assets/"+asset.Name(), "")
++		require.Equal(t, http.StatusOK, response.StatusCode)
++		require.Contains(t, response.Header.Get("Cache-Control"), "immutable")
++		require.NotContains(t, response.Header.Get("Cache-Control"), "no-store")
++		return
++	}
++	t.Fatal("the embedded build contains no hashed JavaScript asset")
++}
+diff --git a/frontend/src/views/admin/__tests__/ChannelsView.bedrockCompat.spec.ts b/frontend/src/views/admin/__tests__/ChannelsView.bedrockCompat.spec.ts
+new file mode 100644
+index 000000000..129109548
+--- /dev/null
++++ b/frontend/src/views/admin/__tests__/ChannelsView.bedrockCompat.spec.ts
+@@ -0,0 +1,177 @@
++import { defineComponent } from 'vue'
++import { flushPromises, mount } from '@vue/test-utils'
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++import type { Channel, CreateChannelRequest, UpdateChannelRequest } from '@/api/admin/channels'
++import ChannelsView from '@/views/admin/ChannelsView.vue'
++
++const { listChannels, createChannel, updateChannel, getGroups, showSuccess, showError } = vi.hoisted(() => ({
++  listChannels: vi.fn(),
++  createChannel: vi.fn(),
++  updateChannel: vi.fn(),
++  getGroups: vi.fn(),
++  showSuccess: vi.fn(),
++  showError: vi.fn()
++}))
++
++vi.mock('@/api/admin', () => ({
++  adminAPI: {
++    channels: { list: listChannels, create: createChannel, update: updateChannel },
++    groups: { getAll: getGroups },
++    settings: { getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false }) }
++  }
++}))
++
++vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showSuccess, showError }) }))
++
++vi.mock('vue-i18n', async () => ({
++  ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
++  useI18n: () => ({ t: (key: string) => key })
++}))
++
++function mountView() {
++  return mount(ChannelsView, {
++    global: {
++      stubs: {
++        AppLayout: defineComponent({ template: '<main><slot /></main>' }),
++        TablePageLayout: defineComponent({
++          template: '<section><slot name="filters" /><slot name="table" /><slot name="pagination" /></section>'
++        }),
++        BaseDialog: defineComponent({
++          props: ['show'],
++          template: '<section v-if="show"><slot /><slot name="footer" /></section>'
++        }),
++        DataTable: defineComponent({
++          props: ['data'],
++          template: '<div v-for="row in data" :key="row.id"><slot name="cell-actions" :row="row" /></div>'
++        }),
++        Pagination: true,
++        ConfirmDialog: true,
++        EmptyState: true,
++        Select: true,
++        Icon: true,
++        PlatformIcon: true,
++        PricingEntryCard: true
++      }
++    }
++  })
++}
++
++type View = ReturnType<typeof mountView>
++
++async function clickButton(wrapper: View, text: string) {
++  const button = wrapper.findAll('button').find(button => button.text() === text)
++  expect(button).toBeDefined()
++  await button!.trigger('click')
++  await flushPromises()
++}
++
++function platformCheckbox(wrapper: View, platform: string) {
++  return wrapper.findAll('label')
++    .find(label => label.text() === `admin.groups.platforms.${platform}`)!
++    .get('input[type="checkbox"]')
++}
++
++function bedrockToggle(wrapper: View) {
++  return wrapper.findAll('[role="switch"]')
++    .find(toggle => toggle.element.parentElement?.textContent?.includes('admin.channels.form.bedrockCCCompat'))!
++}
++
++function makeChannel(features: Record<string, unknown>): Channel {
++  return {
++    id: 1, name: 'Bedrock relay', description: '', status: 'active',
++    billing_model_source: 'channel_mapped', restrict_models: false,
++    features_config: features, group_ids: [11, 22], model_pricing: [], model_mapping: {},
++    apply_pricing_to_account_stats: false, account_stats_pricing_rules: [],
++    created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z'
++  }
++}
++
++describe('ChannelsView Bedrock compatibility', () => {
++  let stored: Channel[]
++
++  beforeEach(() => {
++    vi.clearAllMocks()
++    localStorage.clear()
++    stored = []
++    listChannels.mockImplementation(async () => ({ items: stored, total: stored.length }))
++    getGroups.mockResolvedValue([
++      { id: 11, name: 'Anthropic group', platform: 'anthropic', rate_multiplier: 1 },
++      { id: 22, name: 'OpenAI group', platform: 'openai', rate_multiplier: 1 }
++    ])
++    createChannel.mockImplementation(async (request: CreateChannelRequest) => {
++      const channel = makeChannel(request.features_config || {})
++      channel.group_ids = request.group_ids || []
++      stored = [channel]
++      return channel
++    })
++    updateChannel.mockImplementation(async (_id: number, request: UpdateChannelRequest) => {
++      stored = [{ ...stored[0], ...request } as Channel]
++      return stored[0]
++    })
++  })
++
++  it.each([true, false])('creates and reopens a channel with compatibility %s', async enabled => {
++    const wrapper = mountView()
++    await flushPromises()
++    await clickButton(wrapper, 'admin.channels.createChannel')
++    await wrapper.get('input[required]').setValue('Bedrock relay')
++    await platformCheckbox(wrapper, 'anthropic').setValue(true)
++    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
++    await wrapper.findAll('label').find(label => label.text().includes('Anthropic group'))!
++      .get('input[type="checkbox"]').setValue(true)
++    if (enabled) await bedrockToggle(wrapper).trigger('click')
++
++    await wrapper.get('#channel-form').trigger('submit')
++    await flushPromises()
++    expect(showError).not.toHaveBeenCalled()
++    expect(createChannel).toHaveBeenCalledOnce()
++    expect(createChannel.mock.calls[0][0].features_config.bedrock_cc_compat).toBe(enabled)
++
++    await clickButton(wrapper, 'common.edit')
++    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
++    expect(bedrockToggle(wrapper).attributes('aria-checked')).toBe(String(enabled))
++    wrapper.unmount()
++  })
++
++  it.each([true, false])('updates compatibility to %s while preserving other features', async enabled => {
++    stored = [makeChannel({ bedrock_cc_compat: true, future_feature: { enabled: true } })]
++    const wrapper = mountView()
++    await flushPromises()
++    await clickButton(wrapper, 'common.edit')
++    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
++    expect(bedrockToggle(wrapper).attributes('aria-checked')).toBe('true')
++    if (!enabled) await bedrockToggle(wrapper).trigger('click')
++
++    await wrapper.get('#channel-form').trigger('submit')
++    await flushPromises()
++    expect(showError).not.toHaveBeenCalled()
++    expect(updateChannel).toHaveBeenCalledOnce()
++    expect(updateChannel.mock.calls[0][1].features_config).toMatchObject({
++      bedrock_cc_compat: enabled,
++      future_feature: { enabled: true }
++    })
++
++    await clickButton(wrapper, 'common.edit')
++    await clickButton(wrapper, 'admin.groups.platforms.anthropic')
++    expect(bedrockToggle(wrapper).attributes('aria-checked')).toBe(String(enabled))
++    wrapper.unmount()
++  })
++
++  it('explicitly disables compatibility when the Anthropic section is removed', async () => {
++    stored = [makeChannel({ bedrock_cc_compat: true, future_feature: { enabled: true } })]
++    const wrapper = mountView()
++    await flushPromises()
++    await clickButton(wrapper, 'common.edit')
++    await platformCheckbox(wrapper, 'anthropic').setValue(false)
++
++    await wrapper.get('#channel-form').trigger('submit')
++    await flushPromises()
++    expect(showError).not.toHaveBeenCalled()
++    expect(updateChannel).toHaveBeenCalledOnce()
++    expect(updateChannel.mock.calls[0][1]).toMatchObject({
++      group_ids: [22],
++      features_config: { bedrock_cc_compat: false, future_feature: { enabled: true } }
++    })
++    wrapper.unmount()
++  })
++})

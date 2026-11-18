@@ -1983,16 +1983,9 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
 		slog.Info("account_session_window_initialized", "account_id", account.ID, "window_start", start, "window_end", end, "status", status)
 	}
 
-	// 窗口重置时清除旧的 utilization 和被动采样数据，避免残留上个窗口的数据
+	// 5h utilization belongs to the old window; weekly readings expire independently.
 	if windowEnd != nil && needInitWindow {
-		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
-			"session_window_utilization":      nil,
-			"passive_usage_7d_utilization":    nil,
-			"passive_usage_7d_reset":          nil,
-			"passive_usage_7d_oi_utilization": nil,
-			"passive_usage_7d_oi_reset":       nil,
-			"passive_usage_sampled_at":        nil,
-		})
+		_ = s.accountRepo.UpdateExtra(ctx, account.ID, rolloverPassiveUsageClears(account.Extra, time.Now()))
 	}
 
 	if err := s.accountRepo.UpdateSessionWindow(ctx, account.ID, windowStart, windowEnd, status); err != nil {
@@ -2008,6 +2001,32 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
 			slog.Warn("rate_limit_clear_failed", "account_id", account.ID, "error", err)
 		}
 	}
+}
+
+// rolloverPassiveUsageClears preserves weekly readings until their own reset.
+// The sample time remains meaningful while either existing weekly bucket survives.
+func rolloverPassiveUsageClears(extra map[string]any, now time.Time) map[string]any {
+	updates := map[string]any{"session_window_utilization": nil}
+	kept := false
+	for _, keys := range [][2]string{
+		{"passive_usage_7d_utilization", "passive_usage_7d_reset"},
+		{"passive_usage_7d_oi_utilization", "passive_usage_7d_oi_reset"},
+	} {
+		reset := parseExtraFloat64(extra[keys[1]])
+		if reset > 1e11 {
+			reset /= 1000
+		}
+		if reset > 0 && time.Unix(int64(reset), 0).After(now) {
+			kept = true
+			continue
+		}
+		updates[keys[0]] = nil
+		updates[keys[1]] = nil
+	}
+	if !kept {
+		updates["passive_usage_sampled_at"] = nil
+	}
+	return updates
 }
 
 // samplePassiveUsageFromHeaders 从 Anthropic 响应头收集 5h/7d/7d_oi 的
