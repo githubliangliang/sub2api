@@ -100,8 +100,9 @@ type openAIWSIngressTurnError struct {
 // The replacement account has no session state, so retrying needs the whole
 // conversation rebuilt into retryPayload rather than the original first message.
 type openAIWSCurrentTurnFailoverError struct {
-	cause        error
-	retryPayload []byte
+	cause                    error
+	retryPayload             []byte
+	requestedReasoningEffort *string
 }
 
 func (e *openAIWSCurrentTurnFailoverError) Error() string {
@@ -118,21 +119,22 @@ func (e *openAIWSCurrentTurnFailoverError) Unwrap() error {
 	return e.cause
 }
 
-func newOpenAIWSCurrentTurnFailoverError(cause error, retryPayload []byte) error {
+func newOpenAIWSCurrentTurnFailoverError(cause error, retryPayload []byte, requestedEffort *string) error {
 	return &openAIWSCurrentTurnFailoverError{
-		cause:        cause,
-		retryPayload: append([]byte(nil), retryPayload...),
+		cause:                    cause,
+		retryPayload:             append([]byte(nil), retryPayload...),
+		requestedReasoningEffort: requestedEffort,
 	}
 }
 
 // OpenAIWSCurrentTurnRetryPayload returns an isolated copy of the payload that
 // may be retried on a replacement account without replaying the first turn.
-func OpenAIWSCurrentTurnRetryPayload(err error) ([]byte, bool) {
+func OpenAIWSCurrentTurnRetryPayload(err error) ([]byte, *string, bool) {
 	var retryErr *openAIWSCurrentTurnFailoverError
 	if !errors.As(err, &retryErr) || retryErr == nil {
-		return nil, false
+		return nil, nil, false
 	}
-	return append([]byte(nil), retryErr.retryPayload...), true
+	return append([]byte(nil), retryErr.retryPayload...), retryErr.requestedReasoningEffort, true
 }
 
 func (e *openAIWSIngressTurnError) Error() string {

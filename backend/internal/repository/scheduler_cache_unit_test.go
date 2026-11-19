@@ -1102,6 +1102,26 @@ func schedulerCacheBenchmarkAccounts(size int) []service.Account {
 // 一旦投影把开关裁掉、却保留了白名单，透传账号在选号阶段就会退回白名单判定并被误判成
 // model_not_supported，而转发阶段（读完整账号）仍按透传工作 —— 表现为"单独测这个账号能通、
 // 走网关却报 no available accounts"。#4936 修的是判定逻辑，这里守的是喂给判定的输入。
+func TestPassthroughModelFilterSurvivesSchedulerUpdates(t *testing.T) {
+	ctx := context.Background()
+	cache := newSchedulerCacheUnit(t)
+	bucket := service.SchedulerBucket{GroupID: 7, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeSingle}
+	a := service.Account{ID: 73, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
+		Extra: map[string]any{"openai_passthrough": true}, Credentials: map[string]any{"model_mapping": map[string]any{"alpha": "beta"}}}
+	for _, enabled := range []bool{false, true, false} {
+		a.Extra["openai_passthrough_model_filter"] = enabled
+		token, err := cache.CaptureBucketWriteToken(ctx, bucket)
+		require.NoError(t, err)
+		require.NoError(t, cache.SetSnapshot(ctx, bucket, token, []service.Account{a}))
+		rows, hit, err := cache.GetSnapshot(ctx, bucket)
+		require.NoError(t, err)
+		require.True(t, hit)
+		require.Len(t, rows, 1)
+		require.Equal(t, !enabled, rows[0].IsModelSupported("beta"))
+		require.True(t, rows[0].IsModelSupported("alpha"))
+	}
+}
+
 func TestBuildSchedulerMetadataAccount_KeepsOpenAIPassthroughForModelGate(t *testing.T) {
 	for _, key := range []string{"openai_passthrough", "openai_oauth_passthrough"} {
 		t.Run(key, func(t *testing.T) {

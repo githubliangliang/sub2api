@@ -167,6 +167,25 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     syncUpstreamModelsMock.mockReset().mockResolvedValue({ models: [], warnings: [] })
   })
 
+  it('can create a passthrough account with model filtering enabled', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('filtered passthrough')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('synthetic-key')
+    await wrapper.get('[data-testid="create-openai-passthrough-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="create-openai-passthrough-model-filter"]').setValue(true)
+    wrapper.getComponent({ name: 'ModelWhitelistSelector' }).vm.$emit('update:modelValue', ['qwen3.8-max'])
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const payload = createAccountMock.mock.calls[0]?.[0]
+    expect(payload.extra.openai_passthrough).toBe(true)
+    expect(payload.extra.openai_passthrough_model_filter).toBe(true)
+    expect(payload.credentials.model_mapping).toEqual({ 'qwen3.8-max': 'qwen3.8-max' })
+    wrapper.unmount()
+  })
+
   it('creates OpenAI search emulation with model-scoped defaults and explicit account-scoped rules', async () => {
     webSearchConfigMock.mockResolvedValue({ enabled: true, providers: [{}] })
     const wrapper = mountModal()

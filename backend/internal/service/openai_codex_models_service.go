@@ -120,6 +120,12 @@ func (s *OpenAIGatewayService) BuildGroupConfiguredCodexModelsManifest(
 	if err != nil {
 		return nil, false, fmt.Errorf("load group configured Codex models: %w", err)
 	}
+	for i := range visible {
+		if visible[i].IsOpenAIPassthroughEnabled() {
+			// Discover the source IDs and their metadata before applying account rules.
+			return nil, false, nil
+		}
+	}
 	configuredModels := openAIConfiguredCodexModelIDsForGroup(visible, group)
 	if len(configuredModels) == 0 && len(openAIConfiguredCodexModelIDs(visible)) == 0 {
 		return nil, false, nil
@@ -163,6 +169,7 @@ func (s *OpenAIGatewayService) MergeGroupConfiguredCodexModels(
 	ctx context.Context,
 	group *Group,
 	manifest *CodexModelsManifest,
+	source *Account,
 	ifNoneMatch string,
 ) error {
 	if s == nil || s.accountRepo == nil || group == nil || manifest == nil || manifest.NotModified {
@@ -176,9 +183,33 @@ func (s *OpenAIGatewayService) MergeGroupConfiguredCodexModels(
 	if err != nil {
 		return fmt.Errorf("load group configured Codex models: %w", err)
 	}
-	configuredModels := openAIConfiguredCodexModelIDsForGroup(visible, group)
+	sourceBody := manifest.Body
+	sourceChanged := false
+	if source != nil && source.IsOpenAIPassthroughModelFilterEnabled() && len(source.GetModelMapping()) > 0 {
+		sourceBody, sourceChanged, err = filterOpenAIPublicModelsBody(sourceBody, true, source.IsModelSupported)
+		if err != nil {
+			return err
+		}
+	}
+	// Only other accounts can add configured models absent from a filtered source catalog.
+	configuredAccounts := make([]Account, 0, len(visible))
+	var supplementDefaults bool
+	for i := range visible {
+		a := &visible[i]
+		if source != nil && a.ID == source.ID && a.IsOpenAIPassthroughEnabled() {
+			continue
+		}
+		configuredAccounts = append(configuredAccounts, *a)
+		if source != nil && source.IsOpenAIPassthroughModelFilterEnabled() && a.IsOpenAI() && (len(a.GetModelMapping()) == 0 || a.IsOpenAIPassthroughEnabled() && !a.IsOpenAIPassthroughModelFilterEnabled()) {
+			supplementDefaults = true
+		}
+	}
+	configuredModels := openAIConfiguredCodexModelIDsForGroup(configuredAccounts, group)
+	if supplementDefaults {
+		configuredModels = append(configuredModels, openai.DefaultModelIDs()...)
+	}
 	body, changed, err := mergeConfiguredCodexModelsManifest(
-		manifest.Body,
+		sourceBody,
 		configuredModels,
 		group.ModelsListConfig.Models,
 		group.CustomModelsListEnabled(),
@@ -191,7 +222,7 @@ func (s *OpenAIGatewayService) MergeGroupConfiguredCodexModels(
 		return fmt.Errorf("filter retired Codex models: %w", err)
 	}
 	body = filtered
-	if changed || retired {
+	if sourceChanged || changed || retired {
 		manifest.Body = body
 		manifest.ETag = codexModelsManifestBodyETag(body)
 	}
@@ -246,6 +277,17 @@ func openAIConfiguredCodexModelIDs(accounts []Account) []string {
 		if account.Platform != PlatformOpenAI {
 			continue
 		}
+		if account.IsOpenAIPassthroughEnabled() {
+			if account.IsOpenAIPassthroughModelFilterEnabled() && len(account.GetModelMapping()) > 0 {
+				for _, id := range account.passthroughCatalogIDs(openai.DefaultModelIDs()) {
+					if _, ok := seen[id]; !ok {
+						seen[id] = struct{}{}
+						models = append(models, id)
+					}
+				}
+			}
+			continue
+		}
 		for modelID := range account.GetModelMapping() {
 			modelID = strings.TrimSpace(modelID)
 			if modelID == "" || strings.Contains(modelID, "*") {
@@ -279,7 +321,7 @@ func openAIConfiguredCodexModelIDsForGroup(accounts []Account, group *Group) []s
 		}
 		for i := range accounts {
 			account := &accounts[i]
-			if account.Platform != PlatformOpenAI {
+			if account.Platform != PlatformOpenAI || (account.IsOpenAIPassthroughEnabled() && !account.IsOpenAIPassthroughModelFilterEnabled()) {
 				continue
 			}
 			mappedModel, matched := account.ResolveMappedModel(selectedModel)

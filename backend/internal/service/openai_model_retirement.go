@@ -53,6 +53,10 @@ func filterRetiredOpenAIModelIDs(accounts []Account, models []string) []string {
 // each public name exactly as routing does, after projection and before the
 // final client ETag is calculated. Preserve unknown fields.
 func filterRetiredOpenAIPublicModelsBody(body []byte, accounts []Account, codex bool) ([]byte, bool, error) {
+	return filterOpenAIPublicModelsBody(body, codex, func(id string) bool { return !openAIModelRetiredForAccounts(accounts, id) })
+}
+
+func filterOpenAIPublicModelsBody(body []byte, codex bool, keep func(string) bool) ([]byte, bool, error) {
 	field, idField := "data", "id"
 	if codex {
 		field, idField = "models", "slug"
@@ -68,7 +72,7 @@ func filterRetiredOpenAIPublicModelsBody(body []byte, accounts []Account, codex 
 		if json.Unmarshal(raw, &entry) == nil {
 			_ = json.Unmarshal(entry[idField], &id)
 		}
-		if !openAIModelRetiredForAccounts(accounts, id) {
+		if keep(id) {
 			filtered = append(filtered, raw)
 		}
 	}

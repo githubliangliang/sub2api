@@ -622,6 +622,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				turn,
 				writeClientMessage,
 			)
+			if result != nil {
+				result.RequestedReasoningEffort = CanonicalRequestedReasoningEffort(currentBridgePayload.rawForHash)
+			}
 			if hooks != nil && hooks.AfterTurn != nil {
 				hooks.AfterTurn(turn, result, bridgeErr)
 			}
@@ -643,7 +646,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					if !retrySafe {
 						retryPayload = nil
 					}
-					return newOpenAIWSCurrentTurnFailoverError(bridgeErr, retryPayload)
+					return newOpenAIWSCurrentTurnFailoverError(bridgeErr, retryPayload, CanonicalRequestedReasoningEffort(currentBridgePayload.rawForHash))
 				}
 				return bridgeErr
 			}
@@ -1277,7 +1280,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if turn > 1 && errors.As(returnErr, &failoverErr) {
 			// Native ingress cannot migrate a complete conversation to another
 			// account. A nil turn payload closes the client with a retryable code.
-			returnErr = newOpenAIWSCurrentTurnFailoverError(returnErr, nil)
+			returnErr = newOpenAIWSCurrentTurnFailoverError(returnErr, nil, nil)
 		}
 	}()
 	turnRetry := 0
@@ -1776,6 +1779,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 
 		result, relayErr := sendAndRelay(turn, sessionLease, currentPayload, currentPayloadBytes, currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize)
+		if result != nil {
+			result.RequestedReasoningEffort = CanonicalRequestedReasoningEffort(currentClientPayload)
+		}
 		if relayErr != nil {
 			lastTurnClean = false
 			if recoverIngressPrevResponseNotFound(relayErr, turn, connID) {

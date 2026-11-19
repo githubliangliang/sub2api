@@ -152,7 +152,12 @@ func startPassthroughLifecycleServer(
 	controlCtx context.Context,
 	svc *OpenAIGatewayService,
 	account *Account,
+	hooks ...*OpenAIWSIngressHooks,
 ) (*httptest.Server, <-chan error) {
+	var ingressHooks *OpenAIWSIngressHooks
+	if len(hooks) > 0 {
+		ingressHooks = hooks[0]
+	}
 	t.Helper()
 	serverErr := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +189,7 @@ func startPassthroughLifecycleServer(
 		req := r.Clone(controlCtx)
 		req.Header = req.Header.Clone()
 		ginCtx.Request = req
-		serverErr <- svc.ProxyResponsesWebSocketFromClient(controlCtx, ginCtx, conn, account, "sk-test", firstMessage, nil)
+		serverErr <- svc.ProxyResponsesWebSocketFromClient(controlCtx, ginCtx, conn, account, "sk-test", firstMessage, ingressHooks)
 	}))
 	return server, serverErr
 }
@@ -224,6 +229,52 @@ func requirePassthroughUpstreamWrite(t *testing.T, upstream *stagedPassthroughCo
 		t.Fatal("passthrough request was not forwarded upstream")
 		return nil
 	}
+}
+
+func TestPassthroughLifecycle_EffortIsScopedToEachCreate(t *testing.T) {
+	upstream := newStagedPassthroughConn()
+	svc := newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream)
+	results := make(chan *OpenAIForwardResult, 3)
+	hooks := &OpenAIWSIngressHooks{
+		MaxReasoningEffort: "high",
+		AfterTurn: func(_ int, result *OpenAIForwardResult, err error) {
+			if result != nil && err == nil {
+				results <- result
+			}
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	server, _ := startPassthroughLifecycleServer(t, ctx, svc, passthroughLifecycleAccount(), hooks)
+	defer server.Close()
+	frames := []string{
+		`{"type":"response.create","model":"gpt-5.4","reasoning":{"effort":"xhigh"},"input":"one"}`,
+		`{"type":"response.create","model":"gpt-5.4","reasoning":{"effort":"low"},"input":"two"}`,
+		`{"type":"response.create","model":"gpt-5.4","input":"three"}`,
+	}
+	client := dialPassthroughLifecycleClientWithPayload(t, server, frames[0])
+	defer func() { _ = client.CloseNow() }()
+	var stored []*OpenAIForwardResult
+	for i, frame := range frames {
+		if i != 0 {
+			require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(frame)))
+		}
+		wire := requirePassthroughUpstreamWrite(t, upstream, 3*time.Second)
+		require.Equal(t, []string{"high", "low", ""}[i], gjson.GetBytes(wire, "reasoning.effort").String())
+		upstream.Send(`{"type":"response.completed","response":{"id":"` + []string{"r1", "r2", "r3"}[i] + `","usage":{"input_tokens":2,"output_tokens":1}}}`)
+		_, err := readPassthroughLifecycleFrame(t, client, 3*time.Second)
+		require.NoError(t, err)
+		select {
+		case result := <-results:
+			stored = append(stored, result)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
+	}
+	require.Equal(t, "xhigh", *stored[0].RequestedReasoningEffort)
+	require.Equal(t, "high", *stored[0].ReasoningEffort)
+	require.Equal(t, "low", *stored[1].RequestedReasoningEffort)
+	require.Nil(t, stored[2].RequestedReasoningEffort)
 }
 
 func TestPassthroughLifecycle_ResponsesLiteFirstFramePinsParallelToolCalls(t *testing.T) {

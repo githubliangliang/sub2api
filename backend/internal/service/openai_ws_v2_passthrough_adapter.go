@@ -134,10 +134,11 @@ func openAIWSPassthroughPolicyModelFromSessionFrame(account *Account, payload []
 }
 
 type openAIWSPassthroughUsageMeta struct {
-	serviceTier     atomic.Pointer[string]
-	reasoningEffort atomic.Pointer[string]
-	requestModel    atomic.Pointer[string]
-	upstreamModel   atomic.Pointer[string]
+	serviceTier              atomic.Pointer[string]
+	reasoningEffort          atomic.Pointer[string]
+	requestedReasoningEffort atomic.Pointer[string]
+	requestModel             atomic.Pointer[string]
+	upstreamModel            atomic.Pointer[string]
 
 	// 仅在 client->upstream filter goroutine 中读写；Load 侧通过上方原子指针同步。
 	sessionRequestModel string
@@ -677,6 +678,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	// 门槛不再卡 IsOpenAIOAuth()：normalizeOpenAIResponsesLitePayloadForAccount 内部
 	// 自己按账号形态分派，API Key 账号同样要钉 parallel_tool_calls（上游这三处也没有
 	// OAuth 门槛，见 upstream/main 的同名文件）。
+	firstRequestedEffort := CanonicalRequestedReasoningEffort(firstClientMessage)
 	if account.IsOpenAI() && isOpenAIResponsesLiteWebSocketPayload(firstClientMessage) {
 		liteFirstMessage, _, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(firstClientMessage, account)
 		if liteErr != nil {
@@ -778,6 +780,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	// goroutine）和 OnTurnComplete / final result（runUpstreamToClient
 	// goroutine）之间同步当前 turn 的 usage metadata。
 	usageMeta.initFromFirstFrame(firstClientMessage, capturedSessionModel)
+	usageMeta.requestedReasoningEffort.Store(firstRequestedEffort)
 	promptCacheKey := strings.TrimSpace(gjson.GetBytes(firstClientMessage, "prompt_cache_key").String())
 
 	wsURL, err := s.buildOpenAIResponsesWSURL(account)
@@ -952,6 +955,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			}
 			eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
 			isResponseCreate := eventType == "response.create"
+			originalPayload := payload
 			acceptedTurn := false
 			if isResponseCreate {
 				if !turnLifecycle.beginResponseCreate(clientFrameConn.markTurnStarted) {
@@ -1054,6 +1058,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if policyErr != nil {
 					return payload, nil, policyErr
 				}
+				usageMeta.requestedReasoningEffort.Store(CanonicalRequestedReasoningEffort(originalPayload))
 				usageMeta.updateFromResponseCreate(out, model, requestModelForThisFrame)
 				acceptedTurn = true
 			}
@@ -1143,6 +1148,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					UpstreamResponseModelConflict: turn.ResponseModelConflict,
 					ServiceTier:                   resolvedOpenAIServiceTier(account, normalizeOpenAIServiceTier(turn.ResponseServiceTier), usageMeta.serviceTier.Load()),
 					ReasoningEffort:               usageMeta.reasoningEffort.Load(),
+					RequestedReasoningEffort:      usageMeta.requestedReasoningEffort.Load(),
 					Stream:                        true,
 					OpenAIWSMode:                  true,
 					UpstreamTerminalEvent:         normalizeOpenAIWSTerminalEvent(turn.TerminalEventType),
@@ -1272,6 +1278,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		UpstreamResponseModelConflict: relayResult.ResponseModelConflict,
 		ServiceTier:                   resolvedOpenAIServiceTier(account, normalizeOpenAIServiceTier(relayResult.ResponseServiceTier), usageMeta.serviceTier.Load()),
 		ReasoningEffort:               usageMeta.reasoningEffort.Load(),
+		RequestedReasoningEffort:      usageMeta.requestedReasoningEffort.Load(),
 		Stream:                        true,
 		OpenAIWSMode:                  true,
 		UpstreamTerminalEvent:         normalizeOpenAIWSTerminalEvent(relayResult.TerminalEventType),

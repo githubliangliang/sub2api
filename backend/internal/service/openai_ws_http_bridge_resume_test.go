@@ -179,7 +179,11 @@ func TestOpenAIWSHTTPBridgeLaterTurn429RetriesCurrentTurnOnReplacementAccount(t 
 			serverErrCh <- proxyErr
 			return
 		}
-		retryPayload, retryCurrentTurn := OpenAIWSCurrentTurnRetryPayload(proxyErr)
+		retryPayload, requestedEffort, retryCurrentTurn := OpenAIWSCurrentTurnRetryPayload(proxyErr)
+		if requestedEffort == nil || *requestedEffort != "xhigh" {
+			serverErrCh <- errors.New("later-turn failover lost requested effort")
+			return
+		}
 		if !retryCurrentTurn || len(retryPayload) == 0 {
 			serverErrCh <- errors.New("missing current-turn retry payload")
 			return
@@ -209,7 +213,7 @@ func TestOpenAIWSHTTPBridgeLaterTurn429RetriesCurrentTurnOnReplacementAccount(t 
 	require.Equal(t, "response.completed", gjson.GetBytes(completed, "type").String())
 
 	writeCtx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, websocket.MessageText, []byte(`{"type":"response.create","model":"gpt-5.6-sol","previous_response_id":"resp_first","input":[{"type":"function_call_output","call_id":"call_1","output":"second"}]}`))
+	err = clientConn.Write(writeCtx, websocket.MessageText, []byte(`{"type":"response.create","model":"gpt-5.6-sol","reasoning":{"effort":"xhigh"},"previous_response_id":"resp_first","input":[{"type":"function_call_output","call_id":"call_1","output":"second"}]}`))
 	cancel()
 	require.NoError(t, err)
 

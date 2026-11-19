@@ -1041,9 +1041,10 @@ func TestMergeGroupConfiguredCodexModelsInjectsCurrentGroupAliases(t *testing.T)
 	err := svc.MergeGroupConfiguredCodexModels(
 		context.Background(),
 		&Group{ID: groupID, Platform: PlatformOpenAI},
-		manifest,
-		"",
-	)
+		manifest, nil,
+
+		"")
+
 	require.NoError(t, err)
 	models := decodeCodexManifestModels(t, manifest.Body)
 	require.Len(t, models, 2)
@@ -1282,9 +1283,9 @@ func TestMergeGroupConfiguredCodexModelsFiltersAutoReviewByDefault(t *testing.T)
 	require.NoError(t, svc.MergeGroupConfiguredCodexModels(
 		context.Background(),
 		&Group{ID: groupID, Platform: PlatformOpenAI},
-		manifest,
-		"",
-	))
+		manifest, nil,
+
+		""))
 	models := decodeCodexManifestModels(t, manifest.Body)
 	require.Len(t, models, 1)
 	require.Equal(t, "gpt-5.6", models[0]["slug"])
@@ -1317,9 +1318,9 @@ func TestMergeGroupConfiguredCodexModelsFiltersAccountMappedAutoReviewByDefault(
 	require.NoError(t, svc.MergeGroupConfiguredCodexModels(
 		context.Background(),
 		&Group{ID: groupID, Platform: PlatformOpenAI},
-		manifest,
-		"",
-	))
+		manifest, nil,
+
+		""))
 	require.Equal(t, []string{"gpt-5.6"}, codexManifestModelSlugs(t, manifest.Body))
 }
 
@@ -1341,7 +1342,7 @@ func TestMergeGroupConfiguredCodexModelsKeepsExplicitAutoReviewSelection(t *test
 		},
 	}
 
-	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, manifest, ""))
+	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, manifest, nil, ""))
 	require.Equal(t, []string{"codex-auto-review"}, codexManifestModelSlugs(t, manifest.Body))
 }
 
@@ -1375,14 +1376,14 @@ func TestMergeGroupConfiguredCodexModelsHonorsCustomListAndFinalETag(t *testing.
 	upstreamBody := []byte(`{"models":[{"slug":"gpt-5.6","display_name":"GPT-5.6"}]}`)
 	manifest := &CodexModelsManifest{Body: upstreamBody}
 
-	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, manifest, ""))
+	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, manifest, nil, ""))
 	models := decodeCodexManifestModels(t, manifest.Body)
 	require.Len(t, models, 1)
 	requireCompleteConfiguredCodexModel(t, models[0], "deepseek-4-pro")
 
 	finalETag := manifest.ETag
 	second := &CodexModelsManifest{Body: upstreamBody}
-	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, second, finalETag))
+	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, second, nil, finalETag))
 	require.True(t, second.NotModified)
 	require.Empty(t, second.Body)
 	require.Equal(t, finalETag, second.ETag)
@@ -1884,14 +1885,14 @@ func TestFetchCodexModelsManifestAPIKeyCompleteBodyWithoutUpstreamETagUsesFinalB
 	first, err := svc.FetchCodexModelsManifest(context.Background(), account, "0.150.0", "")
 	require.NoError(t, err)
 	require.NoError(t, svc.CompleteAPIKeyCodexModelsManifestForClient(first, account))
-	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, first, ""))
+	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, first, nil, ""))
 	require.Equal(t, codexModelsManifestBodyETag(first.Body), first.ETag)
 	require.NotEmpty(t, first.ETag)
 
 	second, err := svc.FetchCodexModelsManifest(context.Background(), account, "0.150.0", "")
 	require.NoError(t, err)
 	require.NoError(t, svc.CompleteAPIKeyCodexModelsManifestForClient(second, account))
-	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, second, first.ETag))
+	require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, second, nil, first.ETag))
 	require.True(t, second.NotModified)
 	require.Empty(t, second.Body)
 	require.Equal(t, int32(1), calls.Load())
@@ -2606,9 +2607,9 @@ func TestFetchCodexModelsManifestAPIKeyCacheSurvivesClientMutation(t *testing.T)
 				Models:  []string{"model-a"},
 			},
 		},
-		first,
-		"",
-	))
+		first, nil,
+
+		""))
 	require.Equal(t, []string{"model-a"}, codexManifestModelSlugs(t, first.Body))
 
 	second, err := s.FetchCodexModelsManifest(context.Background(), account, "0.144.0", "")
@@ -2633,9 +2634,9 @@ func TestFetchCodexModelsManifestAPIKeyCacheSurvivesClientMutation(t *testing.T)
 						Models:  []string{"model-b"},
 					},
 				},
-				manifest,
-				"",
-			))
+				manifest, nil,
+
+				""))
 			require.Equal(t, []string{"model-b"}, codexManifestModelSlugs(t, manifest.Body))
 		}()
 	}

@@ -638,6 +638,7 @@ type ForwardResult struct {
 	FirstTokenMs                  *int // 首字时间（流式请求）
 	ClientDisconnect              bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort               *string
+	RequestedReasoningEffort      *string
 	ServiceTier                   *string // Observed/final request service speed, recorded in usage logs.
 
 	// 图片生成计费字段（图片生成模型使用）
@@ -1388,13 +1389,22 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account 
 	return respBytes, nil
 }
 
+type cachedAvailableModels struct {
+	ids      []string
+	revision uint64
+}
+
 func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64, platform string) []string {
+	var revision uint64
+	if s.schedulerSnapshot != nil && platform == PlatformOpenAI {
+		revision = s.schedulerSnapshot.modelCatalogRevision.Load()
+	}
 	cacheKey := modelsListCacheKey(groupID, platform)
 	if s.modelsListCache != nil {
 		if cached, found := s.modelsListCache.Get(cacheKey); found {
-			if models, ok := cached.([]string); ok {
+			if models, ok := cached.(cachedAvailableModels); ok && models.revision == revision {
 				modelsListCacheHitTotal.Add(1)
-				return cloneStringSlice(models)
+				return cloneStringSlice(models.ids)
 			}
 		}
 	}
@@ -1438,9 +1448,24 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	// Collect unique models from all accounts
 	modelSet := make(map[string]struct{})
 	hasAnyMapping := false
-
-	for _, acc := range accounts {
+	var unrestrictedOpenAI, hasPassthrough bool
+	for i := range accounts {
+		acc := &accounts[i]
 		mapping := acc.GetModelMapping()
+		if platform == PlatformOpenAI {
+			hasPassthrough = hasPassthrough || acc.IsOpenAIPassthroughEnabled()
+			if len(mapping) == 0 || (acc.IsOpenAIPassthroughEnabled() && !acc.IsOpenAIPassthroughModelFilterEnabled()) {
+				unrestrictedOpenAI = true
+				continue
+			}
+			if acc.IsOpenAIPassthroughModelFilterEnabled() {
+				hasAnyMapping = true
+				for _, id := range acc.passthroughCatalogIDs(openai.DefaultModelIDs()) {
+					modelSet[id] = struct{}{}
+				}
+				continue
+			}
+		}
 		if len(mapping) > 0 {
 			hasAnyMapping = true
 			for model := range mapping {
@@ -1458,12 +1483,17 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	}
 	if !hasAnyMapping {
 		if s.modelsListCache != nil {
-			s.modelsListCache.Set(cacheKey, []string(nil), s.modelsListCacheTTL)
+			s.modelsListCache.Set(cacheKey, cachedAvailableModels{revision: revision}, s.modelsListCacheTTL)
 			modelsListCacheStoreTotal.Add(1)
 		}
 		return nil
 	}
 
+	if hasPassthrough && unrestrictedOpenAI {
+		for _, id := range openai.DefaultModelIDs() {
+			modelSet[id] = struct{}{}
+		}
+	}
 	// Convert to slice
 	models := make([]string, 0, len(modelSet))
 	for model := range modelSet {
@@ -1480,7 +1510,7 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	}
 
 	if s.modelsListCache != nil {
-		s.modelsListCache.Set(cacheKey, cloneStringSlice(models), s.modelsListCacheTTL)
+		s.modelsListCache.Set(cacheKey, cachedAvailableModels{ids: cloneStringSlice(models), revision: revision}, s.modelsListCacheTTL)
 		modelsListCacheStoreTotal.Add(1)
 	}
 	return cloneStringSlice(models)

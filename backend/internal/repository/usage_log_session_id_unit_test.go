@@ -35,7 +35,7 @@ func TestPrepareUsageLogInsert_SessionIDArgWiring(t *testing.T) {
 	sessionID := "sess-persisted-123"
 	prepared := prepareUsageLogInsert(newSessionIDUsageLog(&sessionID))
 
-	require.Len(t, prepared.args, 59, "arg slice must include session_id")
+	require.Len(t, prepared.args, 60, "arg slice must include both effort fields and session_id")
 
 	// created_at is last; session_id is the arg immediately before it.
 	sessionArg := prepared.args[len(prepared.args)-2]
@@ -60,9 +60,38 @@ func TestPrepareUsageLogInsert_SessionIDNullWhenAbsent(t *testing.T) {
 	require.False(t, nsEmpty.Valid, "empty session id must also be NULL")
 }
 
+func TestPrepareUsageLogInsert_RequestedReasoningEffortArgWiring(t *testing.T) {
+	requested := "max"
+	forwarded := "xhigh"
+	prepared := prepareUsageLogInsert(&service.UsageLog{
+		UserID:                   1,
+		APIKeyID:                 2,
+		AccountID:                3,
+		RequestID:                "req-requested-effort",
+		Model:                    "gpt-5.4",
+		ReasoningEffort:          &forwarded,
+		RequestedReasoningEffort: &requested,
+		CreatedAt:                time.Now().UTC(),
+	})
+
+	require.Len(t, prepared.args, 60)
+
+	forwardedArg, ok := prepared.args[47].(sql.NullString)
+	require.True(t, ok)
+	require.True(t, forwardedArg.Valid)
+	require.Equal(t, forwarded, forwardedArg.String)
+
+	requestedArg, ok := prepared.args[48].(sql.NullString)
+	require.True(t, ok)
+	require.True(t, requestedArg.Valid)
+	require.Equal(t, requested, requestedArg.String)
+}
+
 // TestUsageLogInsertQueries_IncludeSessionID guards that every generated INSERT path
 // and the SELECT column list reference session_id.
 func TestUsageLogInsertQueries_IncludeSessionID(t *testing.T) {
+	require.Contains(t, usageLogSelectColumns, "requested_reasoning_effort",
+		"SELECT column list must include requested_reasoning_effort")
 	require.Contains(t, usageLogSelectColumns, "session_id",
 		"SELECT column list must include session_id")
 
@@ -74,6 +103,7 @@ func TestUsageLogInsertQueries_IncludeSessionID(t *testing.T) {
 	batchQuery, batchArgs := buildUsageLogBatchInsertQuery([]string{key},
 		map[string]usageLogInsertPrepared{key: prepared})
 	require.Contains(t, batchQuery, "session_id")
+	require.Contains(t, batchQuery, "requested_reasoning_effort")
 	// Two column references (INSERT column list + SELECT ... FROM input) plus the CTE def.
 	require.GreaterOrEqual(t, strings.Count(batchQuery, "session_id"), 3)
 	require.Len(t, batchArgs, len(prepared.args)+1,

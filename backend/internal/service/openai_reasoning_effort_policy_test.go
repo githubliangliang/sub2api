@@ -9,6 +9,30 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestCanonicalRequestedReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	max := CanonicalRequestedReasoningEffort([]byte(`{"model":"gpt-5.4","reasoning":{"effort":"MAX"}}`), "gpt-5.4")
+	require.NotNil(t, max)
+	require.Equal(t, "max", *max)
+
+	fromSuffix := CanonicalRequestedReasoningEffort([]byte(`{"model":"gpt-5.4-max"}`), "gpt-5.4-max")
+	require.NotNil(t, fromSuffix)
+	require.Equal(t, "max", *fromSuffix)
+
+	claude := CanonicalRequestedReasoningEffort([]byte(`{"model":"claude-sonnet-4","output_config":{"effort":"high"}}`))
+	require.NotNil(t, claude)
+	require.Equal(t, "high", *claude)
+
+	require.Nil(t, CanonicalRequestedReasoningEffort([]byte(`{"model":"gpt-5.4"}`), "gpt-5.4"))
+}
+
+func TestRequestedReasoningEffortDistinguishesOmission(t *testing.T) {
+	require.Nil(t, CanonicalRequestedReasoningEffort([]byte(`{"model":"m-high","reasoning":{"effort":"unknown"}}`)))
+	require.Nil(t, CanonicalRequestedReasoningEffort([]byte(`{"model":"m"}`)))
+	require.Equal(t, "none", *CanonicalRequestedReasoningEffort([]byte(`{"model":"m-high","reasoning_effort":"none"}`)))
+}
+
 func TestNormalizeMaxReasoningEffort(t *testing.T) {
 	tests := []struct {
 		name string

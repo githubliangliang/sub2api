@@ -60,7 +60,7 @@ func TestGPT55RetirementCatalogs(t *testing.T) {
 			etag := CodexModelsManifestETag(original)
 			manifest := &CodexModelsManifest{Body: original, ETag: etag}
 			service := &OpenAIGatewayService{accountRepo: repo}
-			require.NoError(t, service.MergeGroupConfiguredCodexModels(context.Background(), group, manifest, etag))
+			require.NoError(t, service.MergeGroupConfiguredCodexModels(context.Background(), group, manifest, nil, etag))
 			if !tc.wantGPT55 {
 				require.False(t, manifest.NotModified)
 				require.NotEqual(t, etag, manifest.ETag)
@@ -154,13 +154,13 @@ func TestGPT55RetirementPublicAliasesAndETag(t *testing.T) {
 			etag := CodexModelsManifestETag(original)
 			response := &CodexModelsManifest{Body: append([]byte(nil), original...), ETag: etag}
 			group := &Group{ID: 1, Platform: PlatformOpenAI}
-			require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, response, etag))
+			require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, response, nil, etag))
 			require.False(t, response.NotModified)
 			require.ElementsMatch(t, tc.want, codexManifestModelSlugs(t, response.Body))
 			require.True(t, gjson.GetBytes(response.Body, "extra_top").Bool())
 			require.Equal(t, codexModelsManifestBodyETag(response.Body), response.ETag)
 			finalETag := response.ETag
-			require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, response, finalETag))
+			require.NoError(t, svc.MergeGroupConfiguredCodexModels(context.Background(), group, response, nil, finalETag))
 			require.True(t, response.NotModified, "remote and downloaded file clients share the final filtered catalog ETag")
 			require.Contains(t, string(original), `"slug":"gpt-5.5"`, "shared upstream payload must not be modified")
 		})

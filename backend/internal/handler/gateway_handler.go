@@ -171,6 +171,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	}
 	body = parsedReq.Body.Bytes()
 	reqModel := parsedReq.Model
+	requestedEffort := service.CanonicalRequestedReasoningEffort(body, reqModel)
 	reqStream := parsedReq.Stream
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
@@ -567,6 +568,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			sessionID := service.ExtractClientSessionID(c)
 			channelUsageFields := clientRequestedUsageFields(c, channelMapping, reqModel, result.UpstreamModel)
+			result.RequestedReasoningEffort = requestedEffort
 			h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:             result,
@@ -933,6 +935,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				forceCacheBilling := fs.ForceCacheBilling
 				quotaPlatform := service.QuotaPlatform(c.Request.Context(), currentAPIKey)
 				sessionID := service.ExtractClientSessionID(c)
+				result.RequestedReasoningEffort = requestedEffort
 				h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 					if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 						Result:             result,

@@ -550,7 +550,7 @@ func getOpenAIReasoningEffortFromReqBody(reqBody map[string]any, requestedModel 
 	return "", false
 }
 
-func deriveOpenAIReasoningEffortFromModel(model string) string {
+func modelEffortSuffix(model string) string {
 	if strings.TrimSpace(model) == "" {
 		return ""
 	}
@@ -573,7 +573,11 @@ func deriveOpenAIReasoningEffortFromModel(model string) string {
 		return ""
 	}
 
-	return normalizeOpenAIReasoningEffortForModel(parts[len(parts)-1], modelID)
+	return parts[len(parts)-1]
+}
+
+func deriveOpenAIReasoningEffortFromModel(model string) string {
+	return normalizeOpenAIReasoningEffortForModel(modelEffortSuffix(model), model)
 }
 
 // deriveOpenAIReasoningEffortFromModelCandidates 依次对每个候选模型做后缀推导，
@@ -897,6 +901,31 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 
 func isOpenAICodexModel(model string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(model)), "codex")
+}
+
+// CanonicalRequestedReasoningEffort reads only the original client payload.
+// A synthetic bridge default or an account's target model is not a client declaration.
+func CanonicalRequestedReasoningEffort(body []byte, originalModel ...string) *string {
+	var value string
+	for _, key := range []string{"reasoning.effort", "reasoning_effort", "output_config.effort"} {
+		field := gjson.GetBytes(body, key)
+		if field.Exists() && strings.TrimSpace(field.String()) != "" {
+			value = normalizeReasoningEffortMappingSource(field.String())
+			if value == "" {
+				return nil
+			}
+			return &value
+		}
+	}
+	model := gjson.GetBytes(body, "model").String()
+	if model == "" {
+		model = firstNonEmpty(originalModel...)
+	}
+	value = normalizeReasoningEffortMappingSource(modelEffortSuffix(model))
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // extractOpenAIReasoningEffortFromBody 按优先级传入模型候选（如 upstreamModel,

@@ -380,6 +380,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	requestedEffort := service.CanonicalRequestedReasoningEffort(sessionHashBody)
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !compositeTargetPlatformAllowed(c, apiKey, reqModel, service.PlatformOpenAI, service.PlatformGrok) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -680,6 +681,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			sessionID := service.ExtractClientSessionID(c)
 			cyberBlocked := service.GetOpsCyberPolicy(c) != nil
+			result.RequestedReasoningEffort = requestedEffort
 			h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 					Result:             result,
@@ -1068,6 +1070,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	requestedEffort := service.CanonicalRequestedReasoningEffort(body, reqModel)
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.anthropicErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -1262,6 +1265,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			sessionID := service.ExtractClientSessionID(c)
 			cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 			channelUsageFields := clientRequestedUsageFields(c, channelMappingMsg, reqModel, result.UpstreamModel)
+			result.RequestedReasoningEffort = requestedEffort
 			h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 					Result:             result,
@@ -2499,6 +2503,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	// rebuilt whole-conversation payload, because the replacement account holds
 	// no session state.
 	wsAttemptMessage := append([]byte(nil), firstMessage...)
+	wsAttemptRequestedEffort := service.CanonicalRequestedReasoningEffort(firstMessage)
 	handleWSFailover := func(account *service.Account, failoverErr *service.UpstreamFailoverError) bool {
 		if ctx.Err() != nil {
 			return false
@@ -2824,6 +2829,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				releaseTurnSlots()
 				turnRequestedModel := reqModel
 				turnUpstreamModel := ""
+				if result != nil && turn == 1 {
+					// The first frame on a replacement account may already contain a policy rewrite.
+					result.RequestedReasoningEffort = wsAttemptRequestedEffort
+				}
 				if result != nil && turn > 1 {
 					if model := strings.TrimSpace(result.Model); model != "" {
 						turnRequestedModel = model
@@ -2938,7 +2947,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			}
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
-				retryPayload, retryCurrentTurn := service.OpenAIWSCurrentTurnRetryPayload(err)
+				retryPayload, requestedEffort, retryCurrentTurn := service.OpenAIWSCurrentTurnRetryPayload(err)
 				nextAttemptMessage, retrySafe := openAIWSNextAttemptMessage(wsAttemptMessage, retryPayload, retryCurrentTurn)
 				if !retrySafe {
 					closeOpenAIWSFailoverExhausted(c, wsConn, failoverErr)
@@ -2946,6 +2955,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				wsAttemptMessage = nextAttemptMessage
 				if retryCurrentTurn {
+					wsAttemptRequestedEffort = requestedEffort
 					// The rebuilt payload carries the whole conversation inline,
 					// so the sticky previous_response_id must not follow it onto
 					// a different account.
