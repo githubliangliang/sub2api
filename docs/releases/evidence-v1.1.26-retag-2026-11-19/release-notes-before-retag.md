@@ -1,0 +1,131 @@
+v1.1.26
+
+个人 / 单节点 SQLite 版：完成上游 v0.2.22–v0.2.23 第一档、第二档共 44 个修复簇、146/146 个 OpenSpec 任务。重点改善 Claude/Codex 工具协议、首内容前恢复、5m/1h 缓存计费、SQLite 配置原子同步、账号用量展示和已有 Gemini/Antigravity 兼容路径；另恢复用量页用户排行接口，新增二进制发布脚本并修复 CI 的 Redis 镜像准备。
+
+相对 v1.1.25（cb84a2c3c1d3889f4b0f73b368df52f03e0cfa6d）。产品基线为 3652ddb6aa9f39f0cc0ef4e8c7caa381fc784b13；本 tag 指向另行提交的发布准备，提交内 VERSION 为 1.1.26。标记日期：2026-11-18。
+
+Go 由 1.27.3 升至 1.27.4；SQLite 最大迁移仍为 229，鉴权快照仍为 21，库版本、go.sum、前端依赖/锁文件及 Ent/Wire 生成结果保持原值。继续支持 SQLite-only、可选单进程 miniredis 和 simple mode。本版按选定行为移植，未整体合入两个上游版本。
+
+同步上游
+========
+
+来源分别冻结于上游 v0.2.22 的 b0fa9f3e6eeab1968a53e1289b69daa4bb40ca2b，以及 v0.2.23 的 5af9afb588c4b014b3df9db7d4073af1f8ae01b6。第一档实现提交 d8d126da949d2f7cb12283e594bcdd467adc527d，F01–F21、70/70 任务；第二档实现提交 3652ddb6aa9f39f0cc0ef4e8c7caa381fc784b13，S01–S23、76/76 任务。跨版本簇按实际来源拆分如下。
+
+1) 上游 v0.2.22：第一档协议、账号与页面修复
+
+- F01 / #8682：Responses 函数调用从 delta 重建时保留 encrypted_content，连同既有 namespace、密封参数与 call_id 一致传递，覆盖缓冲、普通转换和透传处理。
+- F02 / #8703：Chat/Anthropic 对话中途的 system 消息转换为 Responses developer 消息，保持顺序和权限；工具输出、页面文本与图片不提升为系统指令。
+- F03 / #8761：Chat json_schema 转 Responses 时，省略 strict 明确转换为 false；显式 true/false、null 和 schema 原文按既有约定保留。
+- F04 / #8769：Codex HTTP 的 browser_info、goal_objective、untrusted_context 在缺少真实工具调用关系时转为带不可信标记的用户上下文。真实 call_id 对应的工具输出继续作为工具结果，避免混淆调用和外部页面内容。
+- F05 / #8742：已支持的 per-turn/mid-conversation beta 保留消息级 output_config；API Key/OAuth、原始请求头与最终账号策略一致执行，GLM 等既有净化规则继续生效。
+- F06 / #8788：count_tokens 用大小写无关的原始头读取/写入处理覆写和默认值，避免同名头重复；鉴权、beta 和多值头保留既有优先级。
+- F07 / #8814：Chat/Messages 兼容流已经输出文本或工具后，再收到上游错误仍执行已配置的账号/模型冷却等副作用；保持已输出流的终止语义，不重放响应。
+- F08 / #8812 选定子集：既有 GPT-6.1 Sol Ultra Fast 使用来源的 6 倍模型倍率，和既有 Astra 一致。别名、长上下文、显式零价、Fast/Free Fast 及 HTTP/WS 结算均覆盖；未引入新的强制 Ultra Fast 或渠道倍率字段。
+- F09 / #8684：登录邮箱身份回填返回 nil 时安全跳过默认设置判断，消除空指针；SQLite 身份归属冲突仍按原绑定规则处理。
+- F10 / #8723：Claude 5h 窗口滚动仅清理已失效的独立周读数，保留仍有效的 7d 数据；秒/毫秒 reset、缺 reset 和仅周额度响应分别处理。
+- F11 / #8698：主动读取 5h 窗口结束时间时同步 start=end-5h，保留毫秒精度与 SQLite 旧时间格式兼容，避免把旧窗口费用计入新窗口。
+- F12 / #8808：首输出暂存无法创建临时文件时，在原 8MiB 上限内回退内存；commit、drop、取消及超限拒绝仍释放资源。
+- F13 / #8757：内置 Claude 默认测试模型对齐 claude-sonnet-4-6；显式选择的模型及其它平台默认值保持原行为。此项依据冻结来源，未宣称在线核实模型退役。
+- F14 / #8669：既有 Grok 媒体错误识别 xAI 扁平 error/code，保留嵌套错误优先级、脱敏、状态码和可配置规则。
+- F15 / #8759：Gemini/Antigravity 工具 schema 清理非 array 的 items，保留合法数组、tuple、default 和 enum 实例值。
+- F16 / #8736：模型白名单只接受精确名称，拒绝包含星号的输入；点击与 Enter 一致，失败保留草稿，重复及映射冲突提示保持可用。
+- F17 / #8840：渠道 Bedrock Claude Code 兼容开关以 boolean 保存；创建、编辑、关闭和移除配置区段时保留其它 features，保存重开显示一致。
+- F18 / #8837 选定子集：调度快照投影保留已有 openai_capabilities 元数据，chat/embeddings/Responses 按真实端点声明筛选账号；未引入 PR 标题所述的新媒体平台。
+- F19 / #8775：设置注入及 CSP nonce 页面采用相应 no-store 行为，携带新 nonce 时不按旧 ETag 返回 304；哈希静态资源继续使用既有缓存策略。
+- F20 / #8786 既有消费者：Chat 转 Anthropic 补回已识别格式的 metadata.user_id，覆盖 JSON/legacy 格式和空值/类型保护。来源独立原生 Anthropic 文件本地缺失，该分支记为 N/A。
+- F21 / #8726：选定的完成转发后粘性写回截止对齐 5 秒，沿用已有脱离客户端取消的上下文保护；失败不绑定，换号不覆盖错误归属。
+
+2) 上游 v0.2.22：第二档跨路径、SQLite 和工具链适配
+
+- S02 / #8737：Claude OAuth 使用旧 token 遇 401，只有数据库证明同一账号已经轮换为新的有效 token 才重试一次，并清理旧凭据缓存。三个实际转发路径的流式/非流式保持 10 秒、最多 5 次尝试等既有总预算；不因任意 401 主动刷新或持久化 token。
+- S03 / #8659：分组倍率/RPM 同步在一个 SQLite 事务内完成目标列清空、分批 upsert 和无配置行清理。失败或取消回滚旧配置，保留另一列及其它分组；每批 128 行、最多 4 个绑定值，兼容 999 参数限制，重复账号以最后值为准。
+- S04 / #8811、#8813、#8724：Messages 首内容前的 message_start 等前奏使用既有有界暂存，keepalive 可以及时发送；仅 keepalive 已提交时仍允许安全换号。账号私有头留到有效输出时提交，已进入 SSE 的错误保持 SSE 事件格式，并保留原错误帧、规则和终态。
+- S06 / #8754：Codex additional_tools 保留声明 ID 与匹配引用，仅规范已识别的 at_UUID 形式；引用先于声明也能匹配。store=false 的 ID、普通调用、未知 ID 和 namespace 保持原语义。
+- S07 / #8834：Grok xs_/as_ 服务端 custom 搜索调用保留类型和输入，按调用身份去重统计搜索次数；兼容输出不要求客户端执行这类服务端搜索，普通 custom 工具和其它平台不受影响。
+- S08 / #8727、#8728、#8745、#8741：每次尝试先观察原文 response model，再进行公开模型改写，部分输出及错误也保留观测结果。模型冲突带到用量/计费边界，现有利润准入降级和 Fast 语义继续执行；操作错误记录真实 /messages 等端点。
+- S09 / #8796：Composite 还原响应顶层和 message_start 中的公开模型名，保留原始上游模型用于审计/计价。只改模型字段，正文和工具参数中出现的同名字符串保持原文。
+- S10 / #8739：Anthropic 分组的 Chat/Responses 兼容入口在选号前执行现有 effort 映射、上限和拒绝策略，并在最终转换的 Anthropic 请求再次验证；省略、disabled、非法类型、none/GLM 和计价行为一致。页面提示区分兼容入口策略与原生 Messages 自己的 thinking 配置。
+- S11 / #8675：Bedrock 区分封号/缺用例、请求内容过滤、模型 429 和 5xx；内容过滤作为客户端错误处理，429 仅作用于映射模型，5xx 沿用配置规则。AWS 二进制流中断仍返回已观测部分用量并进入既有 SQLite 结算/成功去重边界。
+- S12 / #8828：两个 Gemini 兼容流 reader 按调用身份划分同名并行工具，保留字符串参数分片和终态快照；无 ID 时采用保守边界，不再仅按名称合并。
+- S13 / #8662：Gemini Chat 兼容传递 json_object/json_schema 至 responseMimeType/responseJsonSchema，保留 schema 属性顺序、大整数及实例值，覆盖 Studio/CodeAssist 包装；工具和图片互斥、既有 2.5/3 thinking 最小前置继续执行。
+- S14 / #8673、#8826：已有 Antigravity 适配按响应头到达锚定等待与至少 15 秒的前奏保护，保留原首 token 总预算、thought、取消和已提交输出规则。空流只释放仍属于当前账号的粘性会话，本地采用原子 Redis compare-delete 防止删除并发新绑定。
+- S15 / #8822：Gemini 原生无显式 session ID 时，按 API Key、模型、tools/system 和首个有意义的用户 parts 派生稳定会话，后续历史增长不改变粘性；省略 role 视为 user，空 parts 不生成会话。显式 ID 优先；完整 PR 最终仍保留 ForceCacheBilling，本版没有按发布摘要删除它。
+- S16 / #8729：调度快照保留配置启用的完整账号池，包括临时冷却成员；每次读取判断冷却、过期、组和状态，使自然到期账号可重新进入候选。沿用原 revision/retire 契约，不引入 stale grace 或新合并加载架构。
+- S17 / #8747：额度观测时间仅随真实上游 quota 成功更新；失败或没有 quota 时保留旧读数和旧时间。页面区分陈旧、未知和真实零用量，本地未知显示横线并允许重试；来源监控 quota-fetcher 本地不存在，记为 N/A。
+- S18 / #8806：统计分别展示用户实际扣除 actual_cost、账号成本 account_cost 和标准费用；账号筛选不再覆盖 actual_cost，模型/端点/旧路径查询保持相同过滤。账号成本覆盖值为零仍有效，Gemini 账号额度使用账号成本；用户 API/UI 不暴露账号成本。
+- S19 / #8798：已有有效本地价格时初始化不等待远端 hash，后台同步由服务拥有的 context/worker 管理，Stop 可取消真实 HTTP 请求。下载、手工更新与重载串行发布，实际正文 hash、有效旧价格和显式零价覆盖保留。
+- S20 / #8800：标准上游 TCP dialer 使用 15 秒 keepalive idle、5 秒间隔和 3 次探测；Linux 设置 30000ms TCP_USER_TIMEOUT，设置失败仍正常拨号，非 Linux 构建保持兼容。应用读写 idle 仍为 120 秒；参数估算不作为实测断线时间。
+- S21 / #8772：用本地窄 regexp 适配处理 OpenAI 不支持的工具 schema 正则，约束删除/降级只作用于 schema，保留 default/enum 字面量、嵌套邻接字段和其它平台行为。现有四处兼容解码采用 UseNumber，避免大整数实例值被浮点转换；未导入来源整套正则解析器或新增产品依赖。
+- S22 / #8653、#8667 选定子集：既有 Ollama 单次 offset 编辑、缓存 ASCII 预检、工具断点/名称映射、billing header 指纹、字符串反向与 SSE map gate 减少重复解析/分配。JSON 转义强制回到完整解析，保留字节、工具顺序、本地最后工具 TTL、错误、用量及有界生命周期；测量结果见后文。
+- S23 / #8767、#8743：Go 声明、五处 CI 断言、三个 Docker 构建入口及当前开发指引统一为 1.27.4；golangci-lint 保持 2.14.0 并以新 Go 重建。隔离 Ent/Wire 生成一致，已有峰谷计价测试用明确 PricingAt 规避午夜边界。
+
+3) 上游 v0.2.23：缓存 TTL、空闲恢复及流处理后续
+
+- S01 / #8174：Chat/Messages/Responses、SSE/WS 的既有转换和结算完整保留 5m/1h 缓存创建明细及字段 presence。正聚合值作为总量，零占位可由 TTL 明细导出；未分配差额按 5m，矛盾明细按比例封顶。普通输入、缓存读取和缓存创建采用互斥桶，账号统计使用同一分配，保留自定义零价和 Fast 规则；不增加 30m/12h 字段或新迁移。
+- S05 / #8577、#8920：上游空闲截止以最后一次读取计算，持续读取注释也重置计时。OpenAI 首语义输出前空闲超时接入最多一次换号预算，即使只发过 keepalive 仍可恢复；连续两个账号空闲后停止，不无限尝试第三个。已产生内容则终止当前流并处理既有副作用。
+- S22 / #8904：Chat reasoning 处理采用一次遍历的选定热点，保持原文、工具映射与终态用量；未导入缺失平台的专用占位逻辑或广泛零拷贝体系。
+- S22 / #8903：原始 Chat SSE 的选定 flush 路径合并同批写入，等待读取前、EOF 和取消时仍及时 flush。实际本地 TCP 的 100 事件夹具 flush 202→1，约 0.59ms→0.25ms；结果限于该夹具，不承诺所有流或生产延迟改善。
+
+本仓库自上一 tag 起另外新增
+==========================
+
+- 7a0b78fe511f17b0f7eb9d26fcf5e4ff083312c7：恢复 /api/v1/admin/dashboard/user-breakdown，供 /admin/usage 用户排行使用，沿用管理员中间件；补充实际路由注册/权限测试和页面裁剪说明。
+- aab5591c700f1045e4452d9b2b626e0930e45a88：新增 deploy/deploy-binary-remote.sh，读取仓库根目录已编译的 sub2api，固定发布到 admin@18.226.163.236:/home/admin/sub2api。使用压缩 SCP 上传单个二进制，临时文件通过执行版本检查后，备份 sub2api.prev、原子替换并重启现有 systemd 服务；检查 127.0.0.1:8080/health，失败恢复上一二进制并重启。默认密钥 ~/.ssh/test.pem，支持 -i/SSH_KEY 和 --dry-run，HEALTH_TIMEOUT 默认60秒。配置和 unit 沿用既有安装。
+- 19edd5698d22717eb06cfd547ff40c694a65b446：CI 与 Release 的 integration 步骤前准备 redis:8.4-alpine；缓存可用则复用，缺失时用 Docker CLI 显式拉取并检查，最多3次、间隔2秒，持续失败就终止准备。当前 testcontainers v0.40.0 会丢弃拉取响应中的 JSON 错误，可能在创建容器时才报 No such image；控制实验复现此机制。真实 Redis、SQLite 和原测试断言保持执行，测试依赖版本保留。
+- 完成 v0.2.21→v0.2.23（含 v0.2.22）的冻结评估：128 个非 merge 提交、78 个 PR 加 4 个直接提交、524 个候选文件状态；从 55 个 PR 选择上述 44 簇行为。两档合计 146/146 个任务完成，活动 change 等待单独归档。
+- 为本地 SQLite 原子同步、旧时间格式、5m/1h 互斥桶、部分用量、实际扣除/账号成本及成功去重补充真实临时库证据。Antigravity 空流采用原子 compare-delete；schema 的大整数实例值保留来自实际兼容请求验证。
+- 不增加迁移或产品依赖：来源独立原生 Anthropic/监控消费者缺失的分支明确记 N/A；schema 验证依赖仅用于隔离测试，未写入产品 go.mod/go.sum。Go patch 升级和同版本 lint 重建单独验收，Ent/Wire 生成内容一致。
+- 两档源码、测试、失败、来源适配与性能边界分别留档；第二档提交核对 3982 个产品文件与最终验收一致，并核对第一档 55 个产品/测试文件与独立提交一致。历史 PORTING、来源和旧发布说明保持当时语义。
+- VERSION 1.1.25→1.1.26，新增本版详细中文说明、独立发布检查与 AGENTS 当前版本索引；上述发布工具和 CI 修复独立提交，最终发布准备补齐说明和证据，tag 提交内 VERSION 与版本号一致。
+
+升级与行为变化
+==============
+
+1. 数据库与构建：相对 v1.1.25 没有新增迁移或业务列，SQLite 仍为 229，鉴权快照 21。源码构建及 Docker/CI 使用 Go 1.27.4；Ent/Wire、前端依赖和库版本未变化。
+2. 缓存计费：本次修复后续请求的 5m/1h 明细与互斥计费，聚合与明细不一致时遵循上述分配规则；没有追溯重算历史 usage，也没有引入 30m/12h 新价卡。账号成本与用户实际扣除现在分开显示，显式零覆盖保持有效。
+3. 流恢复：首内容前的 keepalive 不再阻断安全换号；OpenAI 空闲最多换号一次。已经产生文本或工具输出时不会重放，错误继续执行现有账号/模型规则。客户端已收到 SSE 后，失败返回 SSE 错误事件。
+4. Token 轮换：恢复只针对数据库已存在新有效凭据的同账号竞争场景，旧 token 的任意 401 不自动触发刷新。上一版 Refresh Token 原子消费和固定 quota/去重规则继续保留。
+5. 模型与策略：工具 sealed 字段、additional_tools 声明/引用、公开 Composite 名称和原文模型各自保持正确归属。Anthropic 分组的兼容入口现在一致执行已配置 effort 策略，可能更早拒绝已有违规请求；原生 Messages thinking 仍由原请求配置控制。
+6. 页面：用量用户排行恢复；白名单拒绝星号；Bedrock 开关保存为 boolean；额度失败继续显示旧读数及旧时间，未知额度不再伪装为当前 0%。用户页面继续隐藏账号成本。
+7. 启动与页面缓存：有效本地价格可立即使用，远端价格同步在受管后台继续；HTML 设置注入/nonce 响应与哈希静态资源分别按各自缓存规则处理。
+8. 资源：gateway body 预算 64MiB、SSE 行 40MiB、暂存/队列 8MiB、应用读写 idle 120 秒、断开后 drain 总限 180 秒、WS 默认容量系数 1.0 保留。TCP 探测参数是连接层配置，不替代应用超时或完整进程内存限制。
+9. 发布工具：执行 ./deploy/deploy-binary-remote.sh 可上传当前编译好的二进制并重启目标服务。脚本需要既有 sub2api 服务、可读 SSH 私钥、远端免密 sudo 和 curl；--dry-run 展示计划。健康检查失败会尝试恢复 sub2api.prev，原数据库和配置保留。
+10. CI：Redis 缓存为空的 runner 会先拉取并核验镜像，再启动 integration 测试；拉取失败显示 Docker CLI 的原始错误并有限重试。准备失败不会继续启动依赖该镜像的测试，不将外部镜像不可用算作测试通过。
+
+验证结果与范围
+==============
+
+- 第一档实施验收：后端 54 包 unit、embed build、lint 0 issues、六包定向 race，真实本地 HTTP/WS、SQLite229/Ent、miniredis/Fast/结算与去重/固定 quota 检查通过；前端 2206 通过、2 个既有跳过，critical 179/2，typecheck/lint/build 和真实桌面/移动 Chrome 操作通过。
+- 第二档最终实施验收：后端 54 包 unit、embed build、Go1.27.4 重建 lint 0 issues、六包 race 通过，race 约 246.6 秒；真实本地 HTTP/WS、SQLite/miniredis 覆盖旧 token/新 token barrier、首内容恢复、TTL/模型冲突/公开别名、工具 schema、部分结算、成功去重和 Fast/固定 quota。
+- 第二档前端：293 文件、2212 通过 / 2 个既有跳过，critical 179/2，typecheck/lint/build 通过。真实构建 SPA 和 Chrome 覆盖 1440px 桌面、390px 移动的 8 项操作、120 个合成 API 请求，无 pageerror；包括 effort 保存重开、额度未知/失败/重试及三种费用展示。
+- 工具链：Go1.27.4 隔离生成的 331 个 Ent 文件及 Wire 和产品一致，Darwin/Windows 现有跨平台仓储编译通过；生成过程没有产品依赖副作用。
+- 单 P、200 消息/工具局部性能对照：Ollama 约 12.6ms/29.5MB 分配→0.42ms/0.33MB；缓存 ASCII 预检约 270µs/114688B→44µs/0B；SSE map gate 约 480µs/244.6KB→192µs/123.6KB。转义字段走完整解析，对应请求没有宣称同样收益；工具 TTL、字节及用量对照通过。
+- 首输出资源夹具：1CPU/1GiB 独立暂存/合成请求容器，第一档 memory.peak=70287360B，第二档 69771264B。夹具只运行测量对象，不能据此承诺完整服务或生产实例的内存峰值。
+- 本次发布另执行后端 unit、Release 同类 integration、前端类型检查/构建、发布脚本、版本解析、CGO=0 静态 embed 构建和实际二进制 --version 核对；具体命令、结果及范围见本版 readiness。历史 race、浏览器和性能结果作为已有实施验收引用，不冒充本次重跑。
+- CI 修复追加验证：CI=true、TZ=UTC、禁用测试结果缓存，全量48包 integration 通过，约153.5秒；原失败的 TestRateLimiterSetsTTLAndDoesNotRefresh 和另一项 TTL 修复测试通过。actionlint、YAML/脚本语法、镜像缓存/冷启动/重试/持续失败/拉取后仍不可用的5组控制通过。验证初轮误把 -json 放入 GOFLAGS，影响 Ent 的子命令；该验证配置错误和纠正后的完整结果分别保留，不修改 schema 来掩盖失败。
+- 发布脚本追加验证：15组本地隔离的上传/重启/健康检查/回滚/权限与输入控制通过；随后实际上传到目标实例，服务重启成功，运行进程 SHA256 与二进制一致，内外 /health 返回200，原 config.yaml 和 unit 哈希保留。该部署使用1.1.26/4d58d9367，与本次 tag 的协议和前端源码一致；发布脚本与 CI 修复不改变这些源码。
+- 协议、浏览器和性能验收中的上游账号、响应和页面数据为本地合成夹具，持久化使用真实临时 SQLite、缓存使用 miniredis。供应商在线权限、真实 Codex Desktop 联机和死 peer 断线时间不在这些结论内；上面的独立部署验收仅覆盖复制、版本/进程、健康状态与配置保留。
+
+明确未合
+========
+
+- 支付、充值、购买/续费、退款及商业提供商/UI/依赖/配置/迁移继续排除，包括本轮 #8649 支付退款；不进行无关支付删除。
+- GPT-6.2 Sol/Astra 和 Pro/促销时钟、Gemini4 Carbon/Hydrogen、Qwen 新 embedding/reranker 价卡、Fable 新目录/额度恢复、Vertex us/eu 多区域和 1.1 倍计价未选定。既有自定义映射可能到达部分模型，后续按实际使用单独选择核价。
+- #8812 的 group force-ultrafast、#8914 渠道 Ultra Fast 独立倍率和新增字段/PG252 迁移未合；本版仅修复既有 Sol 6 倍倍率。已实现 Fast/Free Fast/Ultrafast 保持真实完成状态。
+- 30m/12h 独立缓存 TTL、usage/schema/UI 和新计价仍按需，和本次已有 5m/1h 完整性修复分别处理。
+- #8816 的 PG 批量账务/lane combiner、#8833 的 bucket 合并加载/200ms last_used/20s stale grace、完整 ojson/COW/广泛零拷贝及整套 Gemini thinking 架构未引入；本版只采用有字节和资源对照的现有热点。
+- 关闭 ping 的新控制、透传模型白名单新策略、监控 v2/quota-summary、新趋势图、受限管理员 Key/MCP 管理授权、邮箱黑名单、新图片/视频/原生 CN 平台、plugins、Realtime、完整 Grok 429/WS 容量、exec_scope/抢占/queue-wake 仍保留各自按需状态。
+- 缺失的 Codex 账号 namespace 重写、完整 raw OAuth metadata 清理、在途账务预占和 PG rollup/锁基座记 N/A；已等价的跨组 RPM/Gemini 刷新留行不重开，未添加来源专有强制 DeepSeek 峰谷覆盖。
+- 最低 1GiB 的自适应预算不采用，WS 默认 5.0 不采用；保持已测资源默认、1.0 容量系数、固定 quota、软删除、SQLite 后台维护和已有利润准入/成功去重。
+- 历史 Terra、TPS、Grok 诊断、兼容尾项、完整 Fast 和 v0.2.21 两档保持已完成状态；上游 v0.2.23 tag 之后的 main 不纳入。已独立完成的目标实例部署记录保留其实际提交4d58d9367；本次推送 main 与 v1.1.26 annotated tag，远端 Release/镜像由工作流生成，不归档 OpenSpec 或追加业务数据库操作。
+
+完整来源与验收
+==============
+
+- [v0.2.22–v0.2.23 完整评估](https://github.com/githubliangliang/sub2api/blob/v1.1.26/docs/upstream-sync/PORTING-0.2.23.md)。
+- [第一档验收](https://github.com/githubliangliang/sub2api/blob/v1.1.26/openspec/changes/port-upstream-0.2.23-tier1/verification.md) / [实施证据](https://github.com/githubliangliang/sub2api/blob/v1.1.26/docs/upstream-sync/implementation-0.2.23-tier1/README.md)。
+- [第二档验收](https://github.com/githubliangliang/sub2api/blob/v1.1.26/openspec/changes/port-upstream-0.2.23-tier2/verification.md) / [实施证据](https://github.com/githubliangliang/sub2api/blob/v1.1.26/docs/upstream-sync/implementation-0.2.23-tier2/README.md)。
+- [本版发布检查](https://github.com/githubliangliang/sub2api/blob/v1.1.26/docs/releases/evidence-v1.1.26/readiness.md)。
+- [推送准备、CI 修复与发布工具验证](https://github.com/githubliangliang/sub2api/blob/v1.1.26/docs/releases/evidence-v1.1.26-push/readiness.md)。
+
+完整版本对比：[v1.1.25...v1.1.26](https://github.com/githubliangliang/sub2api/compare/v1.1.25...v1.1.26)。annotated tag 的完整中文说明使用本文件；GitHub Release 与镜像/资产由 tag 推送触发的工作流生成，以实际工作流结果为准。
