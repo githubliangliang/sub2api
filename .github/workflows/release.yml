@@ -127,6 +127,8 @@ jobs:
   release:
     needs: [preflight, build-frontend, verify-backend]
     runs-on: ubuntu-latest
+    env:
+      GOPROXY: 'https://proxy.golang.org|direct'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -150,6 +152,20 @@ jobs:
       - name: Verify Go version
         run: |
           go version | grep -q 'go1.27.4'
+
+      - name: Download Go modules
+        working-directory: backend
+        run: |
+          for go_download_attempt in 1 2 3; do
+            if go mod download; then
+              break
+            fi
+            if [ "$go_download_attempt" -eq 3 ]; then
+              echo "Go module download failed after 3 attempts" >&2
+              exit 1
+            fi
+            sleep 2
+          done
 
       - name: Verify release version
         working-directory: backend
