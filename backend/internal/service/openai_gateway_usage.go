@@ -166,7 +166,11 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// 变价）；未装配 PricingAt 的路径回退记录时刻，保持既有行为。不并入上面的
 	// Resolve，以免污染 user:group 倍率缓存。
 	baseMultiplier := multiplier
-	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, openAIUsagePricingAt(input))
+	pricingAt := openAIUsagePricingAt(input)
+	// Restore the frozen instant after asynchronous recording detaches the request.
+	// Both user billing and independent account statistics read it from this context.
+	ctx = context.WithValue(ctx, gatewayTokenRequestPricingAtCtxKey{}, pricingAt)
+	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, pricingAt)
 	videoMultiplier := resolveVideoRateMultiplier(apiKey, baseMultiplier)
 
 	var cost *CostBreakdown
@@ -660,29 +664,17 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 	longContextBillingGate *bool,
 	modelLongContextExempt bool,
 ) (*CostBreakdown, error) {
-	if s.resolver != nil && apiKey.Group != nil {
-		gid := apiKey.Group.ID
-		return s.billingService.CalculateCostUnified(CostInput{
-			Ctx:                            ctx,
-			Model:                          billingModel,
-			GroupID:                        &gid,
-			Group:                          apiKey.Group,
-			Tokens:                         tokens,
-			RequestCount:                   1,
-			RateMultiplier:                 multiplier,
-			ServiceTier:                    serviceTier,
-			Resolver:                       s.resolver,
-			LongContextBillingEnabled:      longContextBillingGate,
-			DisableModelLongContextPricing: modelLongContextExempt,
-		})
+	input := CostInput{
+		Ctx: ctx, Model: billingModel, Tokens: tokens, RequestCount: 1,
+		RateMultiplier: multiplier, ServiceTier: serviceTier,
+		LongContextBillingEnabled: longContextBillingGate, DisableModelLongContextPricing: modelLongContextExempt,
 	}
-	return s.billingService.calculateCostWithServiceTierPolicy(
-		billingModel,
-		tokens,
-		multiplier,
-		serviceTier,
-		(longContextBillingGate == nil || *longContextBillingGate) && !modelLongContextExempt,
-	)
+	if s.resolver != nil && apiKey.Group != nil {
+		input.GroupID = &apiKey.Group.ID
+		input.Group = apiKey.Group
+		input.Resolver = s.resolver
+	}
+	return s.billingService.CalculateCostUnified(input)
 }
 
 func (s *OpenAIGatewayService) calculateOpenAIImageCost(

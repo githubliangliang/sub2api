@@ -31,6 +31,7 @@ import (
 
 func TestSolUltrafastHTTPAndWSSettlementSQLite(t *testing.T) {
 	ctx := context.Background()
+	cutoff := time.Date(2027, time.March, 1, 8, 0, 0, 0, time.UTC)
 	templatePath := filepath.Join(t.TempDir(), "template.db")
 	templateDB, err := sql.Open("sqlite", "file:"+templatePath+"?_time_format=sqlite")
 	require.NoError(t, err)
@@ -43,17 +44,28 @@ func TestSolUltrafastHTTPAndWSSettlementSQLite(t *testing.T) {
 		for _, model := range []struct {
 			name, alias string
 			standard    float64
+			pricingAt   time.Time
+			ultrafast   float64
 		}{
-			{"gpt-6.1-sol", "public-sol", 0.00187}, {"gpt-6-astra", "public-astra", 0.00945},
+			{"gpt-6.1-sol", "public-sol", 0.00187, time.Time{}, 6},
+			{"gpt-6-astra", "public-astra", 0.00945, time.Time{}, 6},
+			{"gpt-6.2-sol", "public-62-sol", 0.00187, cutoff.Add(-time.Nanosecond), 3},
+			{"gpt-6.2-astra", "public-62-astra", 0.00748, cutoff.Add(-time.Nanosecond), 3},
+			{"gpt-6.2-sol", "public-62-sol", 0.00187, cutoff, 6},
+			{"gpt-6.2-astra", "public-62-astra", 0.00748, cutoff, 6},
 		} {
 			for _, scenario := range []struct {
 				name, tier                         string
 				free                               bool
 				upstreamMultiplier, userMultiplier float64
 			}{
-				{"ultrafast", "ultrafast", false, 6, 6}, {"fast", "priority", false, 2, 2}, {"free-fast", "priority", true, 2, 1}, {"free-ultrafast-control", "ultrafast", true, 6, 6},
+				{"ultrafast", "ultrafast", false, model.ultrafast, model.ultrafast}, {"fast", "priority", false, 2, 2}, {"free-fast", "priority", true, 2, 1}, {"free-ultrafast-control", "ultrafast", true, model.ultrafast, model.ultrafast},
 			} {
-				t.Run(transport+"/"+model.name+"/"+scenario.name, func(t *testing.T) {
+				name := transport + "/" + model.name + "/" + scenario.name
+				if !model.pricingAt.IsZero() {
+					name += "/" + model.pricingAt.Format(time.RFC3339Nano)
+				}
+				t.Run(name, func(t *testing.T) {
 					dbPath := filepath.Join(t.TempDir(), "settlement.db")
 					require.NoError(t, os.WriteFile(dbPath, template, 0600))
 					db, err := sql.Open("sqlite", "file:"+dbPath+"?_time_format=sqlite&_pragma=foreign_keys(1)")
@@ -120,7 +132,7 @@ func TestSolUltrafastHTTPAndWSSettlementSQLite(t *testing.T) {
 					t.Cleanup(svc.CloseOpenAIWSPool)
 					account := &service.Account{ID: 3, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Concurrency: 1,
 						Credentials: map[string]any{"api_key": "sol-fixture-key", "base_url": upstream.URL, "model_mapping": map[string]any{model.alias: model.name}}, Extra: map[string]any{"responses_websockets_v2_enabled": transport == "ws"}}
-					body := fmt.Sprintf(`{"model":%q,"input":"hi","stream":false,"service_tier":%q,"reasoning":{"effort":"none"}}`, model.alias, scenario.tier)
+					body := fmt.Sprintf(`{"model":%q,"input":"hi","stream":false,"service_tier":%q,"reasoning":{"effort":"low"}}`, model.alias, scenario.tier)
 					c, _ := gin.CreateTestContext(httptest.NewRecorder())
 					c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
 					c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 2})
@@ -139,7 +151,7 @@ func TestSolUltrafastHTTPAndWSSettlementSQLite(t *testing.T) {
 					user := &service.User{ID: 1, Status: service.StatusActive, Balance: 10}
 					groupID := int64(4)
 					key := &service.APIKey{ID: 2, UserID: 1, User: user, Quota: 1, Status: service.StatusActive, GroupID: &groupID, Group: &service.Group{ID: 4, Platform: service.PlatformOpenAI, Hydrated: true, RateMultiplier: 1, FreeOpenAIFast: scenario.free}}
-					input := &service.OpenAIRecordUsageInput{Result: result, User: user, APIKey: key, Account: account, APIKeyService: grokAuditQuotaUpdater{}, BillingModelSource: "response_model"}
+					input := &service.OpenAIRecordUsageInput{Result: result, User: user, APIKey: key, Account: account, APIKeyService: grokAuditQuotaUpdater{}, BillingModelSource: "response_model", PricingAt: model.pricingAt}
 					require.NoError(t, svc.RecordUsage(ctx, input))
 					var cost, total, balance, quota float64
 					var tier string

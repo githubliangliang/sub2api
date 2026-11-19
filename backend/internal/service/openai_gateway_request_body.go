@@ -1613,7 +1613,7 @@ func normalizeGPT6ResponsesSampling(body []byte, model string) ([]byte, bool, er
 	if model == "" {
 		model = gjson.GetBytes(body, "model").String()
 	}
-	if (!openai.IsGPT6SolOrLunaModelSpelling(model) && !openai.IsGPT61SolModelSpelling(model)) || gjson.GetBytes(body, "reasoning.effort").String() == "none" {
+	if (!openai.IsGPT6SolOrLunaModelSpelling(model) && !openai.IsGPT61SolModelSpelling(model) && openai.GPT62ModelID(model) == "") || gjson.GetBytes(body, "reasoning.effort").String() == "none" {
 		return body, false, nil
 	}
 	out := body
@@ -1659,7 +1659,7 @@ func validateGPT61CompatRequest(body []byte, model string) error {
 
 // Validate explicit client selections before conversion can discard them.
 func validateGPT61RawEffort(body []byte, model string) error {
-	if !openai.IsGPT61SolModelSpelling(model) && !openai.IsGPT61TerraModelSpelling(model) {
+	if !openai.IsGPT61SolModelSpelling(model) && !openai.IsGPT61TerraModelSpelling(model) && openai.GPT62ModelID(model) == "" {
 		return nil
 	}
 	for _, path := range []string{"reasoning.effort", "reasoning_effort", "output_config.effort"} {

@@ -510,6 +510,17 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		}
 	}
 
+	if base := openai.GPT62ModelID(modelID); base != "" {
+		metadata := openai.CodexGPT62SolMetadata
+		if base == "gpt-6.2-astra" {
+			metadata = openai.CodexGPT62AstraMetadata
+		}
+		if err := json.Unmarshal(metadata, &descriptor); err != nil {
+			panic(err)
+		}
+		descriptor.Slug = modelID
+		descriptor.officialMetadata = metadata
+	}
 	if openai.IsGPT61SolModelSpelling(modelID) {
 		if err := json.Unmarshal(openai.CodexGPT61SolMetadata, &descriptor); err != nil {
 			panic(err)
@@ -1911,6 +1922,8 @@ func CodexModelsManifestETag(body []byte) string {
 }
 
 var apiKeyCodexModelsWithoutResponsesLite = map[string]struct{}{
+	"gpt-6.2-sol":   {},
+	"gpt-6.2-astra": {},
 	"gpt-6.1-terra": {},
 	"gpt-6.1-sol":   {},
 	"gpt-6-astra":   {},
@@ -1946,6 +1959,9 @@ func adjustAPIKeyCodexModelsManifest(body []byte, account *Account) ([]byte, err
 		target := slug
 		if account != nil {
 			target = account.GetMappedModel(slug)
+		}
+		if base := openai.GPT62ModelID(target); base != "" {
+			target = base
 		}
 		if isOpenAIGPT6AstraModel(target) {
 			target = "gpt-6-astra"

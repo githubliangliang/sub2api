@@ -72,6 +72,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 		return nil, err
 	}
 	chatReq.Model = upstreamModel
+	if openai.GPT62ModelID(upstreamModel) != "" {
+		chatReq.Temperature = nil
+		chatReq.TopP = nil
+	}
 	chatReq.ReasoningEffort = openAICompatAnthropicReasoningEffort(&anthropicReq, upstreamModel, chatReq.ReasoningEffort)
 	chatReq.Stream = clientStream
 	if clientStream {

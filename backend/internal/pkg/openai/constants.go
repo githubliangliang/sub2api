@@ -25,6 +25,8 @@ var DefaultModels = []Model{
 	{ID: "gpt-5.6", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 (Sol)"},
 	{ID: "gpt-5.6-terra", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Terra"},
 	{ID: "gpt-5.6-luna", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Luna"},
+	{ID: "gpt-6.2-sol", Object: "model", Created: 1794873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.2 Sol"},
+	{ID: "gpt-6.2-astra", Object: "model", Created: 1794873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.2 Astra"},
 	// Created is the frozen upstream catalog placeholder, not the release date.
 	{ID: "gpt-6.1-terra", Object: "model", Created: 1704067200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Terra"},
 	{ID: "gpt-6.1-sol", Object: "model", Created: 1790640000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-6.1 Sol"},
@@ -83,6 +85,15 @@ var instructionsGPT55 string
 //
 //go:embed instructions_gpt6_astra.txt
 var instructionsGPT6Astra string
+
+// GPT-6.2 descriptors captured from the 2026-11-17 Codex models response,
+// client 0.169.0, preserved in upstream PR #8906.
+//
+//go:embed codex_gpt62_sol.json
+var CodexGPT62SolMetadata []byte
+
+//go:embed codex_gpt62_astra.json
+var CodexGPT62AstraMetadata []byte
 
 // CodexGPT61SolMetadata is the complete official descriptor from openai/codex
 // b1e72963c3b71a9265a551e54beff078384efed9, codex-rs/models-manager/models.json.
@@ -161,6 +172,7 @@ func CanonicalizeOpenAIModelAliasSpelling(model string) string {
 }
 
 // CodexBaseInstructionsForModel 按模型返回最匹配的真实 Codex base instructions：
+//   - gpt-6.2-sol / gpt-6.2-astra → 各自官方 Codex 描述中的 instructions_template
 //   - gpt-6.1-sol / gpt-6.1-terra → 各自官方 Codex 描述中的 instructions_template
 //   - gpt-6 / gpt-6-astra（含供应商前缀与日期变体）→ GPT-6 Astra prompt
 //   - 含 "codex" 的模型（gpt-5-codex / gpt-5.x-codex / codex-max / spark 等）→ GPT-5-Codex prompt
@@ -173,6 +185,10 @@ func CanonicalizeOpenAIModelAliasSpelling(model string) string {
 func CodexBaseInstructionsForModel(model string) string {
 	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
 	switch {
+	case GPT62ModelID(canonical) == "gpt-6.2-sol":
+		return codexInstructionsTemplate(CodexGPT62SolMetadata)
+	case GPT62ModelID(canonical) == "gpt-6.2-astra":
+		return codexInstructionsTemplate(CodexGPT62AstraMetadata)
 	case IsGPT61SolModelSpelling(canonical):
 		return codexInstructionsTemplate(CodexGPT61SolMetadata)
 	case IsGPT61TerraModelSpelling(canonical):
@@ -215,6 +231,24 @@ func IsGPT6SolOrLunaModelSpelling(model string) bool {
 	return false
 }
 
+// GPT62ModelID recognizes the published IDs and local effort/compact aliases.
+// Disabled effort suffixes stay identifiable so validation can reject them.
+func GPT62ModelID(model string) string {
+	canonical := CanonicalizeOpenAIModelAliasSpelling(model)
+	for _, base := range []string{"gpt-6.2-sol", "gpt-6.2-astra"} {
+		if canonical == base {
+			return base
+		}
+		if suffix, ok := strings.CutPrefix(canonical, base+"-"); ok {
+			switch suffix {
+			case "none", "minimal", "low", "medium", "high", "xhigh", "max", "openai-compact":
+				return base
+			}
+		}
+	}
+	return ""
+}
+
 // IsGPT61SolModelSpelling recognizes the published model and local effort/compact
 // spellings. Invalid effort suffixes remain identifiable for request validation.
 func IsGPT61SolModelSpelling(model string) bool {
@@ -255,7 +289,7 @@ func IsGPT61TerraModelSpelling(model string) bool {
 // RequiresResponsesForToolCalls reports models whose tool calls are only
 // available through the Responses API.
 func RequiresResponsesForToolCalls(model string) bool {
-	return IsGPT61SolModelSpelling(model) || IsGPT61TerraModelSpelling(model)
+	return GPT62ModelID(model) != "" || IsGPT61SolModelSpelling(model) || IsGPT61TerraModelSpelling(model)
 }
 
 // ValidateGPT61SolReasoningEffort rejects disabled reasoning instead of silently
@@ -280,8 +314,14 @@ func ValidateGPT61TerraReasoningEffort(model, effort string) error {
 }
 
 // ValidateGPT61ReasoningEffort applies the published effort scale of each
-// GPT-6.1 model.
+// GPT-6.1 and GPT-6.2 model.
 func ValidateGPT61ReasoningEffort(model, effort string) error {
+	if base := GPT62ModelID(model); base != "" {
+		switch strings.ToLower(strings.TrimSpace(effort)) {
+		case "none", "minimal":
+			return fmt.Errorf("%s does not support reasoning effort %q; use low, medium, high, xhigh or max", base, effort)
+		}
+	}
 	if err := ValidateGPT61SolReasoningEffort(model, effort); err != nil {
 		return err
 	}

@@ -7,6 +7,16 @@ vi.mock('@/api/admin/accounts', () => ({
 import { allModels, buildModelMappingObject, getModelsByPlatform, getPresetMappingsByPlatform, splitModelMappingObject } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
+  it('round-trips GPT-6.2 Sol and Astra whitelist entries and mapping presets', () => {
+    for (const [model, label] of [['gpt-6.2-sol', 'GPT-6.2 Sol'], ['gpt-6.2-astra', 'GPT-6.2 Astra']]) {
+      expect(getModelsByPlatform('openai').filter(value => value === model)).toEqual([model])
+      expect(allModels.filter(value => value.value === model)).toHaveLength(1)
+      expect(getPresetMappingsByPlatform('openai')).toContainEqual(expect.objectContaining({ label, from: model, to: model }))
+      const mapping = buildModelMappingObject('combined', [model], [{ from: 'public', to: model }])
+      expect(splitModelMappingObject(mapping)).toEqual({ allowedModels: [model], modelMappings: [{ from: 'public', to: model }] })
+    }
+  })
+
   it('exposes Terra once and round-trips its whitelist and mapping preset', () => {
     expect(getModelsByPlatform('openai').filter(model => model === 'gpt-6.1-terra')).toEqual(['gpt-6.1-terra'])
     expect(allModels.filter(model => model.value === 'gpt-6.1-terra')).toHaveLength(1)

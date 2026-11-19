@@ -701,6 +701,14 @@ describe('UseKeyModal', () => {
 
     const parsed = JSON.parse(wrapper.find('pre code').text())
     const models = parsed.provider.openai.models
+    for (const [model, name] of [['gpt-6.2-sol', 'GPT-6.2 Sol'], ['gpt-6.2-astra', 'GPT-6.2 Astra']]) {
+      expect(models[model]).toEqual({
+        name,
+        limit: { context: 1050000, output: 128000 },
+        options: { store: false },
+        variants: { low: {}, medium: {}, high: {}, xhigh: {}, max: {} }
+      })
+    }
     expect(models['gpt-6.1-terra']).toEqual({
       name: 'GPT-6.1 Terra',
       limit: { context: 1050000, output: 128000 },

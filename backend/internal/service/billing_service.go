@@ -413,6 +413,21 @@ func (s *BillingService) initFallbackPricing() {
 		LongContextInputMultiplier:         2,
 		LongContextOutputMultiplier:        1.5,
 	}
+	// GPT-6.2 rates frozen from upstream PR #8906, 2026-11-18.
+	s.fallbackPrices["gpt-6.2-astra"] = &ModelPricing{
+		InputPricePerToken:                 8e-6,
+		InputPricePerTokenPriority:         16e-6,
+		OutputPricePerToken:                40e-6,
+		OutputPricePerTokenPriority:        80e-6,
+		CacheCreationPricePerToken:         10e-6,
+		CacheCreationPricePerTokenPriority: 20e-6,
+		CacheReadPricePerToken:             0.4e-6,
+		CacheReadPricePerTokenPriority:     0.8e-6,
+		CacheCreationPriceExplicit:         true,
+		LongContextInputThreshold:          272_000,
+		LongContextInputMultiplier:         2,
+		LongContextOutputMultiplier:        1.5,
+	}
 	// GPT-6 Sol/Luna official rates, 2026-09-22.
 	s.fallbackPrices["gpt-6.1-sol"] = &ModelPricing{
 		InputPricePerToken:                 2e-6,
@@ -428,6 +443,8 @@ func (s *BillingService) initFallbackPricing() {
 		LongContextInputMultiplier:         2,
 		LongContextOutputMultiplier:        1.5,
 	}
+	// Sol's static rates match 6.1; time-dependent tier policy copies this card.
+	s.fallbackPrices["gpt-6.2-sol"] = s.fallbackPrices["gpt-6.1-sol"]
 	s.fallbackPrices["gpt-6-sol"] = &ModelPricing{
 		InputPricePerToken:                 2e-6,
 		InputPricePerTokenPriority:         4e-6,
@@ -998,7 +1015,7 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
-		case "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
+		case "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
 			return s.fallbackPrices[normalized]
 		case "gpt-6-astra":
 			return s.fallbackPrices["gpt-6-astra"]
@@ -1168,7 +1185,7 @@ func (s *BillingService) getModelPricingAt(model string, at time.Time) (*ModelPr
 				InputPricePerTokenPriority:         litellmPricing.InputCostPerTokenPriority,
 				OutputPricePerToken:                litellmPricing.OutputCostPerToken,
 				OutputPricePerTokenPriority:        litellmPricing.OutputCostPerTokenPriority,
-				CacheCreationPriceExplicit:         (openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
+				CacheCreationPriceExplicit:         (openai.GPT62ModelID(model) != "" || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model) || openai.IsGPT61TerraModelSpelling(model)) && litellmPricing.CacheCreationInputTokenCostExplicit,
 				CacheCreationPricePerToken:         litellmPricing.CacheCreationInputTokenCost,
 				CacheCreationPricePerTokenPriority: litellmPricing.CacheCreationInputTokenCostPriority,
 				CacheReadPricePerToken:             litellmPricing.CacheReadInputTokenCost,
@@ -1182,7 +1199,7 @@ func (s *BillingService) getModelPricingAt(model string, at time.Time) (*ModelPr
 				LongContextOutputMultiplier:        litellmPricing.LongContextOutputCostMultiplier,
 				ImageInputPricePerToken:            litellmPricing.InputCostPerImageToken,
 				ImageOutputPricePerToken:           litellmPricing.OutputCostPerImageToken,
-			}), nil
+			}, at), nil
 		}
 	}
 
@@ -1201,7 +1218,7 @@ func (s *BillingService) getModelPricingAt(model string, at time.Time) (*ModelPr
 		if _, seen := s.fallbackWarnSeen.LoadOrStore(model, struct{}{}); !seen {
 			log.Printf("[Billing] Using fallback pricing for model: %s", model)
 		}
-		return s.applyModelSpecificPricingPolicy(model, fallback), nil
+		return s.applyModelSpecificPricingPolicy(model, fallback, at), nil
 	}
 
 	return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, model)
@@ -1274,6 +1291,7 @@ type CostInput struct {
 	RequestCount              int    // 按次计费时使用
 	SizeTier                  string // 按次/图片模式的层级标签（"1K","2K","4K","HD" 等）
 	RateMultiplier            float64
+	PricingAt                 time.Time             // Frozen request/WS-turn instant; zero uses the context or current time.
 	ServiceTier               string                // "priority","flex","" 等
 	Resolver                  *ModelPricingResolver // 定价解析器
 	Resolved                  *ResolvedPricing      // 可选：预解析的定价结果（避免重复 Resolve 调用）
@@ -1285,20 +1303,24 @@ type CostInput struct {
 // CalculateCostUnified 统一计费入口，支持三种计费模式。
 // 使用 ModelPricingResolver 解析定价，然后根据 BillingMode 分发计算。
 func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, error) {
+	if input.PricingAt.IsZero() {
+		input.PricingAt = GatewayTokenRequestPricingAtFromContext(input.Ctx)
+	}
+	if input.PricingAt.IsZero() {
+		input.PricingAt = time.Now()
+	}
 	if input.Resolver == nil {
 		// 无 Resolver，回退到旧路径
 		applyLongContextBilling := true
 		if input.LongContextBillingEnabled != nil {
 			applyLongContextBilling = *input.LongContextBillingEnabled
 		}
-		return s.calculateCostInternalWithPolicy(
-			input.Model,
-			input.Tokens,
-			input.RateMultiplier,
-			input.ServiceTier,
-			nil,
-			applyLongContextBilling && !input.DisableModelLongContextPricing,
-		)
+		pricing, err := s.getModelPricingAt(input.Model, input.PricingAt)
+		if err != nil {
+			return nil, err
+		}
+		return s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier,
+			applyLongContextBilling && !input.DisableModelLongContextPricing), nil
 	}
 
 	// 优先使用预解析结果，避免重复 Resolve 调用
@@ -1342,7 +1364,7 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 		return nil, fmt.Errorf("no pricing available for model: %s: %w", input.Model, ErrModelPricingUnavailable)
 	}
 
-	pricing = s.applyModelSpecificPricingPolicy(input.Model, pricing)
+	pricing = s.applyModelSpecificPricingPolicy(input.Model, pricing, input.PricingAt)
 
 	// 分组开关是统一入口；账号 API 开关保留为额外开启能力，但 false 不否决分组配置。
 	contextTierPricingEnabled := resolved.longContextPricingEnabled
@@ -1552,16 +1574,6 @@ func (s *BillingService) CalculateCostWithServiceTier(model string, tokens Usage
 	return s.calculateCostInternal(model, tokens, rateMultiplier, serviceTier, nil)
 }
 
-func (s *BillingService) calculateCostWithServiceTierPolicy(
-	model string,
-	tokens UsageTokens,
-	rateMultiplier float64,
-	serviceTier string,
-	longContextBillingEnabled bool,
-) (*CostBreakdown, error) {
-	return s.calculateCostInternalWithPolicy(model, tokens, rateMultiplier, serviceTier, nil, longContextBillingEnabled)
-}
-
 func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens, rateMultiplier float64, serviceTier string, channelPricing *ChannelModelPricing) (*CostBreakdown, error) {
 	return s.calculateCostInternalWithPolicy(model, tokens, rateMultiplier, serviceTier, channelPricing, true)
 }
@@ -1588,7 +1600,7 @@ func (s *BillingService) calculateCostInternalWithPolicy(
 	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, longContextBillingEnabled), nil
 }
 
-func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *ModelPricing) *ModelPricing {
+func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *ModelPricing, at time.Time) *ModelPricing {
 	if pricing == nil {
 		return nil
 	}
@@ -1602,16 +1614,16 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 		(pricing.LongContextInputThreshold <= 0 || pricing.LongContextInputMultiplier <= 0 || pricing.LongContextOutputMultiplier <= 0)
 	needsCacheCreationPolicy := isGPT56OrAstra && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
 		(pricing.InputPricePerTokenPriority > 0 && pricing.CacheCreationPricePerTokenPriority <= 0))
-	// GPT-6.1 Sol/Terra explicit cache-write prices, including zero, apply to priority at 2x.
-	needsGPT61CachePriority := (openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized)) && pricing.CacheCreationPriceExplicit &&
+	// Explicit GPT-6.1/6.2 cache-write prices, including zero, apply to priority at 2x.
+	needsGPT61CachePriority := (openai.GPT62ModelID(normalized) != "" || openai.IsGPT61SolModelSpelling(normalized) || openai.IsGPT61TerraModelSpelling(normalized)) && pricing.CacheCreationPriceExplicit &&
 		pricing.CacheCreationPricePerTokenPriority != pricing.CacheCreationPricePerToken*2
 	fastRatio := openAIModelFastPricingRatio(normalized)
 	if !needsLongContextPolicy && !needsCacheCreationPolicy && !needsGPT61CachePriority && fastRatio <= 0 {
 		return pricing
 	}
 	cloned := *pricing
-	if isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6.1-sol" {
-		cloned.UltrafastMultiplier = 6
+	if isOpenAIGPT6AstraModel(normalized) || normalized == "gpt-6.1-sol" || openai.GPT62ModelID(normalized) != "" {
+		cloned.UltrafastMultiplier = openAIUltrafastMultiplier(normalized, at)
 	}
 	if fastRatio > 0 {
 		enforceOpenAIFastPricingRatio(&cloned, fastRatio)
@@ -2170,9 +2182,21 @@ func configuredServiceTierMultiplier(serviceTier string, pricing *ModelPricing) 
 	return serviceTierCostMultiplier(serviceTier)
 }
 
+// March 1, 2027 00:00 Pacific is 08:00 UTC, before daylight saving starts.
+// Compare the frozen request instant, so delayed settlement keeps its price.
+func openAIUltrafastMultiplier(model string, at time.Time) float64 {
+	if at.IsZero() {
+		at = time.Now()
+	}
+	if openai.GPT62ModelID(model) != "" && at.Before(time.Date(2027, time.March, 1, 8, 0, 0, 0, time.UTC)) {
+		return 3
+	}
+	return 6
+}
+
 func openAIModelFastPricingRatio(normalized string) float64 {
 	switch normalized {
-	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
+	case "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna":
 		return 2.0
 	case "gpt-5.5":
 		return 2.5

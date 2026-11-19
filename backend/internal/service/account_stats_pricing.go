@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 )
 
 // resolveAccountStatsCost 计算账号统计定价费用。
@@ -56,7 +57,8 @@ func resolveAccountStatsCost(
 
 	// 优先级 3：模型定价文件（LiteLLM）默认价格
 	if billingService != nil {
-		return tryModelFilePricing(billingService, upstreamModel, tokens, serviceTier, longContextPricingEnabled)
+		return tryModelFilePricing(billingService, upstreamModel, tokens, serviceTier, longContextPricingEnabled,
+			GatewayTokenRequestPricingAtFromContext(ctx))
 	}
 
 	return nil
@@ -66,10 +68,11 @@ func resolveAccountStatsCost(
 // 与用户计费共用同一条定价管线，避免这里维护第二份"单价 × token 数"实现后，
 // 每加一个定价特性都要手工镜像一次。channelPricing 为 nil，保持优先级 3 的
 // 语义：只取模型定价文件，不引入渠道自定义定价。
-func tryModelFilePricing(billingService *BillingService, model string, tokens UsageTokens, serviceTier string, longContextPricingEnabled bool) *float64 {
-	breakdown, err := billingService.calculateCostWithServiceTierPolicy(
-		model, tokens, 1, normalizeBillingServiceTier(serviceTier), longContextPricingEnabled,
-	)
+func tryModelFilePricing(billingService *BillingService, model string, tokens UsageTokens, serviceTier string, longContextPricingEnabled bool, pricingAt time.Time) *float64 {
+	breakdown, err := billingService.CalculateCostUnified(CostInput{
+		Model: model, Tokens: tokens, RateMultiplier: 1, ServiceTier: normalizeBillingServiceTier(serviceTier),
+		PricingAt: pricingAt, LongContextBillingEnabled: &longContextPricingEnabled,
+	})
 	if err != nil || breakdown == nil || breakdown.TotalCost <= 0 {
 		return nil
 	}
