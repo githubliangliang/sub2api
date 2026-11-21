@@ -71,6 +71,9 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// Only the exact validated bytes may use the parser's validation fast path.
+	parseRequestBody := service.ParseGatewayRequestValidated
+
 	// Extract model and stream
 	modelResult := gjson.GetBytes(body, "model")
 	if !modelResult.Exists() || modelResult.Type != gjson.String || modelResult.String() == "" {
@@ -89,6 +92,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	} else if changed {
 		body = capped
+		parseRequestBody = service.ParseGatewayRequest
 	}
 	reqStream, ok := parseOpenAICompatibleStream(body)
 	if !ok {
@@ -157,7 +161,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 
 	// Parse request for session hash
 	bodyRef := service.NewRequestBodyRef(body)
-	parsedReq, _ := service.ParseGatewayRequest(bodyRef, "chat_completions")
+	parsedReq, _ := parseRequestBody(bodyRef, "chat_completions")
 	if parsedReq == nil {
 		parsedReq = &service.ParsedRequest{Model: reqModel, Stream: reqStream, Body: bodyRef}
 	}

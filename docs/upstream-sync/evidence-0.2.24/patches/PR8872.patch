@@ -1,0 +1,942 @@
+diff --git a/backend/internal/service/openai_responses_tool_schema.go b/backend/internal/service/openai_responses_tool_schema.go
+index 4880efbf7..440a1b0a9 100644
+--- a/backend/internal/service/openai_responses_tool_schema.go
++++ b/backend/internal/service/openai_responses_tool_schema.go
+@@ -2,6 +2,7 @@ package service
+ 
+ import (
+ 	"bytes"
++	"encoding/binary"
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
+@@ -86,7 +87,7 @@ func sanitizeOpenAIResponsesToolSchemaPatterns(body []byte) ([]byte, bool, error
+ // oneOf/anyOf. Other missing types and nested property schemas are left
+ // unchanged.
+ func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error) {
+-	if len(body) == 0 {
++	if len(body) == 0 || !openAIResponsesBodyMayNeedToolParameterRepair(body) {
+ 		return body, false, nil
+ 	}
+ 	return sanitizeOpenAIResponsesToolSchemas(body, openAIResponsesToolSchemaOptions{
+@@ -96,31 +97,85 @@ func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error
+ 	})
+ }
+ 
++var (
++	openAIResponsesNullLiteral = []byte("null")
++	// Short needles on purpose: bytes.Contains switches to a much slower
++	// algorithm for longer needles (a quoted 7-byte key costs ~12x a 5-byte one)
++	// and these run on every request.
++	openAIResponsesOneOfHint         = []byte("oneOf")
++	openAIResponsesAnyOfHint         = []byte("anyOf")
++	openAIResponsesRegexGroupBytes   = []byte("(?")
++	openAIResponsesJSONUnicodeEscape = []byte(`\u`)
++	// Any escaped spelling of an ASCII letter is \u00XX, so this also stands in
++	// for a union keyword written that way.
++	openAIResponsesUnicodeLetterEscape = []byte(`\u00`)
++	openAIResponsesJSONBackslashPair   = []byte(`\\`)
++)
++
++// openAIResponsesBodyMayNeedToolParameterRepair is a necessary condition for
++// sanitizeOpenAIResponsesToolParameterTypes to change anything.
++//
++// Every repair reads either a literal null value (type / required), which the
++// JSON grammar cannot spell with escapes, or a oneOf/anyOf union. The union
++// repair first accepts a parameters object that contains "oneOf", "anyOf" or
++// any backslash at all, then decides on the decoded keys - so a union keyword
++// written as "one\u004ff" also qualifies. Any escaped spelling of an ASCII
++// letter is a \u00XX escape, which is what the last needle covers.
++func openAIResponsesBodyMayNeedToolParameterRepair(body []byte) bool {
++	return bytes.Contains(body, openAIResponsesNullLiteral) ||
++		bytes.Contains(body, openAIResponsesOneOfHint) ||
++		bytes.Contains(body, openAIResponsesAnyOfHint) ||
++		bytes.Contains(body, openAIResponsesUnicodeLetterEscape)
++}
++
++// openAIResponsesBodyMayContainUnsupportedRegex is a necessary condition for
++// sanitizeOpenAIResponsesToolSchemaPatterns to change anything. It is
++// deliberately much narrower than "the body contains a parenthesis": prose,
++// descriptions and code samples contain those constantly, so that test passed
++// on nearly every request and made this pass walk every request body.
+ func openAIResponsesBodyMayContainUnsupportedRegex(body []byte) bool {
+-	// An opening parenthesis may be literal or encoded as JSON's canonical
+-	// Unicode escape. A backslash inside a JSON string is escaped as \\, so the
+-	// sequence \\<letter> exposes the decoded regex escape without parsing.
+-	if bytes.Contains(body, []byte("(")) || bytes.Contains(body, []byte(`\u0028`)) ||
+-		bytes.Contains(body, []byte(`\u005c`)) || bytes.Contains(body, []byte(`\u005C`)) {
++	// hasUnsupportedOpenAIRegexPattern 只有三种触发方式，这里逐一给出必要字节条件：
++	//
++	//   1. 一个反斜杠后跟了非白名单的字母；
++	//   2. 字符串以反斜杠结尾；
++	//   3. 分组语法 "(?"。
++	//
++	// 前两种都需要解码后的反斜杠，而 JSON 里它只能写成 "\\" 或 \u005c。
++	// 第三种里 "(" 和 "?" 各自都可能是转义写法。
++	if bytes.Contains(body, openAIResponsesJSONBackslashPair) {
+ 		return true
+ 	}
+-	for i := 0; i+2 < len(body); i++ {
+-		if body[i] != '\\' || body[i+1] != '\\' {
+-			continue
+-		}
+-		escaped := body[i+2]
+-		if isASCIILetter(escaped) && !pythonRegexEscapeAllowed(escaped) {
+-			return true
+-		}
++	if bytes.Contains(body, openAIResponsesRegexGroupBytes) {
++		return true
+ 	}
+-	return false
++	if !bytes.Contains(body, openAIResponsesJSONUnicodeEscape) {
++		return false
++	}
++	// 任何 \u00XX 转义都可能写成上述三种形态里的括号、问号或反斜杠。
++	return bytes.Contains(body, openAIResponsesUnicodeLetterEscape)
++}
++
++// openAIResponsesJSONPatternIsUnsupported reports whether a JSON string span
++// (quotes included) decodes to a pattern Python re rejects. Spans without an
++// escape - the overwhelming majority - are checked in place, so the common
++// "many tools, no bad patterns" body neither decodes nor allocates per pattern.
++func openAIResponsesJSONPatternIsUnsupported(raw []byte) bool {
++	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
++		return false
++	}
++	inner := raw[1 : len(raw)-1]
++	if bytes.IndexByte(inner, '\\') < 0 {
++		return hasUnsupportedOpenAIRegexPattern(inner)
++	}
++	decoded, err := decodeOpenAIResponsesJSONString(raw)
++	return err == nil && hasUnsupportedOpenAIRegexPattern([]byte(decoded))
+ }
+ 
+ // hasUnsupportedOpenAIRegexPattern reports whether Python re rejects pattern.
+ // OpenAI validates tool-schema patterns with Python re, which supports neither
+ // lookaround nor the .NET/Java (?<name>...) and (?'name'...) group forms, and
+ // reserves unknown ASCII-letter escapes such as \p and \R.
+-func hasUnsupportedOpenAIRegexPattern(pattern string) bool {
++func hasUnsupportedOpenAIRegexPattern(pattern []byte) bool {
+ 	inCharacterClass := false
+ 	for i := 0; i < len(pattern); i++ {
+ 		switch pattern[i] {
+@@ -231,10 +286,10 @@ func sanitizeOpenAIResponsesToolSchemas(
+ 	if p.pos != len(body) {
+ 		return nil, false, fmt.Errorf("sanitize OpenAI Responses tool schemas: trailing data at byte %d", p.pos)
+ 	}
+-	if !json.Valid(body) {
+-		return nil, false, fmt.Errorf("sanitize OpenAI Responses tool schemas: invalid JSON")
+-	}
+ 	if len(p.edits) == 0 {
++		// The walk above already rejected everything encoding/json rejects, so a
++		// clean parse needs no second full-body validation. When there are edits
++		// the result is validated after patching.
+ 		return body, false, nil
+ 	}
+ 	return applyOpenAIResponsesToolSchemaEdits(body, p.edits)
+@@ -269,7 +324,11 @@ func (p *openAIResponsesToolSchemaParser) parseValue(
+ 		case "additional_tools":
+ 			context = openAIResponsesToolSchemaToolCarrier
+ 		default:
+-			context = openAIResponsesToolSchemaSkip
++			// Nothing inside this item can be edited, so the probe walk is the
++			// whole job: reuse where it stopped instead of walking the item a
++			// second time just to skip it. Messages dominate input history.
++			p.pos = probe.pos
++			return nil
+ 		}
+ 	}
+ 	switch p.body[p.pos] {
+@@ -319,7 +378,7 @@ func (p *openAIResponsesToolSchemaParser) parseObject(
+ 		if err != nil {
+ 			return err
+ 		}
+-		key := p.body[keyStart:keyEnd]
++		key := newOpenAIResponsesJSONKey(p.body[keyStart:keyEnd])
+ 		p.skipWhitespace()
+ 		if !p.consume(':') {
+ 			return p.syntaxError("expected colon")
+@@ -335,26 +394,26 @@ func (p *openAIResponsesToolSchemaParser) parseObject(
+ 		p.skipWhitespace()
+ 
+ 		deleteMember := false
+-		if context == openAIResponsesToolSchemaTypeProbe && openAIResponsesJSONStringEquals(key, "type") {
++		if context == openAIResponsesToolSchemaTypeProbe && key.is("type") {
+ 			if value, ok := decodeOpenAIResponsesJSONStringValue(p.body[valueStart:valueEnd]); ok {
+ 				p.probeType = strings.TrimSpace(value)
+ 			}
+ 		}
+ 		if (context == openAIResponsesToolSchemaTool || context == openAIResponsesToolSchemaFunction) &&
+-			openAIResponsesJSONStringEquals(key, "parameters") {
++			key.is("parameters") {
+ 			parameterCount++
+ 			parameterValueStart = valueStart
+ 			parameterValueEnd = valueEnd
+ 		}
+ 		if p.options.removeUnsupportedRegexPatterns {
+-			if context == openAIResponsesToolSchema && openAIResponsesJSONStringEquals(key, "patternProperties") {
++			if context == openAIResponsesToolSchema && key.is("patternProperties") {
+ 				// The child parser records how many keys it had to remove. A
+ 				// closed sibling object must be reopened in that case.
+ 				if p.patternPropertiesDrops[valueStart] > 0 {
+ 					lostPatternProperty = true
+ 				}
+ 			}
+-			if context == openAIResponsesToolSchema && openAIResponsesJSONStringEquals(key, "additionalProperties") &&
++			if context == openAIResponsesToolSchema && key.is("additionalProperties") &&
+ 				!bytes.Equal(p.body[valueStart:valueEnd], []byte("true")) {
+ 				// Defer the edit: patternProperties may appear after this
+ 				// member, and only actual key removal requires reopening.
+@@ -364,15 +423,14 @@ func (p *openAIResponsesToolSchemaParser) parseObject(
+ 					replacement: "true",
+ 				})
+ 			}
+-			if context == openAIResponsesToolSchema && openAIResponsesJSONStringEquals(key, "pattern") {
+-				if pattern, ok := decodeOpenAIResponsesJSONStringValue(p.body[valueStart:valueEnd]); ok && hasUnsupportedOpenAIRegexPattern(pattern) {
++			if context == openAIResponsesToolSchema && key.is("pattern") {
++				if openAIResponsesJSONPatternIsUnsupported(p.body[valueStart:valueEnd]) {
+ 					deleteMember = true
+ 				}
+ 			}
+-			if context == openAIResponsesToolSchemaPatternPropertiesMap {
+-				if pattern, ok := decodeOpenAIResponsesJSONStringValue(key); ok && hasUnsupportedOpenAIRegexPattern(pattern) {
+-					deleteMember = true
+-				}
++			if context == openAIResponsesToolSchemaPatternPropertiesMap &&
++				openAIResponsesJSONPatternIsUnsupported(key.raw) {
++				deleteMember = true
+ 			}
+ 		}
+ 		// JSON Schema requires "required" to be an array. Clients occasionally emit
+@@ -380,11 +438,11 @@ func (p *openAIResponsesToolSchemaParser) parseObject(
+ 		// "required" is the semantic equivalent of an empty one, so dropping the
+ 		// member preserves the client's intent while satisfying strict validators.
+ 		if context == openAIResponsesToolSchema && p.options.dropNullRequired &&
+-			openAIResponsesJSONStringEquals(key, "required") &&
++			key.is("required") &&
+ 			bytes.Equal(p.body[valueStart:valueEnd], []byte("null")) {
+ 			deleteMember = true
+ 		}
+-		if context == openAIResponsesToolSchema && schemaRoot && openAIResponsesJSONStringEquals(key, "type") {
++		if context == openAIResponsesToolSchema && schemaRoot && key.is("type") {
+ 			// Duplicate JSON keys have parser-dependent effective values. Repair a
+ 			// root type only when it is unique rather than choosing a winner and
+ 			// potentially changing the client's effective schema.
+@@ -570,52 +628,95 @@ func (p *openAIResponsesToolSchemaParser) parseArray(
+ 	}
+ }
+ 
++// openAIResponsesJSONKey is one object member name, prepared for repeated
++// comparison. parseObject tests the same key against a dozen candidate names,
++// so the escape question is answered once here instead of rescanning the span
++// on every comparison.
++type openAIResponsesJSONKey struct {
++	raw   []byte
++	inner []byte
++	plain bool
++}
++
++func newOpenAIResponsesJSONKey(raw []byte) openAIResponsesJSONKey {
++	key := openAIResponsesJSONKey{raw: raw}
++	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
++		return key
++	}
++	key.inner = raw[1 : len(raw)-1]
++	key.plain = bytes.IndexByte(key.inner, '\\') < 0
++	return key
++}
++
++// is reports whether the member name equals want. A key carrying an escape
++// decodes to fewer bytes than it occupies, so an escape-free span can be
++// compared in place; only escaped spellings need to be decoded.
++func (k openAIResponsesJSONKey) is(want string) bool {
++	if k.inner == nil {
++		return false
++	}
++	if k.plain {
++		return len(k.inner) == len(want) && string(k.inner) == want
++	}
++	decoded, err := decodeOpenAIResponsesJSONString(k.raw)
++	return err == nil && decoded == want
++}
++
++func (k openAIResponsesJSONKey) isAny(candidates ...string) bool {
++	for _, candidate := range candidates {
++		if k.is(candidate) {
++			return true
++		}
++	}
++	return false
++}
++
+ func openAIResponsesToolSchemaChildContext(
+-	context openAIResponsesToolSchemaContext, key []byte,
++	context openAIResponsesToolSchemaContext, key openAIResponsesJSONKey,
+ ) (openAIResponsesToolSchemaContext, bool) {
+ 	switch context {
+ 	case openAIResponsesToolSchemaDocument:
+ 		switch {
+-		case openAIResponsesJSONStringEquals(key, "tools"):
++		case key.is("tools"):
+ 			return openAIResponsesToolSchemaTools, false
+-		case openAIResponsesJSONStringEquals(key, "input"):
++		case key.is("input"):
+ 			return openAIResponsesToolSchemaInput, false
+ 		}
+ 	case openAIResponsesToolSchemaTool:
+ 		switch {
+ 		// Anthropic Messages carries the same JSON Schema under input_schema, so
+ 		// /v1/messages tools must reach the sanitizer too.
+-		case openAIResponsesJSONStringMatchesAny(key, "parameters", "input_schema"):
++		case key.isAny("parameters", "input_schema"):
+ 			return openAIResponsesToolSchema, true
+-		case openAIResponsesJSONStringEquals(key, "function"):
++		case key.is("function"):
+ 			return openAIResponsesToolSchemaFunction, false
+-		case openAIResponsesJSONStringEquals(key, "tools"):
++		case key.is("tools"):
+ 			return openAIResponsesToolSchemaTools, false
+ 		}
+ 	case openAIResponsesToolSchemaToolCarrier:
+-		if openAIResponsesJSONStringEquals(key, "tools") {
++		if key.is("tools") {
+ 			return openAIResponsesToolSchemaTools, false
+ 		}
+ 	case openAIResponsesToolSchemaFunction:
+ 		switch {
+-		case openAIResponsesJSONStringEquals(key, "parameters"):
++		case key.is("parameters"):
+ 			return openAIResponsesToolSchema, true
+-		case openAIResponsesJSONStringEquals(key, "tools"):
++		case key.is("tools"):
+ 			return openAIResponsesToolSchemaTools, false
+ 		}
+ 	case openAIResponsesToolSchema:
+ 		switch {
+-		case openAIResponsesJSONStringMatchesAny(key,
++		case key.isAny(
+ 			"additionalProperties", "additionalItems", "contains", "not", "if", "then", "else",
+ 			"propertyNames", "unevaluatedProperties", "unevaluatedItems", "contentSchema"):
+ 			return openAIResponsesToolSchema, false
+-		case openAIResponsesJSONStringEquals(key, "items"):
++		case key.is("items"):
+ 			return openAIResponsesToolSchemaOrArray, false
+-		case openAIResponsesJSONStringMatchesAny(key, "anyOf", "oneOf", "allOf", "prefixItems"):
++		case key.isAny("anyOf", "oneOf", "allOf", "prefixItems"):
+ 			return openAIResponsesToolSchemaArray, false
+-		case openAIResponsesJSONStringEquals(key, "patternProperties"):
++		case key.is("patternProperties"):
+ 			return openAIResponsesToolSchemaPatternPropertiesMap, false
+-		case openAIResponsesJSONStringMatchesAny(key,
++		case key.isAny(
+ 			"properties", "$defs", "definitions", "dependentSchemas", "dependencies"):
+ 			return openAIResponsesToolSchemaMap, false
+ 		}
+@@ -631,7 +732,14 @@ func (p *openAIResponsesToolSchemaParser) parseString() (int, int, error) {
+ 	}
+ 	start := p.pos
+ 	p.pos++
+-	for p.pos < len(p.body) {
++	for {
++		// Skip the plain run in word-sized steps: string payloads dominate large
++		// request bodies, and a byte-at-a-time walk here was the bulk of the
++		// cost of the whole sanitizer.
++		p.pos += openAIResponsesJSONPlainStringRun(p.body[p.pos:])
++		if p.pos >= len(p.body) {
++			return 0, 0, p.syntaxError("unterminated string")
++		}
+ 		switch p.body[p.pos] {
+ 		case '"':
+ 			p.pos++
+@@ -652,20 +760,51 @@ func (p *openAIResponsesToolSchemaParser) parseString() (int, int, error) {
+ 					}
+ 				}
+ 				p.pos += 5
+-				continue
+ 			case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+ 				p.pos++
+ 			default:
+ 				return 0, 0, p.syntaxError("invalid string escape")
+ 			}
+ 		default:
+-			if p.body[p.pos] < 0x20 {
+-				return 0, 0, p.syntaxError("control character in string")
+-			}
+-			p.pos++
++			// Everything else that ends the plain run is a control byte.
++			return 0, 0, p.syntaxError("control character in string")
++		}
++	}
++}
++
++const (
++	openAIResponsesSWARByteOnes = 0x0101010101010101
++	openAIResponsesSWARHighBits = 0x8080808080808080
++)
++
++// openAIResponsesJSONWordHasZeroByte reports whether any byte of word is 0x00.
++func openAIResponsesJSONWordHasZeroByte(word uint64) bool {
++	return (word-openAIResponsesSWARByteOnes)&^word&openAIResponsesSWARHighBits != 0
++}
++
++// openAIResponsesJSONPlainStringRun returns the length of the leading run of
++// bytes in bulk that can be copied through a JSON string verbatim: no closing
++// quote, no escape backslash and no control byte. Those three are exactly the
++// bytes parseString has to stop at.
++func openAIResponsesJSONPlainStringRun(bulk []byte) int {
++	offset := 0
++	for ; offset+8 <= len(bulk); offset += 8 {
++		word := binary.LittleEndian.Uint64(bulk[offset:])
++		// '"' and '\\' are found by zero-byte detection on the XOR, which flags
++		// a whole word at once; (value & 0xE0) == 0 means value < 0x20.
++		if openAIResponsesJSONWordHasZeroByte(word^0x2222222222222222) ||
++			openAIResponsesJSONWordHasZeroByte(word^0x5c5c5c5c5c5c5c5c) ||
++			openAIResponsesJSONWordHasZeroByte(word&0xe0e0e0e0e0e0e0e0) {
++			break
++		}
++	}
++	for ; offset < len(bulk); offset++ {
++		value := bulk[offset]
++		if value == '"' || value == '\\' || value < 0x20 {
++			break
+ 		}
+ 	}
+-	return 0, 0, p.syntaxError("unterminated string")
++	return offset
+ }
+ 
+ func isOpenAIResponsesJSONHexDigit(value byte) bool {
+@@ -767,26 +906,6 @@ func decodeOpenAIResponsesJSONString(raw []byte) (string, error) {
+ 	return decoded, nil
+ }
+ 
+-func openAIResponsesJSONStringEquals(raw []byte, want string) bool {
+-	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+-		return false
+-	}
+-	if !bytes.Contains(raw, []byte{'\\'}) {
+-		return bytes.Equal(raw[1:len(raw)-1], []byte(want))
+-	}
+-	decoded, err := decodeOpenAIResponsesJSONString(raw)
+-	return err == nil && decoded == want
+-}
+-
+-func openAIResponsesJSONStringMatchesAny(raw []byte, candidates ...string) bool {
+-	for _, candidate := range candidates {
+-		if openAIResponsesJSONStringEquals(raw, candidate) {
+-			return true
+-		}
+-	}
+-	return false
+-}
+-
+ func decodeOpenAIResponsesJSONStringValue(raw []byte) (string, bool) {
+ 	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+ 		return "", false
+diff --git a/backend/internal/service/openai_responses_tool_schema_benchmark_test.go b/backend/internal/service/openai_responses_tool_schema_benchmark_test.go
+new file mode 100644
+index 000000000..9d775d22c
+--- /dev/null
++++ b/backend/internal/service/openai_responses_tool_schema_benchmark_test.go
+@@ -0,0 +1,129 @@
++package service
++
++import (
++	"fmt"
++	"strings"
++	"testing"
++)
++
++// buildToolSchemaBenchmarkBody 造一份贴近真实 Codex 请求的 body：小 tools 数组 +
++// 大 input 历史。description 里带括号，因为真实工具的说明几乎都有。
++func buildToolSchemaBenchmarkBody(targetBytes, tools int, withLookaround bool) []byte {
++	var sb strings.Builder
++	sb.Grow(targetBytes + 4096)
++	write := func(s string) { _, _ = sb.WriteString(s) }
++	write(`{"model":"gpt-5.6","stream":true,"instructions":"You are Codex, a coding agent.","tools":[`)
++	for i := 0; i < tools; i++ {
++		if i > 0 {
++			write(",")
++		}
++		pattern := ""
++		if withLookaround && i == 0 {
++			pattern = `,"pattern":"(?=x).*"`
++		}
++		write(fmt.Sprintf(
++			`{"type":"function","name":"tool_%d","description":"Runs a shell command (supports pipes).","parameters":{"type":"object","properties":{"query":{"type":"string"%s},"limit":{"type":"integer","minimum":1}},"required":["query"]}}`,
++			i, pattern))
++	}
++	write(`],"input":[`)
++	item := `{"type":"message","role":"user","content":[{"type":"input_text","text":"` + strings.Repeat("x", 4000) + `"}]}`
++	for i := 0; sb.Len() < targetBytes; i++ {
++		if i > 0 {
++			write(",")
++		}
++		write(item)
++	}
++	write(`]}`)
++	return []byte(sb.String())
++}
++
++// ungated 是改动前入口在这类 body 上的实际走向：旧的预检查是「body 里有 (」，
++// 而工具说明几乎都带括号，所以请求无一例外走整趟解析。
++func benchmarkToolSchemaEntry(
++	b *testing.B, body []byte,
++	ungated func([]byte) ([]byte, bool, error),
++	gated func([]byte) ([]byte, bool, error),
++) {
++	b.Helper()
++	b.Run("ungated", func(b *testing.B) {
++		b.SetBytes(int64(len(body)))
++		b.ReportAllocs()
++		for range b.N {
++			_, _, _ = ungated(body)
++		}
++	})
++	b.Run("gated", func(b *testing.B) {
++		b.SetBytes(int64(len(body)))
++		b.ReportAllocs()
++		for range b.N {
++			_, _, _ = gated(body)
++		}
++	})
++}
++
++func BenchmarkSanitizeOpenAIResponsesToolSchemaPatternsClean1MiB(b *testing.B) {
++	body := buildToolSchemaBenchmarkBody(1<<20, 30, false)
++	benchmarkToolSchemaEntry(b, body,
++		func(in []byte) ([]byte, bool, error) {
++			return sanitizeOpenAIResponsesToolSchemas(in, openAIResponsesToolSchemaOptions{removeUnsupportedRegexPatterns: true})
++		},
++		sanitizeOpenAIResponsesToolSchemaPatterns,
++	)
++}
++
++func BenchmarkSanitizeOpenAIResponsesToolParameterTypesClean1MiB(b *testing.B) {
++	body := buildToolSchemaBenchmarkBody(1<<20, 30, false)
++	benchmarkToolSchemaEntry(b, body,
++		func(in []byte) ([]byte, bool, error) {
++			return sanitizeOpenAIResponsesToolSchemas(in, openAIResponsesToolSchemaOptions{
++				replaceNullParameterTypes:       true,
++				injectObjectUnionRootObjectType: true,
++				dropNullRequired:                true,
++			})
++		},
++		sanitizeOpenAIResponsesToolParameterTypes,
++	)
++}
++
++func BenchmarkOpenAIResponsesToolSchemaGates(b *testing.B) {
++	body := buildToolSchemaBenchmarkBody(1<<20, 30, false)
++	b.Run("unsupported_regex", func(b *testing.B) {
++		b.SetBytes(int64(len(body)))
++		for range b.N {
++			_ = openAIResponsesBodyMayContainUnsupportedRegex(body)
++		}
++	})
++	b.Run("parameter_repair", func(b *testing.B) {
++		b.SetBytes(int64(len(body)))
++		for range b.N {
++			_ = openAIResponsesBodyMayNeedToolParameterRepair(body)
++		}
++	})
++}
++
++// 字符串扫描是解析里最重的一段：请求体的大头是长内容字符串。
++func BenchmarkOpenAIResponsesJSONStringScan(b *testing.B) {
++	body := []byte(`"` + strings.Repeat("abcdefgh", 1<<14) + `"`)
++	b.Run("legacy", func(b *testing.B) {
++		b.SetBytes(int64(len(body)))
++		for range b.N {
++			_, _, _, _ = legacyParseOpenAIResponsesJSONString(body, 0)
++		}
++	})
++	b.Run("current", func(b *testing.B) {
++		b.SetBytes(int64(len(body)))
++		for range b.N {
++			_ = currentParseOpenAIResponsesJSONString(body, 0)
++		}
++	})
++}
++
++// 平台入口就是三个调用点（HTTP 转发、WS 归一化、/v1/messages 转换）实际走的路径。
++func BenchmarkSanitizeOpenAIResponsesToolSchemasForPlatformClean1MiB(b *testing.B) {
++	body := buildToolSchemaBenchmarkBody(1<<20, 30, false)
++	b.SetBytes(int64(len(body)))
++	b.ReportAllocs()
++	for range b.N {
++		_, _, _ = sanitizeOpenAIResponsesToolSchemasForPlatform(body, PlatformOpenAI)
++	}
++}
+diff --git a/backend/internal/service/openai_responses_tool_schema_scan_test.go b/backend/internal/service/openai_responses_tool_schema_scan_test.go
+new file mode 100644
+index 000000000..f98a80b4d
+--- /dev/null
++++ b/backend/internal/service/openai_responses_tool_schema_scan_test.go
+@@ -0,0 +1,334 @@
++package service
++
++import (
++	"encoding/json"
++	"fmt"
++	"strings"
++	"testing"
++	"unicode/utf8"
++
++	"github.com/stretchr/testify/require"
++)
++
++// legacyParseOpenAIResponsesJSONString is the byte-at-a-time scanner this file
++// replaced. It stays here as the differential baseline for parseString.
++func legacyParseOpenAIResponsesJSONString(body []byte, pos int) (int, int, string, int) {
++	if pos >= len(body) || body[pos] != '"' {
++		return 0, 0, "expected string", pos
++	}
++	start := pos
++	pos++
++	for pos < len(body) {
++		switch body[pos] {
++		case '"':
++			pos++
++			return start, pos, "", 0
++		case '\\':
++			pos++
++			if pos >= len(body) {
++				return 0, 0, "unterminated string escape", pos
++			}
++			switch body[pos] {
++			case 'u':
++				if pos+4 >= len(body) {
++					return 0, 0, "short unicode escape", pos
++				}
++				for _, digit := range body[pos+1 : pos+5] {
++					if !isOpenAIResponsesJSONHexDigit(digit) {
++						return 0, 0, "invalid unicode escape", pos
++					}
++				}
++				pos += 5
++				continue
++			case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
++				pos++
++			default:
++				return 0, 0, "invalid string escape", pos
++			}
++		default:
++			if body[pos] < 0x20 {
++				return 0, 0, "control character in string", pos
++			}
++			pos++
++		}
++	}
++	return 0, 0, "unterminated string", pos
++}
++
++type stringScanResult struct {
++	start, end int
++	err        string
++	errPos     int
++}
++
++func currentParseOpenAIResponsesJSONString(body []byte, pos int) stringScanResult {
++	p := openAIResponsesToolSchemaParser{body: body, pos: pos}
++	start, end, err := p.parseString()
++	if err != nil {
++		message, errPos := splitOpenAIResponsesToolSchemaError(err)
++		return stringScanResult{err: message, errPos: errPos}
++	}
++	return stringScanResult{start: start, end: end}
++}
++
++func splitOpenAIResponsesToolSchemaError(err error) (string, int) {
++	text := err.Error()
++	const prefix = "sanitize OpenAI Responses tool schemas: "
++	text = strings.TrimPrefix(text, prefix)
++	at := strings.LastIndex(text, " at byte ")
++	if at < 0 {
++		return text, -1
++	}
++	var pos int
++	if _, scanErr := fmt.Sscanf(text[at+len(" at byte "):], "%d", &pos); scanErr != nil {
++		return text, -1
++	}
++	return text[:at], pos
++}
++
++func TestOpenAIResponsesToolSchemaParseStringMatchesLegacy(t *testing.T) {
++	escape := string(rune(92))
++	cases := []string{
++		`""`,
++		`"abc"`,
++		`"a b c"`,
++		`"` + strings.Repeat("x", 64) + `"`,
++		`"` + strings.Repeat("x", 63) + `"`, // exercises the 8-byte tail
++		`"` + strings.Repeat("x", 65) + `"`,
++		`"a\"b"`,
++		`"a\\b"`,
++		`"a\/b"`,
++		`"` + escape + `u00e9"`,
++		`"` + escape + `uD83D` + escape + `uDE00"`,
++		`"` + escape + `u00E9"`,
++		// 控制字符
++		"\"a\nb\"",
++		"\"a\tb\"",
++		"\"a\x00b\"",
++		"\"a\x1fb\"",
++		"\"a\x7fb\"", // DEL 是合法 JSON
++		// 非法转义 / 截断
++		`"a\qb"`,
++		`"a\u12"`,
++		`"a\u12zz"`,
++		`"a\u`,
++		`"a\`,
++		`"unterminated`,
++		`"`,
++		``,
++		`abc`,
++		// 多字节 UTF-8
++		`"中文 😀"`,
++		`"` + strings.Repeat("中", 40) + `"`,
++	}
++
++	for _, tc := range cases {
++		for _, pos := range []int{0, 1} {
++			body := []byte(tc)
++			if pos == 1 {
++				body = append([]byte("x"), body...)
++			}
++			wantStart, wantEnd, wantErr, wantErrPos := legacyParseOpenAIResponsesJSONString(body, pos)
++			got := currentParseOpenAIResponsesJSONString(body, pos)
++			require.Equal(t, stringScanResult{start: wantStart, end: wantEnd, err: wantErr, errPos: wantErrPos}, got,
++				"input=%q pos=%d", tc, pos)
++		}
++	}
++}
++
++func FuzzOpenAIResponsesToolSchemaParseString(f *testing.F) {
++	f.Add([]byte(`"abc"`), 0)
++	f.Add([]byte(`"a\"b"`), 0)
++	f.Add([]byte{'"', 'a', '\n', '"'}, 0)
++	f.Add([]byte(`"`), 0)
++	f.Add([]byte(`x"aé"`), 1)
++	f.Fuzz(func(t *testing.T, body []byte, pos int) {
++		if pos < 0 || pos > len(body) {
++			return
++		}
++		wantStart, wantEnd, wantErr, wantErrPos := legacyParseOpenAIResponsesJSONString(body, pos)
++		got := currentParseOpenAIResponsesJSONString(body, pos)
++		require.Equal(t, stringScanResult{start: wantStart, end: wantEnd, err: wantErr, errPos: wantErrPos}, got,
++			"body=%q pos=%d", body, pos)
++	})
++}
++
++// 探测走完的终点必须与「跳过」走完的终点一致，探针结果才能被当作跳过复用。
++func TestOpenAIResponsesToolSchemaInputItemSkipMatchesProbe(t *testing.T) {
++	values := []string{
++		`{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}`,
++		`{"type":"function","name":"x","parameters":{"type":"object"}}`,
++		`{"type":"function_call","arguments":"{}"}`,
++		`{"type":"custom","name":"x"}`,
++		`{"type":"tool_search"}`,
++		`{"type":"namespace","tools":[]}`,
++		`{"type":"additional_tools","tools":[{"type":"namespace"}]}`,
++		`{"type":"\\u0066unction","parameters":{"type":"null"}}`,
++		`{"type": "message" , "content" : [ 1 , 2 , {"a":null} ] }`,
++		`{}`,
++		`{"a":[{"b":[{"c":"d"}]}]}`,
++		`{"type":"message","content":"\\u0000\\u001f"}`,
++	}
++	for _, value := range values {
++		body := []byte(value)
++		probe := openAIResponsesToolSchemaParser{body: body, pos: 0}
++		require.NoError(t, probe.parseValue(openAIResponsesToolSchemaTypeProbe, false, 0), "value=%s", value)
++
++		skip := openAIResponsesToolSchemaParser{body: body, pos: 0}
++		require.NoError(t, skip.parseValue(openAIResponsesToolSchemaSkip, false, 0), "value=%s", value)
++
++		require.Equal(t, skip.pos, probe.pos, "value=%s", value)
++		require.Equal(t, len(body), probe.pos, "value=%s", value)
++	}
++}
++
++// 解析器接受的 body 必须也是 encoding/json 认可的有效 JSON——否则去掉改写前的
++// json.Valid 预检查就会放过畸形请求。
++func TestOpenAIResponsesToolSchemaParserAcceptsOnlyValidJSON(t *testing.T) {
++	corpus := append(openAIResponsesToolSchemaGateCorpus(), []string{
++		`{}`, `[]`, `null`, `0`, `""`, `{"a":1}`, `[1,2,3]`,
++	}...)
++	for _, body := range corpus {
++		p := openAIResponsesToolSchemaParser{body: []byte(body)}
++		err := p.parseValue(openAIResponsesToolSchemaDocument, false, 0)
++		if err != nil {
++			continue
++		}
++		p.skipWhitespace()
++		if p.pos != len(body) {
++			continue
++		}
++		require.True(t, json.Valid([]byte(body)), "解析器接受了 encoding/json 拒绝的输入: %q", body)
++	}
++}
++
++func FuzzOpenAIResponsesToolSchemaParserAcceptsOnlyValidJSON(f *testing.F) {
++	for _, seed := range []string{
++		`{"tools":[{"type":"function","parameters":{"type":"null"}}]}`,
++		`{"a":1,"b":[true,null,"x"]}`,
++		`0{"input"[{ "namespace"00`,
++		`{"a":01}`,
++		`{"a":"\u12zz"}`,
++		`{"a":1} trailing`,
++	} {
++		f.Add([]byte(seed))
++	}
++	f.Fuzz(func(t *testing.T, body []byte) {
++		if !utf8.Valid(body) {
++			return // 入口先做 utf8 校验，这里只看解析器本身
++		}
++		p := openAIResponsesToolSchemaParser{body: body}
++		if err := p.parseValue(openAIResponsesToolSchemaDocument, false, 0); err != nil {
++			return
++		}
++		p.skipWhitespace()
++		if p.pos != len(body) {
++			return
++		}
++		require.True(t, json.Valid(body), "解析器接受了 encoding/json 拒绝的输入: %q", body)
++	})
++}
++
++// openAIResponsesToolSchemaGateCorpus 覆盖两个门控必须放行的每一种写法。
++func openAIResponsesToolSchemaGateCorpus() []string {
++	escape := string(rune(92))
++	pattern := func(p string) string {
++		return `{"tools":[{"type":"function","name":"f","parameters":{"type":"object","properties":{"q":{"type":"string","pattern":"` + p + `"}}}}]}`
++	}
++	return []string{
++		// —— 非法正则 ——
++		pattern(`(?=x)`),
++		pattern(`(?!x)`),
++		pattern(`(?<=x)`),
++		pattern(`(?<!x)`),
++		pattern(`(?<name>x)`),
++		pattern(`(?'name'x)`),
++		pattern(`a` + escape + escape + `p{L}`),
++		pattern(`a` + escape + escape + `R`),
++		pattern(`a` + escape + `u005cp`),
++		pattern(`a` + escape + `u0028` + escape + `u003f=x)`),
++		pattern(`a` + escape + `u0028?=x)`),
++		pattern(`a(` + escape + `u003f=x)`),
++		pattern(`a` + escape + escape + escape + escape + `d`),
++		// patternProperties 的键
++		`{"tools":[{"type":"function","parameters":{"type":"object","patternProperties":{"(?=x)":{"type":"string"}}}}]}`,
++		`{"tools":[{"type":"function","parameters":{"type":"object","patternProperties":{"` + escape + `u0028` + escape + `u003f=x)":{"type":"string"}}}}]}`,
++		// —— 参数类型修复 ——
++		`{"tools":[{"type":"function","parameters":{"type":null}}]}`,
++		`{"tools":[{"type":"function","parameters":{"required":null}}]}`,
++		`{"tools":[{"type":"function","parameters":{"oneOf":[{"type":"object"},{"type":"object"}]}}]}`,
++		`{"tools":[{"type":"function","parameters":{"anyOf":[{"properties":{}}]}}]}`,
++		// union 关键字用 \u004f / \u0066 转义写出：字面 needle 不命中，但
++		// openAIMissingRootObjectUnionTypeEdit 会因为 raw 里有反斜杠而继续解析。
++		`{"tools":[{"type":"function","name":"other","parameters":{"one` + escape + `u004ff":[{"type":"object"}]}}]}`,
++		`{"tools":[{"type":"function","name":"other","parameters":{"anyO` + escape + `u0066":[{"type":"object"}]}}]}`,
++		`{"messages":[{"role":"user","content":"x","input_schema":{"type":null}}]}`,
++		// —— 合法正则不应触发修复，但门控允许放行 ——
++		pattern(`^a+$`),
++		pattern(`a` + escape + escape + `d{3}`),
++		`{"input":[{"type":"message","content":"a null mention (and parens)"}]}`,
++	}
++}
++
++// 门控必须是「会改写」的必要条件：只要消毒真的改了 body，门控就必须放行。
++// 反向不成立——门控故意留了余量（例如 body 里出现任何 \\ 就放行），因为算出
++// 精确条件比放行一两次解析更贵也更易错。
++func requireOpenAIResponsesToolSchemaPatternGateCovers(t *testing.T, body []byte) {
++	t.Helper()
++	_, changed, err := sanitizeOpenAIResponsesToolSchemas(body,
++		openAIResponsesToolSchemaOptions{removeUnsupportedRegexPatterns: true})
++	if err != nil {
++		return // 解析失败的 body 不会被改写，错误本身交给既有用例覆盖
++	}
++	if changed {
++		require.True(t, openAIResponsesBodyMayContainUnsupportedRegex(body),
++			"改写已发生但正则门控放过了: %q", body)
++	}
++}
++
++// 类型修复原本没有门控，同样用绝对不变量：只要真的改了 body，门控就必须放行。
++func requireOpenAIResponsesToolParameterGateCovers(t *testing.T, body []byte) {
++	t.Helper()
++	_, changed, err := sanitizeOpenAIResponsesToolSchemas(body, openAIResponsesToolSchemaOptions{
++		replaceNullParameterTypes:       true,
++		injectObjectUnionRootObjectType: true,
++		dropNullRequired:                true,
++	})
++	if err != nil {
++		return
++	}
++	if changed {
++		require.True(t, openAIResponsesBodyMayNeedToolParameterRepair(body),
++			"改写已发生但类型门控放过了: %q", body)
++	}
++}
++
++// 门控必须真的能挡住普通请求，否则上面那条不变量会被「永远返回 true」蒙混过关。
++func TestOpenAIResponsesToolSchemaGatesSkipOrdinaryTraffic(t *testing.T) {
++	clean := buildToolSchemaBenchmarkBody(1<<20, 30, false)
++	require.False(t, openAIResponsesBodyMayContainUnsupportedRegex(clean),
++		"普通的 1 MiB 请求不该进入正则 pattern 消毒")
++	require.False(t, openAIResponsesBodyMayNeedToolParameterRepair(clean),
++		"普通的 1 MiB 请求不该进入参数类型修复")
++}
++
++func TestOpenAIResponsesToolSchemaGatesAreNecessary(t *testing.T) {
++	for _, body := range openAIResponsesToolSchemaGateCorpus() {
++		raw := []byte(body)
++		requireOpenAIResponsesToolSchemaPatternGateCovers(t, raw)
++		requireOpenAIResponsesToolParameterGateCovers(t, raw)
++	}
++}
++
++func FuzzOpenAIResponsesToolSchemaGatesAreNecessary(f *testing.F) {
++	for _, seed := range openAIResponsesToolSchemaGateCorpus() {
++		f.Add([]byte(seed))
++	}
++	f.Fuzz(func(t *testing.T, body []byte) {
++		if len(body) == 0 {
++			return
++		}
++		requireOpenAIResponsesToolSchemaPatternGateCovers(t, body)
++		requireOpenAIResponsesToolParameterGateCovers(t, body)
++	})
++}
+diff --git a/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/19981bffc2abbaf1 b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/19981bffc2abbaf1
+new file mode 100644
+index 000000000..ecbe8afb9
+--- /dev/null
++++ b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/19981bffc2abbaf1
+@@ -0,0 +1,2 @@
++go test fuzz v1
++[]byte("A")
+diff --git a/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/430233b3de39cf96 b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/430233b3de39cf96
+new file mode 100644
+index 000000000..41376806e
+--- /dev/null
++++ b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/430233b3de39cf96
+@@ -0,0 +1,2 @@
++go test fuzz v1
++[]byte("{\"tools\":[{\"parameters\":{\"properties\":{\"\":{\"\":\"(\",\"pattern\":\"\\\\\"}}}}]}")
+diff --git a/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/6c31f0fa5746a2cd b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/6c31f0fa5746a2cd
+new file mode 100644
+index 000000000..f9d7f69b3
+--- /dev/null
++++ b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/6c31f0fa5746a2cd
+@@ -0,0 +1,2 @@
++go test fuzz v1
++[]byte("0\\\\")
+diff --git a/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/e90985907f88433e b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/e90985907f88433e
+new file mode 100644
+index 000000000..3a4d1d4e1
+--- /dev/null
++++ b/backend/internal/service/testdata/fuzz/FuzzOpenAIResponsesToolSchemaGatesAreNecessary/e90985907f88433e
+@@ -0,0 +1,2 @@
++go test fuzz v1
++[]byte("{\"tools\":[{\"parameters\":{\"properties\":{\"\":{\"pattern\":\"\\\\\"}}}}]}")

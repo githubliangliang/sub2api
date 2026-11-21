@@ -1,0 +1,66 @@
+package routes
+
+import (
+	"github.com/tidwall/gjson"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCompositeThinkingHTTP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	resolver := service.NewCompositeRouteResolver(compositeRouteRepoStub{
+		routes: []service.CompositeModelRoute{
+			{
+				ID:             1,
+				GroupID:        1,
+				PublicModel:    "openrouter/gpt-5",
+				MatchType:      service.CompositeRouteMatchExact,
+				TargetPlatform: service.PlatformAnthropic,
+				UpstreamModel:  "claude-sonnet-5-5",
+				Endpoint:       service.CompositeRouteEndpointAny,
+				Priority:       100,
+				Enabled:        true,
+			},
+		},
+	})
+	router.Use(gin.HandlerFunc(servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
+		groupID := int64(1)
+		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+			GroupID: &groupID,
+			Group:   &service.Group{ID: groupID, Platform: service.PlatformComposite},
+		})
+		c.Next()
+	})))
+	router.Use(compositeTargetPlatformMiddleware(resolver))
+	router.POST("/v1/chat/completions", func(c *gin.Context) {
+		platform, ok := service.ResolvedTargetPlatformFromContext(c.Request.Context())
+		require.True(t, ok)
+		require.Equal(t, service.PlatformAnthropic, platform)
+
+		upstreamModel, ok := service.ResolvedUpstreamModelFromContext(c.Request.Context())
+		require.True(t, ok)
+		require.Equal(t, "claude-sonnet-5-5", upstreamModel)
+
+		body, err := io.ReadAll(c.Request.Body)
+		require.NoError(t, err)
+		require.Equal(t, "adaptive", gjson.GetBytes(body, "thinking.type").String())
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"openrouter/gpt-5","thinking":{"type":"enabled","budget_tokens":1024},"messages":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
+}

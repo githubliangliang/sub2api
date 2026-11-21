@@ -1,0 +1,60 @@
+diff --git a/frontend/src/components/admin/account/AccountActionMenu.vue b/frontend/src/components/admin/account/AccountActionMenu.vue
+index f376cce12..a6e4a2c2b 100644
+--- a/frontend/src/components/admin/account/AccountActionMenu.vue
++++ b/frontend/src/components/admin/account/AccountActionMenu.vue
+@@ -33,7 +33,7 @@
+                 <Icon name="link" size="sm" />
+                 {{ t('admin.accounts.reAuthorize') }}
+               </button>
+-              <button @click="$emit('refresh-token', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-purple-600 hover:bg-gray-100 dark:hover:bg-dark-700">
++              <button @click="$emit('refresh-token', account); $emit('close')" :title="t('admin.accounts.refreshTokenHint')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-purple-600 hover:bg-gray-100 dark:hover:bg-dark-700">
+                 <Icon name="refresh" size="sm" />
+                 {{ t('admin.accounts.refreshToken') }}
+               </button>
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index 1dbb8658d..9b3d97afe 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -504,6 +504,8 @@ export default {
+       testConnection: 'Test Connection',
+       reAuthorize: 'Re-Authorize',
+       refreshToken: 'Refresh Token',
++      refreshTokenHint: 'Tokens are refreshed automatically in the background. Frequent manual refreshes can race the automatic refresh and invalidate the token, pausing the account.',
++      refreshTokenFrequentWarning: 'Less than a minute since the last manual refresh: frequent refreshes can race the background auto-refresh and invalidate the token. Only retry when necessary.',
+       noAccountsYet: 'No accounts yet',
+       createFirstAccount: 'Create your first account to start using AI services.',
+       tokenRefreshed: 'Token refreshed successfully',
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index a3e16a3f3..a7640ffa8 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -297,6 +297,8 @@ export default {
+       testConnection: '测试连接',
+       reAuthorize: '重新授权',
+       refreshToken: '刷新令牌',
++      refreshTokenHint: '系统已在后台自动刷新令牌，频繁手动刷新可能与自动刷新相互冲突，导致令牌失效、账号被暂停',
++      refreshTokenFrequentWarning: '距离上次手动刷新不足一分钟：频繁刷新可能与后台自动刷新冲突，导致令牌失效。如无必要请稍候再试。',
+       noAccountsYet: '暂无账号',
+       createFirstAccount: '添加 AI 平台账号以开始使用 API 网关。',
+       tokenRefreshed: 'Token 刷新成功',
+diff --git a/frontend/src/views/admin/AccountsView.vue b/frontend/src/views/admin/AccountsView.vue
+index cb650f706..fc3bea875 100644
+--- a/frontend/src/views/admin/AccountsView.vue
++++ b/frontend/src/views/admin/AccountsView.vue
+@@ -2393,7 +2393,16 @@ const handleDuplicateAccount = async (a: Account) => {
+     duplicatingAccountIDs.delete(a.id)
+   }
+ }
++const lastManualRefreshAt = new Map<number, number>()
++const MANUAL_REFRESH_WARN_INTERVAL_MS = 60_000
++
+ const handleRefresh = async (a: Account) => {
++  // 只提醒不阻拦：短时间内反复手动刷新可能与后台自动刷新竞争同一份轮换令牌
++  const lastAt = lastManualRefreshAt.get(a.id) ?? 0
++  if (Date.now() - lastAt < MANUAL_REFRESH_WARN_INTERVAL_MS) {
++    appStore.showWarning(t('admin.accounts.refreshTokenFrequentWarning'))
++  }
++  lastManualRefreshAt.set(a.id, Date.now())
+   try {
+     const result = await adminAPI.accounts.refreshCredentials(a.id)
+     patchAccountInList(result.account)

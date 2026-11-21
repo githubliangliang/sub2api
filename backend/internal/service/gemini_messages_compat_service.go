@@ -3467,6 +3467,24 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
 			"parts": parts,
 		})
 	}
+	// Gemini rejects a final tool-result turn with trailing text or media.
+	// Keep all function responses together and preserve the trailing parts in a user turn.
+	if n := len(out); n > 0 {
+		last, _ := out[n-1].(map[string]any)
+		parts, _ := last["parts"].([]any)
+		lastResponse := -1
+		for i, part := range parts {
+			if p, ok := part.(map[string]any); ok {
+				if _, ok := p["functionResponse"]; ok {
+					lastResponse = i
+				}
+			}
+		}
+		if lastResponse >= 0 && lastResponse < len(parts)-1 {
+			last["parts"] = parts[:lastResponse+1]
+			out = append(out, map[string]any{"role": "user", "parts": parts[lastResponse+1:]})
+		}
+	}
 	return out, nil
 }
 

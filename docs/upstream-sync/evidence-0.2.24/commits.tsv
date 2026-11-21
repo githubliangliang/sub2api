@@ -1,0 +1,66 @@
+sha	parents	author_date	subject
+bf292550a6d45088c46dd0792d9bffddb2c65e92	530c5e3a4f9c73ca2b0881191d0ef8e0d82c5484	2026-11-14T02:54:25-08:00	feat(websearch): add Exa as a web search emulation provider
+aa5a020bd16bcac8c9c18f71040abfa50e2c9984	530c5e3a4f9c73ca2b0881191d0ef8e0d82c5484	2026-11-14T02:54:30-08:00	feat(apicompat): return web_search sources in web_search_tool_result blocks
+e2631bbb385a8fa04a7b006678417713600aa270	530c5e3a4f9c73ca2b0881191d0ef8e0d82c5484	2026-11-14T03:55:33-08:00	feat(gateway): write Claude Code compaction requests at 5m cache TTL
+5e322694e72ef39ffb59ec7b5920e206239eb895	530c5e3a4f9c73ca2b0881191d0ef8e0d82c5484	2026-11-14T03:51:44-08:00	fix(apicompat): map ToolSearch to native tool_search for Codex OAuth
+30152d1b16fb2fbc5d3d58a8ca71d2bd6fea8a89	aa5a020bd16bcac8c9c18f71040abfa50e2c9984	2026-11-14T07:09:38-08:00	fix(apicompat): tolerate non-string action.url and skip unfinished web_search calls
+3f1a7c6d9d1906989a19aba330d477b8e72b80c1	5e322694e72ef39ffb59ec7b5920e206239eb895	2026-11-14T06:15:40-08:00	fix(apicompat): keep forced tools, result text and reserved names intact
+f72ef070975445fe077c6c267369f08e38ca52e7	70ad8365d9b5a0be5ebaf3c0065ff385f8c081fd	2026-11-14T06:18:52-08:00	fix(openai): keep hosted output items in buffered compat responses
+00b09b892d7bbbf14c004b4246771ffe3e019ad0	f72ef070975445fe077c6c267369f08e38ca52e7	2026-11-14T12:49:12-08:00	fix(openai): rebuild empty buffered terminal output from done items
+fbe8c39a90e8b2b3153f418cc828dc6f97281ed9	00b09b892d7bbbf14c004b4246771ffe3e019ad0	2026-11-14T12:56:42-08:00	fix(apicompat): keep tool_use input a JSON object in buffered responses
+49ef5f6909661a2c0dfc88b586d83568fd3cde70	fbe8c39a90e8b2b3153f418cc828dc6f97281ed9	2026-11-14T17:40:48-08:00	fix(openai): render custom tool calls only from rebuilt buffered output
+5279823757cc8d836316243e5f37a13715ce4b81	49ef5f6909661a2c0dfc88b586d83568fd3cde70	2026-11-15T02:35:40-08:00	fix(openai): complete buffered item parts by their own index
+7f1ecfaa2dab996e39165ffbeadb71c0fb371927	5279823757cc8d836316243e5f37a13715ce4b81	2026-11-15T04:10:53-08:00	fix(openai): follow the streaming path for rebuilt buffered items
+413f1cb08a449d855aaa5220b12940c93704bd88	7f1ecfaa2dab996e39165ffbeadb71c0fb371927	2026-11-16T00:43:36-08:00	fix(openai): keep xAI server-side search out of rebuilt buffered tool calls
+2c587f78b07e35f23e79ac63d180a06234bee050	ef29203002bf134560b78627e675a79547b88ab3	2026-11-16T04:06:12-08:00	fix(grok): bill search calls from xAI usage success counts
+fa796b309a613785396a0c658b710ba8c13b3a1f	9cd1a1eb21e84707685e1998dcb5a3d1ceafae49	2026-11-16T20:52:14+08:00	fix(accounts): refresh Claude and Gemini usage snapshots
+833cfcc2fb49ea35f2191b009cd2dc35a2784234	d70676756fd3a35b854d41aa46c07935bbef283f	2026-11-16T21:30:06+08:00	perf(gateway): skip the cache_control TTL walk when no 1h breakpoint exists
+f42dad9b7113ad26dfcfc59b4ce1bfe3352c9493	d70676756fd3a35b854d41aa46c07935bbef283f	2026-11-16T01:28:35-08:00	fix(composite): adapt thinking to the Claude 5.5 model a route rewrites to
+59645b7bea035d4f43072a2c0b62360eaa6e45fe	9cd1a1eb21e84707685e1998dcb5a3d1ceafae49	2026-11-16T22:52:36+08:00	perf(openai): skip the image-intent body scan when a request cannot declare one
+487d42c9645d3e259e42a99a29edc9d1a9311e4c	59645b7bea035d4f43072a2c0b62360eaa6e45fe	2026-11-16T23:02:17+08:00	perf(openai): reuse an already-validated body when classifying image intent
+62765bb4e761ec89f91aa7d409d4103f7075154e	487d42c9645d3e259e42a99a29edc9d1a9311e4c	2026-11-16T23:03:38+08:00	perf(openai): apply the image-intent precheck to the declaration scanners
+0c571e9e271ebc295e505424700e9213d2401388	9cd1a1eb21e84707685e1998dcb5a3d1ceafae49	2026-11-16T23:23:13+08:00	perf(service): parse the gateway request body with a single root walk
+844459e78595acb63dc4d97e0394106cfd9dbfa1	0c571e9e271ebc295e505424700e9213d2401388	2026-11-16T23:24:26+08:00	perf(openai): skip the redundant body validation when parsing responses requests
+8d962ba494ae0adcd745629b1e4bcec1dc839b0e	844459e78595acb63dc4d97e0394106cfd9dbfa1	2026-11-16T23:34:25+08:00	perf(openai): use the validated parse path for chat completions too
+fb52c6e136a9401d5c078bade0533b32715706f7	9cd1a1eb21e84707685e1998dcb5a3d1ceafae49	2026-11-11T15:21:18+08:00	fix(openai): protect rotated oauth credentials from enrichment timeout and race conditions
+049e0f41b863b0e81527de088fb144db0a60e5d3	9cd1a1eb21e84707685e1998dcb5a3d1ceafae49	2026-11-17T00:10:26+08:00	perf(openai): stop copying the whole input array when stripping namespaces
+09840b8027a308b46ed62268151d6de71877e09f	8d962ba494ae0adcd745629b1e4bcec1dc839b0e	2026-11-17T00:14:52+08:00	test(gateway): stop ignoring strings.Builder errors in the scan benchmark
+596696356e2fb4a62d3e4797dc5cdcf71553cfdb	049e0f41b863b0e81527de088fb144db0a60e5d3	2026-11-17T00:29:48+08:00	style(openai): gofmt the namespace strip equivalence test
+e7c587e14de55c286edc816fda2f18e550d58492	9cd1a1eb21e84707685e1998dcb5a3d1ceafae49	2026-11-17T01:39:42+08:00	perf(openai): stop walking every request body in the tool-schema sanitizer
+d0c232401fb1ad977682602ab2d8af4c1b8ace26	fa796b309a613785396a0c658b710ba8c13b3a1f	2026-11-17T11:22:55+08:00	ci: rerun checks after allocation guard failure
+bcb22d4de855635ffb2827a610ecde0c846461f0	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-16T13:22:54+08:00	fix(openai): stop pinning large request bodies after the handler
+570d59e9ac0f32bf5caa51f0a1a72c60f40fbc01	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-17T15:13:03+08:00	fix(anthropic): expose metadata-backed long-context models
+f66984fc5df773522559396c4a7cda0a7a843f0e	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-17T08:28:24+00:00	fix(openai): keep relayed image usage on a single SSE data line
+18c42a29d2edb2e314eef5115021fe33b7fa5af6	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-16T15:00:05+08:00	perf(scheduler): omit expanded groups from account cache
+77ba3346d1ae9aa3930dc1b347d05582e1bae93d	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-17T09:50:16+00:00	fix(openai): skip foreign-vendor models on ChatGPT OAuth accounts, passthrough included
+3b95559788e2538450c6c06765ae508b9f146a7e	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-17T21:46:58+08:00	fix(accounts): opt in to bulk passthrough model filter changes
+f358f0a41a03c44230e6374e9e387d822047a9a0	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-17T23:10:31+08:00	feat(accounts): estimate Claude OAuth and setup-token window costs
+65be27787cae797efb15af62a048215bf74f6cce	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-18T00:21:53+08:00	feat(frontend): warn on frequent manual token refreshes
+75290a9f26e554db29bd06422f4dd5f2a196e7f0	15871f904056f548dd874a1d069ffc6cdf777b78	2026-11-17T23:08:42+03:00	fix(accounts): omit temperature from account tests for models that reject it
+a4b72bef0977b9174fd4c3cc19a8ad055649145c	69d2fae91318359e4e25c0171eaf70364dad3629	2026-11-18T10:39:32+08:00	fix(admin): initialize default platform quotas for new users
+2af3f1e15c98c893a89255a037f551046883b8c0	5af9afb588c4b014b3df9db7d4073af1f8ae01b6	2026-11-18T03:51:52+00:00	chore: sync VERSION to 0.2.23 [skip ci]
+44db3dd72b99467776be3db188be27767bc6b54d	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-18T12:55:14+08:00	fix(gemini): keep trailing parts out of the final tool-result turn
+e3872e16155f777f3a66b49523e447c386e6a1ff	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-18T14:05:43+08:00	fix(openai): preserve VS Code IDE context in HTTP Responses
+e52bc308bb280272baa35c83f6fd109e215aeb1a	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-18T14:30:09+08:00	fix(usage): record per-turn Responses reasoning effort
+75de2de4802821f6dad801aa2bbb3639948b8f54	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-18T14:48:14+08:00	fix(codex): preserve native audio input capabilities
+e2148a18138665623ce41293bdd14db850a78d5c	b5827cfd54d58c248a9480b800444d0b40f0c6ea	2026-11-18T08:25:44+00:00	fix(ops): weight average token rate by request duration
+26e0be3392cdf7574f65491646b5f328b03eabef	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-18T20:57:44+08:00	fix(gateway): ensure DeepSeek Anthropic tool-use history carries thinking blocks
+735bcb0573c9823880cf232db1dc670581ac77d4	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-19T00:14:38+08:00	fix(antigravity): preserve upstream Gemini SSE comment frames
+155b83badbbe4bad3b7ba42f7a4a5c38fec88aa3	baf058f645a29c397a2062c822c425f3db4264fc	2026-11-19T09:49:44+08:00	fix(i18n): clarify Ultra Fast service tier hints
+92fd567a47b83d2fe589f113198bf5a6c606c7ee	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-19T15:47:59+08:00	fix(grok): accept five edit sources and classify input errors
+fec3de4a73d99f579083673fe1f3991d25733e3a	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-19T16:23:51+08:00	fix(gateway): resolve an issue where 'stop' and Kimi dynamic tool definitions were lost during protocol conversio
+4480cd90a42df239f83e0cc14033efd439128c6a	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-19T23:45:59+08:00	fix(openai): fail over upstream request timeouts
+3e190f7e057b1d9c1c1041b36d928f4413c3b2ca	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-20T02:39:02+08:00	fix(typesafe): apply account model mapping to System One
+2b67d1ede28a4175a4a3f4b2cdcafd6927bd2f21	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-20T04:00:28+09:00	fix(gateway): reject request bodies whose duplicate fields disagree
+747d228a215fe8c6c6ac2c3d3937e6d530f8681e	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-16T00:39:35-07:00	test(antigravity): a bare 429 on several accounts is request-scoped
+26b68da5c5f9a6e165d7abb04aadfdef2260a2c5	747d228a215fe8c6c6ac2c3d3937e6d530f8681e	2026-11-16T00:39:35-07:00	fix(antigravity): one request cools at most one account for a bare 429
+e7a556ff53f50d9907c088bab4ed560a5420cf04	26b68da5c5f9a6e165d7abb04aadfdef2260a2c5	2026-11-19T12:15:35-07:00	test(antigravity): a bare 429 after the retry loop cools no second account
+e0328a62acf0ecf55622c297069eec93cca045e5	e7a556ff53f50d9907c088bab4ed560a5420cf04	2026-11-19T12:17:25-07:00	fix(antigravity): a bare 429 after the retry loop cools no account the loop skipped
+f2386f9b2d5712d920a5298884e75f6f29babbe9	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-19T16:08:16-08:00	feat(model-plaza): add copy button for model IDs
+d270d6434f5c0dfeb13bd8584db3db09bb139189	2b67d1ede28a4175a4a3f4b2cdcafd6927bd2f21	2026-11-20T10:06:24+08:00	fix(gateway): reject conflicting duplicates in nested objects too
+ce86c1b3069382151908b39348233e19ee5d8d01	d270d6434f5c0dfeb13bd8584db3db09bb139189	2026-11-20T10:50:32+08:00	fix(gateway): close bypasses found in the duplicate-field audit
+263a13f160a1f21ff0679a8b3b25ecc777c8095f	ce86c1b3069382151908b39348233e19ee5d8d01	2026-11-20T11:32:05+08:00	fix(gateway): close second-round audit findings on the duplicate scanner
+88d5a20b7381c1926fb4f38016c04de9aff62903	263a13f160a1f21ff0679a8b3b25ecc777c8095f	2026-11-20T11:40:25+08:00	fix(gateway): reject multipart parts with an RFC 2231 extended field name
+7ded9ffb46ee24b0b0fe9144ab0d7068affec126	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-20T04:17:18+00:00	fix(antigravity): query quota from the account's forward endpoint
+a436766de3aff163e622d863aa7b3b6b1dc43b76	88d5a20b7381c1926fb4f38016c04de9aff62903	2026-11-20T13:55:58+08:00	fix(gateway): satisfy errcheck in duplicate-field scanner
+fe5e7fa404055cf03880045b4c06d5e6548991e5	2af3f1e15c98c893a89255a037f551046883b8c0	2026-11-20T14:22:44+08:00	fix(openai): stop alpha/search tool-level 403s from benching OAuth accounts

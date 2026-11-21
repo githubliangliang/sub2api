@@ -307,7 +307,10 @@ func TestMarshalSchedulerCacheAccountKeepsEncodingJSONWireFormat(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			full, meta, err := marshalSchedulerCacheAccount(tc.account)
 			require.NoError(t, err)
-			wantFull, err := json.Marshal(tc.account)
+			projected := tc.account
+			projected.Groups = nil
+			projected.AccountGroups = filterSchedulerAccountGroups(projected.AccountGroups)
+			wantFull, err := json.Marshal(projected)
 			require.NoError(t, err)
 			wantMeta, err := json.Marshal(buildSchedulerMetadataAccount(tc.account))
 			require.NoError(t, err)

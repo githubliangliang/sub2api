@@ -1,0 +1,911 @@
+diff --git a/backend/internal/pkg/apicompat/anthropic_tool_search.go b/backend/internal/pkg/apicompat/anthropic_tool_search.go
+new file mode 100644
+index 000000000..b21636d0b
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/anthropic_tool_search.go
+@@ -0,0 +1,271 @@
++package apicompat
++
++import (
++	"encoding/json"
++	"strings"
++)
++
++// ToolSearchToolName is Claude Code's client-executed tool-search tool. Under
++// the native protocol it maps to the Responses `tool_search` tool, its
++// tool_use to a `tool_search_call` and its tool_result to a
++// `tool_search_output`; an upstream tool_search_call comes back under this name.
++const ToolSearchToolName = "ToolSearch"
++
++// emptyToolResultOutput is what convertToolResultOutput emits for a
++// tool_result without text.
++const emptyToolResultOutput = "(empty)"
++
++// ApplyNativeToolSearch rewrites a Responses request produced by
++// AnthropicToResponses so Claude Code's ToolSearch uses the native
++// client-executed tool_search protocol of the ChatGPT/Codex backend.
++//
++// Deferred tools never reach the top-level tools: revealed definitions ride in
++// the history's tool_search_output instead, so the top-level tools (the head of
++// the prompt-cache prefix) stay identical before and after a reveal.
++func ApplyNativeToolSearch(req *AnthropicRequest, out *ResponsesRequest) error {
++	declared := false
++	deferred := make(map[string]bool)
++	for _, t := range req.Tools {
++		if t.DeferLoading {
++			deferred[t.Name] = true
++		} else if t.Name == ToolSearchToolName {
++			declared = true
++		}
++	}
++	// The Responses API has no tool_choice value that forces tool_search or a
++	// tool declared only in tool_search_output, so a request forcing either
++	// keeps every tool and call as a plain function.
++	if !declared || forcesHiddenTool(req.ToolChoice, deferred) {
++		return nil
++	}
++
++	schemas := make(map[string]AnthropicTool, len(req.Tools))
++	kept := make([]AnthropicTool, 0, len(req.Tools))
++	for _, t := range req.Tools {
++		schemas[t.Name] = t
++		if t.DeferLoading {
++			continue
++		}
++		kept = append(kept, t)
++	}
++	tools := convertAnthropicToolsToResponses(kept)
++	for i, t := range kept {
++		if t.Name == ToolSearchToolName {
++			// Codex declares this tool without a name or strict.
++			tools[i] = ResponsesTool{
++				Type:        "tool_search",
++				Execution:   "client",
++				Description: t.Description,
++				Parameters:  normalizeToolParameters(t.InputSchema),
++			}
++		}
++	}
++	out.Tools = tools
++
++	revealed := toolSearchReveals(req.Messages)
++	if len(revealed) == 0 {
++		return nil
++	}
++	var items []json.RawMessage
++	if err := json.Unmarshal(out.Input, &items); err != nil {
++		return err
++	}
++	rewritten := make([]json.RawMessage, 0, len(items))
++	var pendingText []string
++	flush := func(next json.RawMessage) (json.RawMessage, error) {
++		text := strings.Join(pendingText, "\n\n")
++		pendingText = nil
++		return userMessageWithLeadingText(next, text)
++	}
++	for _, raw := range items {
++		var item ResponsesInputItem
++		if err := json.Unmarshal(raw, &item); err != nil {
++			return err
++		}
++		if len(pendingText) > 0 && item.Type != "function_call_output" {
++			// A tool_search_output has no field for the result text, so it rides
++			// in the user message that follows the run of tool outputs.
++			merged, err := flush(raw)
++			if err != nil {
++				return err
++			}
++			if item.Type == "message" && item.Role == "user" {
++				raw = merged
++			} else {
++				rewritten = append(rewritten, merged)
++			}
++		}
++		names, isSearch := revealed[item.CallID]
++		if !isSearch {
++			rewritten = append(rewritten, raw)
++			continue
++		}
++		var native any
++		switch item.Type {
++		case "function_call":
++			native = map[string]any{
++				"type":      "tool_search_call",
++				"call_id":   item.CallID,
++				"execution": "client",
++				"status":    "completed",
++				"arguments": jsonObjectOrEmpty(item.Arguments),
++			}
++		case "function_call_output":
++			loaded := make([]any, 0, len(names))
++			for _, name := range names {
++				t, ok := schemas[name]
++				if !ok {
++					continue
++				}
++				loaded = append(loaded, map[string]any{
++					"type":          "function",
++					"name":          name,
++					"description":   t.Description,
++					"defer_loading": true,
++					"strict":        false,
++					"parameters":    normalizeToolParameters(t.InputSchema),
++				})
++			}
++			native = map[string]any{
++				"type":      "tool_search_output",
++				"call_id":   item.CallID,
++				"execution": "client",
++				"status":    "completed",
++				"tools":     loaded,
++			}
++			if item.Output != "" && item.Output != emptyToolResultOutput {
++				pendingText = append(pendingText, item.Output)
++			}
++		default:
++			rewritten = append(rewritten, raw)
++			continue
++		}
++		encoded, err := json.Marshal(native)
++		if err != nil {
++			return err
++		}
++		rewritten = append(rewritten, encoded)
++	}
++	if len(pendingText) > 0 {
++		tail, err := flush(nil)
++		if err != nil {
++			return err
++		}
++		rewritten = append(rewritten, tail)
++	}
++	input, err := json.Marshal(rewritten)
++	if err != nil {
++		return err
++	}
++	out.Input = input
++	return nil
++}
++
++// userMessageWithLeadingText returns next with a separate input_text part for
++// text placed ahead of its existing parts when next is a user message, and
++// otherwise a new user message holding text. Existing parts stay untouched.
++func userMessageWithLeadingText(next json.RawMessage, text string) (json.RawMessage, error) {
++	lead, err := json.Marshal(ResponsesContentPart{Type: "input_text", Text: text})
++	if err != nil {
++		return nil, err
++	}
++	var msg ResponsesInputItem
++	if len(next) > 0 && json.Unmarshal(next, &msg) == nil && msg.Type == "message" && msg.Role == "user" {
++		var parts []json.RawMessage
++		if json.Unmarshal(msg.Content, &parts) == nil {
++			content, err := json.Marshal(append([]json.RawMessage{lead}, parts...))
++			if err != nil {
++				return nil, err
++			}
++			msg.Content = content
++			return json.Marshal(msg)
++		}
++	}
++	content, err := json.Marshal([]json.RawMessage{lead})
++	if err != nil {
++		return nil, err
++	}
++	return json.Marshal(ResponsesInputItem{Type: "message", Role: "user", Content: content})
++}
++
++func forcesHiddenTool(raw json.RawMessage, deferred map[string]bool) bool {
++	var choice struct {
++		Type string `json:"type"`
++		Name string `json:"name"`
++	}
++	if len(raw) == 0 || json.Unmarshal(raw, &choice) != nil {
++		return false
++	}
++	return choice.Type == "tool" && (choice.Name == ToolSearchToolName || deferred[choice.Name])
++}
++
++// toolSearchReveals maps each ToolSearch tool_use id in the history to the
++// tool names its tool_result referenced, first occurrence first.
++func toolSearchReveals(msgs []AnthropicMessage) map[string][]string {
++	reveals := make(map[string][]string)
++	for _, m := range msgs {
++		var blocks []AnthropicContentBlock
++		if json.Unmarshal(m.Content, &blocks) != nil {
++			continue
++		}
++		for _, b := range blocks {
++			switch {
++			case b.Type == "tool_use" && b.Name == ToolSearchToolName && b.ID != "":
++				reveals[toResponsesCallID(b.ID)] = nil
++			case b.Type == "tool_result":
++				id := toResponsesCallID(b.ToolUseID)
++				if _, isSearch := reveals[id]; !isSearch {
++					continue
++				}
++				var inner []AnthropicContentBlock
++				_ = json.Unmarshal(b.Content, &inner)
++				seen := make(map[string]bool)
++				for _, ib := range inner {
++					if ib.Type == "tool_reference" && ib.ToolName != "" && !seen[ib.ToolName] {
++						seen[ib.ToolName] = true
++						reveals[id] = append(reveals[id], ib.ToolName)
++					}
++				}
++			}
++		}
++	}
++	return reveals
++}
++
++// toolSearchCallToolUse turns an upstream tool_search_call back into the
++// ToolSearch tool_use Claude Code executes; its call_id round-trips as the
++// tool_use id that the next turn's tool_result answers.
++func toolSearchCallToolUse(item ResponsesOutput) AnthropicContentBlock {
++	return AnthropicContentBlock{
++		Type:  "tool_use",
++		ID:    fromResponsesCallID(item.CallID),
++		Name:  ToolSearchToolName,
++		Input: jsonObjectOrEmpty(item.Arguments),
++	}
++}
++
++// jsonObjectOrEmpty keeps raw when it is a JSON object; both tool_search_call
++// arguments and tool_use input must be objects.
++func jsonObjectOrEmpty(raw string) json.RawMessage {
++	var probe map[string]json.RawMessage
++	if json.Unmarshal([]byte(raw), &probe) != nil || probe == nil {
++		return json.RawMessage(`{}`)
++	}
++	return json.RawMessage(raw)
++}
++
++func resToAnthHandleToolSearchDone(evt *ResponsesStreamEvent, state *ResponsesEventToAnthropicState) []AnthropicStreamEvent {
++	events := closeCurrentBlock(state)
++	block := toolSearchCallToolUse(*evt.Item)
++	input := block.Input
++	block.Input = json.RawMessage(`{}`)
++	idx := state.ContentBlockIndex
++	state.HasToolCall = true
++	events = append(events,
++		AnthropicStreamEvent{Type: "content_block_start", Index: &idx, ContentBlock: &block},
++		AnthropicStreamEvent{Type: "content_block_delta", Index: &idx, Delta: &AnthropicDelta{Type: "input_json_delta", PartialJSON: string(input)}},
++		AnthropicStreamEvent{Type: "content_block_stop", Index: &idx},
++	)
++	state.ContentBlockIndex++
++	return events
++}
+diff --git a/backend/internal/pkg/apicompat/anthropic_tool_search_test.go b/backend/internal/pkg/apicompat/anthropic_tool_search_test.go
+new file mode 100644
+index 000000000..76446588c
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/anthropic_tool_search_test.go
+@@ -0,0 +1,256 @@
++//go:build unit
++
++package apicompat
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++const toolSearchTestSchema = `{"type":"object","properties":{"query":{"type":"string"},"max_results":{"type":"number"}},"required":["query","max_results"]}`
++
++func toolSearchTestRequest(t *testing.T, raw string) *AnthropicRequest {
++	t.Helper()
++	var req AnthropicRequest
++	require.NoError(t, json.Unmarshal([]byte(raw), &req))
++	return &req
++}
++
++func nativeToolSearchJSON(t *testing.T, req *AnthropicRequest) []byte {
++	t.Helper()
++	out, err := AnthropicToResponses(req)
++	require.NoError(t, err)
++	require.NoError(t, ApplyNativeToolSearch(req, out))
++	body, err := json.Marshal(out)
++	require.NoError(t, err)
++	return body
++}
++
++// Before the reveal Claude Code sends Bash + ToolSearch; after it, the revealed
++// WebFetch schema joins tools[] with defer_loading:true and the history carries
++// the ToolSearch call plus its tool_reference result.
++const toolSearchBeforeReveal = `{"model":"gpt-6-astra","max_tokens":64,
++ "tools":[
++  {"name":"Bash","description":"run","input_schema":{"type":"object","properties":{"command":{"type":"string"}}}},
++  {"name":"ToolSearch","description":"search deferred tools","input_schema":` + toolSearchTestSchema + `}],
++ "messages":[{"role":"user","content":"fetch the page"}]}`
++
++const toolSearchAfterReveal = `{"model":"gpt-6-astra","max_tokens":64,
++ "tools":[
++  {"name":"Bash","description":"run","input_schema":{"type":"object","properties":{"command":{"type":"string"}}}},
++  {"name":"ToolSearch","description":"search deferred tools","input_schema":` + toolSearchTestSchema + `},
++  {"name":"WebFetch","description":"fetch a url","input_schema":{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]},"defer_loading":true}],
++ "messages":[
++  {"role":"user","content":"fetch the page"},
++  {"role":"assistant","content":[{"type":"tool_use","id":"toolu_search","name":"ToolSearch","input":{"query":"select:WebFetch","max_results":5}}]},
++  {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_search","content":[{"type":"tool_reference","tool_name":"WebFetch"},{"type":"tool_reference","tool_name":"WebFetch"},{"type":"tool_reference","tool_name":"Unknown"}]}]}]}`
++
++func TestApplyNativeToolSearch_TopLevelToolsStableAcrossReveal(t *testing.T) {
++	before := nativeToolSearchJSON(t, toolSearchTestRequest(t, toolSearchBeforeReveal))
++	after := nativeToolSearchJSON(t, toolSearchTestRequest(t, toolSearchAfterReveal))
++
++	require.JSONEq(t, gjson.GetBytes(before, "tools").Raw, gjson.GetBytes(after, "tools").Raw,
++		"top-level tools must not change when a deferred tool is revealed (prompt cache prefix)")
++
++	tools := gjson.GetBytes(after, "tools").Array()
++	require.Len(t, tools, 2)
++	require.Equal(t, "function", tools[0].Get("type").String())
++	require.Equal(t, "Bash", tools[0].Get("name").String())
++
++	search := tools[1]
++	require.Equal(t, "tool_search", search.Get("type").String())
++	require.Equal(t, "client", search.Get("execution").String())
++	require.Equal(t, "search deferred tools", search.Get("description").String())
++	require.JSONEq(t, toolSearchTestSchema, search.Get("parameters").Raw)
++	require.False(t, search.Get("name").Exists(), "tool_search carries no function name")
++	require.False(t, search.Get("strict").Exists(), "tool_search is declared without strict")
++}
++
++func TestApplyNativeToolSearch_HistoryMapsToNativeItems(t *testing.T) {
++	body := nativeToolSearchJSON(t, toolSearchTestRequest(t, toolSearchAfterReveal))
++	input := gjson.GetBytes(body, "input").Array()
++	require.Len(t, input, 3)
++
++	call := input[1]
++	require.Equal(t, "tool_search_call", call.Get("type").String())
++	require.Equal(t, "toolu_search", call.Get("call_id").String())
++	require.Equal(t, "client", call.Get("execution").String())
++	require.Equal(t, "completed", call.Get("status").String())
++	require.True(t, call.Get("arguments").IsObject(), "tool_search_call arguments are a JSON object")
++	require.Equal(t, "select:WebFetch", call.Get("arguments.query").String())
++
++	output := input[2]
++	require.Equal(t, "tool_search_output", output.Get("type").String())
++	require.Equal(t, "toolu_search", output.Get("call_id").String())
++	require.Equal(t, "client", output.Get("execution").String())
++	require.Equal(t, "completed", output.Get("status").String())
++	revealed := output.Get("tools").Array()
++	require.Len(t, revealed, 1, "duplicate and unknown references are dropped")
++	require.Equal(t, "function", revealed[0].Get("type").String())
++	require.Equal(t, "WebFetch", revealed[0].Get("name").String())
++	require.Equal(t, "fetch a url", revealed[0].Get("description").String())
++	require.True(t, revealed[0].Get("defer_loading").Bool())
++	require.False(t, revealed[0].Get("strict").Bool())
++	require.True(t, revealed[0].Get("strict").Exists())
++	require.Equal(t, "url", revealed[0].Get("parameters.required.0").String())
++}
++
++func TestApplyNativeToolSearch_NoToolSearchDeclaredKeepsFunctionTools(t *testing.T) {
++	req := toolSearchTestRequest(t, toolSearchAfterReveal)
++	tools := req.Tools[:0:0]
++	for _, tool := range req.Tools {
++		if tool.Name != "ToolSearch" {
++			tools = append(tools, tool)
++		}
++	}
++	req.Tools = tools
++
++	body := nativeToolSearchJSON(t, req)
++	var names []string
++	for _, tool := range gjson.GetBytes(body, "tools").Array() {
++		require.Equal(t, "function", tool.Get("type").String())
++		names = append(names, tool.Get("name").String())
++	}
++	require.Equal(t, []string{"Bash", "WebFetch"}, names)
++	require.NotContains(t, string(body), "tool_search_call")
++}
++
++func TestApplyNativeToolSearch_ForcedHiddenToolLeavesRequestUntouched(t *testing.T) {
++	for _, name := range []string{"ToolSearch", "WebFetch"} {
++		for _, raw := range []string{toolSearchBeforeReveal, toolSearchAfterReveal} {
++			req := toolSearchTestRequest(t, raw)
++			if name == "WebFetch" {
++				req.Tools = append(req.Tools, AnthropicTool{Name: "WebFetch", InputSchema: json.RawMessage(`{"type":"object"}`), DeferLoading: true})
++			}
++			req.ToolChoice = json.RawMessage(`{"type":"tool","name":"` + name + `"}`)
++			want, err := AnthropicToResponses(req)
++			require.NoError(t, err)
++			wantBody, err := json.Marshal(want)
++			require.NoError(t, err)
++
++			require.Equal(t, string(wantBody), string(nativeToolSearchJSON(t, req)), name)
++			require.NotContains(t, string(wantBody), "tool_search", name)
++		}
++	}
++}
++
++func TestApplyNativeToolSearch_OtherToolChoicesKeepNativeMapping(t *testing.T) {
++	for _, choice := range []string{
++		`{"type":"tool","name":"Bash"}`,
++		`{"type":"auto"}`,
++		`{"type":"any"}`,
++	} {
++		req := toolSearchTestRequest(t, toolSearchAfterReveal)
++		req.ToolChoice = json.RawMessage(choice)
++		body := nativeToolSearchJSON(t, req)
++		require.Equal(t, "tool_search", gjson.GetBytes(body, "tools.1.type").String(), choice)
++		require.Contains(t, string(body), "tool_search_output", choice)
++	}
++}
++
++func toolSearchResultRequest(t *testing.T, result string, trailing string) *AnthropicRequest {
++	t.Helper()
++	return toolSearchTestRequest(t, `{"model":"gpt-6-astra","max_tokens":64,
++ "tools":[
++  {"name":"ToolSearch","description":"search deferred tools","input_schema":`+toolSearchTestSchema+`},
++  {"name":"WebFetch","description":"fetch a url","input_schema":{"type":"object"},"defer_loading":true}],
++ "messages":[
++  {"role":"user","content":"fetch the page"},
++  {"role":"assistant","content":[{"type":"tool_use","id":"toolu_search","name":"ToolSearch","input":{"query":"x","max_results":5}}]},
++  {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_search",`+result+`}`+trailing+`]}]}`)
++}
++
++func TestApplyNativeToolSearch_ResultTextRidesInFollowingUserMessage(t *testing.T) {
++	cases := []struct {
++		name, result, trailing, wantText, wantUser string
++		wantTools                                  int
++	}{
++		{"error", `"is_error":true,"content":"<tool_use_error>InputValidationError</tool_use_error>"`, "", "<tool_use_error>InputValidationError</tool_use_error>", "", 0},
++		{"no match string", `"content":"No matching deferred tools found"`, "", "No matching deferred tools found", "", 0},
++		{"text with reference", `"content":[{"type":"text","text":"found one"},{"type":"tool_reference","tool_name":"WebFetch"}]`, "", "found one", "", 1},
++		{"separate part ahead of following text", `"content":"No matching deferred tools found"`, `,{"type":"text","text":"retry"}`, "No matching deferred tools found", "retry", 0},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			body := nativeToolSearchJSON(t, toolSearchResultRequest(t, tc.result, tc.trailing))
++			input := gjson.GetBytes(body, "input").Array()
++			require.Len(t, input, 4)
++			require.Equal(t, "tool_search_call", input[1].Get("type").String())
++			require.Equal(t, "tool_search_output", input[2].Get("type").String())
++			require.Len(t, input[2].Get("tools").Array(), tc.wantTools)
++			require.Equal(t, "message", input[3].Get("type").String())
++			require.Equal(t, "user", input[3].Get("role").String())
++			parts := input[3].Get("content").Array()
++			require.Equal(t, tc.wantText, parts[0].Get("text").String())
++			if tc.wantUser == "" {
++				require.Len(t, parts, 1)
++				return
++			}
++			require.Len(t, parts, 2)
++			require.Equal(t, `{"type":"input_text","text":"`+tc.wantUser+`"}`, parts[1].Raw)
++		})
++	}
++
++	t.Run("reference only adds no message", func(t *testing.T) {
++		body := nativeToolSearchJSON(t, toolSearchResultRequest(t, `"content":[{"type":"tool_reference","tool_name":"WebFetch"}]`, ""))
++		require.Len(t, gjson.GetBytes(body, "input").Array(), 3)
++	})
++}
++
++func TestResponsesToAnthropic_RestoresToolSearchCall(t *testing.T) {
++	var resp ResponsesResponse
++	require.NoError(t, json.Unmarshal([]byte(`{"id":"resp_1","status":"completed","output":[
++		{"type":"tool_search_call","call_id":"call_search","execution":"client","status":"completed","arguments":{"query":"select:WebFetch","max_results":5}}]}`), &resp))
++
++	out := ResponsesToAnthropic(&resp, "gpt-6-astra")
++	require.Len(t, out.Content, 1)
++	block := out.Content[0]
++	require.Equal(t, "tool_use", block.Type)
++	require.Equal(t, "call_search", block.ID)
++	require.Equal(t, "ToolSearch", block.Name)
++	require.JSONEq(t, `{"query":"select:WebFetch","max_results":5}`, string(block.Input))
++	require.Equal(t, "tool_use", AnthropicStopReasonString(out.StopReason))
++}
++
++func TestResponsesEventToAnthropic_RestoresToolSearchCall(t *testing.T) {
++	state := NewResponsesEventToAnthropicState()
++	var events []AnthropicStreamEvent
++	for _, raw := range []string{
++		`{"type":"response.created","response":{"id":"resp_1","model":"gpt-6-astra"}}`,
++		`{"type":"response.output_item.added","output_index":0,"item":{"type":"tool_search_call","call_id":"call_search","execution":"client"}}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"tool_search_call","call_id":"call_search","execution":"client","status":"completed","arguments":{"query":"docs","max_results":5}}}`,
++		`{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[]}}`,
++	} {
++		var evt ResponsesStreamEvent
++		require.NoError(t, json.Unmarshal([]byte(raw), &evt))
++		events = append(events, ResponsesEventToAnthropicEvents(&evt, state)...)
++	}
++
++	var start, delta, stop *AnthropicStreamEvent
++	for i := range events {
++		switch events[i].Type {
++		case "content_block_start":
++			start = &events[i]
++		case "content_block_delta":
++			delta = &events[i]
++		case "content_block_stop":
++			stop = &events[i]
++		}
++	}
++	require.NotNil(t, start)
++	require.Equal(t, "tool_use", start.ContentBlock.Type)
++	require.Equal(t, "call_search", start.ContentBlock.ID)
++	require.Equal(t, "ToolSearch", start.ContentBlock.Name)
++	require.NotNil(t, delta)
++	require.Equal(t, "input_json_delta", delta.Delta.Type)
++	require.JSONEq(t, `{"query":"docs","max_results":5}`, delta.Delta.PartialJSON)
++	require.NotNil(t, stop)
++	require.Equal(t, *start.Index, *stop.Index)
++
++	last := events[len(events)-2]
++	require.Equal(t, "message_delta", last.Type)
++	require.Equal(t, "tool_use", last.Delta.StopReason)
++}
+diff --git a/backend/internal/pkg/apicompat/responses_to_anthropic.go b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+index 705882830..30d4fb805 100644
+--- a/backend/internal/pkg/apicompat/responses_to_anthropic.go
++++ b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+@@ -55,6 +55,8 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
+ 				Name:  item.Name,
+ 				Input: sanitizeAnthropicToolUseInput(item.Name, item.Arguments),
+ 			})
++		case "tool_search_call":
++			blocks = append(blocks, toolSearchCallToolUse(item))
+ 		case "web_search_call":
+ 			if item.Status != "completed" {
+ 				continue
+@@ -640,6 +642,10 @@ func resToAnthHandleOutputItemDone(evt *ResponsesStreamEvent, state *ResponsesEv
+ 	if evt.Item.Type == "web_search_call" && evt.Item.Status == "completed" {
+ 		return resToAnthHandleWebSearchDone(evt, state)
+ 	}
++	// The native tool_search_call carries its arguments only on done.
++	if evt.Item.Type == "tool_search_call" {
++		return resToAnthHandleToolSearchDone(evt, state)
++	}
+ 
+ 	// Capture encrypted_content on reasoning item done (often only present here).
+ 	if evt.Item.Type == "reasoning" {
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index ebbf9367b..9b76fafff 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -522,6 +522,9 @@ type bufferedFuncCall struct {
+ // so that non-streaming handlers can reconstruct output when the terminal event
+ // (response.completed / response.done) carries an empty output array.
+ type BufferedResponseAccumulator struct {
++	// tool_search_call items arrive complete on output_item.done.
++	toolSearchCalls []ResponsesOutput
++
+ 	text                 strings.Builder
+ 	refusal              strings.Builder
+ 	reasoning            strings.Builder
+@@ -585,6 +588,10 @@ func (a *BufferedResponseAccumulator) ProcessEvent(event *ResponsesStreamEvent)
+ 				_, _ = a.funcCalls[idx].Args.WriteString(completed)
+ 			}
+ 		}
++	case "response.output_item.done":
++		if event.Item != nil && event.Item.Type == "tool_search_call" {
++			a.toolSearchCalls = append(a.toolSearchCalls, *event.Item)
++		}
+ 	case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
+ 		if event.Delta != "" {
+ 			_, _ = a.reasoning.WriteString(event.Delta)
+@@ -594,7 +601,7 @@ func (a *BufferedResponseAccumulator) ProcessEvent(event *ResponsesStreamEvent)
+ 
+ // HasContent reports whether any content has been accumulated.
+ func (a *BufferedResponseAccumulator) HasContent() bool {
+-	return a.text.Len() > 0 || a.refusal.Len() > 0 || len(a.funcCalls) > 0 || a.reasoning.Len() > 0
++	return a.text.Len() > 0 || a.refusal.Len() > 0 || len(a.funcCalls) > 0 || len(a.toolSearchCalls) > 0 || a.reasoning.Len() > 0
+ }
+ 
+ // BuildOutput constructs a []ResponsesOutput from the accumulated delta
+@@ -648,6 +655,7 @@ func (a *BufferedResponseAccumulator) BuildOutput() []ResponsesOutput {
+ 			Arguments:             a.funcCalls[i].Args.String(),
+ 		})
+ 	}
++	out = append(out, a.toolSearchCalls...)
+ 
+ 	return out
+ }
+diff --git a/backend/internal/pkg/apicompat/types.go b/backend/internal/pkg/apicompat/types.go
+index fc1835325..f28846138 100644
+--- a/backend/internal/pkg/apicompat/types.go
++++ b/backend/internal/pkg/apicompat/types.go
+@@ -80,6 +80,9 @@ type AnthropicContentBlock struct {
+ 	ToolUseID string          `json:"tool_use_id,omitempty"`
+ 	Content   json.RawMessage `json:"content,omitempty"` // string or []AnthropicContentBlock
+ 	IsError   bool            `json:"is_error,omitempty"`
++
++	// type=tool_reference (inside a ToolSearch tool_result)
++	ToolName string `json:"tool_name,omitempty"`
+ }
+ 
+ func (b AnthropicContentBlock) MarshalJSON() ([]byte, error) {
+@@ -122,6 +125,8 @@ type AnthropicTool struct {
+ 	Description  string                 `json:"description,omitempty"`
+ 	InputSchema  json.RawMessage        `json:"input_schema,omitempty"` // JSON Schema object
+ 	CacheControl *AnthropicCacheControl `json:"cache_control,omitempty"`
++	// DeferLoading marks a tool Claude Code reveals through ToolSearch.
++	DeferLoading bool `json:"defer_loading,omitempty"`
+ }
+ 
+ // AnthropicCacheControl 对应 Anthropic API 的 cache_control 字段。
+@@ -427,6 +432,8 @@ type ResponsesTool struct {
+ 	Description string          `json:"description,omitempty"`
+ 	Parameters  json.RawMessage `json:"parameters,omitempty"`
+ 	Strict      *bool           `json:"strict,omitempty"`
++	// type=tool_search: "client" means the caller executes the search.
++	Execution string `json:"execution,omitempty"`
+ 
+ 	// type=namespace 的子工具列表（tools 与 children 二选一，语义相同）。
+ 	Tools    []ResponsesTool `json:"tools,omitempty"`
+diff --git a/backend/internal/service/openai_codex_tool_names.go b/backend/internal/service/openai_codex_tool_names.go
+index 849a45e41..45b1af0ab 100644
+--- a/backend/internal/service/openai_codex_tool_names.go
++++ b/backend/internal/service/openai_codex_tool_names.go
+@@ -132,7 +132,7 @@ func collectOpenAIResponsesToolNameFields(reqBody map[string]any) []codexToolNam
+ 				continue
+ 			}
+ 			typ := strings.ToLower(strings.TrimSpace(firstNonEmptyString(item["type"])))
+-			if typ == "additional_tools" {
++			if typ == "additional_tools" || typ == "tool_search_output" {
+ 				collectTools(item["tools"])
+ 			}
+ 			if typ == "function_call" {
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index 975325efc..5eb61eeda 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -172,6 +172,16 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+ 		responsesReq.ServiceTier = "priority"
+ 	}
+ 
++	// 3c. ChatGPT/Codex accounts whose model supports tool_search get Claude
++	// Code's ToolSearch as the native protocol, keeping deferred tools out of
++	// the top-level tools.
++	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok &&
++		string(accountCodexToolCapabilities(account, upstreamModel)["supports_search_tool"]) == "true" {
++		if err := apicompat.ApplyNativeToolSearch(&anthropicReq, responsesReq); err != nil {
++			return nil, fmt.Errorf("apply native tool_search: %w", err)
++		}
++	}
++
+ 	responsesReq.Model = upstreamModel
+ 	if responsesReq.Reasoning != nil {
+ 		responsesReq.Reasoning.Effort = openAICompatAnthropicReasoningEffort(&anthropicReq, upstreamModel, responsesReq.Reasoning.Effort)
+diff --git a/backend/internal/service/openai_gateway_messages_tool_search_test.go b/backend/internal/service/openai_gateway_messages_tool_search_test.go
+new file mode 100644
+index 000000000..27c22fea4
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_messages_tool_search_test.go
+@@ -0,0 +1,234 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++const messagesToolSearchBody = `{"model":"gpt-6-astra","max_tokens":64,"stream":true,
++ "tools":[
++  {"name":"Bash","description":"run","input_schema":{"type":"object","properties":{"command":{"type":"string"}}}},
++  {"name":"ToolSearch","description":"search deferred tools","input_schema":{"type":"object","properties":{"query":{"type":"string"},"max_results":{"type":"number"}},"required":["query","max_results"]}},
++  {"name":"WebFetch","description":"fetch a url","input_schema":{"type":"object","properties":{"url":{"type":"string"}}},"defer_loading":true}],
++ "messages":[
++  {"role":"user","content":"fetch the page"},
++  {"role":"assistant","content":[{"type":"tool_use","id":"toolu_search","name":"ToolSearch","input":{"query":"select:WebFetch","max_results":5}}]},
++  {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_search","content":[{"type":"tool_reference","tool_name":"WebFetch"}]}]}]}`
++
++func forwardMessagesToolSearch(t *testing.T, account *Account, requestBody, upstreamSSE, mappedModel string) (*httpUpstreamRecorder, *httptest.ResponseRecorder) {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	body := []byte(requestBody)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
++	c.Request.Header.Set("Content-Type", "application/json")
++	upstream := &httpUpstreamRecorder{resp: &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
++	}}
++	svc := &OpenAIGatewayService{
++		httpUpstream: upstream,
++		cfg:          rawChatCompletionsTestConfig(),
++	}
++	_, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", mappedModel)
++	require.NoError(t, err)
++	return upstream, rec
++}
++
++const toolSearchCallSSE = "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_ts\",\"model\":\"gpt-6-astra\"}}\n\n" +
++	"data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"tool_search_call\",\"call_id\":\"call_search_2\",\"execution\":\"client\",\"status\":\"completed\",\"arguments\":{\"query\":\"notebook\",\"max_results\":5}}}\n\n" +
++	"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_ts\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":5,\"output_tokens\":2,\"total_tokens\":7}}}\n\n"
++
++func TestForwardAsAnthropic_CodexOAuthUsesNativeToolSearch(t *testing.T) {
++	account := &Account{
++		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
++		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
++	}
++	upstream, rec := forwardMessagesToolSearch(t, account, messagesToolSearchBody, toolSearchCallSSE, "gpt-6-astra")
++
++	tools := gjson.GetBytes(upstream.lastBody, "tools").Array()
++	require.Len(t, tools, 2, "deferred WebFetch stays out of the top-level tools")
++	require.Equal(t, "Bash", tools[0].Get("name").String())
++	require.Equal(t, "tool_search", tools[1].Get("type").String())
++	require.Equal(t, "client", tools[1].Get("execution").String())
++
++	var types []string
++	for _, item := range gjson.GetBytes(upstream.lastBody, "input").Array() {
++		types = append(types, item.Get("type").String())
++	}
++	require.Contains(t, types, "tool_search_call")
++	require.Contains(t, types, "tool_search_output")
++	require.NotContains(t, types, "function_call")
++
++	out := rec.Body.String()
++	require.Contains(t, out, `"name":"ToolSearch"`)
++	require.Contains(t, out, `"id":"call_search_2"`)
++	require.Contains(t, out, `"stop_reason":"tool_use"`)
++}
++
++func TestForwardAsAnthropic_NonCodexAccountKeepsFunctionToolSearch(t *testing.T) {
++	completed := "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_fn\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":5,\"output_tokens\":2,\"total_tokens\":7}}}\n\n"
++	upstream, _ := forwardMessagesToolSearch(t, rawChatCompletionsTestAccount(), messagesToolSearchBody, completed, "gpt-6-astra")
++
++	var names []string
++	for _, tool := range gjson.GetBytes(upstream.lastBody, "tools").Array() {
++		require.Equal(t, "function", tool.Get("type").String())
++		names = append(names, tool.Get("name").String())
++	}
++	require.Equal(t, []string{"Bash", "ToolSearch", "WebFetch"}, names)
++	require.NotContains(t, string(upstream.lastBody), "tool_search_call")
++}
++
++// A Codex OAuth model without supports_search_tool keeps ToolSearch and the
++// deferred tools as plain function tools.
++func TestForwardAsAnthropic_CodexOAuthModelWithoutSearchSupportKeepsFunctionToolSearch(t *testing.T) {
++	account := &Account{
++		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
++		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
++	}
++	completed := "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_fn\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":5,\"output_tokens\":2,\"total_tokens\":7}}}\n\n"
++	body := strings.Replace(messagesToolSearchBody, `"model":"gpt-6-astra"`, `"model":"gpt-5.5"`, 1)
++	upstream, _ := forwardMessagesToolSearch(t, account, body, completed, "gpt-5.5")
++
++	var names []string
++	for _, tool := range gjson.GetBytes(upstream.lastBody, "tools").Array() {
++		require.Equal(t, "function", tool.Get("type").String())
++		names = append(names, tool.Get("name").String())
++	}
++	require.Equal(t, []string{"Bash", "ToolSearch", "WebFetch"}, names)
++	require.NotContains(t, string(upstream.lastBody), "tool_search_call")
++}
++
++func codexOAuthToolSearchAccount() *Account {
++	return &Account{
++		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
++		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
++	}
++}
++
++const toolSearchNoopSSE = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_noop\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":5,\"output_tokens\":2,\"total_tokens\":7}}}\n\n"
++
++// A revealed tool is declared in tool_search_output and replayed as a
++// function_call; both must carry the same upstream name.
++func TestForwardAsAnthropic_CodexOAuthRevealedToolNameMatchesReplay(t *testing.T) {
++	for _, tc := range []struct{ name, want string }{
++		{"python", "python__sub2api"},
++		{"Python", "python__sub2api"},
++		{"Echo", "Echo"},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			body := strings.ReplaceAll(messagesToolSearchBody, "WebFetch", tc.name)
++			body = strings.TrimSuffix(body, "]}") + `,
++  {"role":"assistant","content":[{"type":"tool_use","id":"toolu_call","name":"` + tc.name + `","input":{"url":"https://example.com"}}]},
++  {"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_call","content":"ok"}]}]}`
++			upstream, _ := forwardMessagesToolSearch(t, codexOAuthToolSearchAccount(), body, toolSearchNoopSSE, "gpt-6-astra")
++
++			var declared, replayed []string
++			for _, item := range gjson.GetBytes(upstream.lastBody, "input").Array() {
++				switch item.Get("type").String() {
++				case "tool_search_output":
++					for _, tool := range item.Get("tools").Array() {
++						declared = append(declared, tool.Get("name").String())
++					}
++				case "function_call":
++					replayed = append(replayed, item.Get("name").String())
++				}
++			}
++			require.Equal(t, []string{tc.want}, declared)
++			require.Equal(t, []string{tc.want}, replayed)
++		})
++	}
++}
++
++// Selections that name a top-level function or carry no name are forwarded
++// as the bridge produced them.
++func TestForwardAsAnthropic_CodexOAuthToolChoiceControls(t *testing.T) {
++	for choice, want := range map[string]string{
++		`{"type":"tool","name":"Bash"}`: `{"type":"function","name":"Bash"}`,
++		`{"type":"auto"}`:               `"auto"`,
++		`{"type":"any"}`:                `"required"`,
++	} {
++		t.Run(choice, func(t *testing.T) {
++			body := strings.Replace(messagesToolSearchBody, `"stream":true,`, `"stream":true,"tool_choice":`+choice+`,`, 1)
++			upstream, _ := forwardMessagesToolSearch(t, codexOAuthToolSearchAccount(), body, toolSearchNoopSSE, "gpt-6-astra")
++			require.JSONEq(t, want, gjson.GetBytes(upstream.lastBody, "tool_choice").Raw)
++		})
++	}
++}
++
++func TestForwardAsAnthropic_CodexOAuthForcedHiddenToolKeepsFunctionTools(t *testing.T) {
++	for _, name := range []string{"ToolSearch", "WebFetch"} {
++		t.Run(name, func(t *testing.T) {
++			body := strings.Replace(messagesToolSearchBody, `"stream":true,`, `"stream":true,"tool_choice":{"type":"tool","name":"`+name+`"},`, 1)
++			upstream, _ := forwardMessagesToolSearch(t, codexOAuthToolSearchAccount(), body, toolSearchNoopSSE, "gpt-6-astra")
++
++			var names []string
++			for _, tool := range gjson.GetBytes(upstream.lastBody, "tools").Array() {
++				require.Equal(t, "function", tool.Get("type").String())
++				names = append(names, tool.Get("name").String())
++			}
++			require.Equal(t, []string{"Bash", "ToolSearch", "WebFetch"}, names)
++			require.JSONEq(t, `{"type":"function","name":"`+name+`"}`, gjson.GetBytes(upstream.lastBody, "tool_choice").Raw)
++			require.NotContains(t, string(upstream.lastBody), "tool_search_call")
++			require.NotContains(t, string(upstream.lastBody), "tool_search_output")
++		})
++	}
++}
++
++// Claude Code also sends stream:false turns; their upstream stream can end
++// with an empty terminal output, rebuilt from the buffered output items.
++func TestForwardAsAnthropic_CodexOAuthNonStreamingRestoresToolSearchCall(t *testing.T) {
++	account := &Account{
++		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
++		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
++	}
++	body := strings.Replace(messagesToolSearchBody, `"stream":true`, `"stream":false`, 1)
++	_, rec := forwardMessagesToolSearch(t, account, body, toolSearchCallSSE, "gpt-6-astra")
++
++	out := rec.Body.String()
++	require.Contains(t, out, `"name":"ToolSearch"`)
++	require.Contains(t, out, `"id":"call_search_2"`)
++	require.Contains(t, out, `"stop_reason":"tool_use"`)
++	require.Equal(t, "notebook", gjson.Get(out, "content.0.input.query").String())
++}
++
++// Grok OAuth accounts also speak the Codex protocol, but xAI has no native
++// tool_search: ToolSearch and deferred tools stay function tools there.
++func TestForwardAsAnthropic_GrokOAuthKeepsFunctionToolSearch(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	body := []byte(messagesToolSearchBody)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
++	account := healthyGrokOAuthGatewayTestAccount(71, "access-token")
++	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{71: account}}}
++	upstream := &httpUpstreamRecorder{resp: grokMessagesSSECompletedResponse("resp_grok_ts", 0)}
++	svc := &OpenAIGatewayService{httpUpstream: upstream, grokTokenProvider: NewGrokTokenProvider(repo, nil), accountRepo: repo}
++
++	_, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
++	require.NoError(t, err)
++
++	var functions []string
++	for _, tool := range gjson.GetBytes(upstream.lastBody, "tools").Array() {
++		require.NotEqual(t, "tool_search", tool.Get("type").String())
++		if tool.Get("type").String() == "function" {
++			functions = append(functions, tool.Get("name").String())
++		}
++	}
++	require.Contains(t, functions, "ToolSearch")
++	require.Contains(t, functions, "WebFetch")
++	require.NotContains(t, string(upstream.lastBody), "tool_search_call")
++	require.NotContains(t, string(upstream.lastBody), "tool_search_output")
++}

@@ -627,12 +627,15 @@ func newOpenAIRequestView(body []byte) openAIRequestView {
 
 	view := openAIRequestView{body: body}
 	var seen uint8
-	// parseRawJSONView reads body without copying; view keeps body alive for extracted strings.
+	// Scalars can outlive this view through usage logs and deferred work.
+	field := func(value gjson.Result) string {
+		return strings.Clone(strings.TrimSpace(value.String()))
+	}
 	parseRawJSONView(body).ForEach(func(key, value gjson.Result) bool {
 		switch key.Str {
 		case "model":
 			if seen&modelField == 0 {
-				view.Model = strings.TrimSpace(value.String())
+				view.Model = field(value)
 				seen |= modelField
 			}
 		case "stream":
@@ -642,22 +645,22 @@ func newOpenAIRequestView(body []byte) openAIRequestView {
 			}
 		case "prompt_cache_key":
 			if seen&promptCacheKeyField == 0 {
-				view.PromptCacheKey = strings.TrimSpace(value.String())
+				view.PromptCacheKey = field(value)
 				seen |= promptCacheKeyField
 			}
 		case "previous_response_id":
 			if seen&previousResponseIDField == 0 {
-				view.PreviousResponseID = strings.TrimSpace(value.String())
+				view.PreviousResponseID = field(value)
 				seen |= previousResponseIDField
 			}
 		case "service_tier":
 			if seen&serviceTierField == 0 {
-				view.ServiceTier = strings.TrimSpace(value.String())
+				view.ServiceTier = field(value)
 				seen |= serviceTierField
 			}
 		case "reasoning":
 			if seen&reasoningField == 0 {
-				view.ReasoningEffort = strings.TrimSpace(value.Get("effort").String())
+				view.ReasoningEffort = field(value.Get("effort"))
 				seen |= reasoningField
 			}
 		}
@@ -903,9 +906,35 @@ func isOpenAICodexModel(model string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(model)), "codex")
 }
 
+// The last input configuration update applies to the current generation. Empty
+// updates do not unset an earlier effort declaration in the same client turn.
+func latestResponsesInputEffort(body []byte) string {
+	const update = "configuration_update"
+	if !bytes.Contains(body, []byte(update)) && !bytes.Contains(body, []byte(`\u`)) {
+		return ""
+	}
+	input := parseRawJSONView(body).Get("input")
+	if !input.IsArray() {
+		return ""
+	}
+	var latest string
+	input.ForEach(func(_, item gjson.Result) bool {
+		if item.Get("type").Str == update {
+			if effort := normalizeReasoningEffortMappingSource(item.Get("reasoning.effort").Str); effort != "" {
+				latest = effort
+			}
+		}
+		return true
+	})
+	return latest
+}
+
 // CanonicalRequestedReasoningEffort reads only the original client payload.
 // A synthetic bridge default or an account's target model is not a client declaration.
 func CanonicalRequestedReasoningEffort(body []byte, originalModel ...string) *string {
+	if latest := latestResponsesInputEffort(body); latest != "" {
+		return optionalTrimmedStringPtr(strings.Clone(latest))
+	}
 	var value string
 	for _, key := range []string{"reasoning.effort", "reasoning_effort", "output_config.effort"} {
 		field := gjson.GetBytes(body, key)

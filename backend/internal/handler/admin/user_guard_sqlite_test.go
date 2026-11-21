@@ -55,7 +55,7 @@ func TestUserHandler_AdminGuardsSQLite(t *testing.T) {
 				_, err = db.ExecContext(ctx, `CREATE TRIGGER fail_admin_role BEFORE UPDATE OF role ON users BEGIN SELECT unavailable_admin_write_function(); END`)
 				require.NoError(t, err)
 			}
-			svc := service.NewAdminService(repository.NewUserRepository(client, db), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			svc := service.NewAdminService(repository.NewUserRepository(client, db), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 			h := NewUserHandler(svc, nil, nil, nil, nil, nil, nil)
 			router := gin.New()
 			router.PUT("/api/v1/admin/users/:id", h.Update)

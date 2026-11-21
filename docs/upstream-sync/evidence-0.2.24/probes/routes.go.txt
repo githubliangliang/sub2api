@@ -1,0 +1,8 @@
+package routes
+import("net/http";"net/http/httptest";"strings";"testing";"github.com/stretchr/testify/require")
+func TestIntake024HTTPDuplicateFields(t *testing.T){
+ for _,body:=range []string{`{"model":"gpt-6.2-sol","model":"gpt-6.2-astra","input":"hello"}`,`{"model":"gpt-6.2-sol","service_tier":"auto","service_tier":"ultrafast","input":"hello"}`,`{"model":"gpt-6.2-sol","reasoning":{"effort":"low","effort":"high"},"input":"hello"}`} {
+  t.Run(body,func(t *testing.T){router:=newGatewayRoutesTestRouter();w:=httptest.NewRecorder();req:=httptest.NewRequest(http.MethodPost,"/v1/responses",strings.NewReader(body));req.Header.Set("Content-Type","application/json");router.ServeHTTP(w,req);require.Equal(t,400,w.Code,"ambiguous request must be rejected before authentication-dependent handler dispatch: %s",w.Body.String())})
+ }
+}
+func TestIntake024NormalHTTPControl(t *testing.T){router:=newGatewayRoutesTestRouter();w:=httptest.NewRecorder();router.ServeHTTP(w,httptest.NewRequest(http.MethodPost,"/v1/responses",strings.NewReader(`{"model":"gpt-6.2-sol","input":"hello"}`)));require.NotEqual(t,400,w.Code)}

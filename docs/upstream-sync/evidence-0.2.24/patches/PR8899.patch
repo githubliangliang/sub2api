@@ -1,0 +1,309 @@
+diff --git a/frontend/src/components/account/BulkEditAccountModal.vue b/frontend/src/components/account/BulkEditAccountModal.vue
+index d04af5f3f..48235d55e 100644
+--- a/frontend/src/components/account/BulkEditAccountModal.vue
++++ b/frontend/src/components/account/BulkEditAccountModal.vue
+@@ -79,20 +79,50 @@
+               ]"
+             />
+           </button>
+-          <label v-if="openaiPassthroughEnabled" class="mt-3 flex items-start gap-2">
++        </div>
++      </div>
++
++      <!-- OpenAI passthrough model filtering -->
++      <div
++        v-if="allOpenAIPassthroughCapable"
++        class="border-t border-gray-200 pt-4 dark:border-dark-600"
++      >
++        <div class="mb-3 flex items-center justify-between">
++          <div class="flex-1 pr-4">
++            <label
++              id="bulk-edit-openai-passthrough-model-filter-label"
++              class="input-label mb-0"
++              for="bulk-edit-openai-passthrough-model-filter-enabled"
++            >
++              {{ t('admin.accounts.openai.passthroughModelFilter') }}
++            </label>
++            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
++              {{ t('admin.accounts.openai.passthroughModelFilterDesc') }}
++            </p>
++          </div>
++          <input
++            v-model="enableOpenAIPassthroughModelFilter"
++            id="bulk-edit-openai-passthrough-model-filter-enabled"
++            type="checkbox"
++            aria-controls="bulk-edit-openai-passthrough-model-filter-body"
++            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
++          />
++        </div>
++        <div
++          id="bulk-edit-openai-passthrough-model-filter-body"
++          :class="!enableOpenAIPassthroughModelFilter && 'pointer-events-none opacity-50'"
++          role="group"
++          aria-labelledby="bulk-edit-openai-passthrough-model-filter-label"
++        >
++          <label class="flex items-center gap-2 text-sm">
+             <input
+               v-model="openaiPassthroughModelFilterEnabled"
+               type="checkbox"
+               data-testid="bulk-openai-passthrough-model-filter"
+-              :disabled="!enableOpenAIPassthrough"
+-              class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
++              :disabled="!enableOpenAIPassthroughModelFilter"
++              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+             />
+-            <span class="text-sm">
+-              {{ t('admin.accounts.openai.passthroughModelFilter') }}
+-              <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+-                {{ t('admin.accounts.openai.passthroughModelFilterDesc') }}
+-              </span>
+-            </span>
++            {{ t('common.enabled') }}
+           </label>
+         </div>
+       </div>
+@@ -1718,6 +1748,7 @@ const enableRateMultiplier = ref(false)
+ const enableStatus = ref(false)
+ const enableGroups = ref(false)
+ const enableOpenAIPassthrough = ref(false)
++const enableOpenAIPassthroughModelFilter = ref(false)
+ const enableOpenAIFlattenNamespaces = ref(false)
+ const enableOpenAILongContextBilling = ref(false)
+ const enableOpenAIImageSizeTiers = ref(false)
+@@ -1815,6 +1846,7 @@ const isOpenAIModelRestrictionDisabled = computed(
+     allOpenAIPassthroughCapable.value &&
+     enableOpenAIPassthrough.value &&
+     openaiPassthroughEnabled.value &&
++    enableOpenAIPassthroughModelFilter.value &&
+     !openaiPassthroughModelFilterEnabled.value
+ )
+ 
+@@ -2043,12 +2075,16 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
+   if (enableOpenAIPassthrough.value) {
+     const extra = ensureExtra()
+     extra.openai_passthrough = openaiPassthroughEnabled.value
+-    extra.openai_passthrough_model_filter = openaiPassthroughEnabled.value && openaiPassthroughModelFilterEnabled.value
+     if (!openaiPassthroughEnabled.value) {
+       extra.openai_oauth_passthrough = false
+     }
+   }
+ 
++  // extra 按键合并；未勾选修改时省略该键，保留各账号原有的筛选设置。
++  if (enableOpenAIPassthroughModelFilter.value && allOpenAIPassthroughCapable.value) {
++    ensureExtra().openai_passthrough_model_filter = openaiPassthroughModelFilterEnabled.value
++  }
++
+   // 同时校验可见性：勾选后又改了目标筛选条件时，不应把该键写到非 OAuth 账号上
+   if (enableOpenAIFlattenNamespaces.value && allOpenAIOAuthOnly.value) {
+     const extra = ensureExtra()
+@@ -2273,6 +2309,7 @@ const handleSubmit = async () => {
+   const hasAnyFieldEnabled =
+     enableBaseUrl.value ||
+     enableOpenAIPassthrough.value ||
++    (enableOpenAIPassthroughModelFilter.value && allOpenAIPassthroughCapable.value) ||
+     enableOpenAIFlattenNamespaces.value ||
+     (enableOpenAILongContextBilling.value && allOpenAIPassthroughCapable.value) ||
+     (enableOpenAIImageSizeTiers.value && allOpenAIPassthroughCapable.value) ||
+@@ -2436,6 +2473,7 @@ watch(
+       enableStatus.value = false
+       enableGroups.value = false
+       enableOpenAIPassthrough.value = false
++      enableOpenAIPassthroughModelFilter.value = false
+       enableOpenAIFlattenNamespaces.value = false
+       enableOpenAILongContextBilling.value = false
+       enableOpenAIImageSizeTiers.value = false
+diff --git a/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts b/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
+index 504abb04f..c6282146c 100644
+--- a/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
++++ b/frontend/src/components/account/__tests__/BulkEditAccountModal.spec.ts
+@@ -273,10 +273,10 @@ describe('BulkEditAccountModal', () => {
+     })
+   })
+ 
+-  it('OpenAI 账号批量编辑可开启自动透传', async () => {
++  it.each(['oauth', 'apikey'])('OpenAI %s 仅开启自动透传时保留原有模型筛选设置', async (type) => {
+     const wrapper = mountModal({
+       selectedPlatforms: ['openai'],
+-      selectedTypes: ['oauth']
++      selectedTypes: [type]
+     })
+ 
+     await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
+@@ -287,8 +287,7 @@ describe('BulkEditAccountModal', () => {
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+       extra: {
+-        openai_passthrough: true,
+-        openai_passthrough_model_filter: false
++        openai_passthrough: true
+       }
+     })
+   })
+@@ -893,10 +892,10 @@ describe('BulkEditAccountModal', () => {
+     })
+   })
+ 
+-  it('OpenAI 账号批量编辑可关闭自动透传', async () => {
++  it.each(['oauth', 'apikey'])('OpenAI %s 仅关闭自动透传时保留原有模型筛选设置', async (type) => {
+     const wrapper = mountModal({
+       selectedPlatforms: ['openai'],
+-      selectedTypes: ['apikey']
++      selectedTypes: [type]
+     })
+ 
+     await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
+@@ -907,13 +906,12 @@ describe('BulkEditAccountModal', () => {
+     expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+       extra: {
+         openai_passthrough: false,
+-        openai_passthrough_model_filter: false,
+         openai_oauth_passthrough: false
+       }
+     })
+   })
+ 
+-  it('开启 OpenAI 自动透传时不再同时提交模型限制', async () => {
++  it('明确关闭模型筛选并开启 OpenAI 自动透传时不再同时提交模型限制', async () => {
+     const wrapper = mountModal({
+       selectedPlatforms: ['openai'],
+       selectedTypes: ['oauth']
+@@ -921,6 +919,7 @@ describe('BulkEditAccountModal', () => {
+ 
+     await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
+     await wrapper.get('#bulk-edit-openai-passthrough-toggle').trigger('click')
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(true)
+     await wrapper.get('#bulk-edit-model-restriction-enabled').setValue(true)
+     await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+     await flushPromises()
+@@ -939,6 +938,7 @@ describe('BulkEditAccountModal', () => {
+     const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
+     await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
+     await wrapper.get('#bulk-edit-openai-passthrough-toggle').trigger('click')
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(true)
+     await wrapper.get('[data-testid="bulk-openai-passthrough-model-filter"]').setValue(true)
+     await wrapper.get('#bulk-edit-model-restriction-enabled').setValue(true)
+     wrapper.findComponent({ name: 'ModelWhitelistSelector' }).vm.$emit('update:modelValue', ['qwen3.8-max'])
+@@ -951,6 +951,123 @@ describe('BulkEditAccountModal', () => {
+     })
+   })
+ 
++  it.each([
++    ['oauth', true],
++    ['oauth', false],
++    ['apikey', true],
++    ['apikey', false]
++  ])('can set model filtering to %s/%s without changing passthrough', async (type, enabled) => {
++    const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: [type] })
++    const filter = wrapper.get('[data-testid="bulk-openai-passthrough-model-filter"]')
++    expect(filter.attributes('disabled')).toBeDefined()
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(true)
++    await filter.setValue(enabled)
++    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
++      extra: { openai_passthrough_model_filter: enabled }
++    })
++  })
++
++  it('can update a whitelist while preserving existing passthrough model filtering', async () => {
++    const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['oauth'] })
++    await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
++    await wrapper.get('#bulk-edit-openai-passthrough-toggle').trigger('click')
++    await wrapper.get('#bulk-edit-model-restriction-enabled').setValue(true)
++    wrapper.findComponent(ModelWhitelistSelector).vm.$emit('update:modelValue', ['qwen3.8-max'])
++    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
++      extra: { openai_passthrough: true },
++      credentials: { model_mapping: { 'qwen3.8-max': 'qwen3.8-max' } }
++    })
++    expect(wrapper.text()).not.toContain('admin.accounts.openai.modelRestrictionDisabledByPassthrough')
++  })
++
++  it('can independently disable model filtering for filtered results', async () => {
++    const wrapper = mountModal({
++      accountIds: [],
++      target: {
++        mode: 'filtered',
++        filters: { platform: 'openai', status: 'active' },
++        previewCount: 12,
++        selectedPlatforms: ['openai'],
++        selectedTypes: ['oauth', 'apikey']
++      }
++    })
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(true)
++    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith({
++      filters: { platform: 'openai', status: 'active' },
++      extra: { openai_passthrough_model_filter: false }
++    })
++  })
++
++  it('omits model filtering after its modification checkbox is cleared', async () => {
++    const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(true)
++    await wrapper.get('[data-testid="bulk-openai-passthrough-model-filter"]').setValue(true)
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(false)
++    await wrapper.get('#bulk-edit-status-enabled').setValue(true)
++    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], { status: 'active' })
++  })
++
++  it('resets model filtering and its modification checkbox when reopened', async () => {
++    const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(true)
++    await wrapper.get('[data-testid="bulk-openai-passthrough-model-filter"]').setValue(true)
++    await wrapper.setProps({ show: false })
++    await wrapper.setProps({ show: true })
++    expect((wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').element as HTMLInputElement).checked).toBe(false)
++    expect((wrapper.get('[data-testid="bulk-openai-passthrough-model-filter"]').element as HTMLInputElement).checked).toBe(false)
++    await wrapper.get('#bulk-edit-status-enabled').setValue(true)
++    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], { status: 'active' })
++  })
++
++  it('omits model filtering when the target changes to mixed platforms', async () => {
++    const wrapper = mountModal({
++      accountIds: [],
++      target: {
++        mode: 'filtered',
++        filters: { platform: 'openai' },
++        previewCount: 12,
++        selectedPlatforms: ['openai'],
++        selectedTypes: ['apikey']
++      }
++    })
++    await wrapper.get('#bulk-edit-openai-passthrough-model-filter-enabled').setValue(true)
++    await wrapper.get('[data-testid="bulk-openai-passthrough-model-filter"]').setValue(true)
++    await wrapper.setProps({
++      target: {
++        mode: 'filtered',
++        filters: { status: 'active' },
++        previewCount: 20,
++        selectedPlatforms: ['openai', 'anthropic'],
++        selectedTypes: ['apikey']
++      }
++    })
++    expect(wrapper.find('#bulk-edit-openai-passthrough-model-filter-enabled').exists()).toBe(false)
++    await wrapper.get('#bulk-edit-status-enabled').setValue(true)
++    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
++    await flushPromises()
++
++    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith({
++      filters: { status: 'active' },
++      status: 'active'
++    })
++  })
++
+   it('filtered-results 模式下应提交 filters 而不是 account_ids', async () => {
+     const wrapper = mountModal({
+       accountIds: [],

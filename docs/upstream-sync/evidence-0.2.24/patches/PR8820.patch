@@ -1,0 +1,2001 @@
+diff --git a/backend/internal/pkg/apicompat/responses_to_anthropic.go b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+index 30d4fb805..0400fafdc 100644
+--- a/backend/internal/pkg/apicompat/responses_to_anthropic.go
++++ b/backend/internal/pkg/apicompat/responses_to_anthropic.go
+@@ -53,7 +53,17 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
+ 				Type:  "tool_use",
+ 				ID:    fromResponsesCallID(item.CallID),
+ 				Name:  item.Name,
+-				Input: sanitizeAnthropicToolUseInput(item.Name, item.Arguments),
++				Input: anthropicToolUseInput(item.Type, item.Name, item.Arguments),
++			})
++		case "custom_tool_call":
++			if !resp.RenderCustomToolCalls || (resp.XAIServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID)) {
++				continue
++			}
++			blocks = append(blocks, AnthropicContentBlock{
++				Type:  "tool_use",
++				ID:    fromResponsesCallID(item.CallID),
++				Name:  item.Name,
++				Input: anthropicToolUseInput(item.Type, item.Name, item.Input),
+ 			})
+ 		case "tool_search_call":
+ 			blocks = append(blocks, toolSearchCallToolUse(item))
+@@ -146,6 +156,26 @@ func containsAnthropicToolUseBlock(blocks []AnthropicContentBlock) bool {
+ 	return false
+ }
+ 
++// anthropicToolUseInput returns the input of a non-streaming tool_use block,
++// which must be a JSON object. An object is kept as it is. A function_call whose
++// arguments are not an object (truncated by max_output_tokens, or empty) gets {};
++// a custom_tool_call's free-form input is wrapped in the same {"input": ...}
++// shape that downgrades a custom tool to a function tool, so that
++// extractCustomToolCallInput gives the text back; an empty custom input is {} as
++// it is in the streamed tool_use.
++func anthropicToolUseInput(itemType, name, raw string) json.RawMessage {
++	if trimmed := strings.TrimSpace(raw); strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed)) {
++		return sanitizeAnthropicToolUseInput(name, raw)
++	}
++	if itemType == "custom_tool_call" && raw != "" {
++		wrapped, err := json.Marshal(map[string]string{"input": raw})
++		if err == nil {
++			return wrapped
++		}
++	}
++	return json.RawMessage("{}")
++}
++
+ func sanitizeAnthropicToolUseInput(name string, raw string) json.RawMessage {
+ 	if name != "Read" || raw == "" {
+ 		return json.RawMessage(raw)
+diff --git a/backend/internal/pkg/apicompat/responses_to_anthropic_tool_input_test.go b/backend/internal/pkg/apicompat/responses_to_anthropic_tool_input_test.go
+new file mode 100644
+index 000000000..a0a99d379
+--- /dev/null
++++ b/backend/internal/pkg/apicompat/responses_to_anthropic_tool_input_test.go
+@@ -0,0 +1,80 @@
++package apicompat
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestAnthropicToolUseInput(t *testing.T) {
++	tests := []struct {
++		name     string
++		itemType string
++		raw      string
++		want     string
++	}{
++		{"object kept", "function_call", "{\"a\":1}", "{\"a\":1}"},
++		{"object with padding kept", "function_call", " {\"a\": 1}\n", " {\"a\": 1}\n"},
++		{"truncated function arguments", "function_call", "{\"a\":1", "{}"},
++		{"empty function arguments", "function_call", "", "{}"},
++		{"non-object function arguments", "function_call", "[1]", "{}"},
++		{"custom input wrapped", "custom_tool_call", "dir /b", "{\"input\":\"dir /b\"}"},
++		{"empty custom input is an empty object", "custom_tool_call", "", "{}"},
++		{"custom input that is an object kept", "custom_tool_call", "{\"a\":1}", "{\"a\":1}"},
++	}
++	for _, tc := range tests {
++		t.Run(tc.name, func(t *testing.T) {
++			got := anthropicToolUseInput(tc.itemType, "exec", tc.raw)
++			require.Equal(t, tc.want, string(got))
++			require.True(t, json.Valid(got))
++		})
++	}
++}
++
++// The wrapper must round-trip through the helper that undoes the custom tool
++// downgrade, including text that is itself valid JSON or has outer whitespace.
++func TestAnthropicToolUseInputCustomRoundTrip(t *testing.T) {
++	for _, text := range []string{"dir", "  padded text\n", "", "\"quoted\"", "[1,2]", "line1\nline2"} {
++		wrapped := anthropicToolUseInput("custom_tool_call", "exec", text)
++		require.Equal(t, text, extractCustomToolCallInput(string(wrapped)), text)
++	}
++}
++
++func TestResponsesToAnthropicInvalidToolInputStillMarshals(t *testing.T) {
++	resp := &ResponsesResponse{ID: "resp_1", Status: "incomplete", IncompleteDetails: &ResponsesIncompleteDetails{Reason: "max_output_tokens"}, Output: []ResponsesOutput{
++		{Type: "reasoning", Summary: []ResponsesSummary{{Type: "summary_text", Text: "plan"}}},
++		{Type: "function_call", CallID: "call_1", Name: "get", Arguments: "{\"a\":1"},
++		{Type: "custom_tool_call", CallID: "call_2", Name: "exec", Input: "dir"},
++	}, RenderCustomToolCalls: true}
++	out := ResponsesToAnthropic(resp, "m")
++	body, err := json.Marshal(out)
++	require.NoError(t, err)
++	require.Len(t, out.Content, 3)
++	require.Equal(t, "thinking", out.Content[0].Type)
++	require.Equal(t, "{}", string(out.Content[1].Input))
++	require.Equal(t, "{\"input\":\"dir\"}", string(out.Content[2].Input))
++	require.Equal(t, "max_tokens", *out.StopReason, string(body))
++}
++
++func TestResponsesToChatCompletionsRendersCustomToolCall(t *testing.T) {
++	resp := &ResponsesResponse{ID: "resp_1", Status: "completed", Output: []ResponsesOutput{
++		{Type: "custom_tool_call", CallID: "call_1", Name: "exec", Input: "dir"},
++	}, RenderCustomToolCalls: true}
++	out := ResponsesToChatCompletions(resp, "m")
++	require.Len(t, out.Choices[0].Message.ToolCalls, 1)
++	require.Equal(t, "dir", out.Choices[0].Message.ToolCalls[0].Function.Arguments)
++	require.Equal(t, "tool_calls", out.Choices[0].FinishReason)
++}
++
++// An output the upstream delivered keeps custom_tool_call items unrendered.
++func TestResponsesToAnthropicAndChatSkipDeliveredCustomToolCall(t *testing.T) {
++	resp := &ResponsesResponse{ID: "resp_1", Status: "completed", Output: []ResponsesOutput{
++		{Type: "custom_tool_call", CallID: "xs_123", Name: "x_keyword_search", Input: "{}"},
++	}}
++	require.Len(t, ResponsesToAnthropic(resp, "m").Content, 1)
++	require.Equal(t, "text", ResponsesToAnthropic(resp, "m").Content[0].Type)
++	chat := ResponsesToChatCompletions(resp, "m")
++	require.Empty(t, chat.Choices[0].Message.ToolCalls)
++	require.Equal(t, "stop", chat.Choices[0].FinishReason)
++}
+diff --git a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+index 9b76fafff..d62ba5d43 100644
+--- a/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
++++ b/backend/internal/pkg/apicompat/responses_to_chatcompletions.go
+@@ -56,6 +56,18 @@ func ResponsesToChatCompletions(resp *ResponsesResponse, model string) *ChatComp
+ 					Arguments: item.Arguments,
+ 				},
+ 			})
++		case "custom_tool_call":
++			if !resp.RenderCustomToolCalls || (resp.XAIServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID)) {
++				continue
++			}
++			toolCalls = append(toolCalls, ChatToolCall{
++				ID:   item.CallID,
++				Type: "function",
++				Function: ChatFunctionCall{
++					Name:      item.Name,
++					Arguments: item.Input,
++				},
++			})
+ 		case "reasoning":
+ 			reasoningText += responsesReasoningText(item)
+ 		case "web_search_call":
+diff --git a/backend/internal/pkg/apicompat/types.go b/backend/internal/pkg/apicompat/types.go
+index f28846138..763db1725 100644
+--- a/backend/internal/pkg/apicompat/types.go
++++ b/backend/internal/pkg/apicompat/types.go
+@@ -484,6 +484,16 @@ type ResponsesResponse struct {
+ 
+ 	// Error is present when status="failed"
+ 	Error *ResponsesError `json:"error,omitempty"`
++
++	// RenderCustomToolCalls is set on an output rebuilt from stream events, where
++	// the accumulator has always handed custom_tool_call items to the converters
++	// as tool calls. An output the upstream delivered keeps them unrendered.
++	RenderCustomToolCalls bool `json:"-"`
++
++	// XAIServerSideSearch is set with RenderCustomToolCalls when the upstream is
++	// xAI. A custom_tool_call that IsServerSideSearchCall then stays in the
++	// output but is not rendered as a tool call, because xAI runs it itself.
++	XAIServerSideSearch bool `json:"-"`
+ }
+ 
+ // ResponsesError describes an error in a failed response.
+diff --git a/backend/internal/service/openai_gateway_buffered_hosted_items.go b/backend/internal/service/openai_gateway_buffered_hosted_items.go
+new file mode 100644
+index 000000000..69ac8f620
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_buffered_hosted_items.go
+@@ -0,0 +1,474 @@
++package service
++
++import (
++	"encoding/json"
++	"math"
++	"sort"
++	"strings"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
++	"github.com/tidwall/gjson"
++)
++
++// openAICompatPartText keeps the delta text of one kind per part index, the
++// content_index or summary_index of its events, so that a part of an item is
++// completed with the text of that part only.
++type openAICompatPartText struct {
++	parts map[int64]*strings.Builder
++}
++
++func (p *openAICompatPartText) write(index int64, delta string) {
++	if p.parts == nil {
++		p.parts = map[int64]*strings.Builder{}
++	}
++	if p.parts[index] == nil {
++		p.parts[index] = &strings.Builder{}
++	}
++	_, _ = p.parts[index].WriteString(delta)
++}
++
++func (p *openAICompatPartText) any() bool {
++	return len(p.parts) > 0
++}
++
++func (p *openAICompatPartText) at(index int64) string {
++	if builder := p.parts[index]; builder != nil {
++		return builder.String()
++	}
++	return ""
++}
++
++// unclaimed joins, in part order, the text of the parts from index from on that
++// are not in claimed.
++func (p *openAICompatPartText) unclaimed(claimed map[int64]bool, from int64) string {
++	indexes := make([]int64, 0, len(p.parts))
++	for index := range p.parts {
++		if index >= from && !claimed[index] {
++			indexes = append(indexes, index)
++		}
++	}
++	sort.Slice(indexes, func(i, j int) bool { return indexes[i] < indexes[j] })
++	var text strings.Builder
++	for _, index := range indexes {
++		_, _ = text.WriteString(p.parts[index].String())
++	}
++	return text.String()
++}
++
++// openAICompatOutputSlot is everything the upstream stream said about one output
++// item: the item of its output_item.added and output_item.done events and the
++// text, refusal and argument deltas that arrived for it. Text, refusal and the
++// two kinds of reasoning text are kept per part, and the reasoning text also in
++// arrival order across its kinds.
++type openAICompatOutputSlot struct {
++	index         int64
++	indexed       bool
++	itemType      string
++	id            string
++	added         *apicompat.ResponsesOutput
++	done          *apicompat.ResponsesOutput
++	reasoning     strings.Builder
++	summaryText   openAICompatPartText
++	reasoningText openAICompatPartText
++	text          openAICompatPartText
++	refusal       openAICompatPartText
++	args          strings.Builder
++	argsDone      string
++}
++
++// openAICompatOutputSlots records the output items of a buffered upstream stream
++// so that an empty terminal output can be rebuilt from them.
++type openAICompatOutputSlots struct {
++	slots []*openAICompatOutputSlot
++	// xaiServerSideSearch is set when the upstream is xAI, so that the rebuilt
++	// output keeps a server-side search call out of the client tool calls.
++	xaiServerSideSearch bool
++}
++
++func openAICompatIsToolCallType(itemType string) bool {
++	return itemType == "function_call" || itemType == "custom_tool_call"
++}
++
++func (o *openAICompatOutputSlots) Observe(payload []byte) {
++	if o == nil {
++		return
++	}
++	switch strings.TrimSpace(gjson.GetBytes(payload, "type").String()) {
++	case "response.output_item.added":
++		if item, ok := openAICompatEventItem(payload); ok {
++			slot := o.slot(payload, item.Type, item.ID, item.CallID, false, true)
++			slot.added = &item
++		}
++	case "response.output_item.done":
++		if item, ok := openAICompatEventItem(payload); ok {
++			slot := o.slot(payload, item.Type, item.ID, item.CallID, true, true)
++			slot.done = &item
++		}
++	case "response.output_text.delta":
++		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
++			o.slot(payload, "message", gjson.GetBytes(payload, "item_id").String(), "", false, true).text.write(gjson.GetBytes(payload, "content_index").Int(), delta)
++		}
++	case "response.refusal.delta":
++		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
++			o.slot(payload, "message", gjson.GetBytes(payload, "item_id").String(), "", false, true).refusal.write(gjson.GetBytes(payload, "content_index").Int(), delta)
++		}
++	case "response.reasoning_summary_text.delta":
++		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
++			slot := o.slot(payload, "reasoning", gjson.GetBytes(payload, "item_id").String(), "", false, true)
++			_, _ = slot.reasoning.WriteString(delta)
++			slot.summaryText.write(gjson.GetBytes(payload, "summary_index").Int(), delta)
++		}
++	case "response.reasoning_text.delta":
++		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
++			slot := o.slot(payload, "reasoning", gjson.GetBytes(payload, "item_id").String(), "", false, true)
++			_, _ = slot.reasoning.WriteString(delta)
++			slot.reasoningText.write(gjson.GetBytes(payload, "content_index").Int(), delta)
++		}
++	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
++		if delta := gjson.GetBytes(payload, "delta").String(); delta != "" {
++			if slot := o.slot(payload, "function_call", gjson.GetBytes(payload, "item_id").String(), "", false, false); slot != nil {
++				_, _ = slot.args.WriteString(delta)
++			}
++		}
++	case "response.function_call_arguments.done":
++		if slot := o.slot(payload, "function_call", gjson.GetBytes(payload, "item_id").String(), "", false, false); slot != nil {
++			if completed := gjson.GetBytes(payload, "arguments").String(); completed != "" {
++				slot.argsDone = completed
++			}
++		}
++	case "response.custom_tool_call_input.done":
++		if slot := o.slot(payload, "function_call", gjson.GetBytes(payload, "item_id").String(), "", false, false); slot != nil {
++			if completed := gjson.GetBytes(payload, "input").String(); completed != "" {
++				slot.argsDone = completed
++			}
++		}
++	}
++}
++
++func openAICompatEventItem(payload []byte) (apicompat.ResponsesOutput, bool) {
++	var item apicompat.ResponsesOutput
++	raw := gjson.GetBytes(payload, "item")
++	if !raw.IsObject() || !gjson.ValidBytes(payload) || json.Unmarshal([]byte(raw.Raw), &item) != nil {
++		return item, false
++	}
++	item.Type = strings.TrimSpace(item.Type)
++	return item, item.Type != ""
++}
++
++// slot finds the slot an event belongs to. id is the id of the item the event
++// is about (the item of an added or done event, the item_id of a delta) and
++// callID the call_id of a tool call item. A done event whose item has an id
++// belongs to the slot that already holds a done item with that id, so a repeated
++// item replaces its earlier copy. Otherwise an event whose id a slot already
++// has, because the deltas or the added event of that item opened it, belongs to
++// that slot, also when the event has no output_index. Otherwise an event with an
++// output_index belongs to the newest slot of that index that can hold its kind
++// of item and has no other id (an added event: the newest one without an added or
++// done item; a done event with an id: the newest one without a done item; a done
++// event without an id replaces the done item of that slot), so items that merely
++// share an output_index stay apart. An event without an output_index belongs to
++// the newest slot of its kind that is not done, else to the newest unindexed
++// one; a done event with a call_id belongs to the slot of that call, else to the
++// oldest unindexed slot of its kind without a done item, and an added event
++// always starts a new slot, so unindexed items keep arrival order. With create
++// unset, a missing slot returns nil.
++func (o *openAICompatOutputSlots) slot(payload []byte, kind, id, callID string, done, create bool) *openAICompatOutputSlot {
++	index := gjson.GetBytes(payload, "output_index")
++	added := strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.output_item.added"
++	matches := func(slot *openAICompatOutputSlot) bool {
++		if slot.itemType == "" || slot.itemType == kind {
++			return true
++		}
++		return openAICompatIsToolCallType(kind) && openAICompatIsToolCallType(slot.itemType)
++	}
++	fits := func(slot *openAICompatOutputSlot) bool {
++		return matches(slot) && (slot.id == "" || id == "" || slot.id == id)
++	}
++	newest := func(accept func(*openAICompatOutputSlot) bool) *openAICompatOutputSlot {
++		for i := len(o.slots) - 1; i >= 0; i-- {
++			if accept(o.slots[i]) {
++				return o.slots[i]
++			}
++		}
++		return nil
++	}
++	var found *openAICompatOutputSlot
++	if done && id != "" {
++		found = newest(func(slot *openAICompatOutputSlot) bool { return slot.done != nil && slot.done.ID == id })
++	}
++	if found == nil && id != "" && (done || added || !index.Exists()) {
++		found = newest(func(slot *openAICompatOutputSlot) bool {
++			return slot.id == id && matches(slot) && slot.done == nil && (!added || slot.added == nil)
++		})
++	}
++	if found == nil {
++		switch {
++		case index.Exists():
++			atIndex := func(slot *openAICompatOutputSlot) bool {
++				return slot.indexed && slot.index == index.Int() && matches(slot)
++			}
++			switch {
++			case done && id != "":
++				found = newest(func(slot *openAICompatOutputSlot) bool { return atIndex(slot) && slot.done == nil })
++			case added:
++				found = newest(func(slot *openAICompatOutputSlot) bool { return atIndex(slot) && slot.added == nil && slot.done == nil })
++			default:
++				found = newest(atIndex)
++			}
++		case added:
++		case done:
++			if callID != "" {
++				found = newest(func(slot *openAICompatOutputSlot) bool {
++					return slot.done == nil && slot.added != nil && slot.added.CallID == callID && matches(slot)
++				})
++			}
++			for _, slot := range o.slots {
++				if found == nil && !slot.indexed && slot.done == nil && slot.itemType == kind {
++					found = slot
++				}
++			}
++		default:
++			found = newest(func(slot *openAICompatOutputSlot) bool { return slot.done == nil && fits(slot) })
++			if found == nil {
++				found = newest(func(slot *openAICompatOutputSlot) bool { return !slot.indexed && fits(slot) })
++			}
++		}
++	}
++	if found == nil && index.Exists() && (added || done) {
++		// Deltas that came with no output_index and before their item was announced
++		// belong to the newest such item of this kind.
++		found = newest(func(slot *openAICompatOutputSlot) bool {
++			return !slot.indexed && slot.added == nil && slot.done == nil && fits(slot)
++		})
++	}
++	if found == nil {
++		if !create {
++			return nil
++		}
++		found = &openAICompatOutputSlot{}
++		o.slots = append(o.slots, found)
++	}
++	if index.Exists() && !found.indexed {
++		found.index, found.indexed = index.Int(), true
++	}
++	if found.id == "" {
++		found.id = id
++	}
++	if found.itemType == "" || done || added {
++		found.itemType = kind
++	}
++	return found
++}
++
++// fillTerminalOutput rebuilds an empty terminal output from the stream's output
++// items, in output_index order, items without an output_index after the indexed
++// ones in arrival order. Items with the same output_index keep arrival order.
++// An item that received output_item.done is taken from that event, completed with the deltas where the event left a text, refusal or
++// the arguments empty, a part with the deltas of its own content_index or
++// summary_index; an item that never received it is rebuilt from its deltas. Only terminals that carry a result are filled; the output of
++// response.failed and error terminals never reaches the client and is left as
++// the upstream sent it.
++func (o *openAICompatOutputSlots) fillTerminalOutput(eventType string, response *apicompat.ResponsesResponse) {
++	switch strings.TrimSpace(eventType) {
++	case "response.completed", "response.done", "response.incomplete", "response.cancelled", "response.canceled":
++	default:
++		return
++	}
++	if o == nil || response == nil || len(response.Output) > 0 {
++		return
++	}
++	slots := append([]*openAICompatOutputSlot(nil), o.slots...)
++	sort.SliceStable(slots, func(i, j int) bool {
++		a, b := slots[i], slots[j]
++		if a.indexed != b.indexed {
++			return a.indexed
++		}
++		return a.indexed && a.index < b.index
++	})
++	for _, slot := range slots {
++		if item, ok := slot.build(); ok {
++			// The streaming converters render a web search only once it is completed.
++			if item.Type == "web_search_call" && item.Status != "completed" {
++				continue
++			}
++			response.Output = append(response.Output, item)
++			if item.Type == "custom_tool_call" {
++				response.RenderCustomToolCalls = true
++				response.XAIServerSideSearch = o.xaiServerSideSearch
++			}
++		}
++	}
++}
++
++func (s *openAICompatOutputSlot) build() (apicompat.ResponsesOutput, bool) {
++	switch s.itemType {
++	case "reasoning":
++		return s.buildReasoning()
++	case "message":
++		return s.buildMessage()
++	case "function_call", "custom_tool_call":
++		return s.buildToolCall()
++	}
++	if s.done == nil {
++		return apicompat.ResponsesOutput{}, false
++	}
++	return *s.done, true
++}
++
++func (s *openAICompatOutputSlot) buildReasoning() (apicompat.ResponsesOutput, bool) {
++	item := apicompat.ResponsesOutput{Type: "reasoning"}
++	if s.done != nil {
++		item = *s.done
++	}
++	// The signature may be on the added event only.
++	if s.added != nil && strings.TrimSpace(item.EncryptedContent) == "" {
++		item.EncryptedContent = s.added.EncryptedContent
++	}
++	// The converters render the summary text and fall back to the reasoning_text
++	// content only when the summary has none, so an item carrying both would lose
++	// one. The deltas carried every text the client is shown, so they stand in
++	// for a text field that is empty or that would be dropped.
++	if s.reasoning.Len() > 0 {
++		var summary, content bool
++		for _, part := range item.Summary {
++			summary = summary || (part.Type == "summary_text" && part.Text != "")
++		}
++		for _, part := range item.Content {
++			content = content || (part.Type == "reasoning_text" && part.Text != "")
++		}
++		switch {
++		case summary == content:
++			item.Summary = []apicompat.ResponsesSummary{{Type: "summary_text", Text: s.reasoning.String()}}
++			item.Content = nil
++		case summary:
++			// The item keeps its text; a summary part it left empty takes the
++			// deltas of its own summary_index.
++			item.Summary = append([]apicompat.ResponsesSummary(nil), item.Summary...)
++			claimed := map[int64]bool{}
++			for i := range item.Summary {
++				if part := &item.Summary[i]; part.Type == "summary_text" {
++					claimed[int64(i)] = true
++					if part.Text == "" {
++						part.Text = s.summaryText.at(int64(i))
++					}
++				}
++			}
++			if rest := s.summaryText.unclaimed(claimed, int64(len(item.Summary))); rest != "" {
++				item.Summary = append(item.Summary, apicompat.ResponsesSummary{Type: "summary_text", Text: rest})
++			}
++		default:
++			item.Content = append([]apicompat.ResponsesContentPart(nil), item.Content...)
++			claimed := map[int64]bool{}
++			for i := range item.Content {
++				if part := &item.Content[i]; part.Type == "reasoning_text" {
++					claimed[int64(i)] = true
++					if part.Text == "" {
++						part.Text = s.reasoningText.at(int64(i))
++					}
++				}
++			}
++			if rest := s.reasoningText.unclaimed(claimed, int64(len(item.Content))); rest != "" {
++				item.Content = append(item.Content, apicompat.ResponsesContentPart{Type: "reasoning_text", Text: rest})
++			}
++		}
++	}
++	return item, s.done != nil || s.reasoning.Len() > 0 || strings.TrimSpace(item.EncryptedContent) != ""
++}
++
++func (s *openAICompatOutputSlot) buildMessage() (apicompat.ResponsesOutput, bool) {
++	item := apicompat.ResponsesOutput{Type: "message", Role: "assistant"}
++	if s.done != nil {
++		item = *s.done
++		item.Content = append([]apicompat.ResponsesContentPart(nil), item.Content...)
++	}
++	declared := int64(len(item.Content))
++	if s.text.any() {
++		blank := func(text string) bool { return strings.TrimSpace(text) == "" }
++		if rest := completeContentParts(item.Content, &s.text, "output_text", declared, blank); rest != "" {
++			item.Content = append(item.Content, apicompat.ResponsesContentPart{Type: "output_text", Text: rest})
++		}
++	}
++	if s.refusal.any() {
++		blank := func(text string) bool { return text == "" }
++		if rest := completeContentParts(item.Content, &s.refusal, "refusal", declared, blank); rest != "" {
++			item.Content = append(item.Content, apicompat.ResponsesContentPart{Type: "refusal", Refusal: rest})
++		}
++	}
++	return item, s.done != nil || s.text.any() || s.refusal.any()
++}
++
++// completeContentParts gives each blank part of partType the deltas of its own
++// content_index, the position of the part in the content, and leaves the parts
++// that have text as they are. It returns the deltas of the indexes that have no
++// part of that type: all of them when no part has text, else those beyond the
++// last of the declared parts of the done item.
++func completeContentParts(content []apicompat.ResponsesContentPart, deltas *openAICompatPartText, partType string, declared int64, blank func(string) bool) string {
++	claimed := map[int64]bool{}
++	present := false
++	for i := range content {
++		part := &content[i]
++		if part.Type != partType {
++			continue
++		}
++		field := &part.Text
++		if partType == "refusal" {
++			field = &part.Refusal
++		}
++		claimed[int64(i)] = true
++		if blank(*field) {
++			if delta := deltas.at(int64(i)); delta != "" {
++				*field = delta
++			}
++		}
++		present = present || !blank(*field)
++	}
++	from := declared
++	if !present {
++		from = math.MinInt64
++	}
++	return deltas.unclaimed(claimed, from)
++}
++
++// buildToolCall returns the function_call or custom_tool_call item of the slot,
++// with the arguments or input a done item left empty taken from the deltas.
++func (s *openAICompatOutputSlot) buildToolCall() (apicompat.ResponsesOutput, bool) {
++	if s.done == nil && s.added == nil {
++		return apicompat.ResponsesOutput{}, false
++	}
++	var item apicompat.ResponsesOutput
++	if s.done != nil {
++		item = *s.done
++	} else {
++		item = *s.added
++	}
++	if s.added != nil {
++		if item.CallID == "" {
++			item.CallID = s.added.CallID
++		}
++		if item.Name == "" {
++			item.Name = s.added.Name
++		}
++		if item.Namespace == "" {
++			item.Namespace = s.added.Namespace
++		}
++		if item.EncryptedFunctionArgs == nil {
++			item.EncryptedFunctionArgs = s.added.EncryptedFunctionArgs
++		}
++	}
++	arguments := item.Arguments
++	if item.Type == "custom_tool_call" {
++		arguments = item.Input
++	}
++	if arguments == "" {
++		arguments = s.argsDone
++	}
++	if arguments == "" {
++		arguments = s.args.String()
++	}
++	if item.Type == "custom_tool_call" {
++		item.Input = arguments
++	} else {
++		item.Arguments = arguments
++	}
++	return item, true
++}
+diff --git a/backend/internal/service/openai_gateway_buffered_hosted_items_test.go b/backend/internal/service/openai_gateway_buffered_hosted_items_test.go
+new file mode 100644
+index 000000000..d137fe14e
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_buffered_hosted_items_test.go
+@@ -0,0 +1,777 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strconv"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++const bufferedHostedItemsMessagesBody = `{"model":"gpt-5.5","max_tokens":64,"stream":false,"messages":[{"role":"user","content":"search the web"}]}`
++
++const bufferedHostedItemsThinkingBody = `{"model":"gpt-5.5","max_tokens":4096,"stream":false,"thinking":{"type":"enabled","budget_tokens":2048},"messages":[{"role":"user","content":"search the web"}]}`
++
++const bufferedHostedItemsChatBody = `{"model":"gpt-5.5","stream":false,"messages":[{"role":"user","content":"search the web"}]}`
++
++const bufferedHostedItemsCreated = `{"type":"response.created","response":{"id":"resp_1","model":"gpt-5.5"}}`
++
++const bufferedHostedItemsCompleted = `{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`
++
++const (
++	bufferedHostedItemsWebSearchDone = `{"type":"response.output_item.done","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q","sources":[{"type":"url","url":"https://a.example/1"}]}}}`
++	bufferedHostedItemsImageDone     = `{"type":"response.output_item.done","output_index":1,"item":{"type":"image_generation_call","id":"ig_1","status":"completed","result":"aGVsbG8="}}`
++	bufferedHostedItemsTextDelta     = `{"type":"response.output_text.delta","output_index":2,"delta":"found it"}`
++	bufferedHostedItemsMessageDone   = `{"type":"response.output_item.done","output_index":2,"item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"found it"}]}}`
++)
++
++// bufferedItemsSSE joins JSON events into an SSE body.
++func bufferedItemsSSE(events ...string) string {
++	var b strings.Builder
++	for _, event := range events {
++		b.WriteString("data: " + event + "\n\n")
++	}
++	return b.String()
++}
++
++// The upstream reports every output item on output_item.done but ends with an
++// empty terminal output.
++var bufferedHostedItemsSSE = bufferedItemsSSE(
++	bufferedHostedItemsCreated,
++	`{"type":"response.output_item.added","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"in_progress"}}`,
++	bufferedHostedItemsWebSearchDone,
++	bufferedHostedItemsImageDone,
++	bufferedHostedItemsTextDelta,
++	bufferedHostedItemsMessageDone,
++	bufferedHostedItemsCompleted,
++)
++
++func bufferedHostedItemsOAuthAccount() *Account {
++	return &Account{
++		ID: 1, Name: "openai-oauth", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
++		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
++	}
++}
++
++func bufferedHostedItemsSSEResponse(sse string) *http.Response {
++	return &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
++		Body:       io.NopCloser(strings.NewReader(sse)),
++	}
++}
++
++func forwardBufferedHostedItems(t *testing.T, path, requestBody, upstreamSSE string) string {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	body := []byte(requestBody)
++	c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
++	c.Request.Header.Set("Content-Type", "application/json")
++	svc := &OpenAIGatewayService{
++		httpUpstream: &httpUpstreamRecorder{resp: bufferedHostedItemsSSEResponse(upstreamSSE)},
++		cfg:          rawChatCompletionsTestConfig(),
++	}
++	account := bufferedHostedItemsOAuthAccount()
++	var err error
++	if path == "/v1/chat/completions" {
++		_, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
++	} else {
++		_, err = svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
++	}
++	require.NoError(t, err)
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++	return rec.Body.String()
++}
++
++func TestForwardAsAnthropic_CodexOAuthNonStreamingKeepsHostedOutputItems(t *testing.T) {
++	out := forwardBufferedHostedItems(t, "/v1/messages", bufferedHostedItemsMessagesBody, bufferedHostedItemsSSE)
++
++	content := gjson.Get(out, "content").Array()
++	require.Len(t, content, 3, out)
++	require.Equal(t, "server_tool_use", content[0].Get("type").String())
++	require.Equal(t, "web_search", content[0].Get("name").String())
++	require.Equal(t, "q", content[0].Get("input.query").String())
++	require.Equal(t, "web_search_tool_result", content[1].Get("type").String())
++	require.Equal(t, content[0].Get("id").String(), content[1].Get("tool_use_id").String())
++	require.Equal(t, "text", content[2].Get("type").String())
++	require.Equal(t, "found it", content[2].Get("text").String())
++}
++
++func TestForwardAsAnthropic_BufferedHostedItemsFollowReasoning(t *testing.T) {
++	sse := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"plan"}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[]}}`,
++		`{"type":"response.output_item.done","output_index":1,"item":{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q"}}}`,
++		`{"type":"response.output_text.delta","output_index":2,"delta":"found it"}`,
++		bufferedHostedItemsCompleted,
++	)
++	out := forwardBufferedHostedItems(t, "/v1/messages", bufferedHostedItemsThinkingBody, sse)
++
++	var types []string
++	for _, block := range gjson.Get(out, "content").Array() {
++		types = append(types, block.Get("type").String())
++	}
++	require.Equal(t, []string{"thinking", "server_tool_use", "web_search_tool_result", "text"}, types, out)
++}
++
++func TestReadOpenAICompatBufferedTerminal_EmptyTerminalOutputGainsHostedItems(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
++	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1}
++
++	response, _, acc, _, err := (&OpenAIGatewayService{}).readOpenAICompatBufferedTerminal(
++		bufferedHostedItemsSSEResponse(bufferedHostedItemsSSE), c, account, "openai chat buffered", "req-1")
++	require.NoError(t, err)
++	require.NotNil(t, response)
++
++	var types []string
++	for _, item := range response.Output {
++		types = append(types, item.Type)
++	}
++	require.Equal(t, []string{"web_search_call", "image_generation_call", "message"}, types)
++
++	// The handler supplements the output afterwards; the text must not be added twice.
++	acc.SupplementResponseOutput(response)
++	require.Len(t, response.Output, 3)
++}
++
++func TestReadOpenAICompatBufferedTerminal_HostedItemsWithoutOutputIndexKeepArrivalOrder(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
++	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1}
++	sse := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.done","item":{"type":"web_search_call","id":"ws_1","status":"completed"}}`,
++		`{"type":"response.output_item.done","item":{"type":"image_generation_call","id":"ig_1","status":"completed"}}`,
++		bufferedHostedItemsCompleted,
++	)
++
++	response, _, _, _, err := (&OpenAIGatewayService{}).readOpenAICompatBufferedTerminal(
++		bufferedHostedItemsSSEResponse(sse), c, account, "openai chat buffered", "req-1")
++	require.NoError(t, err)
++
++	var ids []string
++	for _, item := range response.Output {
++		ids = append(ids, item.ID)
++	}
++	require.Equal(t, []string{"ws_1", "ig_1"}, ids)
++}
++
++// With an empty terminal output the accumulator keeps building reasoning, text
++// and function calls from deltas. Only the types it does not know are added.
++func TestBufferedCompat_EmptyTerminalOutputKeepsAccumulatedItems(t *testing.T) {
++	fnTool := `"tools":[{"type":"function","function":{"name":"get","parameters":{"type":"object"}}}]`
++	customTool := `"tools":[{"type":"custom","custom":{"name":"exec","description":"run"}}]`
++	chatBody := func(extra string) string {
++		return `{"model":"gpt-5.5","stream":false,` + extra + `,"messages":[{"role":"user","content":"hi"}]}`
++	}
++	toolMessagesBody := `{"model":"gpt-5.5","max_tokens":64,"stream":false,"tools":[{"name":"get","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"hi"}]}`
++
++	// The reasoning done item has an empty summary; its text only streamed as deltas.
++	reasoningSSE := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[]}}`,
++		`{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"thinking hard"}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[]}}`,
++		`{"type":"response.output_text.delta","output_index":1,"delta":"answer"}`,
++		`{"type":"response.output_item.done","output_index":1,"item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"answer"}]}}`,
++		bufferedHostedItemsCompleted,
++	)
++	// Item events without output_index, two calls.
++	noIndexSSE := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.added","item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get","arguments":""}}`,
++		`{"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\"a\":1}"}`,
++		`{"type":"response.output_item.done","item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get","arguments":"{\"a\":1}","status":"completed"}}`,
++		`{"type":"response.output_item.added","item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"get","arguments":""}}`,
++		`{"type":"response.function_call_arguments.delta","item_id":"fc_2","delta":"{\"b\":2}"}`,
++		`{"type":"response.output_item.done","item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"get","arguments":"{\"b\":2}","status":"completed"}}`,
++		bufferedHostedItemsCompleted,
++	)
++	customSSE := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.added","output_index":0,"item":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"exec","input":""}}`,
++		`{"type":"response.custom_tool_call_input.delta","output_index":0,"item_id":"ctc_1","delta":"dir"}`,
++		`{"type":"response.custom_tool_call_input.done","output_index":0,"item_id":"ctc_1","input":"dir"}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"exec","input":"dir","status":"completed"}}`,
++		bufferedHostedItemsCompleted,
++	)
++
++	t.Run("reasoning text from deltas, chat", func(t *testing.T) {
++		out := forwardBufferedHostedItems(t, "/v1/chat/completions", chatBody(`"reasoning_effort":"high"`), reasoningSSE)
++		require.Equal(t, "thinking hard", gjson.Get(out, "choices.0.message.reasoning_content").String(), out)
++		require.Equal(t, "answer", gjson.Get(out, "choices.0.message.content").String(), out)
++	})
++	t.Run("reasoning text from deltas, messages", func(t *testing.T) {
++		out := forwardBufferedHostedItems(t, "/v1/messages", bufferedHostedItemsThinkingBody, reasoningSSE)
++		require.Equal(t, "thinking", gjson.Get(out, "content.0.type").String(), out)
++		require.Equal(t, "thinking hard", gjson.Get(out, "content.0.thinking").String(), out)
++		require.Equal(t, "answer", gjson.Get(out, "content.1.text").String(), out)
++	})
++	t.Run("two function calls without output_index, chat", func(t *testing.T) {
++		out := forwardBufferedHostedItems(t, "/v1/chat/completions", chatBody(fnTool), noIndexSSE)
++		calls := gjson.Get(out, "choices.0.message.tool_calls").Array()
++		require.Len(t, calls, 2, out)
++		require.Equal(t, "call_1", calls[0].Get("id").String())
++		require.Equal(t, "call_2", calls[1].Get("id").String())
++	})
++	t.Run("two function calls without output_index, messages", func(t *testing.T) {
++		out := forwardBufferedHostedItems(t, "/v1/messages", toolMessagesBody, noIndexSSE)
++		content := gjson.Get(out, "content").Array()
++		require.Len(t, content, 2, out)
++		require.Equal(t, "call_1", content[0].Get("id").String())
++		require.Equal(t, "call_2", content[1].Get("id").String())
++	})
++	t.Run("custom tool call, chat", func(t *testing.T) {
++		out := forwardBufferedHostedItems(t, "/v1/chat/completions", chatBody(customTool), customSSE)
++		calls := gjson.Get(out, "choices.0.message.tool_calls").Array()
++		require.Len(t, calls, 1, out)
++		require.Equal(t, "exec", calls[0].Get("function.name").String())
++		require.Equal(t, "dir", calls[0].Get("function.arguments").String())
++	})
++}
++
++// Native search calls are billed from the terminal Responses body, so an empty
++// terminal output that is rebuilt with hosted items must count them, and a
++// terminal output that already has items must keep the count it reports.
++func TestBufferedCompat_GrokSearchCountFromRebuiltHostedItems(t *testing.T) {
++	const searchDone = `{"type":"response.output_item.done","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q"}}}`
++	const xSearchDone = `{"type":"response.output_item.done","output_index":1,"item":{"type":"x_search_call","id":"xs_1","status":"completed"}}`
++	const messageDone = `{"type":"response.output_item.done","output_index":2,"item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"found it"}]}}`
++	const usage = `"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}`
++	completed := func(output string) string {
++		return `{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":` + output + `,` + usage + `}}`
++	}
++	stream := func(terminalOutput string) string {
++		return bufferedItemsSSE(bufferedHostedItemsCreated, searchDone, xSearchDone, bufferedHostedItemsTextDelta, messageDone, completed(terminalOutput))
++	}
++
++	cases := []struct {
++		name           string
++		terminalOutput string
++		wantSearches   int
++	}{
++		{"empty terminal output", `[]`, 2},
++		{"terminal output with the search items", `[{"type":"web_search_call","id":"ws_1","status":"completed"},{"type":"x_search_call","id":"xs_1","status":"completed"},{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"found it"}]}]`, 2},
++		{"terminal output without search items", `[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"found it"}]}]`, 0},
++	}
++	for _, tc := range cases {
++		for _, path := range []string{"/v1/messages", "/v1/chat/completions"} {
++			t.Run(tc.name+" "+path, func(t *testing.T) {
++				gin.SetMode(gin.TestMode)
++				rec := httptest.NewRecorder()
++				c, _ := gin.CreateTestContext(rec)
++				body := []byte(`{"model":"grok-4.7","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
++				c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
++				c.Request.Header.Set("Content-Type", "application/json")
++				c.Set("api_key", &APIKey{ID: 88000})
++				account := healthyGrokOAuthGatewayTestAccount(4242, "access-token")
++				svc := grokAuditOAuthService(&httpUpstreamRecorder{resp: bufferedHostedItemsSSEResponse(stream(tc.terminalOutput))}, account)
++
++				var result *OpenAIForwardResult
++				var err error
++				if path == "/v1/chat/completions" {
++					result, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
++				} else {
++					result, err = svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
++				}
++				require.NoError(t, err)
++				require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++				require.NotNil(t, result)
++				require.Equal(t, tc.wantSearches, result.SearchCount)
++			})
++		}
++	}
++}
++
++// The output of a failed terminal only feeds the error payload, so hosted items
++// reported before the failure must not change the payload recorded for ops.
++func TestBufferedCompat_FailedTerminalKeepsErrorPayload(t *testing.T) {
++	const failed = `{"type":"response.failed","response":{"id":"resp_err","object":"response","status":"failed","error":{"type":"rate_limit_error","message":"Rate limit reached"},"output":[],"usage":{"input_tokens":10,"output_tokens":0,"total_tokens":10}}}`
++	plain := bufferedItemsSSE(bufferedHostedItemsCreated, failed)
++	withHosted := bufferedItemsSSE(bufferedHostedItemsCreated, bufferedHostedItemsWebSearchDone, bufferedHostedItemsImageDone, failed)
++
++	recordedPayload := func(t *testing.T, path, requestBody, sse string) string {
++		t.Helper()
++		gin.SetMode(gin.TestMode)
++		c, _ := gin.CreateTestContext(httptest.NewRecorder())
++		body := []byte(requestBody)
++		c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
++		c.Request.Header.Set("Content-Type", "application/json")
++		cfg := rawChatCompletionsTestConfig()
++		cfg.Gateway.LogUpstreamErrorBody = true
++		cfg.Gateway.LogUpstreamErrorBodyMaxBytes = 4096
++		svc := &OpenAIGatewayService{
++			httpUpstream: &httpUpstreamRecorder{resp: bufferedHostedItemsSSEResponse(sse)},
++			cfg:          cfg,
++		}
++		account := bufferedHostedItemsOAuthAccount()
++		var err error
++		if path == "/v1/chat/completions" {
++			_, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
++		} else {
++			_, err = svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
++		}
++		var failoverErr *UpstreamFailoverError
++		require.ErrorAs(t, err, &failoverErr)
++		events, _ := c.Get(OpsUpstreamErrorsKey)
++		recorded, _ := events.([]*OpsUpstreamErrorEvent)
++		require.NotEmpty(t, recorded)
++		return recorded[0].Detail
++	}
++
++	for path, requestBody := range map[string]string{
++		"/v1/messages":         bufferedHostedItemsMessagesBody,
++		"/v1/chat/completions": bufferedHostedItemsChatBody,
++	} {
++		t.Run(path, func(t *testing.T) {
++			want := recordedPayload(t, path, requestBody, plain)
++			require.Contains(t, want, `"output":[]`)
++			require.Equal(t, want, recordedPayload(t, path, requestBody, withHosted))
++		})
++	}
++}
++
++func readBufferedOutputItems(t *testing.T, sse string) []string {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
++	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1}
++	response, _, _, _, err := (&OpenAIGatewayService{}).readOpenAICompatBufferedTerminal(
++		bufferedHostedItemsSSEResponse(sse), c, account, "openai chat buffered", "req-1")
++	require.NoError(t, err)
++	require.NotNil(t, response)
++	var items []string
++	for _, item := range response.Output {
++		items = append(items, item.Type+":"+item.ID+":"+item.Arguments+":"+item.Input)
++	}
++	return items
++}
++
++// Items that share an output_index stay apart; the same item reported again
++// replaces its earlier copy; equal indexes keep arrival order.
++func TestReadOpenAICompatBufferedTerminal_DoneItemsMergeByItemID(t *testing.T) {
++	done := func(index int, id string) string {
++		return `{"type":"response.output_item.done","output_index":` + strconv.Itoa(index) + `,"item":{"type":"web_search_call","id":"` + id + `","status":"completed"}}`
++	}
++	items := readBufferedOutputItems(t, bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		done(0, "ws_a"), done(0, "ws_b"), done(1, "ws_c"), done(0, "ws_a"),
++		bufferedHostedItemsCompleted,
++	))
++	require.Equal(t, []string{"web_search_call:ws_a::", "web_search_call:ws_b::", "web_search_call:ws_c::"}, items)
++}
++
++// The done item is the upstream's final form of an item; deltas only complete a
++// text, refusal or arguments field that the done item left empty, and rebuild an
++// item that never got a done event.
++func TestReadOpenAICompatBufferedTerminal_DoneItemsWinOverDeltas(t *testing.T) {
++	items := readBufferedOutputItems(t, bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get","arguments":""}}`,
++		`{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"stale\":1}"}`,
++		`{"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"a\":1}"}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get","arguments":""}}`,
++		`{"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_2","name":"get","arguments":""}}`,
++		`{"type":"response.function_call_arguments.delta","output_index":1,"delta":"{\"b\":2}"}`,
++		`{"type":"response.output_item.done","output_index":2,"item":{"type":"function_call","id":"fc_3","call_id":"call_3","name":"get","arguments":"{\"c\":3}"}}`,
++		bufferedHostedItemsCompleted,
++	))
++	require.Equal(t, []string{
++		`function_call:fc_1:{"a":1}:`,
++		`function_call:fc_2:{"b":2}:`,
++		`function_call:fc_3:{"c":3}:`,
++	}, items)
++}
++
++func TestForwardAsAnthropic_CancelledTerminalKeepsHostedOutputItems(t *testing.T) {
++	cancelled := `{"type":"response.cancelled","response":{"id":"resp_1","status":"cancelled","output":[],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`
++	out := forwardBufferedHostedItems(t, "/v1/messages", bufferedHostedItemsMessagesBody,
++		bufferedItemsSSE(bufferedHostedItemsCreated, bufferedHostedItemsWebSearchDone, cancelled))
++	require.Equal(t, "server_tool_use", gjson.Get(out, "content.0.type").String(), out)
++}
++
++// A tool call whose arguments are not a JSON object must not empty the response:
++// a truncated function call gets {}, a custom tool call its input wrapped.
++func TestForwardAsAnthropic_BufferedNonObjectToolInput(t *testing.T) {
++	toolBody := `{"model":"gpt-5.5","max_tokens":64,"stream":false,"tools":[{"name":"get","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"hi"}]}`
++	truncated := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"plan"}]}}`,
++		`{"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get","arguments":""}}`,
++		`{"type":"response.function_call_arguments.delta","output_index":1,"delta":"{\"a\":1"}`,
++		`{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[]}}`,
++	)
++	out := forwardBufferedHostedItems(t, "/v1/messages", toolBody, truncated)
++	require.Equal(t, "thinking", gjson.Get(out, "content.0.type").String(), out)
++	require.Equal(t, "plan", gjson.Get(out, "content.0.thinking").String(), out)
++	require.Equal(t, "tool_use", gjson.Get(out, "content.1.type").String(), out)
++	require.Equal(t, "{}", gjson.Get(out, "content.1.input").Raw, out)
++	require.Equal(t, "max_tokens", gjson.Get(out, "stop_reason").String(), out)
++
++	custom := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.added","output_index":0,"item":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"get","input":""}}`,
++		`{"type":"response.custom_tool_call_input.delta","output_index":0,"delta":"dir"}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"get","input":"dir"}}`,
++		bufferedHostedItemsCompleted,
++	)
++	out = forwardBufferedHostedItems(t, "/v1/messages", toolBody, custom)
++	require.Equal(t, "tool_use", gjson.Get(out, "content.0.type").String(), out)
++	require.Equal(t, `{"input":"dir"}`, gjson.Get(out, "content.0.input").Raw, out)
++	require.Equal(t, "tool_use", gjson.Get(out, "stop_reason").String(), out)
++}
++
++// A reasoning item with a summary and raw reasoning_text content: the converters render one of the two,
++// so the deltas that carried both supply the text, as the streaming path shows it.
++func TestForwardAsAnthropic_BufferedReasoningSummaryAndContentKeepBoth(t *testing.T) {
++	sse := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.reasoning_text.delta","output_index":0,"content_index":0,"delta":"raw thoughts"}`,
++		`{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"summary"}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"summary"}],"content":[{"type":"reasoning_text","text":"raw thoughts"}]}}`,
++		bufferedHostedItemsCompleted,
++	)
++	out := forwardBufferedHostedItems(t, "/v1/messages", bufferedHostedItemsThinkingBody, sse)
++	require.Equal(t, "raw thoughtssummary", gjson.Get(out, "content.0.thinking").String(), out)
++}
++
++// bufferedPartsEntries are the two buffered entries, each with the request that
++// makes it show the field under test.
++var bufferedPartsEntries = []struct{ name, path, body string }{
++	{"messages", "/v1/messages", bufferedHostedItemsThinkingBody},
++	{"chat", "/v1/chat/completions", `{"model":"gpt-5.5","stream":false,"reasoning_effort":"high","messages":[{"role":"user","content":"search the web"}]}`},
++}
++
++// bufferedPartsVisible is the text of one kind ("text", "thinking" or "refusal")
++// the client is shown: the text or thinking blocks joined for /v1/messages, the
++// content, reasoning_content or refusal of the message for /v1/chat/completions.
++func bufferedPartsVisible(out, path, kind string) string {
++	if path == "/v1/chat/completions" {
++		return gjson.Get(out, "choices.0.message."+map[string]string{"text": "content", "thinking": "reasoning_content", "refusal": "refusal"}[kind]).String()
++	}
++	var text strings.Builder
++	for _, block := range gjson.Get(out, "content").Array() {
++		if block.Get("type").String() == kind {
++			text.WriteString(block.Get(kind).String())
++		}
++	}
++	return text.String()
++}
++
++// One item with several parts whose done item leaves only some of them empty, and
++// an empty terminal output: a part is completed with the deltas of its own part
++// index, a part that has text and the order of the parts stay as the done item
++// has them.
++func TestBufferedCompat_PartialTextParts(t *testing.T) {
++	text := func(s string) string { return `{"type":"output_text","text":"` + s + `"}` }
++	cases := []struct {
++		name, parts, want string
++		deltas            []string
++	}{
++		{"first empty", "[" + text("") + "," + text("second") + "]", "first second", []string{"first ", "second"}},
++		{"second empty", "[" + text("first ") + "," + text("") + "]", "first second", []string{"first ", "second"}},
++		{"both empty", "[" + text("") + "," + text("") + "]", "first second", []string{"first ", "second"}},
++		{"both with text, the done item wins", "[" + text("one ") + "," + text("two") + "]", "one two", []string{"first ", "second"}},
++		{"middle with text of three", "[" + text("") + "," + text("b ") + "," + text("") + "]", "a b c", []string{"a ", "b ", "c"}},
++	}
++	for _, entry := range bufferedPartsEntries {
++		for _, tc := range cases {
++			t.Run(entry.name+" "+tc.name, func(t *testing.T) {
++				events := []string{
++					bufferedHostedItemsCreated,
++					`{"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":[]}}`,
++				}
++				for index, delta := range tc.deltas {
++					events = append(events, `{"type":"response.output_text.delta","output_index":0,"content_index":`+strconv.Itoa(index)+`,"delta":"`+delta+`"}`)
++				}
++				events = append(events,
++					`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":`+tc.parts+`}}`,
++					bufferedHostedItemsCompleted)
++				sse := bufferedItemsSSE(events...)
++				out := forwardBufferedHostedItems(t, entry.path, entry.body, sse)
++				require.Equal(t, tc.want, bufferedPartsVisible(out, entry.path, "text"), out)
++			})
++		}
++	}
++}
++
++// The same for the refusal parts of a message, which only /v1/chat/completions renders.
++func TestBufferedCompat_PartialRefusalParts(t *testing.T) {
++	refusal := func(s string) string { return `{"type":"refusal","refusal":"` + s + `"}` }
++	cases := []struct{ name, parts, want string }{
++		{"first empty", "[" + refusal("") + "," + refusal("second") + "]", "first second"},
++		{"second empty", "[" + refusal("first ") + "," + refusal("") + "]", "first second"},
++		{"both empty", "[" + refusal("") + "," + refusal("") + "]", "first second"},
++		{"both with text, the done item wins", "[" + refusal("one ") + "," + refusal("two") + "]", "one two"},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			sse := bufferedItemsSSE(
++				bufferedHostedItemsCreated,
++				`{"type":"response.refusal.delta","output_index":0,"content_index":0,"delta":"first "}`,
++				`{"type":"response.refusal.delta","output_index":0,"content_index":1,"delta":"second"}`,
++				`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":`+tc.parts+`}}`,
++				bufferedHostedItemsCompleted,
++			)
++			out := forwardBufferedHostedItems(t, "/v1/chat/completions", bufferedHostedItemsChatBody, sse)
++			require.Equal(t, tc.want, bufferedPartsVisible(out, "/v1/chat/completions", "refusal"), out)
++		})
++	}
++}
++
++// A refusal part and a text part of one message keep their own deltas.
++func TestBufferedCompat_RefusalAndTextPartsKeepTheirOwnDeltas(t *testing.T) {
++	sse := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"answer"}`,
++		`{"type":"response.refusal.delta","output_index":0,"content_index":1,"delta":"no"}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":""},{"type":"refusal","refusal":""}]}}`,
++		bufferedHostedItemsCompleted,
++	)
++	out := forwardBufferedHostedItems(t, "/v1/chat/completions", bufferedHostedItemsChatBody, sse)
++	require.Equal(t, "answer", bufferedPartsVisible(out, "/v1/chat/completions", "text"), out)
++	require.Equal(t, "no", bufferedPartsVisible(out, "/v1/chat/completions", "refusal"), out)
++}
++
++// Reasoning with several summary parts, or several reasoning_text parts, whose
++// done item leaves only some of them empty.
++func TestBufferedCompat_PartialReasoningParts(t *testing.T) {
++	summary := func(s string) string { return `{"type":"summary_text","text":"` + s + `"}` }
++	raw := func(s string) string { return `{"type":"reasoning_text","text":"` + s + `"}` }
++	summaryDeltas := []string{
++		`{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"first "}`,
++		`{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":1,"delta":"second"}`,
++	}
++	rawDeltas := []string{
++		`{"type":"response.reasoning_text.delta","output_index":0,"content_index":0,"delta":"first "}`,
++		`{"type":"response.reasoning_text.delta","output_index":0,"content_index":1,"delta":"second"}`,
++	}
++	cases := []struct {
++		name             string
++		deltas           []string
++		summary, content string
++		want             string
++	}{
++		{"summary, first empty", summaryDeltas, "[" + summary("") + "," + summary("second") + "]", "[]", "first second"},
++		{"summary, second empty", summaryDeltas, "[" + summary("first ") + "," + summary("") + "]", "[]", "first second"},
++		{"summary, both empty", summaryDeltas, "[" + summary("") + "," + summary("") + "]", "[]", "first second"},
++		{"summary, both with text, the done item wins", summaryDeltas, "[" + summary("one ") + "," + summary("two") + "]", "[]", "one two"},
++		{"reasoning_text, first empty", rawDeltas, "[]", "[" + raw("") + "," + raw("second") + "]", "first second"},
++		{"reasoning_text, second empty", rawDeltas, "[]", "[" + raw("first ") + "," + raw("") + "]", "first second"},
++		{"reasoning_text, both empty", rawDeltas, "[]", "[" + raw("") + "," + raw("") + "]", "first second"},
++		{"reasoning_text, both with text, the done item wins", rawDeltas, "[]", "[" + raw("one ") + "," + raw("two") + "]", "one two"},
++	}
++	for _, entry := range bufferedPartsEntries {
++		for _, tc := range cases {
++			t.Run(entry.name+" "+tc.name, func(t *testing.T) {
++				events := append([]string{bufferedHostedItemsCreated}, tc.deltas...)
++				events = append(events,
++					`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":`+tc.summary+`,"content":`+tc.content+`}}`,
++					bufferedHostedItemsCompleted)
++				out := forwardBufferedHostedItems(t, entry.path, entry.body, bufferedItemsSSE(events...))
++				require.Equal(t, tc.want, bufferedPartsVisible(out, entry.path, "thinking"), out)
++			})
++		}
++	}
++}
++
++// The streaming converters render a web search once it is completed, so a
++// rebuilt output does the same.
++func TestBufferedCompat_WebSearchNotCompletedIsNotRebuilt(t *testing.T) {
++	for _, tc := range []struct {
++		status string
++		want   []string
++	}{
++		{"completed", []string{"server_tool_use", "web_search_tool_result"}},
++		{"in_progress", []string{"text"}},
++	} {
++		t.Run(tc.status, func(t *testing.T) {
++			sse := bufferedItemsSSE(
++				bufferedHostedItemsCreated,
++				`{"type":"response.output_item.done","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"`+tc.status+`","action":{"type":"search","query":"q"}}}`,
++				bufferedHostedItemsCompleted,
++			)
++			out := forwardBufferedHostedItems(t, "/v1/messages", bufferedHostedItemsMessagesBody, sse)
++			var types []string
++			for _, block := range gjson.Get(out, "content").Array() {
++				types = append(types, block.Get("type").String())
++			}
++			require.Equal(t, tc.want, types, out)
++		})
++	}
++}
++
++// A custom tool call without input is {} as in the streamed tool_use.
++func TestBufferedCompat_EmptyCustomToolInputIsAnEmptyObject(t *testing.T) {
++	sse := bufferedItemsSSE(
++		bufferedHostedItemsCreated,
++		`{"type":"response.output_item.added","output_index":0,"item":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"exec","input":""}}`,
++		`{"type":"response.output_item.done","output_index":0,"item":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"exec","input":""}}`,
++		bufferedHostedItemsCompleted,
++	)
++	toolBody := `{"model":"gpt-5.5","max_tokens":64,"stream":false,"tools":[{"name":"exec","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"hi"}]}`
++	out := forwardBufferedHostedItems(t, "/v1/messages", toolBody, sse)
++	require.Equal(t, "tool_use", gjson.Get(out, "content.0.type").String(), out)
++	require.Equal(t, "{}", gjson.Get(out, "content.0.input").Raw, out)
++}
++
++// Deltas without an output_index belong to their item, found by item_id or as the
++// newest open item of their kind, not to a second copy of it.
++func TestBufferedCompat_DeltasWithoutOutputIndexJoinTheirItem(t *testing.T) {
++	customBody := `{"model":"gpt-5.5","stream":false,"tools":[{"type":"custom","custom":{"name":"exec","description":"run"}}],"messages":[{"role":"user","content":"hi"}]}`
++	cases := []struct {
++		name, shown string
++		sse         string
++	}{
++		{"item_id, no added event", "text", bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_text.delta","item_id":"msg_1","content_index":0,"delta":"hello"}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"hello"}]}}`,
++			bufferedHostedItemsCompleted)},
++		{"item_id, after added", "thinking", bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[]}}`,
++			`{"type":"response.reasoning_text.delta","item_id":"rs_1","content_index":0,"delta":"hello"}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[],"content":[{"type":"reasoning_text","text":"hello"}]}}`,
++			bufferedHostedItemsCompleted)},
++		{"no item_id, after added", "text", bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_item.added","output_index":1,"item":{"type":"message","role":"assistant","content":[]}}`,
++			`{"type":"response.output_text.delta","content_index":0,"delta":"hello"}`,
++			`{"type":"response.output_item.done","output_index":1,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}}`,
++			bufferedHostedItemsCompleted)},
++	}
++	for _, entry := range bufferedPartsEntries {
++		for _, tc := range cases {
++			t.Run(entry.name+" "+tc.name, func(t *testing.T) {
++				out := forwardBufferedHostedItems(t, entry.path, entry.body, tc.sse)
++				require.Equal(t, "hello", bufferedPartsVisible(out, entry.path, tc.shown), out)
++			})
++		}
++	}
++	t.Run("custom tool call input", func(t *testing.T) {
++		sse := bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_item.added","output_index":1,"item":{"type":"reasoning","summary":[]}}`,
++			`{"type":"response.reasoning_summary_text.delta","summary_index":0,"delta":"plan"}`,
++			`{"type":"response.output_item.added","output_index":0,"item":{"type":"custom_tool_call","call_id":"call_1","name":"exec","input":""}}`,
++			`{"type":"response.custom_tool_call_input.delta","delta":"dir"}`,
++			`{"type":"response.custom_tool_call_input.done"}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"custom_tool_call","call_id":"call_1","name":"exec","input":""}}`,
++			bufferedHostedItemsCompleted)
++		out := forwardBufferedHostedItems(t, "/v1/chat/completions", customBody, sse)
++		require.Equal(t, "dir", gjson.Get(out, "choices.0.message.tool_calls.0.function.arguments").String(), out)
++		require.Equal(t, "plan", gjson.Get(out, "choices.0.message.reasoning_content").String(), out)
++	})
++}
++
++// Items that share an output_index, or have none, and lack an added or a done
++// event keep their own deltas.
++func TestBufferedCompat_ItemsOfOneOutputIndexKeepTheirOwnEvents(t *testing.T) {
++	fnBody := `{"model":"gpt-5.5","stream":false,"tools":[{"type":"function","function":{"name":"get","parameters":{"type":"object"}}}],"messages":[{"role":"user","content":"hi"}]}`
++	t.Run("reasoning deltas, then a message added at the same index", func(t *testing.T) {
++		sse := bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"plan"}`,
++			`{"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":[]}}`,
++			`{"type":"response.output_text.delta","output_index":0,"content_index":0,"item_id":"msg_1","delta":"answer"}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"answer"}]}}`,
++			bufferedHostedItemsCompleted)
++		for _, entry := range bufferedPartsEntries {
++			out := forwardBufferedHostedItems(t, entry.path, entry.body, sse)
++			require.Equal(t, "plan", bufferedPartsVisible(out, entry.path, "thinking"), out)
++			require.Equal(t, "answer", bufferedPartsVisible(out, entry.path, "text"), out)
++		}
++	})
++	t.Run("a message done, then another message added at the same index", func(t *testing.T) {
++		sse := bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"first "}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":""}]}}`,
++			`{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","content":[]}}`,
++			`{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"second"}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second"}]}}`,
++			bufferedHostedItemsCompleted)
++		for _, entry := range bufferedPartsEntries {
++			out := forwardBufferedHostedItems(t, entry.path, entry.body, sse)
++			require.Equal(t, "first second", bufferedPartsVisible(out, entry.path, "text"), out)
++		}
++	})
++	t.Run("a hosted call added at the index of delta-only text", func(t *testing.T) {
++		sse := bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.refusal.delta","output_index":0,"content_index":0,"delta":"no"}`,
++			`{"type":"response.output_item.added","output_index":0,"item":{"type":"web_search_call","status":"in_progress"}}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"web_search_call","status":"completed"}}`,
++			bufferedHostedItemsCompleted)
++		out := forwardBufferedHostedItems(t, "/v1/chat/completions", bufferedHostedItemsChatBody, sse)
++		require.Equal(t, "no", bufferedPartsVisible(out, "/v1/chat/completions", "refusal"), out)
++	})
++	t.Run("two function calls without index and id", func(t *testing.T) {
++		sse := bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_a","name":"get","arguments":""}}`,
++			`{"type":"response.function_call_arguments.delta","delta":"{\"a\":1}"}`,
++			`{"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_b","name":"get","arguments":""}}`,
++			`{"type":"response.function_call_arguments.delta","delta":"{\"b\":2}"}`,
++			`{"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_b","name":"get","arguments":""}}`,
++			bufferedHostedItemsCompleted)
++		out := forwardBufferedHostedItems(t, "/v1/chat/completions", fnBody, sse)
++		calls := gjson.Get(out, "choices.0.message.tool_calls").Array()
++		require.Len(t, calls, 2, out)
++		require.Equal(t, "call_a", calls[0].Get("id").String())
++		require.Equal(t, `{"a":1}`, calls[0].Get("function.arguments").String())
++		require.Equal(t, "call_b", calls[1].Get("id").String())
++		require.Equal(t, `{"b":2}`, calls[1].Get("function.arguments").String())
++	})
++}
++
++// The signature of a reasoning item may be on its added event only; the item is
++// kept for it even without text, as the streaming path keeps it.
++func TestBufferedCompat_ReasoningSignatureOnAddedEventIsKept(t *testing.T) {
++	cases := []struct {
++		name, sse string
++		want      []string
++	}{
++		{"with text deltas and a done item without it", bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ENC"}}`,
++			`{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"plan"}`,
++			`{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"plan"}]}}`,
++			bufferedHostedItemsCompleted), []string{`thinking "plan" ENC`}},
++		{"added event only", bufferedItemsSSE(bufferedHostedItemsCreated,
++			`{"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ENC"}}`,
++			bufferedHostedItemsCompleted), []string{`thinking "" ENC`}},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			out := forwardBufferedHostedItems(t, "/v1/messages", bufferedHostedItemsThinkingBody, tc.sse)
++			var got []string
++			for _, block := range gjson.Get(out, "content").Array() {
++				got = append(got, block.Get("type").String()+" "+strconv.Quote(block.Get("thinking").String())+" "+block.Get("signature").String())
++			}
++			require.Equal(t, tc.want, got, out)
++		})
++	}
++}
++
++// Reasoning deltas that came with no output_index before the item was added belong
++// to that item, so the text keeps its arrival order.
++func TestBufferedCompat_UnindexedReasoningDeltasJoinTheItemAddedLater(t *testing.T) {
++	sse := bufferedItemsSSE(bufferedHostedItemsCreated,
++		`{"type":"response.reasoning_text.delta","content_index":0,"delta":"first "}`,
++		`{"type":"response.output_item.added","output_index":1,"item":{"type":"reasoning","summary":[]}}`,
++		`{"type":"response.reasoning_summary_text.delta","summary_index":0,"delta":"second"}`,
++		bufferedHostedItemsCompleted)
++	for _, entry := range bufferedPartsEntries {
++		out := forwardBufferedHostedItems(t, entry.path, entry.body, sse)
++		require.Equal(t, "first second", bufferedPartsVisible(out, entry.path, "thinking"), out)
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_buffered_server_side_search_test.go b/backend/internal/service/openai_gateway_buffered_server_side_search_test.go
+new file mode 100644
+index 000000000..99be34e34
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_buffered_server_side_search_test.go
+@@ -0,0 +1,65 @@
++//go:build unit
++
++package service
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++// A nonstreaming request rebuilds an empty terminal output from the output_item.done items and
++// renders its custom_tool_call items as tool calls. On xAI an xs_ / as_ item is a search the
++// server ran, so it is not a tool call but still counts as a Grok search.
++func TestGrokBufferedRebuiltOutputKeepsServerSideSearchOutOfToolCalls(t *testing.T) {
++	account := healthyGrokOAuthGatewayTestAccount(4242, "access-token")
++	for _, path := range []string{"/v1/messages", "/v1/chat/completions"} {
++		t.Run(path+" search only", func(t *testing.T) {
++			sse := grokCustomToolCallStream([]string{grokXSearchItemJSON}, `[]`)
++			got := forwardGrokCustomToolCallStream(t, path, false, account, sse)
++
++			require.Equal(t, 1, got.searchCount)
++			require.NotContains(t, got.body, "tool_use", got.body)
++			require.NotContains(t, got.body, "tool_calls", got.body)
++			require.NotContains(t, got.body, "x_keyword_search", got.body)
++			require.Contains(t, got.body, "found it", got.body)
++			if path == "/v1/messages" {
++				require.Contains(t, got.body, `"stop_reason":"end_turn"`, got.body)
++			} else {
++				require.Contains(t, got.body, `"finish_reason":"stop"`, got.body)
++			}
++		})
++		t.Run(path+" search next to a client tool", func(t *testing.T) {
++			sse := grokCustomToolCallStream([]string{grokXSearchItemJSON, grokClientToolJSON}, `[]`)
++			got := forwardGrokCustomToolCallStream(t, path, false, account, sse)
++
++			require.Equal(t, 1, got.searchCount)
++			require.NotContains(t, got.body, "x_keyword_search", got.body)
++			require.Contains(t, got.body, "exec", got.body)
++			if path == "/v1/messages" {
++				require.Contains(t, got.body, `"stop_reason":"tool_use"`, got.body)
++			} else {
++				require.Contains(t, got.body, `"finish_reason":"tool_calls"`, got.body)
++			}
++		})
++	}
++}
++
++// Off xAI the same call_id is an ordinary custom tool call and stays one.
++func TestOpenAIBufferedRebuiltOutputKeepsXSCallIDAsToolCall(t *testing.T) {
++	account := rawChatCompletionsTestAccount()
++	for _, path := range []string{"/v1/messages", "/v1/chat/completions"} {
++		t.Run(path, func(t *testing.T) {
++			sse := grokCustomToolCallStream([]string{grokXSearchItemJSON}, `[]`)
++			got := forwardGrokCustomToolCallStream(t, path, false, account, sse)
++
++			require.Equal(t, 0, got.searchCount)
++			require.Contains(t, got.body, "x_keyword_search", got.body)
++			if path == "/v1/messages" {
++				require.Contains(t, got.body, "tool_use", got.body)
++			} else {
++				require.Contains(t, got.body, "tool_calls", got.body)
++			}
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_buffered_stream_parity_test.go b/backend/internal/service/openai_gateway_buffered_stream_parity_test.go
+new file mode 100644
+index 000000000..322798f09
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_buffered_stream_parity_test.go
+@@ -0,0 +1,437 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"sort"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++const bufferedParityMessagesBody = `{"model":"gpt-5.5","max_tokens":4096,"stream":%t,"thinking":{"type":"enabled","budget_tokens":2048},"tools":[{"name":"record_version","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"USER_PROMPT_PLACEHOLDER"}]}`
++
++const bufferedParityChatBody = `{"model":"gpt-5.5","stream":%t,"reasoning_effort":"medium","tools":[{"type":"function","function":{"name":"record_version","parameters":{"type":"object"}}}],"messages":[{"role":"user","content":"USER_PROMPT_PLACEHOLDER"}]}`
++
++func bufferedParityReasoning(index int, id, text, encrypted string) []string {
++	summary := `[]`
++	if text != "" {
++		summary = fmt.Sprintf(`[{"type":"summary_text","text":%q}]`, text)
++	}
++	events := []string{
++		fmt.Sprintf(`{"type":"response.output_item.added","output_index":%d,"item":{"type":"reasoning","id":%q,"summary":[]}}`, index, id),
++	}
++	if text != "" {
++		events = append(events,
++			fmt.Sprintf(`{"type":"response.reasoning_summary_part.added","output_index":%d,"summary_index":0,"part":{"type":"summary_text","text":""}}`, index),
++			fmt.Sprintf(`{"type":"response.reasoning_summary_text.delta","output_index":%d,"summary_index":0,"delta":%q}`, index, text),
++			fmt.Sprintf(`{"type":"response.reasoning_summary_text.done","output_index":%d,"summary_index":0,"text":%q}`, index, text),
++		)
++	}
++	return append(events, fmt.Sprintf(`{"type":"response.output_item.done","output_index":%d,"item":{"type":"reasoning","id":%q,"summary":%s,"encrypted_content":%q}}`, index, id, summary, encrypted))
++}
++
++func bufferedParityWebSearch(index int, id, query string) []string {
++	return []string{
++		fmt.Sprintf(`{"type":"response.output_item.added","output_index":%d,"item":{"type":"web_search_call","id":%q,"status":"in_progress"}}`, index, id),
++		fmt.Sprintf(`{"type":"response.web_search_call.in_progress","output_index":%d,"item_id":%q}`, index, id),
++		fmt.Sprintf(`{"type":"response.web_search_call.searching","output_index":%d,"item_id":%q}`, index, id),
++		fmt.Sprintf(`{"type":"response.web_search_call.completed","output_index":%d,"item_id":%q}`, index, id),
++		fmt.Sprintf(`{"type":"response.output_item.done","output_index":%d,"item":{"type":"web_search_call","id":%q,"status":"completed","action":{"type":"search","query":%q}}}`, index, id, query),
++	}
++}
++
++func bufferedParityFunctionCall(index int) []string {
++	return []string{
++		fmt.Sprintf(`{"type":"response.output_item.added","output_index":%d,"item":{"type":"function_call","id":"fc_1","call_id":"call_c","name":"record_version","arguments":""}}`, index),
++		fmt.Sprintf(`{"type":"response.function_call_arguments.delta","output_index":%d,"item_id":"fc_1","delta":"{\"version\""}`, index),
++		fmt.Sprintf(`{"type":"response.function_call_arguments.delta","output_index":%d,"item_id":"fc_1","delta":":\"1.25\"}"}`, index),
++		fmt.Sprintf(`{"type":"response.function_call_arguments.done","output_index":%d,"item_id":"fc_1","arguments":"{\"version\":\"1.25\"}"}`, index),
++		fmt.Sprintf(`{"type":"response.output_item.done","output_index":%d,"item":{"type":"function_call","id":"fc_1","call_id":"call_c","name":"record_version","arguments":"{\"version\":\"1.25\"}","status":"completed"}}`, index),
++	}
++}
++
++func bufferedParityMessage(index int, text string) []string {
++	content := `[{"type":"output_text","text":""}]`
++	events := []string{
++		fmt.Sprintf(`{"type":"response.output_item.added","output_index":%d,"item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress","phase":"final_answer","content":[]}}`, index),
++		fmt.Sprintf(`{"type":"response.content_part.added","output_index":%d,"content_index":0,"part":{"type":"output_text","text":""}}`, index),
++	}
++	if text != "" {
++		content = fmt.Sprintf(`[{"type":"output_text","text":%q}]`, text)
++		events = append(events,
++			fmt.Sprintf(`{"type":"response.output_text.delta","output_index":%d,"content_index":0,"delta":%q}`, index, text),
++			fmt.Sprintf(`{"type":"response.output_text.done","output_index":%d,"content_index":0,"text":%q}`, index, text),
++		)
++	}
++	return append(events,
++		fmt.Sprintf(`{"type":"response.content_part.done","output_index":%d,"content_index":0,"part":{"type":"output_text","text":%q}}`, index, text),
++		fmt.Sprintf(`{"type":"response.output_item.done","output_index":%d,"item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","phase":"final_answer","content":%s}}`, index, content),
++	)
++}
++
++func bufferedParityStream(terminalOutput string, groups ...[]string) string {
++	events := []string{bufferedHostedItemsCreated}
++	for _, group := range groups {
++		events = append(events, group...)
++	}
++	events = append(events, fmt.Sprintf(`{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":%s,"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`, terminalOutput))
++	return bufferedItemsSSE(events...)
++}
++
++// bufferedParityBlocks reduces an Anthropic content array to one line per block.
++func bufferedParityBlocks(blocks []gjson.Result) []string {
++	var lines []string
++	for _, block := range blocks {
++		switch block.Get("type").String() {
++		case "thinking":
++			lines = append(lines, fmt.Sprintf("thinking %q signature=%q", block.Get("thinking").String(), block.Get("signature").String()))
++		case "text":
++			lines = append(lines, fmt.Sprintf("text %q", block.Get("text").String()))
++		case "tool_use":
++			lines = append(lines, fmt.Sprintf("tool_use %s %s %s", block.Get("id").String(), block.Get("name").String(), block.Get("input").Raw))
++		case "server_tool_use":
++			lines = append(lines, fmt.Sprintf("server_tool_use %s %s", block.Get("id").String(), block.Get("input").Raw))
++		case "web_search_tool_result":
++			lines = append(lines, fmt.Sprintf("web_search_tool_result %s", block.Get("tool_use_id").String()))
++		default:
++			lines = append(lines, "other "+block.Get("type").String())
++		}
++	}
++	return lines
++}
++
++// bufferedParityStreamBlocks folds an Anthropic SSE body back into content blocks.
++func bufferedParityStreamBlocks(t *testing.T, sse string) []string {
++	t.Helper()
++	type streamed struct {
++		kind, id, name, toolUseID, thinking, text, signature, input string
++	}
++	byIndex := map[int64]*streamed{}
++	for _, line := range strings.Split(sse, "\n") {
++		data, ok := strings.CutPrefix(line, "data: ")
++		if !ok || !gjson.Valid(data) {
++			continue
++		}
++		index := gjson.Get(data, "index").Int()
++		switch gjson.Get(data, "type").String() {
++		case "content_block_start":
++			block := gjson.Get(data, "content_block")
++			byIndex[index] = &streamed{
++				kind: block.Get("type").String(), id: block.Get("id").String(), name: block.Get("name").String(),
++				toolUseID: block.Get("tool_use_id").String(), input: block.Get("input").Raw,
++			}
++		case "content_block_delta":
++			block := byIndex[index]
++			require.NotNil(t, block, data)
++			delta := gjson.Get(data, "delta")
++			switch delta.Get("type").String() {
++			case "thinking_delta":
++				block.thinking += delta.Get("thinking").String()
++			case "text_delta":
++				block.text += delta.Get("text").String()
++			case "signature_delta":
++				block.signature = delta.Get("signature").String()
++			case "input_json_delta":
++				if block.input == "{}" {
++					block.input = ""
++				}
++				block.input += delta.Get("partial_json").String()
++			}
++		}
++	}
++	indexes := make([]int64, 0, len(byIndex))
++	for index := range byIndex {
++		indexes = append(indexes, index)
++	}
++	sort.Slice(indexes, func(i, j int) bool { return indexes[i] < indexes[j] })
++	var lines []string
++	for _, index := range indexes {
++		block := byIndex[index]
++		switch block.kind {
++		case "thinking":
++			lines = append(lines, fmt.Sprintf("thinking %q signature=%q", block.thinking, block.signature))
++		case "text":
++			lines = append(lines, fmt.Sprintf("text %q", block.text))
++		case "tool_use":
++			lines = append(lines, fmt.Sprintf("tool_use %s %s %s", block.id, block.name, block.input))
++		case "server_tool_use":
++			lines = append(lines, fmt.Sprintf("server_tool_use %s %s", block.id, block.input))
++		case "web_search_tool_result":
++			lines = append(lines, fmt.Sprintf("web_search_tool_result %s", block.toolUseID))
++		default:
++			lines = append(lines, "other "+block.kind)
++		}
++	}
++	return lines
++}
++
++// bufferedParityChat reduces a Chat Completions answer to the fields a client reads.
++func bufferedParityChatSummary(reasoning, content string, calls []string, finish string) string {
++	return fmt.Sprintf("reasoning=%q content=%q tool_calls=%v finish_reason=%s", reasoning, content, calls, finish)
++}
++
++func bufferedParityChatNonStream(body string) string {
++	message := gjson.Get(body, "choices.0.message")
++	var calls []string
++	for _, call := range message.Get("tool_calls").Array() {
++		calls = append(calls, fmt.Sprintf("%s %s %s", call.Get("id").String(), call.Get("function.name").String(), call.Get("function.arguments").String()))
++	}
++	return bufferedParityChatSummary(message.Get("reasoning_content").String(), message.Get("content").String(), calls, gjson.Get(body, "choices.0.finish_reason").String())
++}
++
++func bufferedParityChatStream(sse string) string {
++	var reasoning, content, finish string
++	type call struct{ id, name, args string }
++	calls := map[int64]*call{}
++	for _, line := range strings.Split(sse, "\n") {
++		data, ok := strings.CutPrefix(line, "data: ")
++		if !ok || !gjson.Valid(data) {
++			continue
++		}
++		choice := gjson.Get(data, "choices.0")
++		reasoning += choice.Get("delta.reasoning_content").String()
++		content += choice.Get("delta.content").String()
++		if reason := choice.Get("finish_reason"); reason.Exists() && reason.Type != gjson.Null {
++			finish = reason.String()
++		}
++		for _, tc := range choice.Get("delta.tool_calls").Array() {
++			index := tc.Get("index").Int()
++			if calls[index] == nil {
++				calls[index] = &call{}
++			}
++			if id := tc.Get("id").String(); id != "" {
++				calls[index].id = id
++			}
++			if name := tc.Get("function.name").String(); name != "" {
++				calls[index].name = name
++			}
++			calls[index].args += tc.Get("function.arguments").String()
++		}
++	}
++	indexes := make([]int64, 0, len(calls))
++	for index := range calls {
++		indexes = append(indexes, index)
++	}
++	sort.Slice(indexes, func(i, j int) bool { return indexes[i] < indexes[j] })
++	var lines []string
++	for _, index := range indexes {
++		lines = append(lines, fmt.Sprintf("%s %s %s", calls[index].id, calls[index].name, calls[index].args))
++	}
++	return bufferedParityChatSummary(reasoning, content, lines, finish)
++}
++
++func forwardBufferedParity(t *testing.T, path, requestBody, upstreamSSE string) string {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	body := []byte(requestBody)
++	c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
++	c.Request.Header.Set("Content-Type", "application/json")
++	svc := &OpenAIGatewayService{
++		httpUpstream: &httpUpstreamRecorder{resp: bufferedHostedItemsSSEResponse(upstreamSSE)},
++		cfg:          rawChatCompletionsTestConfig(),
++	}
++	account := bufferedHostedItemsOAuthAccount()
++	var err error
++	if path == "/v1/chat/completions" {
++		_, err = svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
++	} else {
++		_, err = svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
++	}
++	require.NoError(t, err)
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++	return rec.Body.String()
++}
++
++// A buffered /v1/messages or /v1/chat/completions answer must carry what the
++// streaming path delivers for the same upstream event stream. The shapes are the
++// ones real Codex streams produced; texts are placeholders.
++func TestBufferedCompat_MatchesStreamingPathOnRealStreamShapes(t *testing.T) {
++	reasoningThenMessage := func(terminal string) string {
++		return bufferedParityStream(terminal,
++			bufferedParityReasoning(0, "rs_1", "REASON_TEXT_PLACEHOLDER", "ENC_PLACEHOLDER_1"),
++			bufferedParityMessage(1, "ANSWER_PLACEHOLDER"))
++	}
++	signatureOnlyThenEmptyMessage := func(terminal string) string {
++		return bufferedParityStream(terminal,
++			bufferedParityReasoning(0, "rs_1", "", "ENC_PLACEHOLDER_1"),
++			bufferedParityMessage(1, ""))
++	}
++	const filledTerminal = `[{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"REASON_TEXT_PLACEHOLDER"}],"encrypted_content":"ENC_PLACEHOLDER_1"},{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ANSWER_PLACEHOLDER"}]}]`
++	const signatureOnlyTerminal = `[{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"ENC_PLACEHOLDER_1"},{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":""}]}]`
++	webSearchTurn := bufferedParityStream(`[]`,
++		bufferedParityReasoning(0, "rs_1", "REASON_ONE_PLACEHOLDER", "ENC_PLACEHOLDER_1"),
++		bufferedParityWebSearch(1, "ws_1", "QUERY_ONE_PLACEHOLDER"),
++		bufferedParityReasoning(2, "rs_2", "REASON_TWO_PLACEHOLDER", "ENC_PLACEHOLDER_2"),
++		bufferedParityWebSearch(3, "ws_2", "QUERY_TWO_PLACEHOLDER"),
++		bufferedParityReasoning(4, "rs_3", "REASON_THREE_PLACEHOLDER", "ENC_PLACEHOLDER_3"),
++		bufferedParityFunctionCall(5))
++
++	cases := []struct {
++		name         string
++		sse          string
++		wantMessages []string
++		wantChat     string
++	}{
++		{
++			name: "reasoning and message, filled terminal",
++			sse:  reasoningThenMessage(filledTerminal),
++			wantMessages: []string{
++				`thinking "REASON_TEXT_PLACEHOLDER" signature="ENC_PLACEHOLDER_1"`,
++				`text "ANSWER_PLACEHOLDER"`,
++			},
++			wantChat: bufferedParityChatSummary("REASON_TEXT_PLACEHOLDER", "ANSWER_PLACEHOLDER", nil, "stop"),
++		},
++		{
++			name: "reasoning and message, empty terminal",
++			sse:  reasoningThenMessage(`[]`),
++			wantMessages: []string{
++				`thinking "REASON_TEXT_PLACEHOLDER" signature="ENC_PLACEHOLDER_1"`,
++				`text "ANSWER_PLACEHOLDER"`,
++			},
++			wantChat: bufferedParityChatSummary("REASON_TEXT_PLACEHOLDER", "ANSWER_PLACEHOLDER", nil, "stop"),
++		},
++		{
++			name:         "signature only reasoning and empty message, filled terminal",
++			sse:          signatureOnlyThenEmptyMessage(signatureOnlyTerminal),
++			wantMessages: []string{`thinking "" signature="ENC_PLACEHOLDER_1"`},
++			wantChat:     bufferedParityChatSummary("", "", nil, "stop"),
++		},
++		{
++			name:         "signature only reasoning and empty message, empty terminal",
++			sse:          signatureOnlyThenEmptyMessage(`[]`),
++			wantMessages: []string{`thinking "" signature="ENC_PLACEHOLDER_1"`},
++			wantChat:     bufferedParityChatSummary("", "", nil, "stop"),
++		},
++		{
++			name: "web search turn with a client tool, empty terminal",
++			sse:  webSearchTurn,
++			wantMessages: []string{
++				`thinking "REASON_ONE_PLACEHOLDER" signature="ENC_PLACEHOLDER_1"`,
++				`server_tool_use srvtoolu_ws_1 {"query":"QUERY_ONE_PLACEHOLDER"}`,
++				`web_search_tool_result srvtoolu_ws_1`,
++				`thinking "REASON_TWO_PLACEHOLDER" signature="ENC_PLACEHOLDER_2"`,
++				`server_tool_use srvtoolu_ws_2 {"query":"QUERY_TWO_PLACEHOLDER"}`,
++				`web_search_tool_result srvtoolu_ws_2`,
++				`thinking "REASON_THREE_PLACEHOLDER" signature="ENC_PLACEHOLDER_3"`,
++				`tool_use call_c record_version {"version":"1.25"}`,
++			},
++			wantChat: bufferedParityChatSummary("REASON_ONE_PLACEHOLDERREASON_TWO_PLACEHOLDERREASON_THREE_PLACEHOLDER", "", []string{`call_c record_version {"version":"1.25"}`}, "tool_calls"),
++		},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name+" messages", func(t *testing.T) {
++			buffered := forwardBufferedParity(t, "/v1/messages", fmt.Sprintf(bufferedParityMessagesBody, false), tc.sse)
++			streamed := forwardBufferedParity(t, "/v1/messages", fmt.Sprintf(bufferedParityMessagesBody, true), tc.sse)
++			require.Equal(t, tc.wantMessages, bufferedParityBlocks(gjson.Get(buffered, "content").Array()), buffered)
++			streamedBlocks := bufferedParityStreamBlocks(t, streamed)
++			require.Equal(t, tc.wantMessages, streamedBlocks, streamed)
++		})
++		t.Run(tc.name+" chat", func(t *testing.T) {
++			buffered := forwardBufferedParity(t, "/v1/chat/completions", fmt.Sprintf(bufferedParityChatBody, false), tc.sse)
++			streamed := forwardBufferedParity(t, "/v1/chat/completions", fmt.Sprintf(bufferedParityChatBody, true), tc.sse)
++			require.Equal(t, tc.wantChat, bufferedParityChatNonStream(buffered), buffered)
++			require.Equal(t, tc.wantChat, bufferedParityChatStream(streamed), streamed)
++		})
++	}
++}
++
++// bufferedParityStreamedText folds the text of one kind ("text", "thinking" or
++// "refusal") out of a streamed answer of the entry at path.
++func bufferedParityStreamedText(sse, path, kind string) string {
++	var text strings.Builder
++	for _, line := range strings.Split(sse, "\n") {
++		data, ok := strings.CutPrefix(line, "data: ")
++		if !ok || !gjson.Valid(data) {
++			continue
++		}
++		if path == "/v1/chat/completions" {
++			text.WriteString(gjson.Get(data, "choices.0.delta."+map[string]string{"text": "content", "thinking": "reasoning_content", "refusal": "refusal"}[kind]).String())
++			continue
++		}
++		if delta := gjson.Get(data, "delta"); delta.Get("type").String() == kind+"_delta" {
++			text.WriteString(delta.Get(kind).String())
++		}
++	}
++	return text.String()
++}
++
++// bufferedParityPartItem is a streamed item of several parts: every part gets its
++// own part.added, delta and done events, with its own content_index or
++// summary_index, and the item.done event carries the part texts of done.
++func bufferedParityPartItem(kind string, deltas, done []string) []string {
++	var events []string
++	itemType, doneKey, deltaType, indexKey, partType, partKey := "message", "content", "response.output_text.delta", "content_index", "output_text", "text"
++	switch kind {
++	case "refusal":
++		deltaType, partType, partKey = "response.refusal.delta", "refusal", "refusal"
++	case "summary":
++		itemType, doneKey, deltaType, indexKey, partType = "reasoning", "summary", "response.reasoning_summary_text.delta", "summary_index", "summary_text"
++	case "reasoning_text":
++		itemType, deltaType, partType = "reasoning", "response.reasoning_text.delta", "reasoning_text"
++	}
++	events = append(events, fmt.Sprintf(`{"type":"response.output_item.added","output_index":0,"item":{"type":%q,"id":"item_1","role":"assistant","summary":[],"content":[]}}`, itemType))
++	for i, delta := range deltas {
++		events = append(events, fmt.Sprintf(`{"type":%q,"output_index":0,%q:%d,"delta":%q}`, deltaType, indexKey, i, delta))
++	}
++	parts := make([]string, len(done))
++	for i, text := range done {
++		parts[i] = fmt.Sprintf(`{"type":%q,%q:%q}`, partType, partKey, text)
++	}
++	item := fmt.Sprintf(`{"type":%q,"id":"item_1","role":"assistant","status":"completed",%q:[%s]`, itemType, doneKey, strings.Join(parts, ","))
++	if itemType == "reasoning" && doneKey == "content" {
++		item += `,"summary":[]`
++	}
++	return append(events, `{"type":"response.output_item.done","output_index":0,"item":`+item+`}}`)
++}
++
++// An item with several parts, of which the done item leaves some empty, and an
++// empty terminal output: the buffered answer carries the text the streaming path
++// delivers, for every kind of part that has a part index.
++func TestBufferedCompat_MatchesStreamingPathOnMultiPartItems(t *testing.T) {
++	deltas := []string{"first ", "second"}
++	variants := []struct {
++		name string
++		done []string
++	}{
++		{"first part empty", []string{"", "second"}},
++		{"second part empty", []string{"first ", ""}},
++		{"both parts empty", []string{"", ""}},
++		{"both parts with text", []string{"first ", "second"}},
++	}
++	kinds := []struct{ kind, shown string }{
++		{"text", "text"},
++		{"summary", "thinking"},
++		{"reasoning_text", "thinking"},
++		{"refusal", "refusal"},
++	}
++	for _, k := range kinds {
++		for _, v := range variants {
++			sse := bufferedParityStream(`[]`, bufferedParityPartItem(k.kind, deltas, v.done))
++			for _, entry := range []struct{ name, path, body string }{
++				{"messages", "/v1/messages", bufferedParityMessagesBody},
++				{"chat", "/v1/chat/completions", bufferedParityChatBody},
++			} {
++				if k.shown == "refusal" && entry.path == "/v1/messages" {
++					continue // an Anthropic message has no refusal block
++				}
++				t.Run(k.kind+" "+v.name+" "+entry.name, func(t *testing.T) {
++					buffered := forwardBufferedParity(t, entry.path, fmt.Sprintf(entry.body, false), sse)
++					streamed := forwardBufferedParity(t, entry.path, fmt.Sprintf(entry.body, true), sse)
++					require.Equal(t, "first second", bufferedParityStreamedText(streamed, entry.path, k.shown), streamed)
++					require.Equal(t, "first second", bufferedPartsVisible(buffered, entry.path, k.shown), buffered)
++				})
++			}
++		}
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index 5eb61eeda..f9de52bf4 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -848,6 +848,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+ ) (*apicompat.ResponsesResponse, OpenAIUsage, *apicompat.BufferedResponseAccumulator, openAICompatPriorModelAudit, error) {
+ 	acc := apicompat.NewBufferedResponseAccumulator()
+ 	acc.XAIServerSideSearch = account != nil && account.IsGrok()
++	outputSlots := &openAICompatOutputSlots{xaiServerSideSearch: acc.XAIServerSideSearch}
+ 	var usage OpenAIUsage
+ 	if resp == nil || resp.Body == nil {
+ 		return nil, usage, acc, openAICompatPriorModelAudit{}, errors.New("upstream response body is nil")
+@@ -936,6 +937,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+ 				if frame, ok := parser.Finish(); ok {
+ 					payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
+ 					payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
++					outputSlots.Observe([]byte(payload))
+ 					var event apicompat.ResponsesStreamEvent
+ 					if err := json.Unmarshal([]byte(payload), &event); err == nil {
+ 						s.parseSSEUsageBytesWithType([]byte(payload), event.Type, &usage)
+@@ -951,6 +953,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+ 							if response.Usage != nil {
+ 								usage = copyOpenAIUsageFromResponsesUsage(response.Usage)
+ 							}
++							outputSlots.fillTerminalOutput(event.Type, response)
+ 							return response, usage, acc, prior, nil
+ 						}
+ 					}
+@@ -977,6 +980,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+ 			}
+ 			payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
+ 			payload = string(restoreCodexToolNamesFromContext(c, []byte(payload)))
++			outputSlots.Observe([]byte(payload))
+ 
+ 			var event apicompat.ResponsesStreamEvent
+ 			if err := json.Unmarshal([]byte(payload), &event); err != nil {
+@@ -1001,6 +1005,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+ 				if response.Usage != nil {
+ 					usage = copyOpenAIUsageFromResponsesUsage(response.Usage)
+ 				}
++				outputSlots.fillTerminalOutput(event.Type, response)
+ 				return response, usage, acc, prior, nil
+ 			}
+ 

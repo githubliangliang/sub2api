@@ -204,6 +204,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	if err != nil {
 		return nil, fmt.Errorf("marshal responses request: %w", err)
 	}
+	// Later billing retains only scalar fields of this converted request.
+	responsesReq.Input = nil
 
 	if account.Type == AccountTypeOAuth && account.Platform != PlatformGrok {
 		var reqBody map[string]any
@@ -781,6 +783,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 ) (*apicompat.ResponsesResponse, OpenAIUsage, *apicompat.BufferedResponseAccumulator, openAICompatPriorModelAudit, error) {
 	acc := apicompat.NewBufferedResponseAccumulator()
 	acc.XAIServerSideSearch = account != nil && account.IsGrok()
+	outputSlots := &openAICompatOutputSlots{xaiServerSideSearch: acc.XAIServerSideSearch}
 	var usage OpenAIUsage
 	prior := newOpenAICompatPriorModelAudit(account)
 	if resp == nil || resp.Body == nil {
@@ -867,6 +870,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 					payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
 					var event apicompat.ResponsesStreamEvent
 					if err := json.Unmarshal([]byte(payload), &event); err == nil {
+						outputSlots.Observe([]byte(payload))
 						acc.ProcessEvent(&event)
 						prior.record(&event)
 						if isOpenAICompatResponsesTerminalEvent(event.Type) && event.Response != nil {
@@ -879,6 +883,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 							if event.Response.Usage != nil {
 								mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Response.Usage))
 							}
+							outputSlots.fillTerminalOutput(event.Type, event.Response)
 							return event.Response, usage, acc, prior, nil
 						}
 					}
@@ -914,6 +919,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 				continue
 			}
 
+			outputSlots.Observe([]byte(payload))
 			acc.ProcessEvent(&event)
 			prior.record(&event)
 
@@ -927,6 +933,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 				if event.Response.Usage != nil {
 					mergeOpenAIUsageSnapshot(&usage, copyOpenAIUsageFromResponsesUsage(event.Response.Usage))
 				}
+				outputSlots.fillTerminalOutput(event.Type, event.Response)
 				return event.Response, usage, acc, prior, nil
 			}
 
@@ -970,8 +977,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	var streamFailoverErr error
 	var streamNonFailoverErr error
 	var providerServiceTier *string
-	searchCount := 0
-	streamSearchSeen := make(map[string]struct{})
+	var searchCounter grokSearchCounter
 	countSearch := account != nil && account.IsGrok()
 
 	scanner := s.newUpstreamSSEScanner(resp.Body)
@@ -1011,8 +1017,8 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 			ClientDisconnect:              clientDisconnected,
 			ServiceTier:                   providerServiceTier,
 		}
-		if searchCount > 0 {
-			out.SearchCount = searchCount
+		if searchCounter.total > 0 {
+			out.SearchCount = searchCounter.total
 		}
 		return out
 	}
@@ -1055,7 +1061,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 			firstTokenMs = &ms
 		}
 		if countSearch {
-			searchCount += countGrokNativeSearchCallsInSSEDataDedup([]byte(payload), streamSearchSeen)
+			searchCounter.Add([]byte(payload))
 		}
 
 		var event apicompat.ResponsesStreamEvent

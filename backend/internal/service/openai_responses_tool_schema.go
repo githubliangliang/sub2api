@@ -45,8 +45,14 @@ func sanitizeOpenAIResponsesToolParameterTypes(body []byte) ([]byte, bool, error
 	return sanitizeOpenAIResponsesToolSchemas(body, false)
 }
 
+func openAIResponsesBodyMayNeedSchemaRepair(body []byte, patterns bool) bool {
+	if bytes.Contains(body, []byte("null")) {
+		return true
+	}
+	return patterns && (bytes.Contains(body, []byte(`\\`)) || bytes.Contains(body, []byte("(?")) || bytes.Contains(body, []byte(`\u00`)))
+}
 func sanitizeOpenAIResponsesToolSchemas(body []byte, patterns bool) ([]byte, bool, error) {
-	if len(body) == 0 {
+	if len(body) == 0 || !openAIResponsesBodyMayNeedSchemaRepair(body, patterns) {
 		return body, false, nil
 	}
 

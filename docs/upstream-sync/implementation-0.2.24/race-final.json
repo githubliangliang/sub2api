@@ -1,0 +1,5008 @@
+{
+  "command": [
+    "rtk",
+    "proxy",
+    "env",
+    "-u",
+    "HTTP_PROXY",
+    "-u",
+    "HTTPS_PROXY",
+    "-u",
+    "ALL_PROXY",
+    "-u",
+    "http_proxy",
+    "-u",
+    "https_proxy",
+    "-u",
+    "all_proxy",
+    "go",
+    "test",
+    "-json",
+    "-race",
+    "-tags=unit",
+    "-p",
+    "2",
+    "-count=1",
+    "./internal/service",
+    "./internal/repository",
+    "./internal/handler",
+    "./internal/handler/admin",
+    "./internal/server/middleware",
+    "./internal/server/routes",
+    "./internal/securityaudit",
+    "./internal/pkg/apicompat",
+    "./internal/pkg/requestmodel",
+    "-run",
+    "Test(.*024.*|OpenAIRotation.*|OpenAIRefresh.*|RefreshIfNeeded.*|TokenRefresh.*|OAuthModelSupport.*|AnthropicMetadata.*|AnthropicLongContext.*|AnthropicRegistry.*|OpsWeightedTokenRate.*|OpsTokenRate.*|OpsOutputTPS.*|UserPlatformQuota.*|AdminService_CreateUser.*|AdminUserCreation.*|GatewayConflicting.*|Conflict.*|RequestField.*|OpenAIResponsesWebSocket_.*|GatewayCompatibilityHandlersReasoningEffortPolicy|PassthroughFilterAndRequestedEffortOverHTTPWithSQLite|.*Settlement.*|.*Dedup.*|.*FastTier.*|.*Quota.*Miniredis.*)"
+  ],
+  "cwd": "/home/liang/myself/work_space/idea/github/sub2api/backend",
+  "exit_code": 0,
+  "seconds": 428.469,
+  "events": [
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAggregateAccountModelPlaza_DedupesAccountsAndUpstreamIDs",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_Success",
+      "Elapsed": 1.38
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_UsesDefaultBalanceWhenBalanceOmitted",
+      "Elapsed": 0.72
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_ExplicitZeroBalanceOverridesDefault",
+      "Elapsed": 0.7
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpenAIRefreshCASAndOutboxSQLite",
+      "Elapsed": 0.86
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_EmailExists",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpenAIRotationCanceledParentSQLiteMiniredis",
+      "Elapsed": 0.86
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_CreateError",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_AssignsDefaultSubscriptions",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpenAIRefreshConcurrentCASHasOneWinnerSQLite",
+      "Elapsed": 0.93
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaCache_GetMissReturnsNotFound",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaCache_SetThenGet",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaCache_NilLimitSetThenGet",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaCache_IncrMissIsNoop",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaCache_IncrHitAccumulates",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaCache_Delete",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_DoesNotReturnPartialSuccessFromEmailIdentityResync",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_WithAdminRole",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_DefaultsToUserRole",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_InvalidRoleRejected",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_SnapshotsDefaultPlatformQuotas",
+      "Elapsed": 0.7
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_UnlimitedDefaultsDoNotCreateQuotaRows",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_AdminSkipsDefaultPlatformQuotas",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAdminService_CreateUser_QuotaWriteFailureDoesNotFailCreation",
+      "Elapsed": 0.69
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAnthropicRegistryOfficialHostAndCustomEndpoint",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestAPIKeyService_TouchLastUsed_ConcurrentFirstTouchDeduplicated",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestCollectBalanceNotifyRecipients_DeduplicatesCaseInsensitive",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementOutputExpiration",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_SettlesAndChargesSuccessfulImagesOnly",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ZeroSuccessCanComplete",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_CompletedJobReturnsAlreadySettledWithoutBilling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_IdempotentAfterBillingCrash",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/invalid_status",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/negative_success_count",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/negative_fail_count",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/counts_exceed_item_count",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/missing_api_key",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/missing_account",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/pricing_missing",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors/manifest_conflict",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_ValidationErrors",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_CostExceedingHoldDoesNotCharge",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_UsesSubmittedPricingSnapshot",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_BillingFailureLeavesSettlingAndRecordsError",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImagePipelineProcessor_RequeuesTransientSettlementFailure",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImagePipelineProcessor_FailsAndReleasesAfterSettlementRetryLimit",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementRetryExhaustedReleaseIsIdempotentAfterTransitionFailure",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_CostExceedsHoldExhaustsAndReleases",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementService_InvalidCountsExhaustsAndReleases",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementManifestHash",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBatchImageSettlementBillingRequestIDs",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestListPlazaGroups_DedupFirstWinsWithPricingUpgrade",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween/exact_same",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween/exact_different",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween/wildcard_matches_exact",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween/exact_does_not_match_unrelated_wildcard",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween/wildcard_prefix_overlap",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween/wildcards_no_overlap",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween/catch-all_wildcard_vs_any",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestConflictsBetween",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestSupportedModels_DedupAndSort",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestSupportedModels_CaseInsensitiveDedup",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeBlockedKeywords_TrimsDedupesAndCaps",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestDashboardAggregationService_CleanupDedupFailure_DoesNotRecord",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses/false/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses/false/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses/true/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses/true/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/passthrough/false/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/passthrough/false/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/passthrough/true/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/passthrough/true/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/chat/false/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/chat/false/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/chat/true/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/chat/true/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages/false/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages/false/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages/true/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages/true/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses-chat/false/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses-chat/false/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses-chat/true/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/responses-chat/true/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages-chat/false/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages-chat/false/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages-chat/true/fast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols/messages-chat/true/ultrafast",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestFastTiersReachUpstreamAcrossHTTPProtocols",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthDefaultsToDryRunAndSanitizedPlan",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthApplyIsIdempotent",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthCursorResumesWithoutDuplicates",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthCursorUsesRawPageAfterHydrationGap",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthRejectsConflictingApplyMode",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthSkipsStaleBlockAfterConcurrentReauthorization",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthDoesNotRuntimeBlockWhenReauthorizationWinsConditionalMutation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthReportsPermanentRefreshMutationAsBlocked",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthReportsConcurrentRefreshReauthorizationAsSkipped",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ReconcileGrokOAuthReportsInvalidationFailureAsPartial",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestHotpath024CandidateEquivalence",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestHotpath024RequestScanEquivalence",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestOpenAIImageOutputCounterDeduplicatesFinalImages",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNotificationEmailSendDeduplicatesSubscriptionExpiryReminder",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_Success",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_UpdateCredentialsPreservesRateLimitState",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_LockHeld",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_LockErrorDegrades",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_NoCacheNoLock",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_AlreadyRefreshed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RefreshError",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_DBUpdateError",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_GrokSuccessCASLetsConcurrentReauthorizationWin",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_GrokSuccessPersistenceFailureIsProviderContainment",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_GrokSuccessDurableRereadFailureIsProviderContainment",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_DBRereadFails",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RequestPathDBRereadNilFailsClosed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RequestPathDBRereadInactiveFailsClosed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RequestPathDBRereadRevalidatesExecutorContract/platform_changed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RequestPathDBRereadRevalidatesExecutorContract/type_changed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RequestPathDBRereadRevalidatesExecutorContract",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_LocalLockWaitHonorsContext",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_ReleasesDistributedLockAfterParentCancellation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RevalidatesFreshAccountBeforeRefresh/converted_to_API_key",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RevalidatesFreshAccountBeforeRefresh/disabled",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RevalidatesFreshAccountBeforeRefresh",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_RequestPathDBRereadMissingGrokRefreshCredentialReturnsPermanentSignal",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_LateSuccessAfterDeadlineDoesNotPersist",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAIEnrichmentTimeoutKeepsRotatedCredentials",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAILockLeaseReservesPersistenceBudget",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAIShortLockLeaseDoesNotConsumeRefreshToken/1s",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAIShortLockLeaseDoesNotConsumeRefreshToken/19s",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAIShortLockLeaseDoesNotConsumeRefreshToken",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAILateSuccessPersistsWithBoundedContext/deadline",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAILateSuccessPersistsWithBoundedContext/parent_cancellation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAILateSuccessPersistsWithBoundedContext",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAICASKeepsConcurrentReauthorization",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAIPersistenceFailureContainsProvider/CAS_write",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAIPersistenceFailureContainsProvider/durable_reread",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAIPersistenceFailureContainsProvider",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAICanceledWithoutSuccessfulCredentialsDoesNotPersist/<nil>",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAICanceledWithoutSuccessfulCredentialsDoesNotPersist/token_endpoint_failed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_OpenAICanceledWithoutSuccessfulCredentialsDoesNotPersist",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_NilCredentials",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_InvalidGrantRaceRecovered",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_InvalidGrantGenuine",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_InvalidGrantDBRereadFailsOnRecovery",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_LocalMutexSerializesConcurrent",
+      "Elapsed": 0.05
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_LocalLockWaitHonorsContextCancellation",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRefreshIfNeeded_ReleasesDistributedLockWithCleanupContext",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestOllamaCloudUsageRefreshSingleflightAndRunnerDeduplicateSharedGroup",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBuffered024HostedAndCustomReconstruction",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBuffered024IndependentContentIndexesAndDoneAuthority",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBuffered024TerminalAndSearchControls",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBridge024DynamicTools",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestStop024HTTPFallbackAndNativeWhitelist",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestBuffered024HostedRawFields",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestHandleStreamingResponsePassthroughDeduplicatesFunctionCallArguments",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestOAuthModelSupportUsesMappedTarget",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestCanonicalRequestedEffort024InputUpdates",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRequestedEffort024OwnsInputScalar",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestRequestView024OwnsScalars",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestOpenAIRotationMergesConcurrentNonTokenEdits/proxy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestOpenAIRotationMergesConcurrentNonTokenEdits/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestOpenAIRotationMergesConcurrentNonTokenEdits",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestOpenAIRotationRepeatedCASConflictIsBounded",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeOpenAIResponsesLiteTools_DeduplicatesAcrossAdditionalToolItems",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/plain",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/uppercase_and_spaces",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/plus_alias_stripped",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/gmail_plus_alias",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/gmail_dots_removed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/gmail_dots_and_plus",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/googlemail_folded_to_gmail",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/non-gmail_keeps_dots",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/fqdn_root_dot_dropped",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/fqdn_root_dot_on_other_domain",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/leading_plus_keeps_local_part",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/dot-only_local_part_kept",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup/invalid_keeps_lowered_raw",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedup",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestNormalizeEmailForAliasDedupKeepsDistinctInboxes",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestEmailAliasDedupProbes",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestSchedulerGroupLifecycleSeenIsIndependentAndDeduplicatesGroupEvents",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RegistrationsAreCandidateEligibilitySource",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ProcessRefreshPagesByStableCursor",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_BoundsPerProviderConcurrency",
+      "Elapsed": 0.09
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshRateGate_ReservesSpacedSlotsAndHonorsCancellation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RetriesAcquireRateSlotPerAttempt",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ProcessProviderAccountsLegacyNilReleaseGateIsSafe",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ProviderRateGateIsSharedAcrossRuns",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ProviderConcurrencyGateIsSharedAcrossBackgroundAndConcurrentAdminReconciliation",
+      "Elapsed": 0.5
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_SaturatedProviderPreservesConcurrencyAndActualQPSStartSpacing",
+      "Elapsed": 0.49
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ProductionPathRatesOnlyActualRefreshAfterSameAccountContention",
+      "Elapsed": 0.2
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ProviderTripBeforeRateAdmissionSkipsWithoutAccountMutation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ConfigBounds",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_AttemptTimeoutStaysInsideDistributedLockLease",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_SharedProviderFailureContainsCycleWithoutAccountMutation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_SharedDBRereadFailureContainsCycleWithoutAccountMutation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_GenericGrokForbiddenContainsCycleWithoutAccountMutation",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ExplicitGrokEntitlementDenialIsPermanent",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_AttemptTimeoutTripsRetryableProviderThreshold",
+      "Elapsed": 0.04
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ParentCancellationStopsRetryWithoutAccountMutation",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_LateSuccessPastAttemptDeadlineIsRejected",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_NonRetryableGrokFailureInvalidatesTokenCache",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ProcessRefreshUsesOAuthRefreshCandidates",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshFailureDoesNotCallPrivacy/retry_exhausted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshFailureDoesNotCallPrivacy/non_retryable",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshFailureDoesNotCallPrivacy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_InvalidatesCache",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_InvalidatorErrorIgnored",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NilInvalidator",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_Antigravity",
+      "Elapsed": 10
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_AntigravityClearsForceRefreshOnSuccess",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_AntigravityForceRefreshInvalidGrantSetsError",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NonOAuthAccount",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_OtherPlatformOAuth",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_UsesCredentialsUpdater",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_UpdateFailed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_RefreshFailed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_AntigravityRefreshFailed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_AntigravityNonRetryableError",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_ClearsTempUnschedulable",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NonRetryableErrorAllPlatforms/gemini",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NonRetryableErrorAllPlatforms/anthropic",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NonRetryableErrorAllPlatforms/openai",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NonRetryableErrorAllPlatforms/antigravity",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NonRetryableErrorAllPlatforms",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_RefreshWithRetry_NoRefreshTokenDoesNotTempUnschedule",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_PersistedSuccessCrossingAttemptDeadlineStaysSuccessful",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIRotationSurvivesAttemptDeadline/fallback",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIRotationSurvivesAttemptDeadline/unified",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIRotationSurvivesAttemptDeadline",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIPersistenceFailureDoesNotRetryUpstream/unified=false/expired=false",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIPersistenceFailureDoesNotRetryUpstream/unified=false/expired=true",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIPersistenceFailureDoesNotRetryUpstream/unified=true/expired=false",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIPersistenceFailureDoesNotRetryUpstream/unified=true/expired=true",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIPersistenceFailureDoesNotRetryUpstream",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIParentCancellationStillPersists/unified=false",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIParentCancellationStillPersists/unified=true",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_OpenAIParentCancellationStillPersists",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_GrokMissingConditionalMutationContractContainsProviderCycle/permanent_failure",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_GrokMissingConditionalMutationContractContainsProviderCycle/transient_failure",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_GrokMissingConditionalMutationContractContainsProviderCycle",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_GrokConditionalMutationErrorsContainProviderCycle/permanent_failure",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_GrokConditionalMutationErrorsContainProviderCycle/transient_failure",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_GrokConditionalMutationErrorsContainProviderCycle",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityQuotaForwardEndpoint/paid",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityQuotaForwardEndpoint/free",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityQuotaForwardEndpoint/override",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityQuotaForwardEndpoint",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityQuotaDoesNotFallbackAcrossEndpoints",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AlphaSearch403Scope/{\"detail\":\"Literature_search_is_unavailable.\"}/PAT=false",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AlphaSearch403Scope//PAT=false",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AlphaSearch403Scope/{\"error\":{\"code\":\"deactivated_workspace\",\"message\":\"Workspace_is_deactivated\"}}/PAT=false",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AlphaSearch403Scope/{\"detail\":\"Literature_search_is_unavailable.\"}/PAT=true",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AlphaSearch403Scope//PAT=true",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AlphaSearch403Scope/{\"error\":{\"code\":\"deactivated_workspace\",\"message\":\"Workspace_is_deactivated\"}}/PAT=true",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AlphaSearch403Scope",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024RequestTimeoutFailover",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024Images408BeforeOutput",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature/claude-opus-4-7",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature/claude-opus-4-8",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature/anthropic/claude-opus-5.5",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature/us.anthropic.claude-opus-4-8-20261001-v1:0",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature/claude-sonnet-4-6",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature/claude-sonnet-5-5",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature/my-custom-model",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestTemperature",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestSerializedPayload/explicit_opus",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestSerializedPayload/mapped_alias",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestSerializedPayload/sonnet_control",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestSerializedPayload/bedrock_opus",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestSerializedPayload/bedrock_sonnet",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTestSerializedPayload",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTemperatureActualHTTP/bedrock=false/claude-opus-4-8",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTemperatureActualHTTP/bedrock=false/claude-sonnet-4-6",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTemperatureActualHTTP/bedrock=true/claude-opus-4-8",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTemperatureActualHTTP/bedrock=true/claude-sonnet-4-6",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ClaudeTemperatureActualHTTP",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ImagesUsageSingleLine/{__\"input_tokens\":_901,__\"output_tokens\":_37,__\"input_tokens_details\":_{\"text_tokens\":_3}_}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ImagesUsageSingleLine/{\"input_tokens\":901,\"output_tokens\":37,\"input_tokens_details\":{\"text_tokens\":3}}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ImagesUsageSingleLine/#00",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ImagesUsageSingleLine/{\"input_tokens\":",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ImagesUsageSingleLine",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024ImagesUsageTCPEvent",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024GeminiFinalToolTurn/tool_and_text",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024GeminiFinalToolTurn/two_tools_text_image",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024GeminiFinalToolTurn/pure_tools",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024GeminiFinalToolTurn/pure_text",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024GeminiFinalToolTurn/historical_tool_turn",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024GeminiFinalToolTurn",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityCommentFrames/ordinary_LF",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityCommentFrames/ordinary_CRLF",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityCommentFrames/go_genai",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityCommentFrames/python_genai",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityCommentFrames",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestUpstream024AntigravityCommentsDisconnectDrainsUsage",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestCountGrokNativeSearchCallsInSSEDataDedup_MultipleNoIDCalls",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestCountGrokNativeSearchCallsFromSSEBodyDedups",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestCountGrokNativeSearchCallsInSSEDataDedup_NoIDStillDedups",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestCountGrokNativeSearchCallsInSSEDataDedup_LiveStreamPath",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ensureOpenAIPrivacy_RetriesNonSuccessModes/training_set_failed",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ensureOpenAIPrivacy_RetriesNonSuccessModes/training_set_cf_blocked",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestTokenRefreshService_ensureOpenAIPrivacy_RetriesNonSuccessModes",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Test": "TestGrokQuotaServiceProbeFlightsDeduplicateBillingAndSeparateActive",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/service",
+      "Elapsed": 23.273
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicMetadataLongContextModelsHTTP/threshold",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicMetadataLongContextModelsHTTP/below_threshold",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicMetadataLongContextModelsHTTP/mapped_metadata_only",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicMetadataLongContextModelsHTTP/excluded_route",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicMetadataLongContextModelsHTTP",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicLongContextIntersectionAndMappedMetadata/all_long",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicLongContextIntersectionAndMappedMetadata/short_candidate",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicLongContextIntersectionAndMappedMetadata/unknown_candidate",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicLongContextIntersectionAndMappedMetadata/routed_to_long",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicLongContextIntersectionAndMappedMetadata/no_candidate",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestAnthropicLongContextIntersectionAndMappedMetadata",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestFastTiersSQLiteUpgradePersistenceAndAuthProjection",
+      "Elapsed": 26.27
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestScheduler024ProjectionPreservesOwnership",
+      "Elapsed": 0.04
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestApplyMigrationsFS_SchedulerOutboxPendingDedupKeyMigration_DropsInvalidIndexBeforeRetry",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSOverviewFailurePolicy/own_timeout_keeps_overview",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSOverviewFailurePolicy/cancellation_propagates",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSOverviewFailurePolicy/database_errors_propagate",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSOverviewFailurePolicy/real_two_second_query_budget",
+      "Elapsed": 2.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSOverviewFailurePolicy/caller_deadline_propagates",
+      "Elapsed": 0.05
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSOverviewFailurePolicy",
+      "Elapsed": 2.09
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/native-json/priority",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/native-json/ultrafast",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/native-json/free-fast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/native-sse/priority",
+      "Elapsed": 0.15
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/native-sse/ultrafast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/native-sse/free-fast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/chat-buffered/priority",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/chat-buffered/ultrafast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/chat-buffered/free-fast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/chat-sse/priority",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/chat-sse/ultrafast",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/chat-sse/free-fast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/messages-buffered/priority",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/messages-buffered/ultrafast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/messages-buffered/free-fast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/messages-sse/priority",
+      "Elapsed": 0.15
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/messages-sse/ultrafast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup/messages-sse/free-fast",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestFastTierAsyncUsageSQLiteSettlementAndDedup",
+      "Elapsed": 27.74
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=false/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/anthropic/stream=true/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=false/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/chat/completions/composite/stream=true/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=false/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/anthropic/stream=true/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=false/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/mapping_then_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/other_model_mapping",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/deny_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/within_ceiling",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/no_policy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy/responses/composite/stream=true/omitted",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGatewayCompatibilityHandlersReasoningEffortPolicy",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSDistributionSQLite",
+      "Elapsed": 25.33
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/json",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/sse",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/buffered-sse",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/oauth-pass",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/chat-stream",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/chat-buffer",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/messages-stream",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/messages-buffer",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite/ws",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAICacheTTLAndToolSchemaHTTPWSSettlementSQLite",
+      "Elapsed": 26.85
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_SetsClientTransportWSWhenUpgradeValid",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_InvalidUpgradeDoesNotSetTransport",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IngressCapacityRejected",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IngressLeaseBackendUnavailableBeforeUpgrade",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FirstMessageTimeoutUsesConfig",
+      "Elapsed": 1.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IngressLeaseReleasedOnEarlyReturn",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IngressLeaseReleasedWhenUpgradeFails",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_RejectsMessageIDAsPreviousResponseID",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_PreviousResponseIDKindLoggedBeforeAcquireFailure",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_ContentModerationBlocksFirstFrame",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_PassthroughUsageLogPersistsUserAgentAndReasoningEffort",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialRequestModel",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissing",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_PassthroughTracksModelPerTurn",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_ChannelMappedTargetSelectsAccountWithoutRequestedAlias",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_PassthroughKeepsTurnMappingSnapshot",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CtxPoolAppliesPerTurnMappingAndPreservesRequestedModel",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent/passthrough",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent/ctx_pool",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/user_message",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/tool_result",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage/handshake_after_disconnect",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_NativeLaterTurnUsageLimitDoesNotReplayFirstMessage",
+      "Elapsed": 0.05
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClientForOneFailover",
+      "Elapsed": 2.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{\"type\":\"error\",\"error\":{\"code\":\"server_is_overloaded\",\"message\":\"overloaded\"}}",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage/{\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"slow_down\",\"message\":\"overloaded\"}}}",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_NativeLaterTurnOverloadDoesNotReplayFirstMessage",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/openai/responses/passthrough",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/openai/responses/dedicated",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/openai/any/passthrough",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/openai/any/dedicated",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/grok/responses/passthrough",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/grok/responses/dedicated",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/grok/any/passthrough",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias/grok/any/dedicated",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeAlias",
+      "Elapsed": 0.06
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRouteRejections/disallowed_platform",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRouteRejections/wrong_endpoint",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRouteRejections/unknown_alias",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRouteRejections/resolver_error",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRouteRejections",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRejectsOAuthAmbiguity/passthrough",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRejectsOAuthAmbiguity/dedicated",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeRejectsOAuthAmbiguity",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect/passthrough/gpt-5.4",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect/passthrough/grok-4.3",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect/passthrough/unknown-alias",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect/dedicated/gpt-5.4",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect/dedicated/grok-4.3",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect/dedicated/unknown-alias",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeModelSwitchRequiresReconnect",
+      "Elapsed": 0.05
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeChannelBilling/requested",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeChannelBilling/channel_mapped",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeChannelBilling/upstream",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeChannelBilling",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeDetectorFallback",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_CompositeSessionModelSwitchRequiresReconnect",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FirstFrameConflictingModelKeysRejectedWithoutAllowlist/passthrough",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FirstFrameConflictingModelKeysRejectedWithoutAllowlist/dedicated",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FirstFrameConflictingModelKeysRejectedWithoutAllowlist",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FirstFrameConflictingCaseVariantModelKeyRejected",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_SubsequentTurnConflictingModelKeysRejectedWithoutAllowlist/passthrough",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_SubsequentTurnConflictingModelKeysRejectedWithoutAllowlist/dedicated",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_SubsequentTurnConflictingModelKeysRejectedWithoutAllowlist",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IdenticalDuplicateKeysRejectedWithoutAllowlist/passthrough/first_frame",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IdenticalDuplicateKeysRejectedWithoutAllowlist/passthrough/subsequent_turn",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IdenticalDuplicateKeysRejectedWithoutAllowlist/dedicated/first_frame",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IdenticalDuplicateKeysRejectedWithoutAllowlist/dedicated/subsequent_turn",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_IdenticalDuplicateKeysRejectedWithoutAllowlist",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_ConflictingBillingFieldsRejected/passthrough/first_frame_service_tier",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_ConflictingBillingFieldsRejected/passthrough/subsequent_turn_reasoning_effort",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_ConflictingBillingFieldsRejected/dedicated/first_frame_service_tier",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_ConflictingBillingFieldsRejected/dedicated/subsequent_turn_reasoning_effort",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_ConflictingBillingFieldsRejected",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_PassthroughSessionUpdateDuplicateRejected",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_BinaryFramesUseConflictChecks/passthrough/valid",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_BinaryFramesUseConflictChecks/passthrough/duplicate",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_BinaryFramesUseConflictChecks/dedicated/valid",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_BinaryFramesUseConflictChecks/dedicated/duplicate",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_BinaryFramesUseConflictChecks",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_GroupRateChangeAppliesToNextTurn/passthrough",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_GroupRateChangeAppliesToNextTurn/ctx_pool",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_GroupRateChangeAppliesToNextTurn",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_GroupRateChangeReachesProfitGateOnNextTurn",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_KeyMovedToAnotherGroupKeepsConnectionGroup",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestOpenAIResponsesWebSocket_FailedKeyRefreshKeepsConnectionGroup",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSContinuousPercentilesSQLite/single",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSContinuousPercentilesSQLite/two_reversed",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSContinuousPercentilesSQLite/odd_with_duplicates",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSContinuousPercentilesSQLite/integer_ranks",
+      "Elapsed": 0.09
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSContinuousPercentilesSQLite",
+      "Elapsed": 25.26
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSQueryInterruptSQLite/cancel=false",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSQueryInterruptSQLite/cancel=true",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsOutputTPSQueryInterruptSQLite",
+      "Elapsed": 0.06
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/native-json/none",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/native-json/max",
+      "Elapsed": 0.36
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/native-sse/none",
+      "Elapsed": 0.35
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/native-sse/max",
+      "Elapsed": 0.23
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/chat-buffered/none",
+      "Elapsed": 0.26
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/chat-buffered/max",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestOpsTokenRateDurationWeightedSQLite",
+      "Elapsed": 29.57
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestEnqueueSchedulerOutboxReplacesStaleDedupRow",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestSchedulerOutboxPreservesDedupKeyWhenPayloadDecodeFails",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestEnqueueSchedulerOutbox_UngroupedAccountDedupesWithLiteralNilPayload",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/chat-sse/none",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/chat-sse/max",
+      "Elapsed": 0.25
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/messages-buffered/none",
+      "Elapsed": 0.3
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/messages-buffered/max",
+      "Elapsed": 0.29
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/messages-sse/none",
+      "Elapsed": 0.23
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup/messages-sse/max",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestGPT61TerraAsyncUsageSQLiteSettlementAndDedup",
+      "Elapsed": 33.3
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts/ide_context#_Active_file:_main.go",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts/ide_context_",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts/untrusted_content",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts/untrusted_content_",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts/proposed_plan_",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts/proposed_plan",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts/unknowncontext",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestCodex024StandaloneContexts",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestPassthroughFilterAndRequestedEffortOverHTTPWithSQLite",
+      "Elapsed": 43.25
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestRunSecurityAuditDeduplicatesRepeatedPayloadWithinWebSocketTurn",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUsagePromptCacheHitSQLiteSettlement/stream=false",
+      "Elapsed": 44.89
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.1-sol/ultrafast",
+      "Elapsed": 0.24
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.1-sol/fast",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.1-sol/free-fast",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.1-sol/free-ultrafast-control",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6-astra/ultrafast",
+      "Elapsed": 0.2
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6-astra/fast",
+      "Elapsed": 0.28
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6-astra/free-fast",
+      "Elapsed": 0.27
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6-astra/free-ultrafast-control",
+      "Elapsed": 0.2
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUsagePromptCacheHitSQLiteSettlement/stream=true",
+      "Elapsed": 30.71
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUsagePromptCacheHitSQLiteSettlement",
+      "Elapsed": 75.6
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/ultrafast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.23
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.2
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/free-fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.2
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/free-ultrafast-control/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/ultrafast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.26
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.2
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/free-fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/free-ultrafast-control/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/ultrafast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/free-fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.23
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-sol/free-ultrafast-control/2027-03-01T08:00:00Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/ultrafast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.25
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/free-fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/http/gpt-6.2-astra/free-ultrafast-control/2027-03-01T08:00:00Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.1-sol/ultrafast",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.1-sol/fast",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.1-sol/free-fast",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.1-sol/free-ultrafast-control",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6-astra/ultrafast",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6-astra/fast",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6-astra/free-fast",
+      "Elapsed": 0.24
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6-astra/free-ultrafast-control",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/ultrafast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/free-fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/free-ultrafast-control/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/ultrafast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.24
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/free-fast/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/free-ultrafast-control/2027-03-01T07:59:59.999999999Z",
+      "Elapsed": 0.22
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/ultrafast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/free-fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-sol/free-ultrafast-control/2027-03-01T08:00:00Z",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/ultrafast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/free-fast/2027-03-01T08:00:00Z",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite/ws/gpt-6.2-astra/free-ultrafast-control/2027-03-01T08:00:00Z",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestSolUltrafastHTTPAndWSSettlementSQLite",
+      "Elapsed": 38.81
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaMigration227UpgradesRealSQLite226Database",
+      "Elapsed": 27.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaSQLiteInitialSkipsUnlimitedAndPreservesZero",
+      "Elapsed": 0.44
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaSQLiteClearDoesNotReviveAndReconfigureStartsFresh",
+      "Elapsed": 0.48
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaSQLiteUsageMissingIsNoop",
+      "Elapsed": 0.43
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/split-updates",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/contradictory-details",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/zero-price",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/model-downgrade",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=false/model-conflict",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/split-updates",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/contradictory-details",
+      "Elapsed": 0.3
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/zero-price",
+      "Elapsed": 0.21
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/model-downgrade",
+      "Elapsed": 0.2
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=false/model-conflict",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/split-updates",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/contradictory-details",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/zero-price",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/model-downgrade",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=false/pass=true/model-conflict",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/split-updates",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/contradictory-details",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/zero-price",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/model-downgrade",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/messages/stream=true/pass=true/model-conflict",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/split-updates",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/contradictory-details",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/zero-price",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/model-downgrade",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=false/pass=false/model-conflict",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/split-updates",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/contradictory-details",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/zero-price",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/model-downgrade",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/chat/completions/stream=true/pass=false/model-conflict",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/split-updates",
+      "Elapsed": 0.19
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/contradictory-details",
+      "Elapsed": 0.16
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/zero-price",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/model-downgrade",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=false/pass=false/model-conflict",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/split-updates",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/contradictory-details",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/zero-price",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/model-downgrade",
+      "Elapsed": 0.18
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement/responses/stream=true/pass=false/model-conflict",
+      "Elapsed": 0.17
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestClaudeCacheTTLTransportObservationAndSQLiteSettlement",
+      "Elapsed": 34.04
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=false/json/3",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=false/json/4",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=false/multipart/3",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=false/multipart/4",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=true/json/3",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=true/json/4",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=true/multipart/3",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=false/async=true/multipart/4",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=false/json/3",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=false/json/4",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=false/multipart/3",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=false/multipart/4",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=true/json/3",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=true/json/4",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=true/multipart/3",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation/oauth=true/async=true/multipart/4",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Test": "TestUpstream024GrokEditInputValidation",
+      "Elapsed": 0.12
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler",
+      "Elapsed": 209.227
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestImportCodexSessionsWithRefreshTokenKeepsExistingDedup",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestGrokImportProbeSchedulerDeduplicatesPendingAndInFlightAccounts",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpenAIRefreshQuota_PersistsSnapshot",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpenAIRefreshQuota_PersistFailureStillReturnsUsage",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpenAIRefreshQuota_QueryFailureIsReported",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaSQLiteSnapshotsUpdateExistingAndChunkLargeInput",
+      "Elapsed": 33.29
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaSQLiteSnapshotChunksRollBackTogether",
+      "Elapsed": 8.85
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsOutputTPSHTTPWithSQLite//overview/raw",
+      "Elapsed": 0.06
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsOutputTPSHTTPWithSQLite//overview/auto",
+      "Elapsed": 0.07
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsOutputTPSHTTPWithSQLite//overview/preagg",
+      "Elapsed": 0.06
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsOutputTPSHTTPWithSQLite//snapshot/raw",
+      "Elapsed": 0.07
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsOutputTPSHTTPWithSQLite//snapshot/auto",
+      "Elapsed": 0.1
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaSQLiteLegacyWindowColumnsRoundTrip",
+      "Elapsed": 0.58
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsOutputTPSHTTPWithSQLite//snapshot/preagg",
+      "Elapsed": 0.11
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsOutputTPSHTTPWithSQLite",
+      "Elapsed": 28.06
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Test": "TestUserPlatformQuotaSQLiteConcurrentIncrementsDoNotLoseUsage",
+      "Elapsed": 0.97
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/repository",
+      "Elapsed": 260.133
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestRequestFieldConflictsFormatsAndReread//v1/responses",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestRequestFieldConflictsFormatsAndReread//v1/messages",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestRequestFieldConflictsFormatsAndReread//v1beta/models/gemini:generateContent",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestRequestFieldConflictsFormatsAndReread//antigravity/v1beta/models/gemini:generateContent",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestRequestFieldConflictsFormatsAndReread",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestConflictPrereadRetainsNarrowerTextLimitAndStorage",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestConflictIngressConcurrentBudgetHTTP",
+      "Elapsed": 0.68
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Test": "TestRequestFieldConflictsMultipartAndBudget",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/middleware",
+      "Elapsed": 1.8050000000000002
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/messages",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/messages/count_tokens",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//messages/count_tokens",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/responses",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//responses",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//responses/compact",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/responses/compact",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//backend-api/codex/responses",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//backend-api/codex/responses/compact",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//backend-api/codex/realtime/calls",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//backend-api/codex/alpha/search",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//chat/completions",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/chat/completions",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//embeddings",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/embeddings",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//images/generations",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//images/edits",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/images/edits",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/images/generations",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//images/generations/async",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/images/generations/async",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//videos",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/videos",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//videos/generations",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/videos/generations",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//videos/edits",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//videos/extensions",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//tts",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//stt",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//custom-voices",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//web_search",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//x_search",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/live",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//alpha/search",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//v1/alpha/search",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases//antigravity/v1/messages",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Test": "TestGatewayConflictingFieldsHTTPAliases",
+      "Elapsed": 0.05
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/server/routes",
+      "Elapsed": 1.1400000000000001
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/securityaudit",
+      "Test": "TestAggregateDeduplicatesFactsAndUsesMostSevereEndpointMetadata",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/securityaudit",
+      "Test": "TestPrompt024ScalarOwnership",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/securityaudit",
+      "Elapsed": 1.079
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/apicompat",
+      "Test": "TestResponsesToChatCompletionsRequest_DedupesIdenticalNamespaceChildren",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/apicompat",
+      "Test": "TestAdaptResponsesClientTools_PromotesDirectDiscoveryAndDeduplicatesIdenticalDeclarations",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/apicompat",
+      "Test": "TestResponses024StopPreserved",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/apicompat",
+      "Test": "TestChat024StopRoundTrip",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/apicompat",
+      "Elapsed": 1.061
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictMessageBoundsEscapedNames",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/重复_model_取值不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/取值相同的重复_model",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/三个_model",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/大小写变体",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/取值相同的大小写变体",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/转义写法",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/代理对转义",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/孤立代理项与无效_UTF-8_都解码为_U+FFFD",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/长_s_折叠为_s",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/开尔文符号折叠为_k",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/service_tier_取值不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/类型不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/内容字段",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/session_内的_model",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/前导空白",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/UTF-8_BOM",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/嵌套_reasoning.effort_取值不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/嵌套_reasoning.effort_取值相同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/嵌套大小写变体",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/output_config_大小写变体",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/嵌套_thinking.type",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/嵌套对象里的重复键",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/数组元素里的重复键",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/嵌套转义写法",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/深层嵌套",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/session_内嵌套",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/自由键空间内的精确重复",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/metadata_大小写变体（Antigravity_结构体绑定）",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/前导控制字节（gjson_当空白跳过）",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/顶层_input_仍做折叠",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates/超深子树之后的同层重复",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONReportsDuplicates",
+      "Elapsed": 0.02
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/空请求体",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/空对象",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/普通请求",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/相近但不同的字段名",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/兄弟对象里的同名键",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/父子对象同名键",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/schema_属性大小写不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/tool_use_参数大小写不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/Gemini_函数参数与返回大小写不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/提示词模板变量大小写不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/MCP_请求头大小写不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/dependentRequired_大小写不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/转义写法的自由键名",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/只读首个顶层值",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/字符串值里出现字段名",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/字符串里的括号与逗号",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/顶层数组里的不同对象",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies/不是_JSON",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldJSONAcceptsUnambiguousBodies",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldIgnoresMultipartLabelOnJSONBody",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMatchesParserDisagreement/{\"model\":\"first\",\"model\":\"last\"}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMatchesParserDisagreement/{\"model\":\"first\",\"MODEL\":\"last\"}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMatchesParserDisagreement/{\"MODEL\":\"first\",\"model\":\"last\"}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMatchesParserDisagreement/{\"model\":\"same\",\"Model\":\"same\"}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMatchesParserDisagreement/{\"model\":\"only\",\"reasoning\":{\"effort\":\"low\",\"Effort\":\"xhigh\"}}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMatchesParserDisagreement/{\"model\":\"only\",\"reasoning\":{\"effort\":\"low\"}}",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMatchesParserDisagreement",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldReturnsIndependentCopy",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldManyMembersUsesIndex",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldDeepNestingIsLinear",
+      "Elapsed": 0.03
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldManyKeysMemoryIsBounded",
+      "Elapsed": 2.5
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldManyEscapesIsLinear",
+      "Elapsed": 0.01
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/model_字段取值不同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/model_字段取值相同",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/计费标量_size_重复",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/计费标量_n_重复",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/session_字段重复",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/session_JSON_内的_model_重复",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/session_JSON_内的嵌套重复",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/普通表单",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/数组字段",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart/多图输入",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipart",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/JSON_前导内容后的重复_n",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/JSON_前导内容与表单_model_并存",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/数组前导内容",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/名为_model_的文件_part",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/文件与文本同名",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/无法解析名字的_part",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/RFC_2231_扩展字段名",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/分段的扩展字段名",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts/两个_Content-Disposition_头",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Test": "TestConflictingFieldMultipartPreambleAndMalformedParts",
+      "Elapsed": 0
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel",
+      "Elapsed": 3.604
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestOpsWeightedTokenRateHTTPWithSQLite",
+      "Elapsed": 30.7
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Test": "TestAdminUserCreationDefaultPlatformQuotaHTTPAndSQLite",
+      "Elapsed": 32.3
+    },
+    {
+      "Action": "pass",
+      "Package": "github.com/Wei-Shaw/sub2api/internal/handler/admin",
+      "Elapsed": 92.181
+    }
+  ],
+  "test_counts": {
+    "pass": 819
+  },
+  "package_counts": {
+    "pass": 9
+  }
+}

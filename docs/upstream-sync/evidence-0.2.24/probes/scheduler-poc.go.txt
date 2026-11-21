@@ -1,0 +1,12 @@
+package repository
+import("testing";"strings";"encoding/json";"github.com/stretchr/testify/require";"github.com/Wei-Shaw/sub2api/internal/service")
+func TestIntake024SchedulerProjectionPoC(t *testing.T){
+ a:=service.Account{ID:1,Platform:service.PlatformOpenAI,Credentials:map[string]any{"model_mapping":map[string]any{"custom":"gpt-6.2-sol"}}}
+ for i:=int64(1);i<=40;i++ {g:=&service.Group{ID:i,Name:"synthetic",Description:strings.Repeat("x",1500),Platform:service.PlatformOpenAI};a.Groups=append(a.Groups,g);a.GroupIDs=append(a.GroupIDs,i);a.AccountGroups=append(a.AccountGroups,service.AccountGroup{AccountID:1,GroupID:i,Group:g})}
+ before,_,err:=marshalSchedulerCacheAccount(a);require.NoError(t,err)
+ projected:=a;projected.Groups=nil;projected.AccountGroups=filterSchedulerAccountGroups(a.AccountGroups)
+ after,_,err:=marshalSchedulerCacheAccount(projected);require.NoError(t,err)
+ require.Len(t,a.Groups,40);require.NotNil(t,a.AccountGroups[0].Group)
+ var round service.Account;require.NoError(t,json.Unmarshal(after,&round));require.Equal(t,a.GroupIDs,round.GroupIDs);require.Len(t,round.AccountGroups,40);require.Equal(t,a.IsModelSupported("custom"),round.IsModelSupported("custom"))
+ t.Logf("Synthetic 40-group cache payload: %d -> %d bytes; membership and caller graph preserved",len(before),len(after))
+}

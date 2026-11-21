@@ -1,0 +1,142 @@
+### ForwardAlphaSearch
+backend/internal/service/openai_alpha_search.go:30:func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+
+### shouldApplyOpenAIAlphaSearchAccountErrorSideEffects
+backend/internal/service/openai_alpha_search.go:523:func shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(statusCode int) bool {
+
+### shouldFailoverUpstreamError
+backend/internal/service/antigravity_gateway_retry.go:774:func (s *AntigravityGatewayService) shouldFailoverUpstreamError(statusCode int) bool {
+backend/internal/service/openai_gateway_upstream_errors.go:304:func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool {
+backend/internal/service/gateway_forward.go:47:func (s *GatewayService) shouldFailoverUpstreamError(statusCode int) bool {
+
+### normalizeCodexPageContext
+backend/internal/handler/openai_page_context.go:16:func normalizeCodexPageContext(body []byte) ([]byte, bool) {
+
+### validCodexUntrustedContext
+backend/internal/handler/openai_page_context.go:86:func validCodexUntrustedContext(name, output string) bool {
+
+### CanonicalRequestedReasoningEffort
+backend/internal/service/openai_gateway_request_body.go:908:func CanonicalRequestedReasoningEffort(body []byte, originalModel ...string) *string {
+
+### createTestPayload
+backend/internal/service/account_test_service.go:222:func createTestPayload(modelID string) (map[string]any, error) {
+
+### ResponsesToChatCompletionsRequestWithOptions
+backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:45:func ResponsesToChatCompletionsRequestWithOptions(req *ResponsesRequest, opts *ResponsesToChatOptions) (*ChatCompletionsRequest, error) {
+
+### buildOpenAIImagesStreamCompletedPayload
+backend/internal/service/openai_images_responses.go:261:func buildOpenAIImagesStreamCompletedPayload(
+
+### convertClaudeMessagesToGeminiContents
+backend/internal/service/gemini_messages_compat_service.go:3355:func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[string]string, multimodalToolResults bool) ([]any, error) {
+
+### handleGeminiStreamingResponse
+backend/internal/service/antigravity_gateway_streaming.go:117:func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time) (*antigravityStreamResult, error) {
+
+### prepareGrokMediaForwardBody
+backend/internal/service/grok_media.go:942:func prepareGrokMediaForwardBody(endpoint GrokMediaEndpoint, body []byte, contentType string) ([]byte, string, error) {
+
+### handleGrokMedia
+backend/internal/handler/grok_media.go:54:func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.GrokMediaEndpoint, requestID string) {
+
+### hasUniqueJSONMembers
+backend/internal/handler/openai_gateway_handler.go:1635:func hasUniqueJSONMembers(body []byte) bool {
+
+### NewPrereadBody
+backend/internal/pkg/httputil/body.go:41:func NewPrereadBody(body []byte) *PrereadBody {
+
+### snapshotOAuthRefreshAccount
+backend/internal/service/oauth_refresh_api.go:112:func snapshotOAuthRefreshAccount(account *Account) *Account {
+
+### UpdateGrokOAuthCredentialsIfUnchanged
+backend/internal/repository/account_repo.go:1450:func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
+
+### UpdateOpenAIOAuthCredentialsIfUnchanged
+MISSING as a production declaration on this baseline; see per-cluster minimal prerequisite/adaptation decision.
+
+### readOpenAICompatBufferedTerminal
+backend/internal/service/openai_gateway_messages.go:776:func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
+
+### newOpenAIRequestView
+backend/internal/service/openai_gateway_request_body.go:612:func newOpenAIRequestView(body []byte) openAIRequestView {
+
+### isOpenAIOAuthServableModel
+backend/internal/service/openai_model_mapping.go:68:func isOpenAIOAuthServableModel(requestedModel string) bool {
+
+### IsOpenAIPassthroughModelFilterEnabled
+backend/internal/service/account.go:1870:func (a *Account) IsOpenAIPassthroughModelFilterEnabled() bool {
+
+### buildOpenAIUsageRefreshKey
+frontend/src/utils/accountUsageRefresh.ts:8:export const buildOpenAIUsageRefreshKey = (account: Pick<Account, 'id' | 'platform' | 'type' | 'updated_at' | 'last_used_at' | 'rate_limit_reset_at' | 'extra'>): string => {
+
+### normalizeCodexInputModalities
+backend/internal/service/upstream_models.go:1468:func normalizeCodexInputModalities(modalities []string) []string {
+
+### GetUpstreamModelMetadata
+backend/internal/service/upstream_models.go:130:func (a *Account) GetUpstreamModelMetadata(modelID string) (UpstreamModelMetadata, bool) {
+
+### upstreamModelRegistryBaseURL
+backend/internal/service/upstream_models.go:640:func upstreamModelRegistryBaseURL(account *Account) string {
+
+### matchModelsDevProviderByKnownHost
+backend/internal/service/upstream_models.go:699:func matchModelsDevProviderByKnownHost(registry map[string]modelsDevProvider, accountBaseURL string) (modelsDevProvider, bool) {
+
+### IsSonnet55
+backend/internal/pkg/claude/effort_catalog.go:50:func IsSonnet55(model string) bool {
+
+### IsOpus55
+backend/internal/pkg/claude/effort_catalog.go:45:func IsOpus55(model string) bool {
+
+### compositeTargetPlatformMiddleware
+backend/internal/server/routes/gateway.go:528:func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver) gin.HandlerFunc {
+
+### BulkInsertInitial
+backend/internal/repository/user_platform_quota_repo.go:103:func (r *userPlatformQuotaRepository) BulkInsertInitial(ctx context.Context, records []UserPlatformQuotaRecord) error {
+backend/internal/repository/user_platform_quota_service_adapter.go:68:func (a *userPlatformQuotaServiceAdapter) BulkInsertInitial(ctx context.Context, records []service.UserPlatformQuotaRecord) error {
+backend/internal/repository/user_platform_quota_service_adapter.go:164:func (a *genericUserPlatformQuotaAdapter) BulkInsertInitial(ctx context.Context, records []service.UserPlatformQuotaRecord) error {
+
+### snapshotPlatformQuotaDefaults
+backend/internal/service/auth_service.go:1888:func (s *AuthService) snapshotPlatformQuotaDefaults(ctx context.Context, userID int64, plan *signupGrantPlan) error {
+
+### marshalSchedulerCacheAccount
+backend/internal/repository/scheduler_cache.go:839:func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, error) {
+
+### filterSchedulerAccountGroups
+backend/internal/repository/scheduler_cache.go:907:func filterSchedulerAccountGroups(accountGroups []service.AccountGroup) []service.AccountGroup {
+
+### enforceCacheControlLimit
+backend/internal/service/gateway_claude_oauth_body.go:1056:func enforceCacheControlLimit(body []byte) []byte {
+
+### stripOpenAIResponsesInputNamespaces
+backend/internal/service/openai_responses_namespace.go:184:func stripOpenAIResponsesInputNamespaces(body []byte, keepToolCallNamespaces bool) ([]byte, error) {
+
+### sanitizeOpenAIResponsesToolSchemaPatterns
+backend/internal/service/openai_responses_tool_schema.go:112:func sanitizeOpenAIResponsesToolSchemaPatterns(body []byte) ([]byte, bool, error) {
+
+### GetOpenAITokenStats
+backend/internal/repository/ops_repo_openai_token_stats.go:12:func (r *opsRepository) GetOpenAITokenStats(ctx context.Context, filter *service.OpsOpenAITokenStatsFilter) (*service.OpsOpenAITokenStatsResponse, error) {
+backend/internal/service/ops_openai_token_stats.go:9:func (s *OpsService) GetOpenAITokenStats(ctx context.Context, filter *OpsOpenAITokenStatsFilter) (*OpsOpenAITokenStatsResponse, error) {
+
+### resolveAntigravityForwardBaseURL
+backend/internal/service/antigravity_gateway_retry.go:58:func resolveAntigravityForwardBaseURL(account *Account) string {
+
+### FetchAvailableModels
+backend/internal/pkg/antigravity/client.go:662:func (c *Client) FetchAvailableModels(ctx context.Context, accessToken, projectID string) (*FetchAvailableModelsResponse, map[string]any, error) {
+
+### FetchAvailableModelsFromURL
+MISSING as a production declaration on this baseline; see per-cluster minimal prerequisite/adaptation decision.
+
+### ConflictingField
+MISSING as a production declaration on this baseline; see per-cluster minimal prerequisite/adaptation decision.
+
+### RejectConflictingRequestFields
+MISSING as a production declaration on this baseline; see per-cluster minimal prerequisite/adaptation decision.
+
+### GroupModelAllowlist
+MISSING as a production declaration on this baseline; see per-cluster minimal prerequisite/adaptation decision.
+
+### isClaude55SignedThinkingModel
+backend/internal/service/gateway_request.go:566:func isClaude55SignedThinkingModel(model string) bool {
+
+### RetrieveUserQuotaSummary
+MISSING as a production declaration on this baseline; see per-cluster minimal prerequisite/adaptation decision.

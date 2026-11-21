@@ -342,6 +342,8 @@ type ResponsesRequest struct {
 	ServiceTier        string              `json:"service_tier,omitempty"`
 	PromptCacheKey     string              `json:"prompt_cache_key,omitempty"`
 	PreviousResponseID string              `json:"previous_response_id,omitempty"`
+	// Stop is retained for Chat fallback only; native Responses omits it.
+	Stop json.RawMessage `json:"stop,omitempty"`
 }
 
 // ResponsesReasoning configures reasoning effort in the Responses API.
@@ -473,6 +475,10 @@ type ResponsesResponse struct {
 
 	// Error is present when status="failed"
 	Error *ResponsesError `json:"error,omitempty"`
+	// Set only for outputs rebuilt from stream items. Delivered terminals retain
+	// their existing custom-tool representation.
+	RenderCustomToolCalls bool `json:"-"`
+	XAIServerSideSearch   bool `json:"-"`
 }
 
 // ResponsesError describes an error in a failed response.
@@ -515,11 +521,17 @@ type ResponsesOutput struct {
 
 	// type=web_search_call
 	Action *WebSearchAction `json:"action,omitempty"`
+	// Hosted output shapes are provider-defined. Preserve their complete item
+	// while typed fields remain available to the existing converters and billing.
+	hostedRaw json.RawMessage
 }
 
 // MarshalJSON keeps message and tool_search_call items consistent with their
 // streamed representation. Other output types retain their default encoding.
 func (o ResponsesOutput) MarshalJSON() ([]byte, error) {
+	if len(o.hostedRaw) > 0 {
+		return o.hostedRaw, nil
+	}
 	if o.Type == "message" || o.Type == "tool_search_call" {
 		return json.Marshal(responsesItemWire(&o))
 	}
@@ -539,12 +551,17 @@ func (o *ResponsesOutput) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &kind); err != nil {
 		return err
 	}
-	if kind.Type != "tool_search_call" {
+	if kind.Type != "tool_search_call" && kind.Type != "function_call" {
 		var decoded responsesOutputAlias
 		if err := json.Unmarshal(data, &decoded); err != nil {
 			return err
 		}
 		*o = ResponsesOutput(decoded)
+		switch kind.Type {
+		case "message", "reasoning", "custom_tool_call":
+		default:
+			o.hostedRaw = append(json.RawMessage(nil), data...)
+		}
 		return nil
 	}
 
@@ -603,8 +620,9 @@ type ResponsesUsage struct {
 	CostInNanoUSD  *int64 `json:"cost_in_nano_usd,omitempty"`
 
 	// Optional detailed breakdown
-	InputTokensDetails  *ResponsesInputTokensDetails  `json:"input_tokens_details,omitempty"`
-	OutputTokensDetails *ResponsesOutputTokensDetails `json:"output_tokens_details,omitempty"`
+	InputTokensDetails         *ResponsesInputTokensDetails  `json:"input_tokens_details,omitempty"`
+	OutputTokensDetails        *ResponsesOutputTokensDetails `json:"output_tokens_details,omitempty"`
+	ServerSideToolUsageDetails json.RawMessage               `json:"server_side_tool_usage_details,omitempty"`
 }
 
 func (u *ResponsesUsage) UnmarshalJSON(data []byte) error {

@@ -1,0 +1,55 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+$ vitest run src/views/admin/__tests__/AccountsView.lite.spec.ts src/components/account/__tests__/AccountUsageCell.spec.ts
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 11 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+stderr | src/components/account/__tests__/AccountUsageCell.spec.ts > AccountUsageCell > OpenAI quota freshness > shows a failed manual refresh and clears the warning only after a successful retry
+Failed to load active usage: Error: 401
+    at /home/liang/myself/work_space/idea/github/sub2api/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts:1291:72
+    at file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at runSuite (file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file:///home/liang/myself/work_space/idea/github/sub2api/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+
+ ✓ src/components/account/__tests__/AccountUsageCell.spec.ts (41 tests) 604ms
+ ❯ src/views/admin/__tests__/AccountsView.lite.spec.ts (16 tests | 1 failed) 649ms
+   × admin AccountsView lite account list > waits for full details and preserves configuration through a real editor save 61ms
+     → Cannot read properties of undefined (reading 'then')
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/admin/__tests__/AccountsView.lite.spec.ts > admin AccountsView lite account list > waits for full details and preserves configuration through a real editor save
+TypeError: Cannot read properties of undefined (reading 'then')
+ ❯ setup src/components/account/EditAccountModal.vue:3064:47
+    3062| 
+    3063| // Load global feature states once
+    3064| adminAPI.settings.getWebSearchEmulationConfig().then(cfg => {
+       |                                               ^
+    3065|   webSearchGlobalEnabled.value = cfg?.enabled === true && (cfg?.provid…
+    3066| }).catch(() => { webSearchGlobalEnabled.value = false })
+ ❯ callWithErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:200:19
+ ❯ setupStatefulComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:8328:25
+ ❯ setupComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:8290:36
+ ❯ mountComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:6160:7
+ ❯ processComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:6126:9
+ ❯ patch node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:5630:11
+ ❯ mountChildren node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:5881:7
+ ❯ processFragment node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:6069:7
+ ❯ patch node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:5604:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 56 passed (57)
+   Start at  09:23:35
+   Duration  6.48s (transform 4.47s, setup 266ms, collect 5.95s, tests 1.25s, environment 759ms, prepare 352ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

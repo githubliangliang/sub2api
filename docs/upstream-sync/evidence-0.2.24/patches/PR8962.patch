@@ -1,0 +1,377 @@
+diff --git a/backend/internal/handler/grok_media.go b/backend/internal/handler/grok_media.go
+index 4a13293a2..c8c169d37 100644
+--- a/backend/internal/handler/grok_media.go
++++ b/backend/internal/handler/grok_media.go
+@@ -400,6 +400,11 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
+ 		service.SetOpsLatencyMs(c, service.OpsResponseLatencyMsKey, responseLatencyMs)
+ 
+ 		if err != nil {
++			var validationErr *service.GrokMediaInputValidationError
++			if errors.As(err, &validationErr) {
++				h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", validationErr.Error())
++				return
++			}
+ 			var failoverErr *service.UpstreamFailoverError
+ 			if errors.As(err, &failoverErr) {
+ 				if failoverClientGone(c) {
+diff --git a/backend/internal/handler/grok_media_errors_test.go b/backend/internal/handler/grok_media_errors_test.go
+index 234f37d5b..3dcbb107a 100644
+--- a/backend/internal/handler/grok_media_errors_test.go
++++ b/backend/internal/handler/grok_media_errors_test.go
+@@ -3,12 +3,18 @@
+ package handler
+ 
+ import (
++	"bytes"
+ 	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
+ 	"io"
++	"mime/multipart"
+ 	"net/http"
+ 	"net/http/httptest"
+ 	"strings"
+ 	"testing"
++	"testing/iotest"
+ 	"time"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+@@ -17,6 +23,168 @@ import (
+ 	"github.com/tidwall/gjson"
+ )
+ 
++func TestGrokImageEditLocalValidationSyncAndAsync(t *testing.T) {
++	enableGrokMediaValidationTestScheduler(t)
++	for _, oauth := range []bool{false, true} {
++		for _, async := range []bool{false, true} {
++			for _, format := range []string{"json", "multipart"} {
++				for _, count := range []int{3, 4, 5, 6} {
++					t.Run(fmt.Sprintf("oauth=%t/async=%t/%s/%d", oauth, async, format, count), func(t *testing.T) {
++						h, slots, _, upstream := newGrokMediaSlotHandler(t, oauth, false)
++						h.grokMediaEligibilityProber = grokMediaSlotProber(func(context.Context, int64) (bool, string, error) {
++							return true, "eligible", nil
++						})
++						upstream.call = func(req *http.Request, _ int64) (*http.Response, error) {
++							assert.Equal(t, "/v1/images/edits", req.URL.Path)
++							body, err := io.ReadAll(req.Body)
++							assert.NoError(t, err)
++							assert.Len(t, gjson.GetBytes(body, "images").Array(), count)
++							assert.NotEmpty(t, gjson.GetBytes(body, "mask.url").String())
++							return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{"Content-Type": {"application/json"}},
++								Body: io.NopCloser(strings.NewReader(`{"code":"invalid_image","error":"upstream image rejection"}`))}, nil
++						}
++						body, contentType := grokImageEditLimitBody(t, format, count)
++						c, recorder := grokMediaSlotContext(context.Background(), true)
++						path := "/v1/images/edits"
++						if async {
++							path += "/async"
++						}
++						c.Request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
++						c.Request.Header.Set("Content-Type", contentType)
++						responseBody := []byte(nil)
++						if async {
++							store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
++							tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
++							asyncHandler := NewAsyncImageHandler(tasks, h)
++							asyncHandler.Submit(c)
++							require.Equal(t, http.StatusAccepted, recorder.Code, recorder.Body.String())
++							taskID := gjson.GetBytes(recorder.Body.Bytes(), "task_id").String()
++							owner := service.ImageTaskOwner{UserID: 10, APIKeyID: 20}
++							require.Eventually(t, func() bool {
++								task, err := tasks.Get(context.Background(), owner, taskID)
++								return err == nil && task.Status != service.ImageTaskStatusProcessing
++							}, time.Second, 10*time.Millisecond)
++							poll, pollRecorder := grokMediaSlotContext(context.Background(), false)
++							poll.Params[0].Key, poll.Params[0].Value = "task_id", taskID
++							asyncHandler.Get(poll)
++							require.Equal(t, http.StatusOK, pollRecorder.Code)
++							responseBody = pollRecorder.Body.Bytes()
++							require.Equal(t, service.ImageTaskStatusFailed, gjson.GetBytes(responseBody, "status").String())
++							require.Equal(t, int64(http.StatusBadRequest), gjson.GetBytes(responseBody, "http_status").Int())
++						} else {
++							h.GrokImages(c)
++							require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
++							responseBody = recorder.Body.Bytes()
++						}
++						require.Equal(t, "invalid_request_error", gjson.GetBytes(responseBody, "error.type").String())
++						metrics := h.gatewayService.SnapshotOpenAIAccountSchedulerMetrics()
++						if count > 5 {
++							require.Equal(t, "a maximum of 5 source images is supported for image edits", gjson.GetBytes(responseBody, "error.message").String())
++							require.Zero(t, upstream.calls)
++							require.Zero(t, metrics.RuntimeStatsAccountCount, "local rejection must report neither success nor failure")
++						} else {
++							require.Equal(t, "upstream image rejection", gjson.GetBytes(responseBody, "error.message").String())
++							require.Equal(t, 1, upstream.calls)
++							require.Equal(t, 1, metrics.RuntimeStatsAccountCount, "real upstream failures still report failure")
++						}
++						require.Zero(t, metrics.AccountSwitchTotal)
++						slots.assertReleased(t)
++					})
++				}
++			}
++		}
++	}
++}
++
++func grokImageEditLimitBody(t *testing.T, format string, count int) ([]byte, string) {
++	t.Helper()
++	if format == "json" {
++		images := make([]string, count)
++		for index := range images {
++			images[index] = fmt.Sprintf("https://example.test/%d.png", index)
++		}
++		body, err := json.Marshal(map[string]any{"model": "grok-imagine-image-2.0", "prompt": "test", "images": images, "mask": "https://example.test/mask.png"})
++		require.NoError(t, err)
++		return body, "application/json"
++	}
++	var buffer bytes.Buffer
++	writer := multipart.NewWriter(&buffer)
++	require.NoError(t, writer.WriteField("model", "grok-imagine-image-2.0"))
++	require.NoError(t, writer.WriteField("prompt", "test"))
++	for index := 0; index < count; index++ {
++		if index%2 == 0 {
++			require.NoError(t, writer.WriteField("image", fmt.Sprintf("https://example.test/%d.png", index)))
++		} else {
++			part, err := writer.CreateFormFile("image[]", fmt.Sprintf("%d.png", index))
++			require.NoError(t, err)
++			_, err = part.Write([]byte("\x89PNG\r\n\x1a\nsynthetic"))
++			require.NoError(t, err)
++		}
++	}
++	part, err := writer.CreateFormFile("mask", "mask.png")
++	require.NoError(t, err)
++	_, err = part.Write([]byte("\x89PNG\r\n\x1a\nmask"))
++	require.NoError(t, err)
++	require.NoError(t, writer.Close())
++	return buffer.Bytes(), writer.FormDataContentType()
++}
++
++func TestGrokImageEditInternalAndRetryableErrorsRemainUpstreamErrors(t *testing.T) {
++	enableGrokMediaValidationTestScheduler(t)
++	for _, retryable := range []bool{false, true} {
++		t.Run(fmt.Sprintf("retryable=%t", retryable), func(t *testing.T) {
++			h, slots, _, upstream := newGrokMediaSlotHandler(t, false, false)
++			upstream.call = func(*http.Request, int64) (*http.Response, error) {
++				if !retryable {
++					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}},
++						Body: io.NopCloser(iotest.ErrReader(errors.New("internal response read failure")))}, nil
++				}
++				return &http.Response{StatusCode: http.StatusServiceUnavailable, Header: http.Header{"Content-Type": {"application/json"}},
++					Body: io.NopCloser(strings.NewReader(`{"error":"temporarily unavailable"}`))}, nil
++			}
++			c, recorder := grokMediaSlotContext(context.Background(), true)
++			body, contentType := grokImageEditLimitBody(t, "json", 3)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", bytes.NewReader(body))
++			c.Request.Header.Set("Content-Type", contentType)
++			h.GrokImages(c)
++			require.GreaterOrEqual(t, recorder.Code, http.StatusInternalServerError, recorder.Body.String())
++			require.NotEqual(t, "invalid_request_error", gjson.GetBytes(recorder.Body.Bytes(), "error.type").String())
++			metrics := h.gatewayService.SnapshotOpenAIAccountSchedulerMetrics()
++			require.Positive(t, metrics.RuntimeStatsAccountCount, "calls=%d response=%s", upstream.calls, recorder.Body.String())
++			if retryable {
++				require.Greater(t, upstream.calls, 1)
++				require.Positive(t, metrics.AccountSwitchTotal)
++			} else {
++				require.Equal(t, http.StatusBadGateway, recorder.Code)
++				require.Equal(t, 1, upstream.calls)
++				require.Zero(t, metrics.AccountSwitchTotal)
++			}
++			slots.assertReleased(t)
++		})
++	}
++}
++
++type grokMediaValidationSettingsRepo struct {
++	service.SettingRepository
++}
++
++func (grokMediaSlotRepo) SetTempUnschedulable(context.Context, int64, time.Time, string) error {
++	return nil
++}
++
++func (*grokMediaValidationSettingsRepo) SetMultiple(context.Context, map[string]string) error {
++	return nil
++}
++
++func enableGrokMediaValidationTestScheduler(t *testing.T) {
++	t.Helper()
++	settings := service.NewSettingService(&grokMediaValidationSettingsRepo{}, nil)
++	require.NoError(t, settings.UpdateSettings(context.Background(), &service.SystemSettings{OpenAIAdvancedSchedulerEnabled: true}))
++	t.Cleanup(func() {
++		require.NoError(t, settings.UpdateSettings(context.Background(), &service.SystemSettings{}))
++	})
++}
++
+ func TestGrokImagesPreservesUpstreamErrorOnSyncAndAsyncRoutes(t *testing.T) {
+ 	for _, oauth := range []bool{false, true} {
+ 		accountType := "api-key"
+diff --git a/backend/internal/service/grok_media.go b/backend/internal/service/grok_media.go
+index b95c0975f..7267b769f 100644
+--- a/backend/internal/service/grok_media.go
++++ b/backend/internal/service/grok_media.go
+@@ -33,9 +33,17 @@ const (
+ 	GrokMediaEndpointVideoContent      GrokMediaEndpoint = "video_content"
+ 
+ 	// Official xAI Imagine image-edit limit.
+-	grokMediaMaxEditSourceImages = 3
++	grokMediaMaxEditSourceImages = 5
+ )
+ 
++type GrokMediaInputValidationError struct {
++	Reason string
++}
++
++func (e *GrokMediaInputValidationError) Error() string {
++	return e.Reason
++}
++
+ func (e GrokMediaEndpoint) RequiresRequestBody() bool {
+ 	return !e.IsVideoLookupRequest()
+ }
+@@ -1006,7 +1014,7 @@ func prepareGrokMediaForwardBody(endpoint GrokMediaEndpoint, body []byte, conten
+ 		images = append(images, grokMediaImageObject(dataURL))
+ 	}
+ 	if len(images) > grokMediaMaxEditSourceImages {
+-		return nil, "", fmt.Errorf("a maximum of %d source images is supported for image edits", grokMediaMaxEditSourceImages)
++		return nil, "", &GrokMediaInputValidationError{Reason: fmt.Sprintf("a maximum of %d source images is supported for image edits", grokMediaMaxEditSourceImages)}
+ 	}
+ 	if len(images) > 0 {
+ 		payload["image"] = images[0]
+@@ -1037,7 +1045,7 @@ func prepareGrokMediaForwardBody(endpoint GrokMediaEndpoint, body []byte, conten
+ func normalizeGrokMediaJSONImageRefs(body []byte) ([]byte, error) {
+ 	info := ParseGrokMediaRequest("application/json", body)
+ 	if len(info.InputImageURLs) > grokMediaMaxEditSourceImages {
+-		return nil, fmt.Errorf("a maximum of %d source images is supported for image edits", grokMediaMaxEditSourceImages)
++		return nil, &GrokMediaInputValidationError{Reason: fmt.Sprintf("a maximum of %d source images is supported for image edits", grokMediaMaxEditSourceImages)}
+ 	}
+ 	out := body
+ 	var err error
+diff --git a/backend/internal/service/grok_media_input_validation_test.go b/backend/internal/service/grok_media_input_validation_test.go
+new file mode 100644
+index 000000000..8e10d6c47
+--- /dev/null
++++ b/backend/internal/service/grok_media_input_validation_test.go
+@@ -0,0 +1,99 @@
++//go:build unit
++
++package service
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"fmt"
++	"mime/multipart"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestPrepareGrokImageEditSourceLimit(t *testing.T) {
++	for _, format := range []string{"json", "multipart URLs", "multipart uploads", "multipart mixed"} {
++		for _, count := range []int{3, 4, 5, 6} {
++			t.Run(fmt.Sprintf("%s/%d", format, count), func(t *testing.T) {
++				var body []byte
++				contentType := "application/json"
++				if format == "json" {
++					images := make([]string, count-1)
++					for index := range images {
++						images[index] = fmt.Sprintf("https://example.test/%d.png", index+1)
++					}
++					var err error
++					body, err = json.Marshal(map[string]any{
++						"image": "https://example.test/0.png", "images": images,
++						"mask": "https://example.test/mask.png",
++					})
++					require.NoError(t, err)
++				} else {
++					var buffer bytes.Buffer
++					writer := multipart.NewWriter(&buffer)
++					for index := 0; index < count; index++ {
++						if format == "multipart URLs" || (format == "multipart mixed" && index%2 == 0) {
++							require.NoError(t, writer.WriteField("image", fmt.Sprintf("https://example.test/%d.png", index)))
++						} else {
++							part, err := writer.CreateFormFile("image[]", fmt.Sprintf("%d.png", index))
++							require.NoError(t, err)
++							_, err = part.Write([]byte("\x89PNG\r\n\x1a\nsynthetic"))
++							require.NoError(t, err)
++						}
++					}
++					if format == "multipart URLs" {
++						require.NoError(t, writer.WriteField("mask", "https://example.test/mask.png"))
++					} else {
++						part, err := writer.CreateFormFile("mask", "mask.png")
++						require.NoError(t, err)
++						_, err = part.Write([]byte("\x89PNG\r\n\x1a\nmask"))
++						require.NoError(t, err)
++					}
++					require.NoError(t, writer.Close())
++					body, contentType = buffer.Bytes(), writer.FormDataContentType()
++				}
++				out, outputType, err := prepareGrokMediaForwardBody(GrokMediaEndpointImagesEdits, body, contentType)
++				if count > 5 {
++					var validationErr *GrokMediaInputValidationError
++					require.ErrorAs(t, err, &validationErr)
++					require.Equal(t, "a maximum of 5 source images is supported for image edits", validationErr.Error())
++					require.Nil(t, out)
++					return
++				}
++				require.NoError(t, err)
++				require.Equal(t, "application/json", outputType)
++				if format == "json" {
++					require.Len(t, gjson.GetBytes(out, "images").Array(), count-1)
++				} else {
++					require.Len(t, gjson.GetBytes(out, "images").Array(), count)
++				}
++				require.NotEmpty(t, gjson.GetBytes(out, "image.url").String())
++				require.NotEmpty(t, gjson.GetBytes(out, "mask.url").String())
++			})
++		}
++	}
++}
++
++func TestGrokMediaInternalErrorsAreNotInputValidation(t *testing.T) {
++	for _, test := range []struct {
++		name    string
++		account *Account
++	}{
++		{"missing account", nil},
++		{"wrong platform", &Account{Platform: PlatformOpenAI}},
++		{"missing credential", &Account{Platform: PlatformGrok, Type: AccountTypeAPIKey}},
++		{"invalid base URL", &Account{Platform: PlatformGrok, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "test", "base_url": "://invalid"}}},
++		{"missing OAuth provider", &Account{Platform: PlatformGrok, Type: AccountTypeOAuth}},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			svc := &OpenAIGatewayService{}
++			_, err := svc.ForwardGrokMedia(context.Background(), nil, test.account, GrokMediaEndpointImagesEdits, "", []byte(`{"images":[]}`), "application/json")
++			require.Error(t, err)
++			var validationErr *GrokMediaInputValidationError
++			require.NotErrorAs(t, err, &validationErr)
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_grok_test.go b/backend/internal/service/openai_gateway_grok_test.go
+index f8aef113d..3abfa7eef 100644
+--- a/backend/internal/service/openai_gateway_grok_test.go
++++ b/backend/internal/service/openai_gateway_grok_test.go
+@@ -1158,13 +1158,15 @@ func TestPrepareGrokImageEditNormalizesOfficialImageObjects(t *testing.T) {
+ 	}
+ }
+ 
+-func TestPrepareGrokImageEditRejectsMoreThanThreeSources(t *testing.T) {
+-	body := []byte(`{"images":["https://example.com/1.png","https://example.com/2.png","https://example.com/3.png","https://example.com/4.png"]}`)
++func TestPrepareGrokImageEditRejectsMoreThanFiveSources(t *testing.T) {
++	body := []byte(`{"images":["https://example.com/1.png","https://example.com/2.png","https://example.com/3.png","https://example.com/4.png","https://example.com/5.png","https://example.com/6.png"]}`)
+ 
+ 	out, _, err := prepareGrokMediaForwardBody(GrokMediaEndpointImagesEdits, body, "application/json")
+ 	require.Error(t, err)
+ 	require.Nil(t, out)
+-	require.Contains(t, err.Error(), "maximum of 3 source images")
++	var validationErr *GrokMediaInputValidationError
++	require.ErrorAs(t, err, &validationErr)
++	require.Contains(t, err.Error(), "maximum of 5 source images")
+ }
+ 
+ func TestNormalizeGrokMediaModelForEndpoint(t *testing.T) {

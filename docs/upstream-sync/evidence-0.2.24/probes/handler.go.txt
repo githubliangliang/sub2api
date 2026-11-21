@@ -1,0 +1,8 @@
+package handler
+import ("testing";"github.com/stretchr/testify/require";"github.com/tidwall/gjson")
+func TestIntake024IDEContext(t *testing.T){
+ for _,tc:=range []struct{name,out string}{{"ide_context","editor contents"},{"untrusted_content",""},{"proposed_plan"," "}}{
+  t.Run(tc.name,func(t *testing.T){b:=pageContextRequest(t,pageContextItem(tc.name,tc.out));got,changed:=normalizeCodexPageContext(b);require.True(t,changed);require.Equal(t,"user",gjson.GetBytes(got,"input.0.role").String())})
+ }
+}
+func TestIntake024ContextControl(t *testing.T){b:=pageContextRequest(t,pageContextItem("browser_info","browser text"));_,changed:=normalizeCodexPageContext(b);require.True(t,changed)}

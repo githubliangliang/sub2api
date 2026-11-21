@@ -888,6 +888,11 @@ func (a *Account) isModelMappingSupported(requestedModel string) bool {
 	// credentials 里常残留旧的非空 model_mapping，若不在此放行，透传账号会被
 	// model_mapping 白名单错误排除出候选集，导致 no available accounts / 404（issue #4936）。
 	if a.IsOpenAIPassthroughEnabled() {
+		// OAuth-like accounts always use Codex, even when the source-model
+		// passthrough filter is off. Custom API Key endpoints remain unrestricted.
+		if a.IsOpenAIOAuthLike() && !isOpenAIOAuthServableModel(requestedModel) {
+			return false
+		}
 		if !a.IsOpenAIPassthroughModelFilterEnabled() {
 			return true
 		}
@@ -901,7 +906,7 @@ func (a *Account) isModelMappingSupported(requestedModel string) bool {
 		if a.isOfficialDeepSeekAPI() {
 			return isDeepSeekModelSupported(requestedModel)
 		}
-		if a.IsOpenAIOAuth() {
+		if a.IsOpenAIOAuthLike() {
 			return isOpenAIOAuthServableModel(requestedModel)
 		}
 		return true // 无映射 = 允许所有

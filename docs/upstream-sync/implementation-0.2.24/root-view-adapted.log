@@ -1,0 +1,41 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides". See https://pnpm.io/settings for the new home of each setting.
+$ vitest run src/views/admin/__tests__/AccountsView.lite.spec.ts
+
+ RUN  v2.1.9 /home/liang/myself/work_space/idea/github/sub2api/frontend
+
+Browserslist: browsers data (caniuse-lite) is 11 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ❯ src/views/admin/__tests__/AccountsView.lite.spec.ts (16 tests | 1 failed) 736ms
+   × admin AccountsView lite account list > waits for full details and preserves configuration through a real editor save 59ms
+     → Cannot read properties of undefined (reading 'then')
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/admin/__tests__/AccountsView.lite.spec.ts > admin AccountsView lite account list > waits for full details and preserves configuration through a real editor save
+TypeError: Cannot read properties of undefined (reading 'then')
+ ❯ loadGlobalState src/composables/useQuotaNotifyState.ts:24:20
+     22|   function loadGlobalState() {
+     23|     adminAPI.settings
+     24|       .getSettings()
+       |                    ^
+     25|       .then((settings) => {
+     26|         globalEnabled.value = settings.account_quota_notify_enabled ==…
+ ❯ setup src/components/account/EditAccountModal.vue:3068:1
+ ❯ callWithErrorHandling node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:200:19
+ ❯ setupStatefulComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:8328:25
+ ❯ setupComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:8290:36
+ ❯ mountComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:6160:7
+ ❯ processComponent node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:6126:9
+ ❯ patch node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:5630:11
+ ❯ mountChildren node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:5881:7
+ ❯ processFragment node_modules/.pnpm/@vue+runtime-core@3.5.44/node_modules/@vue/runtime-core/dist/runtime-core.cjs.js:6069:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 15 passed (16)
+   Start at  09:28:48
+   Duration  8.28s (transform 5.14s, setup 169ms, collect 6.23s, tests 736ms, environment 424ms, prepare 90ms)
+
+[ELIFECYCLE] Command failed with exit code 1.

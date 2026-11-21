@@ -1,0 +1,911 @@
+diff --git a/backend/internal/repository/account_repo.go b/backend/internal/repository/account_repo.go
+index 468a82a0e..80bebe831 100644
+--- a/backend/internal/repository/account_repo.go
++++ b/backend/internal/repository/account_repo.go
+@@ -1657,6 +1657,29 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
+ 	expectedCredentials map[string]any,
+ 	expectedProxyID *int64,
+ 	credentials map[string]any,
++) (bool, error) {
++	return r.updateOAuthCredentialsIfUnchanged(ctx, id, service.PlatformGrok, expectedCredentials, expectedProxyID, credentials)
++}
++
++// UpdateOpenAIOAuthCredentialsIfUnchanged preserves a completed token rotation
++// without overwriting concurrent reauthorization or writing to a credential shadow.
++func (r *accountRepository) UpdateOpenAIOAuthCredentialsIfUnchanged(
++	ctx context.Context,
++	id int64,
++	expectedCredentials map[string]any,
++	expectedProxyID *int64,
++	credentials map[string]any,
++) (bool, error) {
++	return r.updateOAuthCredentialsIfUnchanged(ctx, id, service.PlatformOpenAI, expectedCredentials, expectedProxyID, credentials)
++}
++
++func (r *accountRepository) updateOAuthCredentialsIfUnchanged(
++	ctx context.Context,
++	id int64,
++	platform string,
++	expectedCredentials map[string]any,
++	expectedProxyID *int64,
++	credentials map[string]any,
+ ) (bool, error) {
+ 	if r == nil || r.sql == nil {
+ 		return false, errors.New("account repository SQL executor is not configured")
+@@ -1680,6 +1703,7 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
+ 			AND a.type = $4
+ 			AND a.credentials = $5::jsonb
+ 			AND a.proxy_id IS NOT DISTINCT FROM $6
++			AND ($3 <> 'openai' OR a.parent_account_id IS NULL)
+ 		RETURNING a.id
+ 		)
+ 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+@@ -1687,7 +1711,7 @@ func (r *accountRepository) UpdateGrokOAuthCredentialsIfUnchanged(
+ 	`,
+ 		string(credentialsJSON),
+ 		id,
+-		service.PlatformGrok,
++		platform,
+ 		service.AccountTypeOAuth,
+ 		string(expectedJSON),
+ 		expectedProxyID,
+diff --git a/backend/internal/repository/account_repo_temp_unsched_test.go b/backend/internal/repository/account_repo_temp_unsched_test.go
+index 9853e272b..df226b1cb 100644
+--- a/backend/internal/repository/account_repo_temp_unsched_test.go
++++ b/backend/internal/repository/account_repo_temp_unsched_test.go
+@@ -4,6 +4,7 @@ import (
+ 	"context"
+ 	"database/sql"
+ 	"database/sql/driver"
++	"errors"
+ 	"regexp"
+ 	"strings"
+ 	"testing"
+@@ -258,9 +259,83 @@ func TestAccountRepository_UpdateGrokOAuthCredentialsIfUnchanged_UsesExactAttemp
+ 	require.Contains(t, normalized, "proxy_id IS NOT DISTINCT FROM $6")
+ 	require.Contains(t, normalized, "INSERT INTO scheduler_outbox")
+ 	require.Len(t, exec.execArgs[0], 7)
++	require.Equal(t, service.PlatformGrok, exec.execArgs[0][2])
+ 	require.Equal(t, &proxyID, exec.execArgs[0][5])
+ }
+ 
++func TestAccountRepository_UpdateOpenAIOAuthCredentialsIfUnchanged_UsesExactAttemptStateAndAtomicOutbox(t *testing.T) {
++	exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
++	repo := newAccountRepositoryWithSQL(nil, exec, nil)
++	proxyID := int64(29)
++
++	applied, err := repo.UpdateOpenAIOAuthCredentialsIfUnchanged(
++		context.Background(),
++		42,
++		map[string]any{"refresh_token": "attempted", "_token_version": int64(9)},
++		&proxyID,
++		map[string]any{"refresh_token": "rotated", "_token_version": int64(10)},
++	)
++
++	require.NoError(t, err)
++	require.True(t, applied)
++	require.Len(t, exec.execQueries, 1, "credential update and outbox insertion must share one SQL statement")
++	normalized := normalizeSQLWhitespace(exec.execQueries[0])
++	require.Contains(t, normalized, "WITH updated AS ( UPDATE accounts AS a SET credentials = $1::jsonb")
++	require.Contains(t, normalized, "a.deleted_at IS NULL")
++	require.Contains(t, normalized, "a.platform = $3")
++	require.Contains(t, normalized, "a.type = $4")
++	require.Contains(t, normalized, "a.credentials = $5::jsonb")
++	require.Contains(t, normalized, "a.proxy_id IS NOT DISTINCT FROM $6")
++	require.Contains(t, normalized, "($3 <> 'openai' OR a.parent_account_id IS NULL)")
++	require.Contains(t, normalized, "RETURNING a.id ) INSERT INTO scheduler_outbox")
++	require.Contains(t, normalized, "SELECT $7, updated.id, NULL, NULL FROM updated")
++	require.Len(t, exec.execArgs[0], 7)
++	arg0, ok := exec.execArgs[0][0].(string)
++	require.True(t, ok)
++	require.JSONEq(t, `{"refresh_token":"rotated","_token_version":10}`, arg0)
++	require.Equal(t, int64(42), exec.execArgs[0][1])
++	require.Equal(t, service.PlatformOpenAI, exec.execArgs[0][2])
++	require.Equal(t, service.AccountTypeOAuth, exec.execArgs[0][3])
++	arg4, ok := exec.execArgs[0][4].(string)
++	require.True(t, ok)
++	require.JSONEq(t, `{"refresh_token":"attempted","_token_version":9}`, arg4)
++	require.Equal(t, &proxyID, exec.execArgs[0][5])
++	require.Equal(t, service.SchedulerOutboxEventAccountChanged, exec.execArgs[0][6])
++}
++
++func TestAccountRepository_UpdateOpenAIOAuthCredentialsIfUnchanged_NoMatchDoesNotApply(t *testing.T) {
++	exec := &recordingSQLExecutor{result: rowsAffectedResult(0)}
++	repo := newAccountRepositoryWithSQL(nil, exec, nil)
++
++	applied, err := repo.UpdateOpenAIOAuthCredentialsIfUnchanged(
++		context.Background(), 42, map[string]any{"refresh_token": "attempted"}, nil,
++		map[string]any{"refresh_token": "rotated"},
++	)
++
++	require.NoError(t, err)
++	require.False(t, applied)
++	require.Len(t, exec.execQueries, 1)
++	require.Nil(t, exec.execArgs[0][5], "a nil proxy must match only a database NULL proxy")
++	require.Contains(t, normalizeSQLWhitespace(exec.execQueries[0]), "SELECT $7, updated.id, NULL, NULL FROM updated",
++		"a CAS miss must not insert an independent invalidation event")
++}
++
++func TestAccountRepository_UpdateOpenAIOAuthCredentialsIfUnchanged_OutboxFailureDoesNotReportSuccess(t *testing.T) {
++	outboxErr := errors.New("scheduler outbox insert failed")
++	exec := &recordingSQLExecutor{err: outboxErr}
++	repo := newAccountRepositoryWithSQL(nil, exec, nil)
++
++	applied, err := repo.UpdateOpenAIOAuthCredentialsIfUnchanged(
++		context.Background(), 42, map[string]any{"refresh_token": "attempted"}, nil,
++		map[string]any{"refresh_token": "rotated"},
++	)
++
++	require.ErrorIs(t, err, outboxErr)
++	require.False(t, applied)
++	require.Len(t, exec.execQueries, 1)
++	require.Contains(t, normalizeSQLWhitespace(exec.execQueries[0]), "INSERT INTO scheduler_outbox")
++}
++
+ func TestAccountRepository_ListOAuthRefreshCandidatePage_SQLFilter(t *testing.T) {
+ 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+ 	require.NoError(t, err)
+diff --git a/backend/internal/service/oauth_refresh_api.go b/backend/internal/service/oauth_refresh_api.go
+index c940bd335..af7126eeb 100644
+--- a/backend/internal/service/oauth_refresh_api.go
++++ b/backend/internal/service/oauth_refresh_api.go
+@@ -5,6 +5,7 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"log/slog"
++	"reflect"
+ 	"strconv"
+ 	"strings"
+ 	"sync"
+@@ -34,10 +35,17 @@ type GrokOAuthRefreshSuccessRepository interface {
+ 	) (bool, error)
+ }
+ 
++type OpenAIOAuthRefreshSuccessRepository interface {
++	UpdateOpenAIOAuthCredentialsIfUnchanged(ctx context.Context, id int64, expectedCredentials map[string]any, expectedProxyID *int64, credentials map[string]any) (bool, error)
++}
++
+ const (
+ 	defaultRefreshLockTTL                   = 60 * time.Second
+ 	defaultRefreshLockReleaseTimeout        = 2 * time.Second
+ 	defaultRefreshPostPersistCleanupTimeout = 2 * time.Second
++	defaultOpenAIRefreshPersistTimeout      = 10 * time.Second
++	// Repository snapshot propagation uses its own detached timeout after CAS.
++	defaultRefreshRepositorySyncTimeout = 2 * time.Second
+ )
+ 
+ var (
+@@ -205,6 +213,17 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
+ 			return &OAuthRefreshResult{LockHeld: true}, nil
+ 		} else {
+ 			defer api.releaseRefreshLock(ctx, cacheKey)
++			if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
++				// Reserve lease time for the irreversible rotation's detached save,
++				// cache invalidation and lock release, including request-path calls.
++				budget := api.lockTTL - defaultOpenAIRefreshPersistTimeout - defaultRefreshRepositorySyncTimeout - defaultRefreshPostPersistCleanupTimeout - defaultRefreshLockReleaseTimeout - maxTokenRefreshLockSafetyMargin
++				if budget <= 0 {
++					return nil, &providerConfigurationRefreshError{err: errors.New("OpenAI OAuth refresh lock lease is too short for credential persistence")}
++				}
++				var cancel context.CancelFunc
++				ctx, cancel = context.WithTimeout(ctx, budget)
++				defer cancel()
++			}
+ 		}
+ 	}
+ 
+@@ -256,6 +275,26 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
+ 	// 4. 执行平台特定刷新逻辑
+ 	attemptedAccount := snapshotOAuthRefreshAccount(freshAccount)
+ 	newCredentials, refreshErr := executor.Refresh(ctx, freshAccount)
++	if refreshErr == nil && hasOpenAIRefreshCredentials(attemptedAccount, newCredentials) {
++		// The upstream rotation is irreversible. Cancellation of optional
++		// enrichment must not discard its result or cause an old-token retry.
++		durableAccount, applied, persistErr := persistOpenAIRefreshCredentials(ctx, api.accountRepo, attemptedAccount, newCredentials)
++		if applied && api.tokenCache != nil {
++			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRefreshPostPersistCleanupTimeout)
++			defer cancel()
++			if err := api.tokenCache.DeleteAccessToken(cleanupCtx, cacheKey); err != nil {
++				slog.Warn("oauth_refresh_post_persist_cache_delete_failed", "account_id", account.ID, "error", err)
++			}
++		}
++		if persistErr != nil {
++			return nil, persistErr
++		}
++		result := &OAuthRefreshResult{Refreshed: applied, Account: durableAccount}
++		if applied {
++			result.NewCredentials = newCredentials
++		}
++		return result, nil
++	}
+ 	if ctxErr := ctx.Err(); ctxErr != nil {
+ 		// A provider implementation may ignore cancellation and return late
+ 		// credentials. Never persist them after the attempt/cycle boundary.
+@@ -372,6 +411,66 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
+ 	}, nil
+ }
+ 
++func hasOpenAIRefreshCredentials(account *Account, credentials map[string]any) bool {
++	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth ||
++		account.IsCredentialShadow() || account.IsOpenAIPersonalAccessToken() {
++		return false
++	}
++	accessToken, _ := credentials["access_token"].(string)
++	refreshToken, _ := credentials["refresh_token"].(string)
++	return strings.TrimSpace(accessToken) != "" && strings.TrimSpace(refreshToken) != ""
++}
++
++func persistOpenAIRefreshCredentials(parent context.Context, repo AccountRepository, attempted *Account, credentials map[string]any) (*Account, bool, error) {
++	conditionalRepo, ok := repo.(OpenAIOAuthRefreshSuccessRepository)
++	if !ok {
++		return nil, false, &providerConfigurationRefreshError{err: errors.New("OpenAI OAuth refresh success CAS repository is not configured")}
++	}
++	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), defaultOpenAIRefreshPersistTimeout)
++	defer cancel()
++	credentials["_token_version"] = time.Now().UnixMilli()
++	expected := attempted
++	replacement := credentials
++	for saveAttempt := 0; saveAttempt < 3; saveAttempt++ {
++		applied, err := conditionalRepo.UpdateOpenAIOAuthCredentialsIfUnchanged(ctx, attempted.ID, expected.Credentials, expected.ProxyID, replacement)
++		if err != nil {
++			return nil, false, &providerCycleContainmentRefreshError{err: fmt.Errorf("%w: %v", errOAuthRefreshCredentialPersist, err)}
++		}
++		// Read the durable row rather than publishing the pre-refresh scheduling
++		// snapshot; an administrator may have changed the account while we waited.
++		current, err := repo.GetByID(ctx, attempted.ID)
++		if err != nil || current == nil || current.ID != attempted.ID {
++			return nil, applied, &providerCycleContainmentRefreshError{err: fmt.Errorf("%w: durable account unavailable after OpenAI refresh", errOAuthRefreshCredentialPersist)}
++		}
++		if applied {
++			return current, true, nil
++		}
++		if current.Platform != PlatformOpenAI || current.Type != AccountTypeOAuth ||
++			current.IsCredentialShadow() || current.IsOpenAIPersonalAccessToken() ||
++			current.GetCredential("refresh_token") != attempted.GetCredential("refresh_token") ||
++			current.GetCredential("access_token") != attempted.GetCredential("access_token") ||
++			current.GetCredentialAsInt64("_token_version") != attempted.GetCredentialAsInt64("_token_version") {
++			return current, false, nil
++		}
++		// A proxy or non-token setting edit must not discard a completed rotation.
++		// Reapply only this refresh's credential changes to the newest snapshot.
++		expected = snapshotOAuthRefreshAccount(current)
++		replacement = shallowCopyMap(current.Credentials)
++		for key, value := range credentials {
++			previous, exists := attempted.Credentials[key]
++			if !exists || !reflect.DeepEqual(previous, value) {
++				replacement[key] = value
++			}
++		}
++		for key := range attempted.Credentials {
++			if _, exists := credentials[key]; !exists {
++				delete(replacement, key)
++			}
++		}
++	}
++	return nil, false, &providerCycleContainmentRefreshError{err: fmt.Errorf("%w: OpenAI credentials changed repeatedly during persistence", errOAuthRefreshCredentialPersist)}
++}
++
+ func (api *OAuthRefreshAPI) releaseRefreshLock(parent context.Context, cacheKey string) {
+ 	cleanupParent := context.Background()
+ 	if parent != nil {
+diff --git a/backend/internal/service/oauth_refresh_api_test.go b/backend/internal/service/oauth_refresh_api_test.go
+index e92bd99f0..9319ed6b8 100644
+--- a/backend/internal/service/oauth_refresh_api_test.go
++++ b/backend/internal/service/oauth_refresh_api_test.go
+@@ -5,11 +5,14 @@ package service
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"reflect"
+ 	"sync"
+ 	"testing"
+ 	"time"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
++	"github.com/imroc/req/v3"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
+@@ -30,9 +33,16 @@ type refreshAPIAccountRepo struct {
+ 	beforeSuccessCAS        func(*refreshAPIAccountRepo)
+ 	lastExpectedCredentials map[string]any
+ 	lastExpectedProxyID     *int64
++	openAISuccessCASCalls   int
++	openAIPersistCtxErr     error
++	openAIPersistDeadline   time.Time
++	respectReadContext      bool
+ }
+ 
+-func (r *refreshAPIAccountRepo) GetByID(_ context.Context, _ int64) (*Account, error) {
++func (r *refreshAPIAccountRepo) GetByID(ctx context.Context, _ int64) (*Account, error) {
++	if r.respectReadContext && ctx.Err() != nil {
++		return nil, ctx.Err()
++	}
+ 	r.getByIDCalls++
+ 	if r.getByIDErrAfterCall > 0 && r.getByIDCalls >= r.getByIDErrAfterCall {
+ 		return nil, r.getByIDErrAfterCallErr
+@@ -103,16 +113,50 @@ func (r *refreshAPIAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(
+ 	return true, nil
+ }
+ 
++func (r *refreshAPIAccountRepo) UpdateOpenAIOAuthCredentialsIfUnchanged(
++	ctx context.Context,
++	id int64,
++	expectedCredentials map[string]any,
++	expectedProxyID *int64,
++	credentials map[string]any,
++) (bool, error) {
++	r.openAISuccessCASCalls++
++	r.openAIPersistCtxErr = ctx.Err()
++	r.openAIPersistDeadline, _ = ctx.Deadline()
++	if err := ctx.Err(); err != nil {
++		return false, err
++	}
++	r.lastExpectedCredentials = shallowCopyMap(expectedCredentials)
++	r.lastExpectedProxyID = expectedProxyID
++	if r.beforeSuccessCAS != nil {
++		r.beforeSuccessCAS(r)
++	}
++	if r.updateErr != nil {
++		return false, r.updateErr
++	}
++	if r.account == nil || r.account.ID != id || r.account.Platform != PlatformOpenAI ||
++		r.account.Type != AccountTypeOAuth || r.account.IsCredentialShadow() ||
++		!reflect.DeepEqual(r.account.Credentials, expectedCredentials) ||
++		!reflect.DeepEqual(r.account.ProxyID, expectedProxyID) {
++		return false, nil
++	}
++	r.updateCalls++
++	r.updateCredentialsCalls++
++	r.account.Credentials = shallowCopyMap(credentials)
++	return true, nil
++}
++
+ // refreshAPIExecutorStub implements OAuthRefreshExecutor for tests.
+ type refreshAPIExecutorStub struct {
+-	needsRefresh  bool
+-	cannotRefresh bool
+-	credentials   map[string]any
+-	err           error
+-	refreshCalls  int
+-	canRefresh    func(*Account) bool
+-	onRefresh     func()
+-	delay         time.Duration
++	needsRefresh     bool
++	cannotRefresh    bool
++	credentials      map[string]any
++	err              error
++	refreshCalls     int
++	canRefresh       func(*Account) bool
++	onRefresh        func()
++	onRefreshContext func(context.Context)
++	delay            time.Duration
+ }
+ 
+ func (e *refreshAPIExecutorStub) CanRefresh(account *Account) bool {
+@@ -129,7 +173,7 @@ func (e *refreshAPIExecutorStub) NeedsRefresh(_ *Account, _ time.Duration) bool
+ 	return e.needsRefresh
+ }
+ 
+-func (e *refreshAPIExecutorStub) Refresh(_ context.Context, _ *Account) (map[string]any, error) {
++func (e *refreshAPIExecutorStub) Refresh(ctx context.Context, _ *Account) (map[string]any, error) {
+ 	e.refreshCalls++
+ 	if e.delay > 0 {
+ 		time.Sleep(e.delay)
+@@ -137,6 +181,9 @@ func (e *refreshAPIExecutorStub) Refresh(_ context.Context, _ *Account) (map[str
+ 	if e.onRefresh != nil {
+ 		e.onRefresh()
+ 	}
++	if e.onRefreshContext != nil {
++		e.onRefreshContext(ctx)
++	}
+ 	if e.err != nil {
+ 		return nil, e.err
+ 	}
+@@ -652,6 +699,220 @@ func TestRefreshIfNeeded_LateSuccessAfterDeadlineDoesNotPersist(t *testing.T) {
+ 	require.Zero(t, repo.updateCredentialsCalls, "late credentials must not cross the unified API persistence boundary")
+ }
+ 
++type openAIRotationClientStub struct {
++	openaiOAuthClientRefreshStub
++	rotationCalls int
++}
++
++func (c *openAIRotationClientStub) RefreshTokenWithClientID(context.Context, string, string, string) (*openai.TokenResponse, error) {
++	c.rotationCalls++
++	return &openai.TokenResponse{
++		AccessToken: "rotated-access", RefreshToken: "rotated-refresh", ExpiresIn: 3600,
++	}, nil
++}
++
++func TestRefreshIfNeeded_OpenAIEnrichmentTimeoutKeepsRotatedCredentials(t *testing.T) {
++	account := openAIRefreshTestAccount()
++	account.Credentials["expires_at"] = time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
++	repo := &refreshAPIAccountRepo{account: account, respectReadContext: true}
++	client := &openAIRotationClientStub{}
++	oauthService := NewOpenAIOAuthService(nil, client)
++	defer oauthService.Stop()
++	privacyCalls := 0
++	oauthService.SetPrivacyClientFactory(func(string) (*req.Client, error) {
++		return req.C().WrapRoundTripFunc(func(req.RoundTripper) req.RoundTripFunc {
++			return func(request *req.Request) (*req.Response, error) {
++				privacyCalls++
++				<-request.Context().Done()
++				return nil, request.Context().Err()
++			}
++		}), nil
++	})
++	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
++	defer cancel()
++	executor := NewOpenAITokenRefresher(oauthService, repo)
++
++	result, err := NewOAuthRefreshAPI(repo, nil).RefreshIfNeeded(ctx, account, executor, time.Hour)
++
++	require.NoError(t, err)
++	require.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
++	require.Positive(t, privacyCalls, "optional enrichment must be the operation that exhausts the context")
++	require.Equal(t, 1, client.rotationCalls)
++	require.True(t, result.Refreshed)
++	require.Equal(t, "rotated-refresh", result.Account.GetOpenAIRefreshToken())
++	require.Equal(t, "rotated-refresh", repo.account.GetOpenAIRefreshToken())
++	require.Equal(t, 1, repo.openAISuccessCASCalls)
++	require.NoError(t, repo.openAIPersistCtxErr)
++}
++
++func TestRefreshIfNeeded_OpenAILockLeaseReservesPersistenceBudget(t *testing.T) {
++	account := openAIRefreshTestAccount()
++	repo := &refreshAPIAccountRepo{account: account}
++	cache := &refreshAPICacheStub{lockResult: true}
++	var executorBudget time.Duration
++	executor := &refreshAPIExecutorStub{
++		needsRefresh: true,
++		credentials:  map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++		onRefreshContext: func(ctx context.Context) {
++			deadline, ok := ctx.Deadline()
++			require.True(t, ok)
++			executorBudget = time.Until(deadline)
++		},
++	}
++
++	_, err := NewOAuthRefreshAPI(repo, cache).RefreshIfNeeded(context.Background(), account, executor, time.Hour)
++
++	require.NoError(t, err)
++	require.Positive(t, executorBudget)
++	require.LessOrEqual(t, executorBudget, 41*time.Second, "60-second lease must reserve 19 seconds for persistence and cleanup")
++	require.Equal(t, 1, executor.refreshCalls)
++	require.Equal(t, 1, cache.releaseCalls)
++}
++
++func TestRefreshIfNeeded_OpenAIShortLockLeaseDoesNotConsumeRefreshToken(t *testing.T) {
++	for _, lease := range []time.Duration{time.Second, 19 * time.Second} {
++		t.Run(lease.String(), func(t *testing.T) {
++			account := openAIRefreshTestAccount()
++			repo := &refreshAPIAccountRepo{account: account}
++			cache := &refreshAPICacheStub{lockResult: true}
++			executor := &refreshAPIExecutorStub{
++				needsRefresh: true,
++				credentials:  map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++			}
++
++			_, err := NewOAuthRefreshAPI(repo, cache, lease).RefreshIfNeeded(context.Background(), account, executor, time.Hour)
++
++			var configuration *providerConfigurationRefreshError
++			require.ErrorAs(t, err, &configuration)
++			require.Zero(t, executor.refreshCalls)
++			require.Zero(t, repo.openAISuccessCASCalls)
++			require.Equal(t, "old-refresh", repo.account.GetOpenAIRefreshToken())
++			require.Equal(t, 1, cache.releaseCalls)
++		})
++	}
++}
++
++func TestRefreshIfNeeded_OpenAILateSuccessPersistsWithBoundedContext(t *testing.T) {
++	for _, cancellation := range []string{"deadline", "parent cancellation"} {
++		t.Run(cancellation, func(t *testing.T) {
++			account := openAIRefreshTestAccount()
++			expected := shallowCopyMap(account.Credentials)
++			repo := &refreshAPIAccountRepo{account: account, respectReadContext: true}
++			cache := &refreshAPICacheStub{lockResult: true}
++			ctx, cancel := context.WithCancel(context.Background())
++			if cancellation == "deadline" {
++				cancel()
++				ctx, cancel = context.WithTimeout(context.Background(), 10*time.Millisecond)
++			}
++			defer cancel()
++			executor := &refreshAPIExecutorStub{
++				needsRefresh: true,
++				credentials:  map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++				onRefresh: func() {
++					if cancellation == "parent cancellation" {
++						cancel()
++					}
++					<-ctx.Done()
++				},
++			}
++
++			result, err := NewOAuthRefreshAPI(repo, cache).RefreshIfNeeded(ctx, account, executor, time.Hour)
++
++			require.NoError(t, err)
++			require.True(t, result.Refreshed)
++			require.Equal(t, "rotated-refresh", result.Account.GetOpenAIRefreshToken())
++			require.Equal(t, "rotated-refresh", repo.account.GetOpenAIRefreshToken())
++			require.Equal(t, expected, repo.lastExpectedCredentials)
++			require.Equal(t, 1, executor.refreshCalls)
++			require.Equal(t, 1, repo.openAISuccessCASCalls)
++			require.NoError(t, repo.openAIPersistCtxErr)
++			require.False(t, repo.openAIPersistDeadline.IsZero(), "detached persistence must remain bounded")
++			require.LessOrEqual(t, time.Until(repo.openAIPersistDeadline), 10*time.Second)
++			require.Equal(t, 1, cache.releaseCalls)
++			require.NoError(t, cache.releaseCtxErr)
++		})
++	}
++}
++
++func openAIRefreshTestAccount() *Account {
++	return &Account{
++		ID: 154, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
++		Credentials: map[string]any{
++			"access_token": "old-access", "refresh_token": "old-refresh", "_token_version": int64(1),
++		},
++	}
++}
++
++func TestRefreshIfNeeded_OpenAICASKeepsConcurrentReauthorization(t *testing.T) {
++	account := openAIRefreshTestAccount()
++	expected := shallowCopyMap(account.Credentials)
++	repo := &refreshAPIAccountRepo{account: account}
++	repo.beforeSuccessCAS = func(repo *refreshAPIAccountRepo) {
++		repo.account.Credentials = map[string]any{
++			"access_token": "reauthorized-access", "refresh_token": "reauthorized-refresh", "_token_version": int64(2),
++		}
++	}
++	executor := &refreshAPIExecutorStub{
++		needsRefresh: true,
++		credentials:  map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++	}
++
++	result, err := NewOAuthRefreshAPI(repo, nil).RefreshIfNeeded(context.Background(), account, executor, time.Hour)
++
++	require.NoError(t, err)
++	require.False(t, result.Refreshed)
++	require.Equal(t, "reauthorized-refresh", result.Account.GetOpenAIRefreshToken())
++	require.Equal(t, expected, repo.lastExpectedCredentials)
++	require.Zero(t, repo.updateCalls)
++}
++
++func TestRefreshIfNeeded_OpenAIPersistenceFailureContainsProvider(t *testing.T) {
++	for _, failure := range []string{"CAS write", "durable reread"} {
++		t.Run(failure, func(t *testing.T) {
++			account := openAIRefreshTestAccount()
++			repo := &refreshAPIAccountRepo{account: account}
++			if failure == "CAS write" {
++				repo.updateErr = errors.New("database unavailable")
++			} else {
++				repo.getByIDErrAfterCall = 2
++				repo.getByIDErrAfterCallErr = errors.New("database reread unavailable")
++			}
++			executor := &refreshAPIExecutorStub{
++				needsRefresh: true,
++				credentials:  map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++			}
++
++			_, err := NewOAuthRefreshAPI(repo, nil).RefreshIfNeeded(context.Background(), account, executor, time.Hour)
++
++			var containment *providerCycleContainmentRefreshError
++			require.ErrorAs(t, err, &containment)
++			require.Equal(t, 1, executor.refreshCalls)
++			require.Equal(t, 1, repo.openAISuccessCASCalls)
++			if failure == "CAS write" {
++				require.Equal(t, "old-refresh", account.GetOpenAIRefreshToken(), "failed persistence must not publish in-memory credentials")
++			}
++		})
++	}
++}
++
++func TestRefreshIfNeeded_OpenAICanceledWithoutSuccessfulCredentialsDoesNotPersist(t *testing.T) {
++	for _, refreshErr := range []error{nil, errors.New("token endpoint failed")} {
++		t.Run(fmt.Sprint(refreshErr), func(t *testing.T) {
++			account := openAIRefreshTestAccount()
++			repo := &refreshAPIAccountRepo{account: account}
++			ctx, cancel := context.WithCancel(context.Background())
++			defer cancel()
++			executor := &refreshAPIExecutorStub{needsRefresh: true, err: refreshErr, onRefresh: cancel}
++
++			_, err := NewOAuthRefreshAPI(repo, nil).RefreshIfNeeded(ctx, account, executor, time.Hour)
++
++			require.Error(t, err)
++			require.Zero(t, repo.openAISuccessCASCalls)
++			require.Zero(t, repo.updateCalls)
++		})
++	}
++}
++
+ func TestRefreshIfNeeded_NilCredentials(t *testing.T) {
+ 	account := &Account{ID: 9, Platform: PlatformGemini, Type: AccountTypeOAuth, Status: StatusActive}
+ 	repo := &refreshAPIAccountRepo{account: account}
+diff --git a/backend/internal/service/token_refresh_service.go b/backend/internal/service/token_refresh_service.go
+index bbf1e8655..0e3b767c1 100644
+--- a/backend/internal/service/token_refresh_service.go
++++ b/backend/internal/service/token_refresh_service.go
+@@ -894,6 +894,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
+ 			}
+ 		} else {
+ 			// 降级：直接调用 refresher（兼容旧路径）
++			attemptedAccount := snapshotOAuthRefreshAccount(account)
+ 			releaseRate := func() {}
+ 			if acquireRate != nil {
+ 				releaseRate, err = acquireRate(attemptCtx)
+@@ -905,7 +906,17 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
+ 				releaseRate()
+ 			}
+ 			attemptTimedOut := errors.Is(attemptCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil
+-			if err == nil && newCredentials != nil && !attemptTimedOut {
++			if err == nil && hasOpenAIRefreshCredentials(attemptedAccount, newCredentials) {
++				var durableAccount *Account
++				durableAccount, credentialsPersisted, err = persistOpenAIRefreshCredentials(attemptCtx, s.accountRepo, attemptedAccount, newCredentials)
++				if err == nil {
++					account = durableAccount
++					if !credentialsPersisted {
++						err = errRefreshSkipped
++						shortCircuit = true
++					}
++				}
++			} else if err == nil && newCredentials != nil && !attemptTimedOut {
+ 				newCredentials["_token_version"] = time.Now().UnixMilli()
+ 				if saveErr := persistAccountCredentials(attemptCtx, s.accountRepo, account, newCredentials); saveErr != nil {
+ 					err = fmt.Errorf("failed to save credentials: %w", saveErr)
+@@ -918,7 +929,7 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
+ 		cancelAttempt()
+ 		releaseAttempt()
+ 		persistedAfterAttemptDeadline := attemptTimedOut && credentialsPersisted && err == nil
+-		if attemptTimedOut && !persistedAfterAttemptDeadline && !isProviderScopedTerminalRefreshError(err) {
++		if attemptTimedOut && !shortCircuit && !persistedAfterAttemptDeadline && !isProviderScopedTerminalRefreshError(err) {
+ 			cause := err
+ 			if cause == nil {
+ 				cause = context.DeadlineExceeded
+diff --git a/backend/internal/service/token_refresh_service_candidates_test.go b/backend/internal/service/token_refresh_service_candidates_test.go
+index ba382bd2d..46b3dacc5 100644
+--- a/backend/internal/service/token_refresh_service_candidates_test.go
++++ b/backend/internal/service/token_refresh_service_candidates_test.go
+@@ -3,6 +3,7 @@ package service
+ import (
+ 	"context"
+ 	"errors"
++	"reflect"
+ 	"strings"
+ 	"sync"
+ 	"testing"
+@@ -69,6 +70,17 @@ func (r *tokenRefreshCandidateRepo) ListOAuthRefreshCandidatePage(_ context.Cont
+ 	return page, nil
+ }
+ 
++func (r *tokenRefreshCandidateRepo) GetByID(_ context.Context, id int64) (*Account, error) {
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	for i := range r.accounts {
++		if r.accounts[i].ID == id {
++			return snapshotOAuthRefreshAccount(&r.accounts[i]), nil
++		}
++	}
++	return nil, errors.New("account not found")
++}
++
+ func (r *tokenRefreshCandidateRepo) UpdateCredentials(_ context.Context, id int64, _ map[string]any) error {
+ 	r.mu.Lock()
+ 	defer r.mu.Unlock()
+@@ -76,6 +88,32 @@ func (r *tokenRefreshCandidateRepo) UpdateCredentials(_ context.Context, id int6
+ 	return nil
+ }
+ 
++func (r *tokenRefreshCandidateRepo) UpdateOpenAIOAuthCredentialsIfUnchanged(
++	_ context.Context,
++	id int64,
++	expectedCredentials map[string]any,
++	expectedProxyID *int64,
++	credentials map[string]any,
++) (bool, error) {
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	for i := range r.accounts {
++		account := &r.accounts[i]
++		if account.ID != id {
++			continue
++		}
++		if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth ||
++			account.IsCredentialShadow() || !reflect.DeepEqual(account.Credentials, expectedCredentials) ||
++			!reflect.DeepEqual(account.ProxyID, expectedProxyID) {
++			return false, nil
++		}
++		account.Credentials = shallowCopyMap(credentials)
++		r.updatedCredentialIDs = append(r.updatedCredentialIDs, id)
++		return true, nil
++	}
++	return false, nil
++}
++
+ func (r *tokenRefreshCandidateRepo) SetError(context.Context, int64, string) error {
+ 	r.mu.Lock()
+ 	defer r.mu.Unlock()
+diff --git a/backend/internal/service/token_refresh_service_test.go b/backend/internal/service/token_refresh_service_test.go
+index 75a84bfbc..37911d8ac 100644
+--- a/backend/internal/service/token_refresh_service_test.go
++++ b/backend/internal/service/token_refresh_service_test.go
+@@ -5,6 +5,7 @@ package service
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"reflect"
+ 	"testing"
+ 	"time"
+@@ -46,6 +47,9 @@ type tokenRefreshAccountRepo struct {
+ 	setErrorErr                  error
+ 	setTempUnschedErr            error
+ 	beforeConditionalState       func()
++	openAISuccessCASCalls        int
++	openAIPersistCtxErr          error
++	openAIPersistDeadline        time.Time
+ }
+ 
+ func (r *tokenRefreshAccountRepo) Update(ctx context.Context, account *Account) error {
+@@ -252,6 +256,35 @@ func (r *tokenRefreshAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(
+ 	return true, nil
+ }
+ 
++func (r *tokenRefreshAccountRepo) UpdateOpenAIOAuthCredentialsIfUnchanged(
++	ctx context.Context,
++	id int64,
++	expectedCredentials map[string]any,
++	expectedProxyID *int64,
++	credentials map[string]any,
++) (bool, error) {
++	r.openAISuccessCASCalls++
++	r.openAIPersistCtxErr = ctx.Err()
++	r.openAIPersistDeadline, _ = ctx.Deadline()
++	if err := ctx.Err(); err != nil {
++		return false, err
++	}
++	if r.conditionalSuccessErr != nil {
++		return false, r.conditionalSuccessErr
++	}
++	account := r.accountsByID[id]
++	if account == nil || account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth ||
++		account.IsCredentialShadow() || !reflect.DeepEqual(account.Credentials, expectedCredentials) ||
++		!reflect.DeepEqual(account.ProxyID, expectedProxyID) {
++		return false, nil
++	}
++	r.updateCalls++
++	r.updateCredentialsCalls++
++	account.Credentials = shallowCopyMap(credentials)
++	r.lastAccount = account
++	return true, nil
++}
++
+ func (r *tokenRefreshAccountRepo) SetGrokOAuthRefreshTempUnschedulableIfCredentialsUnchanged(
+ 	_ context.Context,
+ 	id int64,
+@@ -1210,6 +1243,124 @@ func TestTokenRefreshService_PersistedSuccessCrossingAttemptDeadlineStaysSuccess
+ 	require.Equal(t, 1, scheduler.setAccountCalls)
+ }
+ 
++func TestTokenRefreshService_OpenAIRotationSurvivesAttemptDeadline(t *testing.T) {
++	for _, unified := range []bool{false, true} {
++		name := "fallback"
++		if unified {
++			name = "unified"
++		}
++		t.Run(name, func(t *testing.T) {
++			account := openAIRefreshTestAccount()
++			repo := &tokenRefreshAccountRepo{snapshotReads: true, respectReadContext: true}
++			repo.accountsByID = map[int64]*Account{account.ID: account}
++			invalidator := &tokenCacheInvalidatorStub{}
++			svc := &TokenRefreshService{
++				accountRepo:            repo,
++				cfg:                    &config.TokenRefreshConfig{MaxRetries: 3},
++				refreshPolicy:          DefaultBackgroundRefreshPolicy(),
++				cacheInvalidator:       invalidator,
++				attemptTimeoutOverride: 10 * time.Millisecond,
++			}
++			if unified {
++				svc.refreshAPI = NewOAuthRefreshAPI(repo, nil)
++			}
++			executor := &refreshAPIExecutorStub{
++				needsRefresh:     true,
++				credentials:      map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++				onRefreshContext: func(ctx context.Context) { <-ctx.Done() },
++			}
++
++			err := svc.refreshWithRetry(context.Background(), account, executor, executor, time.Hour)
++
++			require.NoError(t, err)
++			require.Equal(t, 1, executor.refreshCalls, "received rotation must not be retried after the attempt deadline")
++			require.Equal(t, 1, repo.openAISuccessCASCalls)
++			require.NoError(t, repo.openAIPersistCtxErr)
++			require.False(t, repo.openAIPersistDeadline.IsZero())
++			require.LessOrEqual(t, time.Until(repo.openAIPersistDeadline), 10*time.Second)
++			require.Equal(t, "rotated-refresh", repo.accountsByID[account.ID].GetOpenAIRefreshToken())
++			require.Equal(t, 1, invalidator.calls)
++			require.NoError(t, invalidator.ctxErr)
++			require.Zero(t, repo.setErrorCalls)
++			require.Zero(t, repo.setTempUnschedCalls)
++		})
++	}
++}
++
++func TestTokenRefreshService_OpenAIPersistenceFailureDoesNotRetryUpstream(t *testing.T) {
++	for _, unified := range []bool{false, true} {
++		for _, expireAttempt := range []bool{false, true} {
++			name := fmt.Sprintf("unified=%t/expired=%t", unified, expireAttempt)
++			t.Run(name, func(t *testing.T) {
++				account := openAIRefreshTestAccount()
++				repo := &tokenRefreshAccountRepo{snapshotReads: true, respectReadContext: true, conditionalSuccessErr: errors.New("database unavailable")}
++				repo.accountsByID = map[int64]*Account{account.ID: account}
++				svc := &TokenRefreshService{
++					accountRepo:            repo,
++					cfg:                    &config.TokenRefreshConfig{MaxRetries: 3},
++					refreshPolicy:          DefaultBackgroundRefreshPolicy(),
++					attemptTimeoutOverride: 10 * time.Millisecond,
++				}
++				if unified {
++					svc.refreshAPI = NewOAuthRefreshAPI(repo, nil)
++				}
++				executor := &refreshAPIExecutorStub{
++					needsRefresh: true,
++					credentials:  map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++				}
++				if expireAttempt {
++					executor.onRefreshContext = func(ctx context.Context) { <-ctx.Done() }
++				}
++
++				err := svc.refreshWithRetry(context.Background(), account, executor, executor, time.Hour)
++
++				var containment *providerCycleContainmentRefreshError
++				require.ErrorAs(t, err, &containment)
++				require.Equal(t, 1, executor.refreshCalls, "a failed save must not reuse the consumed refresh token")
++				require.Equal(t, 1, repo.openAISuccessCASCalls)
++				require.NoError(t, repo.openAIPersistCtxErr)
++				require.Equal(t, "old-refresh", account.GetOpenAIRefreshToken())
++				require.Zero(t, repo.setErrorCalls)
++				require.Zero(t, repo.setTempUnschedCalls)
++			})
++		}
++	}
++}
++
++func TestTokenRefreshService_OpenAIParentCancellationStillPersists(t *testing.T) {
++	for _, unified := range []bool{false, true} {
++		t.Run(fmt.Sprintf("unified=%t", unified), func(t *testing.T) {
++			account := openAIRefreshTestAccount()
++			repo := &tokenRefreshAccountRepo{snapshotReads: true, respectReadContext: true}
++			repo.accountsByID = map[int64]*Account{account.ID: account}
++			invalidator := &tokenCacheInvalidatorStub{}
++			svc := &TokenRefreshService{
++				accountRepo: repo, cfg: &config.TokenRefreshConfig{MaxRetries: 3},
++				refreshPolicy: DefaultBackgroundRefreshPolicy(), cacheInvalidator: invalidator,
++			}
++			if unified {
++				svc.refreshAPI = NewOAuthRefreshAPI(repo, nil)
++			}
++			ctx, cancel := context.WithCancel(context.Background())
++			defer cancel()
++			executor := &refreshAPIExecutorStub{
++				needsRefresh: true, onRefresh: cancel,
++				credentials: map[string]any{"access_token": "rotated-access", "refresh_token": "rotated-refresh"},
++			}
++
++			err := svc.refreshWithRetry(ctx, account, executor, executor, time.Hour)
++
++			require.ErrorIs(t, err, context.Canceled)
++			require.Equal(t, 1, executor.refreshCalls)
++			require.Equal(t, 1, repo.openAISuccessCASCalls)
++			require.NoError(t, repo.openAIPersistCtxErr)
++			require.Equal(t, "rotated-refresh", repo.accountsByID[account.ID].GetOpenAIRefreshToken())
++			require.Equal(t, 1, invalidator.calls)
++			require.NoError(t, invalidator.ctxErr)
++		})
++	}
++}
++
+ func TestPathA_ParentCancellationAfterPersistStillSynchronizesCacheState(t *testing.T) {
+ 	account := &Account{
+ 		ID:       109,

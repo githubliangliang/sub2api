@@ -394,8 +394,8 @@ export default {
           'Duplicate subscription group: {groupId}. Each group can only appear once.',
         subscriptionGroup: 'Subscription Group',
         subscriptionValidityDays: 'Validity (days)',
-        defaultPlatformQuotas: 'Default Platform Quotas (on signup)',
-        defaultPlatformQuotasHint: 'Automatically assigned to new users on signup; existing users are not affected. Leave blank = unlimited.',
+        defaultPlatformQuotas: 'Default Platform Quotas (on user creation)',
+        defaultPlatformQuotasHint: 'Applied to regular users created by an administrator or through signup; existing users are not affected. Leave blank = unlimited.',
         platformQuotaNotice: 'Monthly quota uses a 30-day rolling window, not a calendar month.',
       },
       platformQuota: {

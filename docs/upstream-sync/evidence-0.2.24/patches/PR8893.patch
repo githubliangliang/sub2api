@@ -1,0 +1,163 @@
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index d2d5448bd..a0cd8ddd6 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -1250,7 +1250,6 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+ 		return
+ 	}
+ 	bindOpenAIReasoningEffortPolicyForMessagesRequest(c, apiKey, body)
+-	routingModel := service.NormalizeOpenAICompatRequestedModel(reqModel)
+ 	preferredMappedModel := resolveOpenAIMessagesDispatchMappedModel(c, apiKey, reqModel)
+ 	reqStream := gjson.GetBytes(body, "stream").Bool()
+ 
+@@ -1267,6 +1266,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
+ 	// 解析渠道级模型映射
+ 	channelMappingMsg, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+ 	mappedBodyForMessages := newOpenAIModelMappedBodyCache(body, h.gatewayService.ReplaceModelInBody)
++	// Schedule by the channel-mapped model, as the Responses and Chat Completions
++	// paths do: the forwarded body carries that model, so account model filters
++	// must judge it rather than the client's alias.
++	routingModel := service.NormalizeOpenAICompatRequestedModel(openAIChannelForwardModel(channelMappingMsg, reqModel))
+ 
+ 	// 绑定错误透传服务，允许 service 层在非 failover 错误场景复用规则。
+ 	if h.errorPassthroughService != nil {
+diff --git a/backend/internal/service/account.go b/backend/internal/service/account.go
+index 51b253bca..a59813ce5 100644
+--- a/backend/internal/service/account.go
++++ b/backend/internal/service/account.go
+@@ -957,8 +957,8 @@ func resolveRequestedModelInMapping(mapping map[string]string, requestedModel st
+ // IsModelSupported 检查模型是否在 model_mapping 中（支持通配符）
+ // 如果未配置 mapping，返回 true（允许所有模型）。
+ //
+-// 例外：OpenAI OAuth 账号（Codex 上游）的空映射会排除明确属于其他厂商
+-// 家族的模型（deepseek-*/glm-* 等）——转发阶段 normalizeOpenAIModelForUpstream
++// 例外：OpenAI OAuth 账号（Codex 上游）的空映射与透传模式都会排除明确属于
++// 其他厂商家族的模型（claude-*/deepseek-*/glm-* 等）——转发阶段 normalizeOpenAIModelForUpstream
+ // 会把未知模型原样透传，Codex 上游对这类模型必然返回不可重试的 400，导致
+ // 请求卡死在该账号上、无法 failover 到真正支持该模型的 API Key 账号（#3662）。
+ // 未知/自定义别名仍保持允许（兼容渠道级映射），见 isOpenAIOAuthServableModel。
+@@ -971,11 +971,17 @@ func (a *Account) IsModelSupported(requestedModel string) bool {
+ }
+ 
+ func (a *Account) isModelMappingSupported(requestedModel string) bool {
+-	// 透传模式仅替换认证、模型语义完全交由上游决定，因此放行所有模型。
++	// 透传模式仅替换认证、模型语义交由上游决定，因此除下面 OAuth 的异族厂商模型外放行所有模型。
+ 	// 该短路必须在 model_mapping 判定之前：账号从"白名单模式"切换到透传后，
+ 	// credentials 里常残留旧的非空 model_mapping，若不在此放行，透传账号会被
+ 	// model_mapping 白名单错误排除出候选集，导致 no available accounts / 404（issue #4936）。
+ 	if a.IsOpenAIPassthroughEnabled() {
++		// OAuth 与 Setup Token 透传的出口恒为 chatgpt.com/backend-api/codex（见
++		// buildUpstreamRequestOpenAIPassthrough），异族厂商模型在那里必然是不可重试的 400，
++		// 因此透传也要在调度阶段跳过它们；API Key 透传的上游由 base_url 决定，不受此限。
++		if a.IsOpenAIOAuthLike() && !isOpenAIOAuthServableModel(requestedModel) {
++			return false
++		}
+ 		if !a.IsOpenAIPassthroughModelFilterEnabled() {
+ 			return true
+ 		}
+diff --git a/backend/internal/service/openai_model_mapping.go b/backend/internal/service/openai_model_mapping.go
+index 7fd67468b..a590c76a8 100644
+--- a/backend/internal/service/openai_model_mapping.go
++++ b/backend/internal/service/openai_model_mapping.go
+@@ -25,11 +25,12 @@ func resolveOpenAIForwardModel(account *Account, requestedModel, messagesDispatc
+ // Codex 上游不可能服务这些模型：转发阶段 normalizeOpenAIModelForUpstream
+ // 对未知模型原样透传，上游必然返回不可重试的 400。
+ //
+-// 采用保守黑名单而非 Codex 模型白名单：未知/自定义别名保持「允许」，
+-// 以兼容渠道级模型映射等「账号选定之后才改写模型名」的部署方式
+-// （调度过滤看到的是改写前的原始模型名）。前缀分类的先例见
++// 采用保守黑名单而非 Codex 模型白名单：未知/自定义别名保持「允许」。
++// 渠道级模型映射不受影响：各 OpenAI 入口都按渠道映射后的模型名调度，
++// 把 claude-* 等别名映射到 gpt-5.x 的渠道照常落到 OAuth 账号。前缀分类的先例见
+ // ResolveThinkingProtocol（thinking_protocol.go）。
+ var openAIOAuthForeignModelPrefixes = []string{
++	"claude-",
+ 	"deepseek-",
+ 	"glm-",
+ 	"kimi-",
+diff --git a/backend/internal/service/openai_oauth_model_support_test.go b/backend/internal/service/openai_oauth_model_support_test.go
+index 8ea10d137..cce75a4eb 100644
+--- a/backend/internal/service/openai_oauth_model_support_test.go
++++ b/backend/internal/service/openai_oauth_model_support_test.go
+@@ -28,9 +28,7 @@ func TestIsModelSupported_OpenAIOAuthEmptyMapping_ServableModels(t *testing.T) {
+ 		"gpt-5",
+ 		"codex-mini-latest",
+ 		"gpt5.3codexspark",  // 别名拼写
+-		"gpt-image-1",       // 图像生成模型
+-		"claude-sonnet-4-6", // /v1/messages 调度默认映射兜底
+-		"claude-3-opus-20240229",
++		"gpt-image-1",     // 图像生成模型
+ 		"gpt-4o",          // 保守 fail-open：非黑名单模型保持允许
+ 		"my-custom-alias", // 自定义别名可能由渠道级映射在转发前改写，保持允许
+ 	}
+@@ -45,6 +43,9 @@ func TestIsModelSupported_OpenAIOAuthEmptyMapping_RejectsForeignModels(t *testin
+ 	// Codex 上游必然以不可重试的 400 拒绝这些厂商家族；调度阶段就应跳过
+ 	// 该账号，让显式声明支持的 API Key 账号接手（#3662）。
+ 	foreign := []string{
++		"claude-sonnet-4-6", // /v1/messages 的 opus/sonnet/haiku 在调度前已映射到 gpt-5.x
++		"claude-3-opus-20240229",
++		"claude-fable-5-1",
+ 		"deepseek-v4",
+ 		"deepseek-chat",
+ 		"glm-4.7",
+@@ -80,11 +81,39 @@ func TestIsModelSupported_OpenAIOAuthExplicitMappingUnchanged(t *testing.T) {
+ 	require.False(t, account.IsModelSupported("glm-4.7"))
+ }
+ 
+-func TestIsModelSupported_OpenAIOAuthPassthroughAllowsAll(t *testing.T) {
++func TestIsModelSupported_OpenAIOAuthPassthroughRejectsForeignModels(t *testing.T) {
+ 	account := newOpenAIOAuthAccountForModelTest()
+ 	account.Extra = map[string]any{"openai_passthrough": true}
+ 
+-	// 透传模式仅替换认证，模型语义由上游决定，保持"允许所有"。
++	// 透传仍放行 Codex 上游可能认识的任意名字，但 OAuth 透传的出口恒为
++	// chatgpt.com/backend-api/codex，异族厂商模型在那里必然 400，调度阶段就应跳过。
++	require.True(t, account.IsModelSupported("gpt-5.6-sol"))
++	require.True(t, account.IsModelSupported("my-custom-alias"))
++	require.False(t, account.IsModelSupported("claude-fable-5-1"))
++	require.False(t, account.IsModelSupported("claude-opus-5-5"))
++	require.False(t, account.IsModelSupported("deepseek-v4"))
++
++	setupToken := &Account{
++		ID:       5,
++		Platform: PlatformOpenAI,
++		Type:     AccountTypeSetupToken,
++		Extra:    map[string]any{"openai_passthrough": true},
++	}
++	// Setup Token 与 OAuth 共用 Codex 出口。
++	require.True(t, setupToken.IsModelSupported("gpt-5.6-sol"))
++	require.False(t, setupToken.IsModelSupported("claude-fable-5-1"))
++}
++
++func TestIsModelSupported_OpenAIAPIKeyPassthroughAllowsForeignModels(t *testing.T) {
++	account := &Account{
++		ID:       4,
++		Platform: PlatformOpenAI,
++		Type:     AccountTypeAPIKey,
++		Extra:    map[string]any{"openai_passthrough": true},
++	}
++
++	// API Key 透传的上游由 base_url 决定，可能正是服务 claude-*/deepseek-* 的中转站。
++	require.True(t, account.IsModelSupported("claude-fable-5-1"))
+ 	require.True(t, account.IsModelSupported("deepseek-v4"))
+ }
+ 
+@@ -99,7 +128,7 @@ func TestIsModelSupported_OpenAIOAuthPassthroughIgnoresLeftoverMapping(t *testin
+ 	}
+ 
+ 	require.True(t, account.IsModelSupported("gpt-5.6-sol"), "透传应放行不在残留白名单中的新模型")
+-	require.True(t, account.IsModelSupported("deepseek-v4"), "透传应放行任意模型")
++	require.True(t, account.IsModelSupported("my-custom-alias"), "透传应放行不在残留白名单中的自定义别名")
+ }
+ 
+ func TestIsModelSupported_OpenAIAPIKeyEmptyMappingAllowsAll(t *testing.T) {
+@@ -123,7 +152,8 @@ func TestIsModelSupported_NonOpenAIPlatformsUnchanged(t *testing.T) {
+ func TestIsOpenAIOAuthServableModel(t *testing.T) {
+ 	require.True(t, isOpenAIOAuthServableModel("gpt-5.4-high"))
+ 	require.True(t, isOpenAIOAuthServableModel("  gpt-5.3-codex  "))
+-	require.True(t, isOpenAIOAuthServableModel("claude-3-5-haiku-20241022"))
++	require.False(t, isOpenAIOAuthServableModel("claude-3-5-haiku-20241022"))
++	require.False(t, isOpenAIOAuthServableModel("provider/claude-fable-5-1"))
+ 	require.True(t, isOpenAIOAuthServableModel("DeepThink-x"))  // 非黑名单前缀，保持允许
+ 	require.False(t, isOpenAIOAuthServableModel("DeepSeek-V4")) // 大小写不敏感
+ 	require.False(t, isOpenAIOAuthServableModel("qwen3-235b-thinking"))

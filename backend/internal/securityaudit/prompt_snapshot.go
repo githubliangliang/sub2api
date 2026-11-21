@@ -45,7 +45,7 @@ func extractPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, er
 	if err := json.Unmarshal(req.Body, &document); err != nil {
 		return PromptSnapshot{}, errors.New("prompt audit request JSON is invalid")
 	}
-	extracted := extractProtocolSegments(req.Protocol, document)
+	extracted := extractProtocolSegments(strings.Clone(req.Protocol), document)
 	segments := normalizeSegmentsLatestUserFirst(extracted)
 	if latestTurnOnly {
 		segments = blockingSegmentsLatestUserAndPreviousOutput(extracted)
@@ -60,13 +60,13 @@ func extractPromptSnapshot(req Request, latestTurnOnly bool) (PromptSnapshot, er
 		stage = "http"
 	}
 	return PromptSnapshot{
-		RequestID: req.RequestID, UserID: req.UserID, UsernameSnapshot: req.Username,
-		UserEmailSnapshot: req.UserEmail, APIKeyID: req.APIKeyID, APIKeyNameSnapshot: req.APIKeyName,
-		GroupID: cloneInt64Ptr(req.GroupID), GroupName: req.GroupName, Provider: req.Provider,
-		Endpoint: req.Endpoint, Protocol: req.Protocol, Model: req.Model,
+		RequestID: strings.Clone(req.RequestID), UserID: req.UserID, UsernameSnapshot: strings.Clone(req.Username),
+		UserEmailSnapshot: strings.Clone(req.UserEmail), APIKeyID: req.APIKeyID, APIKeyNameSnapshot: strings.Clone(req.APIKeyName),
+		GroupID: cloneInt64Ptr(req.GroupID), GroupName: strings.Clone(req.GroupName), Provider: strings.Clone(req.Provider),
+		Endpoint: strings.Clone(req.Endpoint), Protocol: strings.Clone(req.Protocol), Model: strings.Clone(req.Model),
 		PromptHash: hex.EncodeToString(digest[:]), RedactedPreview: BuildPromptPreview(metadataText, DefaultPromptPreviewMaxRunes),
 		FullPrompt:   BuildFullPrompt(metadataText, DefaultFullPromptMaxRunes),
-		PromptLength: utf8.RuneCountInString(metadataText), MessageCount: len(segments), Stage: stage,
+		PromptLength: utf8.RuneCountInString(metadataText), MessageCount: len(segments), Stage: strings.Clone(stage),
 		ScanText: scanText,
 	}, nil
 }

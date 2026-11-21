@@ -1,0 +1,108 @@
+diff --git a/backend/internal/service/antigravity_gateway_service_test.go b/backend/internal/service/antigravity_gateway_service_test.go
+index c589eed3f..57ca2dd26 100644
+--- a/backend/internal/service/antigravity_gateway_service_test.go
++++ b/backend/internal/service/antigravity_gateway_service_test.go
+@@ -1430,6 +1430,37 @@ func TestHandleGeminiStreamingResponse_EventSeparatorIsExactlyOneBlankLine(t *te
+ 	}
+ }
+ 
++func TestHandleGeminiStreamingResponse_ForwardedCommentFrames(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	svc := newAntigravityTestService(&config.Config{
++		Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize},
++	})
++	const first = `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"first"}]}}]}` + "\n\n"
++	const second = `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"second"}]}}]}` + "\n\n"
++	const comment = ": upstream"
++	const stream = first + comment + "\r\n\r\n" + second
++
++	for _, tc := range []struct {
++		name             string
++		userAgent        string
++		forwardedComment string
++	}{
++		{"js-genai", "google-genai-sdk/3.6.0 gl-node/v26.13.1", comment + "\n\n"},
++		{"go-genai", "google-genai-sdk/1.71.0 gl-go/go1.27.4", ""},
++		{"python-genai", "google-genai-sdk/1.20.0 gl-python/3.12.4", ""},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			c, rec := newAntigravityCompatContext(http.MethodPost, "/v1beta/models/gemini-2.5-flash:streamGenerateContent", nil)
++			c.Request.Header.Set("User-Agent", tc.userAgent)
++			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(stream)), Header: http.Header{}}
++
++			_, err := svc.handleGeminiStreamingResponse(c, resp, time.Now())
++			require.NoError(t, err)
++			require.Equal(t, first+tc.forwardedComment+second, rec.Body.String())
++		})
++	}
++}
++
+ func TestHandleGeminiStreamingResponse_ThoughtsTokenCount(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	svc := newAntigravityTestService(&config.Config{
+diff --git a/backend/internal/service/antigravity_gateway_streaming.go b/backend/internal/service/antigravity_gateway_streaming.go
+index 2b5be7770..82a699f8c 100644
+--- a/backend/internal/service/antigravity_gateway_streaming.go
++++ b/backend/internal/service/antigravity_gateway_streaming.go
+@@ -203,9 +203,9 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+ 	if s.settingService.cfg != nil && s.settingService.cfg.Gateway.StreamKeepaliveInterval > 0 {
+ 		keepaliveInterval = time.Duration(s.settingService.cfg.Gateway.StreamKeepaliveInterval) * time.Second
+ 	}
+-	// go-genai / python-genai 不会忽略 SSE 注释行，收到 ":\n\n" 会直接把整个流判成
+-	// invalid stream chunk 而中断（Antigravity CLI 在用 go-genai）。对这类客户端宁可不发心跳。
+-	if keepaliveInterval > 0 && downstreamRejectsSSEComments(c) {
++	// go-genai / python-genai 收到 SSE 注释会中断流。
++	rejectComments := downstreamRejectsSSEComments(c)
++	if rejectComments {
+ 		keepaliveInterval = 0
+ 	}
+ 	var keepaliveTicker *time.Ticker
+@@ -232,6 +232,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+ 		flusher.Flush()
+ 	}
+ 
++	var needsEventSeparator bool
+ 	for {
+ 		select {
+ 		case ev, ok := <-events:
+@@ -260,6 +261,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+ 			s.observeAntigravityGeminiSSELine(c, line)
+ 			trimmed := strings.TrimRight(line, "\r\n")
+ 			if strings.HasPrefix(trimmed, "data:") {
++				needsEventSeparator = false
+ 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+ 				if payload == "" || payload == "[DONE]" {
+ 					cw.Fprintf("%s\n", line)
+@@ -302,15 +304,20 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+ 				continue
+ 			}
+ 
+-			// 上游每个 data 事件后面跟一个空行作为事件分隔。上面已经把 data 行写成
+-			// "data: ...\n\n"，若再把这个空行透传出去，事件之间就会变成 "\n\n\n"。
+-			// google-genai 的 Go SDK（Antigravity CLI 在用）按 "\n\n" 切事件，多出的
+-			// "\n" 会粘到下一个事件开头，前缀变成 "\ndata" 而被判成 invalid stream chunk。
++			// 保留透传帧的空行。重写的 data 帧已带分隔符，重复空行会破坏部分客户端的解析。
+ 			if trimmed == "" {
++				if needsEventSeparator {
++					cw.Fprintf("\n")
++					needsEventSeparator = false
++				}
++				continue
++			}
++			if rejectComments && strings.HasPrefix(trimmed, ":") {
+ 				continue
+ 			}
+ 
+ 			cw.Fprintf("%s\n", line)
++			needsEventSeparator = true
+ 
+ 		case <-intervalCh:
+ 			lastRead := time.Unix(0, atomic.LoadInt64(&lastReadAt))
+@@ -337,6 +344,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
+ 				logger.LegacyPrintf("service.antigravity_gateway", "Client disconnected during keepalive ping (antigravity gemini), continuing to drain upstream for billing")
+ 				continue
+ 			}
++			needsEventSeparator = false
+ 		}
+ 	}
+ }

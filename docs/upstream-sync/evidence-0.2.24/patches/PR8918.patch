@@ -1,0 +1,359 @@
+diff --git a/backend/cmd/server/wire_gen.go b/backend/cmd/server/wire_gen.go
+index b8d8e2897..2835089f9 100644
+--- a/backend/cmd/server/wire_gen.go
++++ b/backend/cmd/server/wire_gen.go
+@@ -197,7 +197,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
+ 	adminAccountRepository := repository.NewAdminAccountRepository(client, db, schedulerCache)
+ 	proxyExitInfoProber := repository.NewProxyExitInfoProber(configConfig)
+ 	proxyLatencyCache := repository.NewProxyLatencyCache(redisClient)
+-	adminService := service.NewAdminService(configConfig, userRepository, adminGroupRepository, adminAccountRepository, proxyRepository, apiKeyRepository, redeemCodeRepository, userGroupRateRepository, userRPMCache, billingCacheService, proxyExitInfoProber, proxyLatencyCache, apiKeyAuthCacheInvalidator, client, settingService, subscriptionService, userSubscriptionRepository, privacyClientFactory, openAIGatewayService, affiliateService, compositeModelRouteRepository, compositeRouteResolver, channelService)
++	adminService := service.NewAdminService(configConfig, userRepository, adminGroupRepository, adminAccountRepository, proxyRepository, apiKeyRepository, redeemCodeRepository, userGroupRateRepository, userRPMCache, billingCacheService, proxyExitInfoProber, proxyLatencyCache, apiKeyAuthCacheInvalidator, client, settingService, subscriptionService, userSubscriptionRepository, privacyClientFactory, openAIGatewayService, affiliateService, compositeModelRouteRepository, compositeRouteResolver, channelService, serviceUserPlatformQuotaRepository)
+ 	adminUserHandler := admin.NewUserHandler(adminService, concurrencyService, serviceUserPlatformQuotaRepository, billingCache, totpService, userService, settingService)
+ 	groupCapacityService := service.NewGroupCapacityService(accountRepository, groupRepository, concurrencyService, sessionLimitCache, rpmCache)
+ 	groupHandler := admin.NewGroupHandlerWithConfig(adminService, dashboardService, groupCapacityService, configConfig)
+diff --git a/backend/internal/repository/custom_admin_key_review_test.go b/backend/internal/repository/custom_admin_key_review_test.go
+index fabf36b07..f45cc844c 100644
+--- a/backend/internal/repository/custom_admin_key_review_test.go
++++ b/backend/internal/repository/custom_admin_key_review_test.go
+@@ -44,7 +44,7 @@ func TestScopedAdminReviewGroupPriorityAndStatus(t *testing.T) {
+ 	cache := &scopedReviewSchedulerCache{accounts: make(map[int64]*service.Account)}
+ 	repo := NewAdminAccountRepository(client, db, cache)
+ 	groups := NewAdminGroupRepository(client, db)
+-	admin := service.NewAdminService(nil, nil, groups, repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, nil, nil, nil, nil, nil)
++	admin := service.NewAdminService(nil, nil, groups, repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, client, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	scoped := admin.(service.ScopedAdminAccounts)
+ 	ctx := context.Background()
+ 	a, err := client.Group.Create().SetName("授权组").Save(ctx)
+diff --git a/backend/internal/server/api_contract_test.go b/backend/internal/server/api_contract_test.go
+index df8bf1dd8..6af265870 100644
+--- a/backend/internal/server/api_contract_test.go
++++ b/backend/internal/server/api_contract_test.go
+@@ -1497,7 +1497,7 @@ func newContractDeps(t *testing.T) *contractDeps {
+ 	settingRepo := newStubSettingRepo()
+ 	settingService := service.NewSettingService(settingRepo, cfg)
+ 
+-	adminService := service.NewAdminService(nil, userRepo, groupRepo, &accountRepo, proxyRepo, apiKeyRepo, redeemRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
++	adminService := service.NewAdminService(nil, userRepo, groupRepo, &accountRepo, proxyRepo, apiKeyRepo, redeemRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	authHandler := handler.NewAuthHandler(cfg, nil, userService, settingService, nil, redeemService, nil, nil)
+ 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService)
+ 	usageHandler := handler.NewUsageHandler(usageService, apiKeyService, nil, nil)
+diff --git a/backend/internal/server/routes/custom_admin_key_group_models_test.go b/backend/internal/server/routes/custom_admin_key_group_models_test.go
+index 05657e671..e930461c0 100644
+--- a/backend/internal/server/routes/custom_admin_key_group_models_test.go
++++ b/backend/internal/server/routes/custom_admin_key_group_models_test.go
+@@ -169,7 +169,7 @@ func (r *scopedRouteAllowlistRepository) ScopedAdminUpdateGroupModels(ctx contex
+ func TestScopedAdminRegisteredGroupModelsUseUpstreamAllowlistSemantics(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 	repo := &scopedRouteAllowlistRepository{}
+-	api := service.NewAdminService(nil, nil, repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
++	api := service.NewAdminService(nil, nil, repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+ 	settings := service.NewSettingService(nil, nil)
+ 	settings.SetScopedAdminKeyRepository(&scopedRouteKeys{})
+ 	key, _, err := settings.CreateScopedAdminKey(context.Background(), service.ScopedAdminKeyInput{Name: "白名单验证", Enabled: true, Policy: adminaccess.Policy{Rules: []adminaccess.Rule{{Permissions: []string{"groups.models.read", "groups.models.write"}, GroupIDs: []int64{2}, Platforms: []string{service.PlatformOpenAI}}}}}, 9)
+diff --git a/backend/internal/service/admin_service.go b/backend/internal/service/admin_service.go
+index 7a9e76930..5a8b764e1 100644
+--- a/backend/internal/service/admin_service.go
++++ b/backend/internal/service/admin_service.go
+@@ -721,6 +721,8 @@ type adminServiceImpl struct {
+ 	affiliateService     adminRechargeAffiliateAccruer
+ 	compositeRouteRepo   CompositeModelRouteRepository
+ 	compositeResolver    *CompositeRouteResolver
++
++	userPlatformQuotaRepo UserPlatformQuotaRepository
+ 	// 分组平台变更后用来失效渠道缓存；可为 nil（缓存会在 TTL 到期后自然重建）
+ 	channelCacheInvalidator ChannelCacheInvalidator
+ }
+@@ -764,6 +766,7 @@ func NewAdminService(
+ 	compositeRouteRepo CompositeModelRouteRepository,
+ 	compositeResolver *CompositeRouteResolver,
+ 	channelCacheInvalidator ChannelCacheInvalidator,
++	userPlatformQuotaRepo UserPlatformQuotaRepository,
+ ) AdminService {
+ 	return &adminServiceImpl{
+ 		cfg:                  cfg,
+@@ -794,5 +797,6 @@ func NewAdminService(
+ 		compositeResolver:    compositeResolver,
+ 
+ 		channelCacheInvalidator: channelCacheInvalidator,
++		userPlatformQuotaRepo:   userPlatformQuotaRepo,
+ 	}
+ }
+diff --git a/backend/internal/service/admin_service_create_user_test.go b/backend/internal/service/admin_service_create_user_test.go
+index 5e9578abe..8b82116bc 100644
+--- a/backend/internal/service/admin_service_create_user_test.go
++++ b/backend/internal/service/admin_service_create_user_test.go
+@@ -108,7 +108,14 @@ func TestAdminService_CreateUser_EmailExists(t *testing.T) {
+ func TestAdminService_CreateUser_CreateError(t *testing.T) {
+ 	createErr := errors.New("db down")
+ 	repo := &userRepoStub{createErr: createErr}
+-	svc := &adminServiceImpl{userRepo: repo}
++	quotas := &userPlatformQuotaRepoStub{}
++	svc := &adminServiceImpl{
++		userRepo: repo,
++		settingService: NewSettingService(&settingRepoStub{values: map[string]string{
++			SettingKeyDefaultPlatformQuotas: `{"openai":{"daily":100}}`,
++		}}, &config.Config{}),
++		userPlatformQuotaRepo: quotas,
++	}
+ 
+ 	_, err := svc.CreateUser(context.Background(), &CreateUserInput{
+ 		Email:    "user@test.com",
+@@ -116,6 +123,7 @@ func TestAdminService_CreateUser_CreateError(t *testing.T) {
+ 	})
+ 	require.ErrorIs(t, err, createErr)
+ 	require.Empty(t, repo.created)
++	require.Empty(t, quotas.bulkInsertCalls, "failed user creation must not initialize platform quotas")
+ }
+ 
+ func TestAdminService_CreateUser_AssignsDefaultSubscriptions(t *testing.T) {
+@@ -146,3 +154,109 @@ func TestAdminService_CreateUser_AssignsDefaultSubscriptions(t *testing.T) {
+ 	require.Equal(t, int64(5), assigner.calls[0].GroupID)
+ 	require.Equal(t, 30, assigner.calls[0].ValidityDays)
+ }
++
++func TestAdminService_CreateUser_SnapshotsDefaultPlatformQuotas(t *testing.T) {
++	users := &userRepoStub{nextID: 40}
++	quotas := &userPlatformQuotaRepoStub{}
++	settings := NewSettingService(&settingRepoStub{values: map[string]string{
++		SettingKeyDefaultPlatformQuotas: `{
++			"openai": {"daily": 100, "weekly": 700, "monthly": 3000},
++			"anthropic": {"daily": 100},
++			"gemini": {"daily": 500},
++			"antigravity": {"daily": 500},
++			"grok": {"daily": 0},
++			"cline": {},
++			"deepseek": null
++		}`,
++		SettingKeyAuthSourceDefaultEmailGrantOnSignup: "true",
++		SettingKeyAuthSourcePlatformQuotas("email"):   `{"openai":{"daily":3}}`,
++	}}, &config.Config{})
++	svc := NewAdminService(nil, users, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, settings, nil, nil, nil, nil, nil, nil, nil, nil, quotas)
++
++	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
++		Email:    "quota-defaults@example.test",
++		Password: "strong-pass",
++	})
++
++	require.NoError(t, err)
++	require.Equal(t, int64(40), user.ID)
++	require.Len(t, quotas.bulkInsertCalls, 1, "admin-created users must receive the configured platform quotas")
++	records := make(map[string]UserPlatformQuotaRecord)
++	for _, record := range quotas.bulkInsertCalls[0] {
++		require.Equal(t, user.ID, record.UserID)
++		records[record.Platform] = record
++	}
++	require.Len(t, records, 5, "unconfigured platforms must not receive quota rows")
++	require.Equal(t, 100.0, *records["openai"].DailyLimitUSD, "admin creation uses system defaults, not email signup overrides")
++	require.Equal(t, 700.0, *records["openai"].WeeklyLimitUSD)
++	require.Equal(t, 3000.0, *records["openai"].MonthlyLimitUSD)
++	require.Equal(t, 100.0, *records["anthropic"].DailyLimitUSD)
++	require.Equal(t, 500.0, *records["gemini"].DailyLimitUSD)
++	require.Equal(t, 500.0, *records["antigravity"].DailyLimitUSD)
++	require.NotNil(t, records["grok"].DailyLimitUSD, "zero is an explicit limit")
++	require.Zero(t, *records["grok"].DailyLimitUSD)
++	require.Nil(t, records["anthropic"].WeeklyLimitUSD)
++	require.Nil(t, records["anthropic"].MonthlyLimitUSD)
++}
++
++func TestAdminService_CreateUser_UnlimitedDefaultsDoNotCreateQuotaRows(t *testing.T) {
++	quotas := &userPlatformQuotaRepoStub{}
++	svc := &adminServiceImpl{
++		userRepo: &userRepoStub{nextID: 41},
++		settingService: NewSettingService(&settingRepoStub{values: map[string]string{
++			SettingKeyDefaultPlatformQuotas: `{"openai":{"daily":null,"weekly":null,"monthly":null}}`,
++		}}, &config.Config{}),
++		userPlatformQuotaRepo: quotas,
++	}
++
++	_, err := svc.CreateUser(context.Background(), &CreateUserInput{
++		Email:    "unlimited@example.test",
++		Password: "strong-pass",
++	})
++
++	require.NoError(t, err)
++	require.Empty(t, quotas.bulkInsertCalls)
++}
++
++func TestAdminService_CreateUser_AdminSkipsDefaultPlatformQuotas(t *testing.T) {
++	quotas := &userPlatformQuotaRepoStub{}
++	svc := &adminServiceImpl{
++		userRepo: &userRepoStub{nextID: 42},
++		settingService: NewSettingService(&settingRepoStub{values: map[string]string{
++			SettingKeyDefaultPlatformQuotas: `{"openai":{"daily":100}}`,
++		}}, &config.Config{}),
++		userPlatformQuotaRepo: quotas,
++	}
++
++	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
++		Email:    "admin@example.test",
++		Password: "strong-pass",
++		Role:     RoleAdmin,
++	})
++
++	require.NoError(t, err)
++	require.Equal(t, RoleAdmin, user.Role)
++	require.Empty(t, quotas.bulkInsertCalls)
++}
++
++func TestAdminService_CreateUser_QuotaWriteFailureDoesNotFailCreation(t *testing.T) {
++	users := &userRepoStub{nextID: 43}
++	quotas := &userPlatformQuotaRepoStub{bulkInsertErr: errors.New("quota insert failed")}
++	svc := &adminServiceImpl{
++		userRepo: users,
++		settingService: NewSettingService(&settingRepoStub{values: map[string]string{
++			SettingKeyDefaultPlatformQuotas: `{"openai":{"daily":100}}`,
++		}}, &config.Config{}),
++		userPlatformQuotaRepo: quotas,
++	}
++
++	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
++		Email:    "quota-failure@example.test",
++		Password: "strong-pass",
++	})
++
++	require.NoError(t, err)
++	require.Equal(t, int64(43), user.ID)
++	require.Len(t, users.created, 1)
++	require.Len(t, quotas.bulkInsertCalls, 1)
++}
+diff --git a/backend/internal/service/admin_user.go b/backend/internal/service/admin_user.go
+index 653a5d62d..763b17fe7 100644
+--- a/backend/internal/service/admin_user.go
++++ b/backend/internal/service/admin_user.go
+@@ -156,9 +156,24 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
+ 			input.ActorAdminID, user.ID)
+ 	}
+ 	s.assignDefaultSubscriptions(ctx, user.ID)
++	s.assignDefaultPlatformQuotas(ctx, user)
+ 	return user, nil
+ }
+ 
++func (s *adminServiceImpl) assignDefaultPlatformQuotas(ctx context.Context, user *User) {
++	if user == nil || user.Role != RoleUser || s.settingService == nil || s.userPlatformQuotaRepo == nil {
++		return
++	}
++	quotas, err := s.settingService.GetDefaultPlatformQuotas(ctx)
++	if err != nil {
++		logger.LegacyPrintf("service.admin", "failed to load default platform quotas: user_id=%d err=%v", user.ID, err)
++		return
++	}
++	if err := snapshotUserPlatformQuotaDefaults(ctx, s.userPlatformQuotaRepo, user.ID, quotas); err != nil {
++		logger.LegacyPrintf("service.admin", "failed to snapshot default platform quotas: user_id=%d err=%v (fail-open)", user.ID, err)
++	}
++}
++
+ // ensureNotLastAdmin 降级管理员前确认系统中仍存在其他管理员，防止零 admin 锁死。
+ // 注：读取与写入之间存在竞态窗口，极端并发下仍可能双双降级；作为后台低频操作
+ // 的兜底保护足够，彻底防护需依赖数据库层约束。
+diff --git a/backend/internal/service/auth_service.go b/backend/internal/service/auth_service.go
+index 90ba5b345..a9d069ac2 100644
+--- a/backend/internal/service/auth_service.go
++++ b/backend/internal/service/auth_service.go
+@@ -1973,35 +1973,11 @@ func resolvedTokenVersion(user *User) int64 {
+ // snapshotPlatformQuotaDefaults 把 plan.PlatformQuotas 中至少配置了一档限额的平台以
+ // BulkInsertInitial 形式写入 user_platform_quotas 表。失败 fail-open（仅 warn log）。
+ func (s *AuthService) snapshotPlatformQuotaDefaults(ctx context.Context, userID int64, plan *signupGrantPlan) error {
+-	if s.userPlatformQuotaRepo == nil || plan == nil || len(plan.PlatformQuotas) == 0 {
++	if plan == nil {
+ 		return nil
+ 	}
+-	// 平台配额快照是 best-effort（fail-open）：必须脱离调用方事务执行。
+-	// 否则写入时的任何数据库错误（历史上是新平台尚未加入 user_platform_quotas 的
+-	// CHECK 约束）都会让整个调用方事务被 Postgres 标记 aborted，把"无关紧要的默认
+-	// 配额快照"放大成"整笔注册失败"（OAuth pending 路径曾因此 500 → 清 cookie → 404）。
+-	ctx = dbent.WithoutTx(ctx)
+-	// 仅为至少配置了一档限额的平台建行：user_platform_quotas 中不存在的行等价于不限额，
+-	// 三档全空的记录不携带任何可执行的限额。
+-	records := make([]UserPlatformQuotaRecord, 0, len(plan.PlatformQuotas))
+-	for platform, q := range plan.PlatformQuotas {
+-		if !q.HasAnyLimit() {
+-			continue
+-		}
+-		records = append(records, UserPlatformQuotaRecord{
+-			UserID:          userID,
+-			Platform:        platform,
+-			DailyLimitUSD:   q.DailyLimitUSD,
+-			WeeklyLimitUSD:  q.WeeklyLimitUSD,
+-			MonthlyLimitUSD: q.MonthlyLimitUSD,
+-		})
+-	}
+-	if len(records) == 0 {
+-		return nil
+-	}
+-	if err := s.userPlatformQuotaRepo.BulkInsertInitial(ctx, records); err != nil {
++	if err := snapshotUserPlatformQuotaDefaults(ctx, s.userPlatformQuotaRepo, userID, plan.PlatformQuotas); err != nil {
+ 		logger.LegacyPrintf("service.auth", "[Auth] Warning: snapshot platform quota failed user=%d: %v (fail-open)", userID, err)
+-		return nil // fail-open：返回 nil，让调用方继续
+ 	}
+ 	return nil
+ }
+diff --git a/backend/internal/service/user_platform_quota_defaults.go b/backend/internal/service/user_platform_quota_defaults.go
+new file mode 100644
+index 000000000..f60a28bbf
+--- /dev/null
++++ b/backend/internal/service/user_platform_quota_defaults.go
+@@ -0,0 +1,34 @@
++package service
++
++import (
++	"context"
++
++	dbent "github.com/Wei-Shaw/sub2api/ent"
++)
++
++// snapshotUserPlatformQuotaDefaults initializes configured limits for a new user.
++// Callers keep failures best-effort and log them without failing user creation.
++func snapshotUserPlatformQuotaDefaults(ctx context.Context, repo UserPlatformQuotaRepository, userID int64, quotas map[string]*DefaultPlatformQuotaSetting) error {
++	if repo == nil || userID <= 0 || len(quotas) == 0 {
++		return nil
++	}
++	// Missing rows mean unlimited; explicit zero is a configured limit.
++	records := make([]UserPlatformQuotaRecord, 0, len(quotas))
++	for platform, quota := range quotas {
++		if !quota.HasAnyLimit() {
++			continue
++		}
++		records = append(records, UserPlatformQuotaRecord{
++			UserID:          userID,
++			Platform:        platform,
++			DailyLimitUSD:   quota.DailyLimitUSD,
++			WeeklyLimitUSD:  quota.WeeklyLimitUSD,
++			MonthlyLimitUSD: quota.MonthlyLimitUSD,
++		})
++	}
++	if len(records) == 0 {
++		return nil
++	}
++	// A failed best-effort write must not abort the caller's transaction.
++	return repo.BulkInsertInitial(dbent.WithoutTx(ctx), records)
++}
+diff --git a/frontend/src/i18n/locales/en/admin/settings.ts b/frontend/src/i18n/locales/en/admin/settings.ts
+index cd0482cc0..b3d3de35a 100644
+--- a/frontend/src/i18n/locales/en/admin/settings.ts
++++ b/frontend/src/i18n/locales/en/admin/settings.ts
+@@ -460,8 +460,8 @@ export default {
+           'Duplicate subscription group: {groupId}. Each group can only appear once.',
+         subscriptionGroup: 'Subscription Group',
+         subscriptionValidityDays: 'Validity (days)',
+-        defaultPlatformQuotas: 'Default Platform Quotas (on signup)',
+-        defaultPlatformQuotasHint: 'Applied to new users on signup; existing users are not affected. Leave blank = no limit for that platform and window.',
++        defaultPlatformQuotas: 'Default Platform Quotas (on user creation)',
++        defaultPlatformQuotasHint: 'Applied to regular users created by an administrator or through signup; existing users are not affected. Leave blank = no limit for that platform and window.',
+         platformQuotaNotice: 'Monthly quota uses a 30-day rolling window, not a calendar month.',
+       },
+       platformQuota: {
+diff --git a/frontend/src/i18n/locales/zh/admin/settings.ts b/frontend/src/i18n/locales/zh/admin/settings.ts
+index 81b8cb8ac..085c74e8d 100644
+--- a/frontend/src/i18n/locales/zh/admin/settings.ts
++++ b/frontend/src/i18n/locales/zh/admin/settings.ts
+@@ -455,8 +455,8 @@ export default {
+         defaultSubscriptionsDuplicate: '默认订阅存在重复分组：{groupId}。每个分组只能出现一次。',
+         subscriptionGroup: '订阅分组',
+         subscriptionValidityDays: '有效期（天）',
+-        defaultPlatformQuotas: '默认平台限额（注册时分配）',
+-        defaultPlatformQuotasHint: '新用户注册时自动获得这里配置的限额；已有用户不受影响。留空 = 该平台该窗口不限制。',
++        defaultPlatformQuotas: '默认平台限额（创建用户时分配）',
++        defaultPlatformQuotasHint: '后台创建或自行注册的普通用户会自动获得这里配置的限额；已有用户不受影响。留空 = 该平台该窗口不限制。',
+         platformQuotaNotice: '月限额为 30 天滚动窗口，非自然月',
+       },
+       platformQuota: {

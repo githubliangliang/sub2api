@@ -1,0 +1,17 @@
+package service
+import("testing";"encoding/json";"strings";"unsafe";"github.com/stretchr/testify/require";"github.com/tidwall/gjson";"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat")
+func TestIntake024RequestScalarOwnsStorage(t *testing.T){
+ b:=[]byte(`{"model":"gpt-6.2-sol","input":"`+strings.Repeat("x",1<<20)+`"}`);v:=newOpenAIRequestView(b)
+ pos:=uintptr(unsafe.Pointer(unsafe.StringData(v.Model)));start:=uintptr(unsafe.Pointer(unsafe.SliceData(b)))
+ require.False(t,pos>=start&&pos<start+uintptr(len(b)),"queued scalar aliases the full 1MiB request buffer")
+}
+func TestIntake024GeminiFinalToolTurn(t *testing.T){
+ m:=[]any{map[string]any{"role":"user","content":[]any{map[string]any{"type":"tool_result","tool_use_id":"c1","content":"result"},map[string]any{"type":"text","text":"continue"}}}}
+ got,err:=convertClaudeMessagesToGeminiContents(m,map[string]string{"c1":"lookup"},false);require.NoError(t,err);require.Len(t,got,2)
+}
+func TestIntake024BufferedHostedCall(t *testing.T){
+ acc:=apicompat.NewBufferedResponseAccumulator()
+ var ev apicompat.ResponsesStreamEvent
+ require.NoError(t,json.Unmarshal([]byte(`{"type":"response.output_item.done","output_index":0,"item":{"type":"web_search_call","id":"ws1","status":"completed","action":{"type":"search","query":"news"}}}`),&ev))
+ acc.ProcessEvent(&ev);out,ok:=buildResponsesOutputJSON(acc,nil);require.True(t,ok);require.Equal(t,"web_search_call",gjson.GetBytes(out,"0.type").String())
+}

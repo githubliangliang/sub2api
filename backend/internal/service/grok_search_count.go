@@ -10,12 +10,16 @@ import (
 
 // countGrokNativeSearchCallsFromJSONBytes counts completed native search tool
 // calls in a Responses-style JSON body (output array or nested response.output).
-// Counts: web_search_call, x_search_call, tool_search_call, and function_call
-// named tool_search / web_search / x_search, and custom_tool_call items the xAI
-// server runs itself (apicompat.IsServerSideSearchCall: call_id xs_ / as_).
+// Counts native search items and custom_tool_call items the xAI server runs
+// itself (apicompat.IsServerSideSearchCall: call_id xs_ / as_).
 func countGrokNativeSearchCallsFromJSONBytes(body []byte) int {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return 0
+	}
+	for _, path := range []string{"response.usage", "usage"} {
+		if count, ok := grokSearchCountFromUsage(gjson.GetBytes(body, path)); ok {
+			return count
+		}
 	}
 	// Responses envelopes normally expose either top-level output (JSON mode)
 	// or response.output (terminal SSE payload). Compatibility layers can retain
@@ -31,12 +35,60 @@ func countGrokNativeSearchCallsFromSSEBody(body string) int {
 	if strings.TrimSpace(body) == "" {
 		return 0
 	}
-	seen := make(map[string]struct{})
-	total := 0
+	var counter grokSearchCounter
 	forEachOpenAISSEDataPayload(body, func(data []byte) {
-		total += countGrokNativeSearchCallsInSSEDataDedup(data, seen)
+		counter.Add(data)
 	})
-	return total
+	return counter.total
+}
+
+// The provider's per-class success count takes precedence, including explicit zero.
+// Malformed values are not authoritative and retain the existing item fallback.
+func grokSearchCountFromUsage(usage gjson.Result) (int, bool) {
+	details := usage.Get("server_side_tool_usage_details")
+	if !details.IsObject() {
+		return 0, false
+	}
+	total := 0
+	for _, key := range []string{"web_search_calls", "x_search_calls", "document_search_calls"} {
+		value := details.Get(key)
+		if !value.Exists() {
+			continue
+		}
+		if value.Type != gjson.Number || strings.ContainsAny(value.Raw, ".eE+-") {
+			return 0, false
+		}
+		count, err := strconv.ParseUint(value.Raw, 10, 63)
+		if err != nil || count > uint64(int(^uint(0)>>1)-total) {
+			return 0, false
+		}
+		total += int(count)
+	}
+	return total, true
+}
+
+type grokSearchCounter struct {
+	total         int
+	seen          map[string]struct{}
+	authoritative bool
+}
+
+func (c *grokSearchCounter) Add(data []byte) {
+	switch gjson.GetBytes(data, "type").String() {
+	case "response.completed", "response.incomplete", "response.done":
+		if count, ok := grokSearchCountFromUsage(gjson.GetBytes(data, "response.usage")); ok {
+			c.total = count
+			c.authoritative = true
+			return
+		}
+	}
+	if c.authoritative {
+		return
+	}
+	if c.seen == nil {
+		c.seen = make(map[string]struct{})
+	}
+	c.total += countGrokNativeSearchCallsInSSEDataDedup(data, c.seen)
 }
 
 // countGrokNativeSearchCallsInSSEData counts search tool calls in one SSE
@@ -222,16 +274,15 @@ func isGrokNativeSearchOutputItem(item gjson.Result) bool {
 	if !item.Exists() {
 		return false
 	}
+	if status := item.Get("status").String(); status != "" && status != "completed" {
+		return false
+	}
 	itemType := strings.ToLower(strings.TrimSpace(item.Get("type").String()))
 	switch itemType {
 	case "web_search_call", "x_search_call", "tool_search_call":
 		return true
 	case "function_call", "custom_tool_call":
-		if apicompat.IsServerSideSearchCall(itemType, item.Get("call_id").String()) {
-			return true
-		}
-		name := strings.ToLower(strings.TrimSpace(item.Get("name").String()))
-		return name == "web_search" || name == "x_search" || name == "tool_search"
+		return apicompat.IsServerSideSearchCall(itemType, item.Get("call_id").String())
 	default:
 		return false
 	}

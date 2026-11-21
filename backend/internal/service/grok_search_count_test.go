@@ -16,7 +16,7 @@ func TestCountGrokNativeSearchCallsFromJSONBytes(t *testing.T) {
 		{"type":"function_call","name":"tool_search","call_id":"ts1"},
 		{"type":"function_call","name":"lookup","call_id":"other"}
 	]}`)
-	require.Equal(t, 3, countGrokNativeSearchCallsFromJSONBytes(body))
+	require.Equal(t, 2, countGrokNativeSearchCallsFromJSONBytes(body))
 }
 
 func TestCountGrokNativeSearchCallsFromJSONBytes_PrefersNestedResponse(t *testing.T) {

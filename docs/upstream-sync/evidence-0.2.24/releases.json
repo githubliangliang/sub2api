@@ -1,0 +1,26 @@
+[
+  {
+    "id": 452483849,
+    "tag_name": "v0.2.24",
+    "name": "Sub2API 0.2.24",
+    "created_at": "2026-11-20T09:12:26Z",
+    "published_at": "2026-11-20T09:19:50Z",
+    "draft": false,
+    "prerelease": false,
+    "target_commitish": "main",
+    "html_url": "https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.24",
+    "body": "> AI API Gateway Platform - 将 AI 订阅配额分发和管理\n\n安全修复：网关拒绝含重复字段的请求，修复利用重复字段使计费模型与实际调用模型不一致的问题；同时修复 Codex 文献检索返回 403 时 OpenAI OAuth 账号被批量停调的问题。\n\n## 新增功能\n\n- 网页搜索模拟新增 Exa 搜索服务商，web_search 结果块返回搜索来源\n- Claude Code 上下文压缩请求按 5 分钟缓存 TTL 写入\n- Claude OAuth / Setup Token 账号显示窗口费用估算\n- 模型广场支持一键复制模型 ID\n- 频繁手动刷新 Token 时给出风险提示\n\n## 优化改进\n\n- 网关请求体只解析一次，并减少工具 schema 清洗、命名空间剥离、图片意图识别、cache_control 检查中的重复遍历与拷贝，降低大请求的 CPU 与内存占用\n- 调度器账号缓存不再保存展开后的分组信息\n- 运维面板模型平均 Tokens/秒改为按累计请求耗时计算\n- 网关在读取请求体阶段返回的错误（如 413）改为按各协议入口的格式返回，文案与 handler 一致\n- Codex Messages 桥接把 ToolSearch 映射为原生 tool_search\n- 合成路由改写到 Claude 5.5 模型时自动适配 thinking 参数\n\n## Bug 修复\n\n- 安全修复：请求体（含嵌套字段）及 WebSocket 帧中同名字段重复声明时直接拒绝，修复按低价模型计费、实际调用高价模型，以及绕过账号模型映射、强制 service_tier、推理强度上限的问题（GHSA-p3r4-jcm3-2hph）\n- 修复带 BOM 或 Content-Type 标为 multipart 的请求体可绕过分组模型白名单的问题\n- 修复 Codex 文献检索返回 403 时逐个暂停甚至永久禁用 OpenAI OAuth 账号的问题\n- 修复 embeddings、alpha search、systemone 等纯文本接口的请求体上限未提前生效的问题\n- 修复 Antigravity 单个请求的裸 429 冷却多个账号的问题，额度查询改用账号转发端点，并保留上游 Gemini SSE 注释帧\n- 修复 OpenAI 上游请求超时不切换账号的问题\n- 修复 OpenAI OAuth 令牌轮换后凭据可能因补全超时或并发被覆盖的问题\n- 修复 ChatGPT OAuth 账号（含透传）调度到非 OpenAI 模型的问题\n- 修复 Grok 搜索按 xAI 返回的成功次数计费，Grok 图片编辑支持 5 张输入图并保留校验错误信息\n- 修复转发图片的 usage 被拆成多行 SSE、缓冲输出为空时 Responses 结果缺失的问题\n- 修复协议转换中丢失 stop 序列与 Kimi 工具定义、DeepSeek Anthropic 工具续接缺少 thinking 块、Gemini 最后一轮工具结果混入多余内容的问题\n- 修复 Codex 音频输入能力、VS Code IDE 上下文在 HTTP Responses 中丢失的问题，按轮次记录 Responses 推理强度\n- 修复 TypeSafe System One 未应用账号模型映射的问题\n- 修复 Anthropic 长上下文模型元数据未展示、账号测试对不支持 temperature 的模型仍发送该参数的问题\n- 修复 Claude 与 Gemini 账号用量快照不刷新、批量透传编辑丢失模型过滤、后台创建用户未初始化默认平台限额的问题\n\n## 破坏性变更\n\n- 请求体或 WebSocket 帧中同名字段重复声明（包括取值相同、仅大小写不同、嵌套字段重复）时返回 400 或关闭连接；multipart 表单中 model、n、size 等字段重复同样拒绝。正常 SDK 和客户端不受影响\n\n\n\n---\n\n## 📥 Installation\n\n**Docker:**\n```bash\n# Docker Hub\ndocker pull weishaw/sub2api:0.2.24\n\n# GitHub Container Registry\ndocker pull ghcr.io/wei-shaw/sub2api:0.2.24\n```\n\n**One-line install (Linux):**\n```bash\ncurl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash\n```\n\n**Manual download:**\nDownload the appropriate archive for your platform from the assets below.\n\n## 📚 Documentation\n\n- [GitHub Repository](https://github.com/Wei-Shaw/sub2api)\n- [Installation Guide](https://github.com/Wei-Shaw/sub2api/blob/main/deploy/README.md)\n\n"
+  },
+  {
+    "id": 449502473,
+    "tag_name": "v0.2.23",
+    "name": "Sub2API 0.2.23",
+    "created_at": "2026-11-18T03:43:54Z",
+    "published_at": "2026-11-18T03:51:33Z",
+    "draft": false,
+    "prerelease": false,
+    "target_commitish": "main",
+    "html_url": "https://github.com/Wei-Shaw/sub2api/releases/tag/v0.2.23",
+    "body": "> AI API Gateway Platform - 将 AI 订阅配额分发和管理\n\n接入 GPT-6.2 Sol 和 Astra，支持 Ultra Fast 档位；修正多条协议转换链路上的缓存写入用量和计费。\n\n## 新增功能\n\n- 支持 GPT-6.2 Sol / Astra 模型：价格与官方一致；上下文超过 272K 时按长上下文计费；Fast 档 2 倍价；Ultra Fast 档在 2027-03-01 00:00（太平洋时间）前是 3 倍促销价，之后自动切为 6 倍\n- GPT-6.2 Ultra Fast 按订阅套餐放行：Pro 200 只开放 Sol，Pro 500 开放 Sol 和 Astra\n- 渠道定价新增「Ultra Fast 倍率」，可按渠道覆盖。不填时沿用模型自带倍率，只影响 Ultra Fast 档\n\n## 优化改进\n\n- OpenAI 流式请求在首次输出前空闲超时，现在会切换账号重试，不再直接报错给客户端。最多切换 1 次，避免一个卡住的请求把超时惩罚扩散到整个账号池\n- 流式空闲计时改为每收到上游数据就重置，避免持续出数据的长流被误判超时\n- 原生 Chat Completions 流式透传减少 flush 次数，降低网关 CPU 占用\n- DeepSeek reasoning 占位和 Ollama Cloud reasoning 回填改为一次改写请求体，大幅降低长对话请求的 CPU 和内存开销\n\n## Bug 修复\n\n- 修复 Anthropic ↔ OpenAI Responses / Chat Completions 互转时丢失缓存写入 TTL（5m/1h）明细的问题\n- 修复缓存写入明细之和小于总量时少计费的问题，差额现在按 5m 价格补计\n- 修复 OpenAI 网关走 Anthropic 原生路径时 1h 缓存写入按 5m 价格计费的问题，现在按 1h 价格计费\n- 修复流式过程中只更新缓存字段时，prompt 总量和缓存写入总量被覆盖或算错的问题\n\n\n\n---\n\n## 📥 Installation\n\n**Docker:**\n```bash\n# Docker Hub\ndocker pull weishaw/sub2api:0.2.23\n\n# GitHub Container Registry\ndocker pull ghcr.io/wei-shaw/sub2api:0.2.23\n```\n\n**One-line install (Linux):**\n```bash\ncurl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | sudo bash\n```\n\n**Manual download:**\nDownload the appropriate archive for your platform from the assets below.\n\n## 📚 Documentation\n\n- [GitHub Repository](https://github.com/Wei-Shaw/sub2api)\n- [Installation Guide](https://github.com/Wei-Shaw/sub2api/blob/main/deploy/README.md)\n\n"
+  }
+]

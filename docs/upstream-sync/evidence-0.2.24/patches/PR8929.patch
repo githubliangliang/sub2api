@@ -1,0 +1,180 @@
+diff --git a/backend/internal/handler/openai_page_context.go b/backend/internal/handler/openai_page_context.go
+index 7313852f6..4c1318717 100644
+--- a/backend/internal/handler/openai_page_context.go
++++ b/backend/internal/handler/openai_page_context.go
+@@ -14,7 +14,10 @@ var codexSelectedPageName = regexp.MustCompile(`^codex_apps_selected_page_part_(
+ // Codex injects external context as standalone outputs, without a model tool call.
+ // Use the legacy user-message representation for HTTP Responses interoperability.
+ func normalizeCodexUntrustedContext(body []byte) ([]byte, bool) {
+-	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context") || !hasUniqueJSONMembers(body) {
++	if !mayContainCodexCallOutputCandidate(body,
++		"codex_apps_open_page", "codex_apps_selected_page_part_",
++		"browser_info", "goal_objective", "untrusted_context", "untrusted_content", "ide_context", "proposed_plan",
++	) || !hasUniqueJSONMembers(body) {
+ 		return body, false
+ 	}
+ 	var request map[string]json.RawMessage
+@@ -45,13 +48,14 @@ func normalizeCodexUntrustedContext(body []byte) ([]byte, bool) {
+ 				continue
+ 			}
+ 		}
+-		name, output := readString("name"), readString("output")
+-		if !validCodexUntrustedContext(name, output) {
++		name := readString("name")
++		var output *string
++		if json.Unmarshal(item["output"], &output) != nil || output == nil || !validCodexUntrustedContext(name, *output) {
+ 			continue
+ 		}
+-		text := "<external_" + name + ">" + output + "</external_" + name + ">"
+-		if validCodexPageContext(name, output) {
+-			text = "<external_" + name + ">\n" + output + "\n</external_" + name + ">"
++		text := "<external_" + name + ">" + *output + "</external_" + name + ">"
++		if validCodexPageContext(name, *output) {
++			text = "<external_" + name + ">\n" + *output + "\n</external_" + name + ">"
+ 		}
+ 		message := map[string]any{
+ 			"type": "message",
+@@ -85,8 +89,14 @@ func normalizeCodexUntrustedContext(body []byte) ([]byte, bool) {
+ 
+ func validCodexUntrustedContext(name, output string) bool {
+ 	switch name {
+-	case "browser_info", "goal_objective", "untrusted_context":
++	case "browser_info", "goal_objective", "untrusted_context", "ide_context":
+ 		return strings.TrimSpace(output) != ""
++	case "untrusted_content":
++		// Codex's fallback for an unnamed context source can carry any text, including an empty value.
++		return true
++	case "proposed_plan":
++		// Codex splits an approved plan by byte length, so a chunk can be all whitespace.
++		return output != ""
+ 	default:
+ 		return validCodexPageContext(name, output)
+ 	}
+diff --git a/backend/internal/handler/openai_page_context_test.go b/backend/internal/handler/openai_page_context_test.go
+index 2eb204ac9..615ce687c 100644
+--- a/backend/internal/handler/openai_page_context_test.go
++++ b/backend/internal/handler/openai_page_context_test.go
+@@ -54,18 +54,24 @@ func TestNormalizeCodexPageContextFirstMessage(t *testing.T) {
+ 	require.Equal(t, got, again)
+ }
+ 
++var codexTextContextNamesForTest = []string{"browser_info", "goal_objective", "untrusted_context", "untrusted_content", "ide_context", "proposed_plan"}
++
+ func TestNormalizeCodexAdditionalUntrustedContext(t *testing.T) {
+-	// AdditionalContextToolOutput derives names from caller-provided context keys.
+-	// Codex 0.169.0 enables this representation by default (openai/codex#60487).
+-	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++	for _, name := range codexTextContextNamesForTest {
+ 		t.Run(name, func(t *testing.T) {
+ 			output := "external context\nline two"
+-			body := pageContextRequest(t, pageContextItem(name, output),
++			if name == "ide_context" {
++				output = "# Context from my IDE setup:\n\n## Active file: main.go\n\n## Active selection of the file:\nfunc main() {}"
++			}
++			contextItem := map[string]any{"type": "function_call_output", "namespace": "agent", "name": name, "output": output}
++			body := pageContextRequest(t, contextItem,
+ 				map[string]any{"role": "user", "content": "continue"})
+ 			h := &OpenAIGatewayHandler{}
+ 			w := httptest.NewRecorder()
+ 			c, _ := gin.CreateTestContext(w)
+ 			require.False(t, h.validateFunctionCallOutputRequest(c, body, zap.NewNop()))
++			require.Equal(t, 400, w.Code)
++			require.Contains(t, w.Body.String(), "function_call_output requires call_id")
+ 
+ 			got, changed := normalizeCodexUntrustedContext(body)
+ 			require.True(t, changed)
+@@ -87,7 +93,7 @@ func TestNormalizeCodexAdditionalUntrustedContext(t *testing.T) {
+ }
+ 
+ func TestNormalizeCodexAdditionalUntrustedContextPreservesRealAndMalformedOutputs(t *testing.T) {
+-	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++	for _, name := range codexTextContextNamesForTest {
+ 		for _, override := range []map[string]any{
+ 			{"call_id": "call_real"},
+ 			{"call_id": nil},
+@@ -96,7 +102,6 @@ func TestNormalizeCodexAdditionalUntrustedContextPreservesRealAndMalformedOutput
+ 			{"namespace": nil},
+ 			{"namespace": 42},
+ 			{"output": []any{map[string]any{"type": "encrypted_content", "encrypted_content": "sealed"}}},
+-			{"output": " "},
+ 			{"output": nil},
+ 		} {
+ 			item := pageContextItem(name, "context")
+@@ -108,12 +113,14 @@ func TestNormalizeCodexAdditionalUntrustedContextPreservesRealAndMalformedOutput
+ 			require.False(t, changed, "name=%s override=%v", name, override)
+ 			require.Equal(t, body, got)
+ 		}
+-		item := pageContextItem(name, "context")
+-		delete(item, "namespace")
+-		body := pageContextRequest(t, item)
+-		got, changed := normalizeCodexUntrustedContext(body)
+-		require.False(t, changed)
+-		require.Equal(t, body, got)
++		for _, field := range []string{"namespace", "output"} {
++			item := pageContextItem(name, "context")
++			delete(item, field)
++			body := pageContextRequest(t, item)
++			got, changed := normalizeCodexUntrustedContext(body)
++			require.False(t, changed)
++			require.Equal(t, body, got)
++		}
+ 	}
+ 	// Recognized external context cannot make an unrelated tool result valid.
+ 	body := pageContextRequest(t, pageContextItem("browser_info", "tab"),
+@@ -138,7 +145,7 @@ func TestNormalizeCodexAdditionalUntrustedContextPreservesRealAndMalformedOutput
+ }
+ 
+ func TestNormalizeCodexAdditionalUntrustedContextBlankCallIDsAndMixedInput(t *testing.T) {
+-	names := []string{"browser_info", "goal_objective", "untrusted_context"}
++	names := codexTextContextNamesForTest
+ 	for _, callID := range []string{"", " \t\n"} {
+ 		items := make([]any, 0, len(names))
+ 		for _, name := range names {
+@@ -158,7 +165,7 @@ func TestNormalizeCodexAdditionalUntrustedContextBlankCallIDsAndMixedInput(t *te
+ }
+ 
+ func TestNormalizeCodexAdditionalUntrustedContextRejectsDuplicateMembers(t *testing.T) {
+-	for _, name := range []string{"browser_info", "goal_objective", "untrusted_context"} {
++	for _, name := range codexTextContextNamesForTest {
+ 		for _, body := range []string{
+ 			`{"input":[{"type":"function_call_output","namespace":"agent","name":"` + name + `","call_id":"real","call_id":"","output":"context"}]}`,
+ 			`{"input":[{"type":"function_call_output","namespace":"agent","name":"` + name + `","output":"first","output":"second"}]}`,
+@@ -170,6 +177,38 @@ func TestNormalizeCodexAdditionalUntrustedContextRejectsDuplicateMembers(t *test
+ 	}
+ }
+ 
++func TestNormalizeCodexProposedPlanChunks(t *testing.T) {
++	chunks := []string{"# Plan\n", " \n\t", "1. Run tests."}
++	var items []any
++	for _, chunk := range chunks {
++		items = append(items, pageContextItem("proposed_plan", chunk))
++	}
++	got, changed := normalizeCodexUntrustedContext(pageContextRequest(t, items...))
++	require.True(t, changed)
++	messages := gjson.GetBytes(got, "input").Array()
++	require.Len(t, messages, len(chunks))
++	for i, message := range messages {
++		require.Equal(t, "user", message.Get("role").String())
++		require.Equal(t, "<external_proposed_plan>"+chunks[i]+"</external_proposed_plan>", message.Get("content.0.text").String())
++	}
++}
++
++func TestNormalizeCodexAdditionalUntrustedContextBlankOutput(t *testing.T) {
++	for _, name := range codexTextContextNamesForTest {
++		for _, output := range []string{"", " \t"} {
++			body := pageContextRequest(t, pageContextItem(name, output))
++			got, changed := normalizeCodexUntrustedContext(body)
++			wantChange := name == "untrusted_content" || (name == "proposed_plan" && output != "")
++			require.Equal(t, wantChange, changed, "name=%s output=%q", name, output)
++			if wantChange {
++				require.Equal(t, "<external_"+name+">"+output+"</external_"+name+">", gjson.GetBytes(got, "input.0.content.0.text").String())
++			} else {
++				require.Equal(t, body, got)
++			}
++		}
++	}
++}
++
+ func TestNormalizeCodexPageContextPreservesHistoryAndToolValidation(t *testing.T) {
+ 	body := []byte(`{"model":"gpt-5","previous_response_id":"resp_history","metadata":{"large":9007199254740993},"input":[{"type":"function_call","name":"read_file","call_id":"call_real","arguments":"{}"},{"type":"function_call_output","call_id":"call_real","output":"result"},{"type":"function_call_output","namespace":"agent","name":"codex_apps_open_page","output":"{\"page_id\":\"page_1\"}"}]}`)
+ 	got, changed := normalizeCodexUntrustedContext(body)

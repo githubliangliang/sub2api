@@ -531,7 +531,7 @@ import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
 import { fetchAllAccountIds } from '@/utils/accountSelection'
-import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
+import { buildAccountUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -722,12 +722,13 @@ const usageBatchByAccountId = ref<Record<string, AccountUsageInfo | null>>({})
 const usageBatchErrorByAccountId = ref<Record<string, string | null>>({})
 const usageBatchLoadingByAccountId = ref<Record<string, boolean>>({})
 const usageBatchRequestTokenByAccountId = ref<Record<string, number>>({})
-const usageBatchCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
+const usageBatchCache = new Map<number, { data: AccountUsageInfo; ts: number; refreshKey: string }>()
 const USAGE_BATCH_CACHE_TTL = 5 * 60 * 1000
 const pendingUsageBatchIds = new Set<number>()
 let usageBatchFlushTimer: ReturnType<typeof setTimeout> | null = null
 let queuedUsageBatchForce = false
 let usageBatchRequestToken = 0
+let usageBatchUnmounted = false
 
 const buildDefaultTodayStats = (): WindowStats => ({
   requests: 0,
@@ -776,6 +777,7 @@ const flushQueuedUsageBatch = async () => {
   usageBatchFlushTimer = null
   const accountIDs = Array.from(pendingUsageBatchIds)
   const force = queuedUsageBatchForce
+  const refreshKeys = new Map(accounts.value.map(account => [account.id, buildAccountUsageRefreshKey(account)]))
   pendingUsageBatchIds.clear()
   queuedUsageBatchForce = false
 
@@ -789,6 +791,7 @@ const flushQueuedUsageBatch = async () => {
   try {
     const result = await adminAPI.accounts.getBatchUsage(accountIDs, force)
 
+    if (usageBatchUnmounted) return
     const usageMap = result.usage ?? {}
     const errorMap = result.errors ?? {}
     const now = Date.now()
@@ -798,15 +801,16 @@ const flushQueuedUsageBatch = async () => {
 
     for (const accountID of accountIDs) {
       const key = String(accountID)
-      if ((usageBatchRequestTokenByAccountId.value[key] ?? 0) !== requestTokensByAccount[key]) {
+      const current = accounts.value.find(account => account.id === accountID)
+      if (!current || buildAccountUsageRefreshKey(current) !== refreshKeys.get(accountID) || (usageBatchRequestTokenByAccountId.value[key] ?? 0) !== requestTokensByAccount[key]) {
         continue
       }
       const usage = usageMap[key] ?? null
-      nextUsage[key] = usage
+      if (usage) nextUsage[key] = usage
       nextErrors[key] = errorMap[key] ?? null
       nextLoading[key] = false
       if (usage) {
-        usageBatchCache.set(accountID, { data: usage, ts: now })
+        usageBatchCache.set(accountID, { data: usage, ts: now, refreshKey: refreshKeys.get(accountID) ?? '' })
       } else {
         usageBatchCache.delete(accountID)
       }
@@ -816,11 +820,13 @@ const flushQueuedUsageBatch = async () => {
     usageBatchErrorByAccountId.value = nextErrors
     usageBatchLoadingByAccountId.value = nextLoading
   } catch (error) {
+    if (usageBatchUnmounted) return
     const nextErrors = { ...usageBatchErrorByAccountId.value }
     const nextLoading = { ...usageBatchLoadingByAccountId.value }
     for (const accountID of accountIDs) {
       const key = String(accountID)
-      if ((usageBatchRequestTokenByAccountId.value[key] ?? 0) !== requestTokensByAccount[key]) {
+      const current = accounts.value.find(account => account.id === accountID)
+      if (!current || buildAccountUsageRefreshKey(current) !== refreshKeys.get(accountID) || (usageBatchRequestTokenByAccountId.value[key] ?? 0) !== requestTokensByAccount[key]) {
         continue
       }
       nextErrors[key] = 'Failed'
@@ -844,7 +850,7 @@ const queueBatchedUsage = (account: Account, options?: { force?: boolean }) => {
     usageBatchCache.delete(cacheKey)
   } else {
     const cached = usageBatchCache.get(cacheKey)
-    if (cached && Date.now() - cached.ts < USAGE_BATCH_CACHE_TTL) {
+    if (cached && cached.refreshKey === buildAccountUsageRefreshKey(account) && Date.now() - cached.ts < USAGE_BATCH_CACHE_TTL) {
       setUsageBatchState(cacheKey, cached.data, null)
       setUsageBatchLoading(cacheKey, false)
       return
@@ -1399,7 +1405,7 @@ const shouldReplaceAutoRefreshRow = (current: Account, next: Account) => {
     current.rate_limit_reset_at !== next.rate_limit_reset_at ||
     current.overload_until !== next.overload_until ||
     current.temp_unschedulable_until !== next.temp_unschedulable_until ||
-    buildOpenAIUsageRefreshKey(current) !== buildOpenAIUsageRefreshKey(next)
+    buildAccountUsageRefreshKey(current) !== buildAccountUsageRefreshKey(next)
   )
 }
 
@@ -2480,6 +2486,7 @@ onUnmounted(() => {
     clearTimeout(usageBatchFlushTimer)
     usageBatchFlushTimer = null
   }
+  usageBatchUnmounted = true
   pendingUsageBatchIds.clear()
   window.removeEventListener('scroll', handleScroll, true)
   window.removeEventListener('resize', handleViewportResize)

@@ -660,30 +660,31 @@ var ErrRPMStatusUnavailable = infraerrors.New(http.StatusNotImplemented, "RPM_ST
 
 // adminServiceImpl implements AdminService
 type adminServiceImpl struct {
-	userRepo             UserRepository
-	groupRepo            GroupRepository
-	groupDuplicateRepo   GroupDuplicateRepository
-	accountRepo          AccountRepository
-	accountDuplicateRepo AccountDuplicateRepository
-	accountBillingRepo   AccountBillingSettingsRepository
-	proxyRepo            ProxyRepository
-	apiKeyRepo           APIKeyRepository
-	redeemCodeRepo       RedeemCodeRepository
-	userGroupRateRepo    UserGroupRateRepository
-	userRPMCache         UserRPMCache
-	billingCacheService  *BillingCacheService
-	proxyProber          ProxyExitInfoProber
-	proxyLatencyCache    ProxyLatencyCache
-	authCacheInvalidator APIKeyAuthCacheInvalidator
-	entClient            *dbent.Client // 用于开启数据库事务
-	settingService       *SettingService
-	defaultSubAssigner   DefaultSubscriptionAssigner
-	userSubRepo          UserSubscriptionRepository
-	privacyClientFactory PrivacyClientFactory
-	runtimeBlocker       AccountRuntimeBlocker
-	affiliateService     adminRechargeAffiliateAccruer
-	compositeRouteRepo   CompositeModelRouteRepository
-	compositeResolver    *CompositeRouteResolver
+	userRepo              UserRepository
+	groupRepo             GroupRepository
+	groupDuplicateRepo    GroupDuplicateRepository
+	accountRepo           AccountRepository
+	accountDuplicateRepo  AccountDuplicateRepository
+	accountBillingRepo    AccountBillingSettingsRepository
+	proxyRepo             ProxyRepository
+	apiKeyRepo            APIKeyRepository
+	redeemCodeRepo        RedeemCodeRepository
+	userGroupRateRepo     UserGroupRateRepository
+	userRPMCache          UserRPMCache
+	billingCacheService   *BillingCacheService
+	proxyProber           ProxyExitInfoProber
+	proxyLatencyCache     ProxyLatencyCache
+	authCacheInvalidator  APIKeyAuthCacheInvalidator
+	entClient             *dbent.Client // 用于开启数据库事务
+	settingService        *SettingService
+	defaultSubAssigner    DefaultSubscriptionAssigner
+	userSubRepo           UserSubscriptionRepository
+	privacyClientFactory  PrivacyClientFactory
+	runtimeBlocker        AccountRuntimeBlocker
+	affiliateService      adminRechargeAffiliateAccruer
+	compositeRouteRepo    CompositeModelRouteRepository
+	compositeResolver     *CompositeRouteResolver
+	userPlatformQuotaRepo UserPlatformQuotaRepository
 	// 分组平台变更后用来失效渠道缓存；可为 nil（缓存会在 TTL 到期后自然重建）
 	channelCacheInvalidator ChannelCacheInvalidator
 }
@@ -726,6 +727,7 @@ func NewAdminService(
 	compositeRouteRepo CompositeModelRouteRepository,
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
+	userPlatformQuotaRepo UserPlatformQuotaRepository,
 ) AdminService {
 	return &adminServiceImpl{
 		userRepo:             userRepo,
@@ -754,5 +756,6 @@ func NewAdminService(
 		compositeResolver:    compositeResolver,
 
 		channelCacheInvalidator: channelCacheInvalidator,
+		userPlatformQuotaRepo:   userPlatformQuotaRepo,
 	}
 }

@@ -475,11 +475,11 @@ func TestForwardAlphaSearchOAuthNotFoundPassesThrough(t *testing.T) {
 }
 
 func TestShouldApplyOpenAIAlphaSearchAccountErrorSideEffects(t *testing.T) {
-	require.False(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusUnauthorized))
-	require.False(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusNotFound))
-	require.False(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusMethodNotAllowed))
-	require.True(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusForbidden))
-	require.True(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusTooManyRequests))
+	require.False(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusUnauthorized, nil))
+	require.False(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusNotFound, nil))
+	require.False(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusMethodNotAllowed, nil))
+	require.False(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusForbidden, nil))
+	require.True(t, shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(http.StatusTooManyRequests, nil))
 }
 
 func TestIsOpenAIAlphaSearchEndpointUnsupported(t *testing.T) {

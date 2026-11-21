@@ -1,0 +1,194 @@
+diff --git a/backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go b/backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go
+index efea050bd..27a6d368e 100644
+--- a/backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go
++++ b/backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go
+@@ -61,6 +61,7 @@ func ResponsesToChatCompletionsRequestWithOptions(req *ResponsesRequest, opts *R
+ 		Stream:              req.Stream,
+ 		ServiceTier:         req.ServiceTier,
+ 		ParallelToolCalls:   req.ParallelToolCalls,
++		Stop:                req.Stop,
+ 	}
+ 	if req.Reasoning != nil {
+ 		out.ReasoningEffort = req.Reasoning.Effort
+diff --git a/backend/internal/pkg/apicompat/types.go b/backend/internal/pkg/apicompat/types.go
+index ab11d2499..a4d2be4fc 100644
+--- a/backend/internal/pkg/apicompat/types.go
++++ b/backend/internal/pkg/apicompat/types.go
+@@ -347,6 +347,10 @@ type ResponsesRequest struct {
+ 	ServiceTier        string              `json:"service_tier,omitempty"`
+ 	PromptCacheKey     string              `json:"prompt_cache_key,omitempty"`
+ 	PreviousResponseID string              `json:"previous_response_id,omitempty"`
++	// Stop 在 Chat Completions 里是原生字段，Responses 协议本身没有。这里保留原样
++	// （string 或 []string），仅在降级到 Chat Completions 时透传，避免客户端设的
++	// 停止序列在转换层被静默丢弃。
++	Stop json.RawMessage `json:"stop,omitempty"`
+ }
+ 
+ // ResponsesReasoning configures reasoning effort in the Responses API.
+diff --git a/backend/internal/service/openai_cursor_warmup_pipeline_test.go b/backend/internal/service/openai_cursor_warmup_pipeline_test.go
+index 19bb13d60..efa704052 100644
+--- a/backend/internal/service/openai_cursor_warmup_pipeline_test.go
++++ b/backend/internal/service/openai_cursor_warmup_pipeline_test.go
+@@ -168,6 +168,7 @@ func TestCursorMixedShape_StripsUnsupportedFields(t *testing.T) {
+ 		"safety_identifier": "cursor-user-xyz",
+ 		"metadata": {"trace_id":"abc","caller":"cursor"},
+ 		"stream_options": {"include_usage": true},
++		"stop": ["STOP_HERE"],
+ 		"input": [{"role":"user","content":"hi"}]
+ 	}`)
+ 
+diff --git a/backend/internal/service/openai_gateway_chat_completions.go b/backend/internal/service/openai_gateway_chat_completions.go
+index 26b81fb05..2e13b558f 100644
+--- a/backend/internal/service/openai_gateway_chat_completions.go
++++ b/backend/internal/service/openai_gateway_chat_completions.go
+@@ -23,20 +23,55 @@ import (
+ 	"go.uber.org/zap"
+ )
+ 
+-// cursorResponsesUnsupportedFields are top-level Responses API parameters that
+-// Codex upstreams reject with "Unsupported parameter: ...". They must be
+-// stripped when forwarding a raw client body through the Responses-shape
+-// short-circuit in ForwardAsChatCompletions (see isResponsesShape branch).
+-// The normal Chat Completions → Responses conversion path is unaffected
+-// because ChatCompletionsRequest has no fields for these parameters — unknown
+-// fields are dropped naturally by json.Unmarshal. Kept semantically in sync
+-// with the list in openai_gateway_service.go:2034 used by the /v1/responses
+-// passthrough path.
++// The Responses-shaped shortcut forwards a raw body. Strip fields that the
++// typed Chat Completions → Responses conversion omits for this upstream.
+ var cursorResponsesUnsupportedFields = []string{
+ 	"prompt_cache_retention",
+ 	"safety_identifier",
+ 	"metadata",
+ 	"stream_options",
++	"stop",
++}
++
++// Kimi Chat can append function declarations to the conversation in system
++// messages. Responses and Anthropic use a request-level tool list for the
++// current generation. Native Chat forwarding keeps the declarations in place.
++func parseChatRequestForBridge(body []byte, platform string, req *apicompat.ChatCompletionsRequest) error {
++	if platform != PlatformKimi {
++		return json.Unmarshal(body, req)
++	}
++	var wire struct {
++		*apicompat.ChatCompletionsRequest
++		Messages []struct {
++			apicompat.ChatMessage
++			Tools json.RawMessage `json:"tools"`
++		} `json:"messages"`
++	}
++	wire.ChatCompletionsRequest = req
++	if err := json.Unmarshal(body, &wire); err != nil {
++		return err
++	}
++	req.Messages = make([]apicompat.ChatMessage, 0, len(wire.Messages))
++	for i, msg := range wire.Messages {
++		if msg.Role != "system" || msg.Tools == nil {
++			req.Messages = append(req.Messages, msg.ChatMessage)
++			continue
++		}
++		if msg.Content != nil {
++			return fmt.Errorf("messages[%d]: Kimi system tools cannot be used with content", i)
++		}
++		var tools []apicompat.ChatTool
++		if err := json.Unmarshal(msg.Tools, &tools); err != nil {
++			return fmt.Errorf("messages[%d].tools: %w", i, err)
++		}
++		for j, tool := range tools {
++			if tool.Type != "function" || tool.Function == nil || strings.TrimSpace(tool.Function.Name) == "" {
++				return fmt.Errorf("messages[%d].tools[%d]: expected a named function", i, j)
++			}
++		}
++		req.Tools = append(req.Tools, tools...)
++	}
++	return nil
+ }
+ 
+ // ForwardAsChatCompletions accepts a Chat Completions request body, converts it
+@@ -155,7 +190,10 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
+ 
+ 	// 1. Parse Chat Completions request
+ 	var chatReq apicompat.ChatCompletionsRequest
+-	if err := json.Unmarshal(body, &chatReq); err != nil {
++	if err := parseChatRequestForBridge(body, account.Platform, &chatReq); err != nil {
++		if account.Platform == PlatformKimi {
++			writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
++		}
+ 		return nil, fmt.Errorf("parse chat completions request: %w", err)
+ 	}
+ 	originalModel := chatReq.Model
+diff --git a/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go b/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go
+index 7d44ac42e..116c99162 100644
+--- a/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go
++++ b/backend/internal/service/openai_gateway_chat_completions_anthropic_native.go
+@@ -46,7 +46,7 @@ func (s *OpenAIGatewayService) forwardChatCompletionsViaNativeAnthropic(
+ 
+ 	// 1. Parse Chat Completions request
+ 	var ccReq apicompat.ChatCompletionsRequest
+-	if err := json.Unmarshal(body, &ccReq); err != nil {
++	if err := parseChatRequestForBridge(body, account.Platform, &ccReq); err != nil {
+ 		writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
+ 		return nil, fmt.Errorf("parse chat completions request: %w", err)
+ 	}
+diff --git a/backend/internal/service/openai_gateway_kimi_dynamic_tools_test.go b/backend/internal/service/openai_gateway_kimi_dynamic_tools_test.go
+new file mode 100644
+index 000000000..3f97e561b
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_kimi_dynamic_tools_test.go
+@@ -0,0 +1,55 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"errors"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestKimiChatDynamicToolsAcrossProtocols(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	body := []byte(`{
++		"model":"kimi-k3.1-pro",
++		"tools":[{"type":"function","function":{"name":"Lookup","parameters":{"type":"object"}}}],
++		"tool_choice":"required",
++		"messages":[
++			{"role":"system","content":"Answer briefly."},
++			{"role":"user","content":"Calculate 23 * 47.","tools":[{"type":"function","function":{"name":"IgnoreMe"}}]},
++			{"role":"system","tools":[{"type":"function","function":{"name":"Calculator","parameters":{"type":"object","properties":{"expr":{"type":"string"}},"required":["expr"]}}}]}
++		]
++	}`)
++	for _, protocol := range []string{APIProtocolChatCompletions, APIProtocolResponses, APIProtocolAnthropic} {
++		t.Run(protocol, func(t *testing.T) {
++			upstream := &httpUpstreamRecorder{err: errors.New("stop after capture")}
++			svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
++			account := adaptiveProtocolTestAccount(PlatformKimi, map[string]any{protocol: "http://kimi.example"})
++			account.Credentials["api_protocol"] = protocol
++			c := adaptiveProtocolTestContext("/v1/chat/completions", body)
++			_, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
++			require.Error(t, err)
++			require.NotNil(t, upstream.lastReq)
++			out := gjson.ParseBytes(upstream.lastBody)
++			schema := gjson.GetBytes(body, "messages.2.tools.0.function.parameters").Raw
++			switch protocol {
++			case APIProtocolChatCompletions:
++				require.JSONEq(t, string(body), string(upstream.lastBody))
++			case APIProtocolResponses:
++				require.JSONEq(t, `["Lookup","Calculator"]`, out.Get("tools.#.name").Raw)
++				require.JSONEq(t, schema, out.Get("tools.1.parameters").Raw)
++				require.Equal(t, "required", out.Get("tool_choice").String())
++				require.Len(t, out.Get("input").Array(), 2)
++			case APIProtocolAnthropic:
++				require.JSONEq(t, `["Lookup","Calculator"]`, out.Get("tools.#.name").Raw)
++				require.JSONEq(t, schema, out.Get("tools.1.input_schema").Raw)
++				require.Equal(t, "any", out.Get("tool_choice.type").String())
++				require.Equal(t, "Answer briefly.", out.Get("system").String())
++			}
++		})
++	}
++}

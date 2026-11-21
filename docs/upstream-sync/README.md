@@ -1,5 +1,18 @@
 # 上游合并指南
 
+2026-11-21 两档已实现并验收：[第一档37/37](../../openspec/changes/port-upstream-0.2.24-tier1/verification.md)、[第二档52/52](../../openspec/changes/port-upstream-0.2.24-tier2/verification.md)，25簇共89任务。[联合证据](./implementation-0.2.24/README.md)记录全入口/WS防重复、协议/账号/快照/配额/目录/统计与窄热点适配。55包unit、9包race、lint0/embed/Wire、实际HTTP/WS/SQLite/miniredis/成本与固定quota/dedup、前端2254/2原skip和桌面移动通过；1C1G独立并发夹具与单P函数成本分开限定。VERSION1.1.26/Go1.27.4/SQLite230/auth21、依赖/Ent与资源默认保持。实现随本次本地提交保存，等待归档；无push/release/业务实例操作。下方intake评估原文保留当时时点的未实施措辞。
+
+最新评估（2026-11-21）：[PORTING-0.2.24.md](./PORTING-0.2.24.md)，v0.2.23→v0.2.24；最新正式版发布于2026-11-20 17:19:50上海时间。基线`d2488b110` / VERSION1.1.26 / Go1.27.4 / SQLite230 / auth21，包含两档旧移植、GPT-6.2及过滤/effort日志。65非merge、39PR+1直接提交+1安全合并簇，217文件态A0/C135/X62/N20。建议[第一档10簇](../../openspec/changes/port-upstream-0.2.24-tier1/README.md)、[第二档15簇](../../openspec/changes/port-upstream-0.2.24-tier2/README.md)，选30PR+安全簇，**均未实施，37/52任务全未勾选**。[来源与核验](./evidence-0.2.24/MANIFEST.md)。
+
+- [x] 官方API/tag/main/fork冻结；整PR及最终安全merge完整覆盖，全部文件先reverse后forward。
+- [x] 四档逐项、真实消费者/最小前置及历史遗留复核，优先重复字段安全、Claude/Codex/Grok和SQLite。
+- [x] 九包相关基线869顶层通过/1原跳过；前端69通过。隔离Go探针17目标失败/10控制或观察通过，前端2失败/1控制通过，初始夹具错误另存。
+- [x] 来源scanner隔离85例通过及单P成本；scheduler合成投影PoC，限定测量口径。
+- [x] 两份未实施OpenSpec、严格校验、链接/空验收槽与产品/历史保护哈希核验。
+- [ ] 后续按选定范围实施、实际HTTP/WS/SQLite/race/浏览器与资源验收；按需能力、发布及部署另行处理。
+
+本轮教训：最终无PR合并也可能是关键安全来源；局部JSON防重不等于全入口；不可逆token轮换应与可选enrichment截止分开；已选能力的后续缺口不重复schema；累计耗时速率与窗口TPS算术mean分开；缺来源helper名字不等于无本地消费者。见[§9](./PORTING-0.2.24.md#9-本轮通用教训)。下方历史记录保留原时点含义。
+
 2026-11-19 两项按需功能已实施，共 12/12 项：[透传账号按模型筛选（#8748）](../../openspec/changes/port-upstream-passthrough-model-filter/verification.md)、[用量日志的请求与实际推理强度（#6188）](../../openspec/changes/port-upstream-usage-reasoning-effort/verification.md)。SQLite 迁移 230。[本地适配位置](./PORTING-passthrough-filter-and-usage-effort.md) · [实施验收](./implementation-passthrough-filter-and-usage-effort/README.md)。
 
 用户选定GPT-6.2 Sol/Astra已完成（2026-11-19）：[范围](./PORTING-gpt62.md)、[12/12验收](../../openspec/changes/port-upstream-0.2.23-gpt62/verification.md)、[实施证据](./implementation-gpt62/README.md)。两模型及Codex/协议/白名单/OpenCode、冻结官方价卡与双层fallback、严格272k计价、Fast2倍、Ultra Fast在太平洋2027-03-01 00:00前3倍/之后6倍，按请求/WS每轮时刻结算。官网在线核验502/403未完成，依据PR8906保存价卡。全量54测试包/四包race及后续清理复验、lint0/embed、实际本地HTTP/WS/SQLite48场景、前端2213/2原跳过与typecheck/lint/build通过。实现随本次提交保存，等待归档，版本/schema/依赖/生成代码及历史来源保留；套餐放行和新强制/渠道字段仍独立。共享工作区发布流程及测试脚本的并行修改单独记录。

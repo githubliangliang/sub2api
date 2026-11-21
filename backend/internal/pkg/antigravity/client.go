@@ -660,6 +660,18 @@ type FetchAvailableModelsResponse struct {
 // FetchAvailableModels 获取可用模型和配额信息，返回解析后的结构体和原始 JSON
 // 支持 URL fallback：sandbox → daily → prod
 func (c *Client) FetchAvailableModels(ctx context.Context, accessToken, projectID string) (*FetchAvailableModelsResponse, map[string]any, error) {
+	return c.fetchAvailableModelsFromURLs(ctx, BaseURLs, accessToken, projectID)
+}
+
+// FetchAvailableModelsFromURL queries quota for the selected forwarding endpoint only.
+func (c *Client) FetchAvailableModelsFromURL(ctx context.Context, baseURL, accessToken, projectID string) (*FetchAvailableModelsResponse, map[string]any, error) {
+	if strings.TrimSpace(baseURL) == "" {
+		return nil, nil, errors.New("antigravity base url is empty")
+	}
+	return c.fetchAvailableModelsFromURLs(ctx, []string{baseURL}, accessToken, projectID)
+}
+
+func (c *Client) fetchAvailableModelsFromURLs(ctx context.Context, availableURLs []string, accessToken, projectID string) (*FetchAvailableModelsResponse, map[string]any, error) {
 	if c == nil || c.httpClient == nil {
 		return nil, nil, errors.New("antigravity client is not configured")
 	}
@@ -669,9 +681,6 @@ func (c *Client) FetchAvailableModels(ctx context.Context, accessToken, projectI
 	if err != nil {
 		return nil, nil, fmt.Errorf("序列化请求失败: %w", err)
 	}
-
-	// 固定顺序：prod -> daily
-	availableURLs := BaseURLs
 
 	fetchClient := c.fetchAvailableModelsHTTPClient()
 	var lastErr error

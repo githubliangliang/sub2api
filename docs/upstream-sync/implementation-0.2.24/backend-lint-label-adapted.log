@@ -1,0 +1,31 @@
+internal/handler/admin/ops_token_rate_sqlite_test.go:23:16: Error return value of `(*database/sql.DB).Close` is not checked (errcheck)
+	defer db.Close()
+	              ^
+internal/handler/admin/user_default_quotas_sqlite_test.go:30:20: Error return value of `(*github.com/Wei-Shaw/sub2api/ent.Client).Close` is not checked (errcheck)
+	defer client.Close()
+	                  ^
+internal/handler/admin/user_default_quotas_sqlite_test.go:45:23: Error return value of `(io.Closer).Close` is not checked (errcheck)
+	defer resp.Body.Close()
+	                     ^
+internal/server/middleware/request_field_conflict_test.go:64:14: Error return value is not checked (errcheck)
+			preread = c.Request.Body.(*httputil.PrereadBody)
+			          ^
+internal/server/middleware/request_field_conflict_test.go:113:25: Error return value of `(io.Closer).Close` is not checked (errcheck)
+			defer resp.Body.Close()
+			                     ^
+internal/service/gemini_messages_compat_service.go:3473:11: Error return value is not checked (errcheck)
+		last := out[n-1].(map[string]any)
+		        ^
+internal/service/gemini_messages_compat_service.go:3474:12: Error return value is not checked (errcheck)
+		parts := last["parts"].([]any)
+		         ^
+internal/handler/anthropic_long_context_models_test.go:59:1: File is not properly formatted (gofmt)
+		a := service.Account{ID: id, Platform: service.PlatformAnthropic, Type: service.AccountTypeAPIKey, Credentials: map[string]any{"model_mapping": map[string]any{"public": "upstream"}}}
+^
+internal/service/hotpath_024_test.go:138:6: func legacy024ExplicitImageIntent is unused (unused)
+func legacy024ExplicitImageIntent(endpoint string, requestedModel string, body []byte) bool {
+     ^
+9 issues:
+* errcheck: 7
+* gofmt: 1
+* unused: 1

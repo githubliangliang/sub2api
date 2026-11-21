@@ -837,6 +837,9 @@ func (c *schedulerCache) writeAccountIDs(ctx context.Context, accounts []service
 }
 
 func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, error) {
+	// Hydration reads membership scalars; relationship graphs remain owned by the caller.
+	account.Groups = nil
+	account.AccountGroups = filterSchedulerAccountGroups(account.AccountGroups)
 	fullPayload, err := json.Marshal(account)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal account: %w", err)

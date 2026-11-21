@@ -1,0 +1,136 @@
+diff --git a/backend/internal/service/account_test_service_typesafe.go b/backend/internal/service/account_test_service_typesafe.go
+index 6c9501d89..228308acc 100644
+--- a/backend/internal/service/account_test_service_typesafe.go
++++ b/backend/internal/service/account_test_service_typesafe.go
+@@ -39,8 +39,9 @@ func (s *AccountTestService) testTypeSafeAccountConnection(c *gin.Context, accou
+ 	if state == "" {
+ 		state = typeSafeTestDefaultState
+ 	}
++	model := firstNonEmpty(account.GetMappedModel(typesafe.JevLatestModel), typesafe.JevLatestModel)
+ 	payload, err := json.Marshal(map[string]any{
+-		"model": typesafe.JevLatestModel,
++		"model": model,
+ 		"state": state,
+ 		"questions": map[string]any{
+ 			typeSafeTestQuestionID: map[string]any{
+@@ -59,7 +60,7 @@ func (s *AccountTestService) testTypeSafeAccountConnection(c *gin.Context, accou
+ 	c.Writer.Header().Set("X-Accel-Buffering", "no")
+ 	c.Writer.Flush()
+ 
+-	s.sendEvent(c, TestEvent{Type: "test_start", Model: typesafe.JevLatestModel})
++	s.sendEvent(c, TestEvent{Type: "test_start", Model: model})
+ 
+ 	req, err := typesafe.NewSystemOneRequest(ctx, baseURL, apiKey, payload)
+ 	if err != nil {
+diff --git a/backend/internal/service/account_test_service_typesafe_test.go b/backend/internal/service/account_test_service_typesafe_test.go
+index c60abf42c..39444c84c 100644
+--- a/backend/internal/service/account_test_service_typesafe_test.go
++++ b/backend/internal/service/account_test_service_typesafe_test.go
+@@ -60,6 +60,18 @@ func TestTypeSafeAccountTestSendsNativeSystemOneRequest(t *testing.T) {
+ 	require.Zero(t, repo.errorCalls)
+ }
+ 
++func TestTypeSafeAccountTestAppliesAccountModelMapping(t *testing.T) {
++	svc, repo, requests, c, rec := newTypeSafeAccountTestFixture(t, http.StatusOK, `{"answers":{"connection_test":{"type":"noul"}}}`)
++	repo.account.Credentials["model_mapping"] = map[string]any{"jev-latest": "decision-model-preview"}
++
++	require.NoError(t, svc.TestAccountConnection(c, 31, "ignored-client-model", "custom state", AccountTestModeDefault))
++	require.Len(t, *requests, 1)
++	body, err := io.ReadAll((*requests)[0].Body)
++	require.NoError(t, err)
++	require.JSONEq(t, `{"model":"decision-model-preview","state":"custom state","questions":{"connection_test":{"type":"noul","instructions":"Is this text a connection test?"}}}`, string(body))
++	require.Contains(t, rec.Body.String(), `"type":"test_start","model":"decision-model-preview"`)
++}
++
+ func TestTypeSafeAccountTestMarksRejectedKey(t *testing.T) {
+ 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+ 		t.Run(http.StatusText(status), func(t *testing.T) {
+diff --git a/backend/internal/service/gateway_systemone.go b/backend/internal/service/gateway_systemone.go
+index 0add1999d..8c0f33afd 100644
+--- a/backend/internal/service/gateway_systemone.go
++++ b/backend/internal/service/gateway_systemone.go
+@@ -11,6 +11,7 @@ import (
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/typesafe"
+ 	"github.com/gin-gonic/gin"
++	"github.com/tidwall/sjson"
+ )
+ 
+ type SystemOneForwardResult struct {
+@@ -43,6 +44,15 @@ func (s *GatewayService) ForwardSystemOne(ctx context.Context, c *gin.Context, a
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	mappedModel := firstNonEmpty(account.GetMappedModel(typesafe.JevLatestModel), typesafe.JevLatestModel)
++	var upstreamModel string
++	if mappedModel != typesafe.JevLatestModel {
++		body, err = sjson.SetBytes(body, "model", mappedModel)
++		if err != nil {
++			return nil, fmt.Errorf("apply TypeSafe account model mapping: %w", err)
++		}
++		upstreamModel = mappedModel
++	}
+ 	req, err := typesafe.NewSystemOneRequest(ctx, baseURL, key, body)
+ 	if err != nil {
+ 		return nil, err
+@@ -52,6 +62,7 @@ func (s *GatewayService) ForwardSystemOne(ctx context.Context, c *gin.Context, a
+ 	if account.ProxyID != nil && account.Proxy != nil {
+ 		proxyURL = account.Proxy.URL()
+ 	}
++	SetOpsUpstreamModel(c, upstreamModel)
+ 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+ 	if err != nil {
+ 		return nil, s.handleUpstreamTransportError(ctx, c, account, err, OpsUpstreamErrorEvent{
+@@ -91,6 +102,7 @@ func (s *GatewayService) ForwardSystemOne(ctx context.Context, c *gin.Context, a
+ 			UpstreamHeaders:       resp.Header.Clone(),
+ 			Usage:                 ClaudeUsage{InputTokens: decoded.Usage.InputTokens, OutputTokens: decoded.Usage.OutputTokens},
+ 			Model:                 typesafe.JevLatestModel,
++			UpstreamModel:         upstreamModel,
+ 			UpstreamResponseModel: decoded.Model,
+ 			Duration:              time.Since(started),
+ 		},
+diff --git a/backend/internal/service/gateway_systemone_test.go b/backend/internal/service/gateway_systemone_test.go
+index d3cb13141..950b638e7 100644
+--- a/backend/internal/service/gateway_systemone_test.go
++++ b/backend/internal/service/gateway_systemone_test.go
+@@ -101,6 +101,40 @@ func TestForwardSystemOneForwardsNativeProtocolAndUsage(t *testing.T) {
+ 	require.Equal(t, 7, result.Usage.OutputTokens)
+ }
+ 
++func TestForwardSystemOneAppliesAccountModelMapping(t *testing.T) {
++	const requestBody = `{"model":"jev-latest","state":{"model":"sample"},"questions":{"q":{"type":"noul","instructions":"Evaluate the sample"}},"stream":false}`
++	const mappedBody = `{"model":"decision-model-preview","state":{"model":"sample"},"questions":{"q":{"type":"noul","instructions":"Evaluate the sample"}},"stream":false}`
++	const responseBody = `{"model":"decision-model-2026-10","answers":{"q":{"type":"noul"}},"usage":{"input_tokens":12,"output_tokens":2}}`
++	var sentBody []byte
++	upstream := &systemOneHTTPUpstream{do: func(req *http.Request) (*http.Response, error) {
++		var err error
++		sentBody, err = io.ReadAll(req.Body)
++		require.NoError(t, err)
++		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(responseBody))}, nil
++	}}
++	svc := newSystemOneTestService(upstream)
++	svc.billingService = NewBillingService(&config.Config{}, nil)
++	account := &Account{ID: 7, Platform: PlatformTypeSafe, Type: AccountTypeAPIKey, Credentials: map[string]any{
++		"base_url":      "http://typesafe.test",
++		"api_key":       "ts-fixture",
++		"model_mapping": map[string]any{"jev-latest": "decision-model-preview"},
++	}}
++	c := newSystemOneTestContext()
++	body := []byte(requestBody)
++	result, err := svc.ForwardSystemOne(context.Background(), c, account, body)
++	require.NoError(t, err)
++	require.JSONEq(t, mappedBody, string(sentBody))
++	require.Equal(t, requestBody, string(body))
++	require.Equal(t, typesafe.JevLatestModel, result.Model)
++	require.Equal(t, "decision-model-preview", result.UpstreamModel)
++	require.Equal(t, "decision-model-preview", c.GetString(OpsUpstreamModelKey))
++	require.Equal(t, "decision-model-2026-10", result.UpstreamResponseModel)
++	require.Equal(t, []byte(responseBody), result.Body)
++	apiKey := &APIKey{Group: &Group{Platform: PlatformTypeSafe}}
++	usageFields := ChannelUsageFields{OriginalModel: result.Model, BillingModelSource: BillingModelSourceUpstream}
++	require.Equal(t, typesafe.JevLatestModel, svc.recordUsageBillingModel(context.Background(), apiKey, &result.ForwardResult, usageFields))
++}
++
+ func TestForwardSystemOneAllowsSuccessfulResponseWithoutModel(t *testing.T) {
+ 	responseBody := []byte(`{"answers":{"q":{"type":"noul","answer":"ok"}},"usage":{"input_tokens":12}}`)
+ 	upstream := &systemOneHTTPUpstream{do: func(*http.Request) (*http.Response, error) {

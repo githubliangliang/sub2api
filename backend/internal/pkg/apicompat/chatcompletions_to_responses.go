@@ -48,6 +48,10 @@ func ChatCompletionsToResponsesWithMinOutputTokens(req *ChatCompletionsRequest, 
 		ParallelToolCalls:  req.ParallelToolCalls,
 	}
 
+	if len(req.Stop) > 0 && strings.TrimSpace(string(req.Stop)) != "null" {
+		out.Stop = req.Stop
+	}
+
 	// Reasoning models (gpt-5.x) do not accept sampling parameters.
 	// See isReasoningModel in anthropic_to_responses.go.
 	if !isReasoningModel(req.Model) || (openai.IsGPT6SolOrLunaModelSpelling(req.Model) && req.ReasoningEffort == "none") {

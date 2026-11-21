@@ -628,7 +628,7 @@ import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'v
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
-import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
+import { buildAccountUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
 import { formatCompactNumber, formatDateTime } from '@/utils/format'
 import UsageProgressBar from './UsageProgressBar.vue'
@@ -638,7 +638,7 @@ import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
 import OllamaCloudUsageCell from './OllamaCloudUsageCell.vue'
 
 // Module-level cache shared across all AccountUsageCell instances
-const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
+const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number; refreshKey: string }>()
 const USAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 // How long a quota-reset response may suppress the row-patch usage refetch.
 const SUPPRESS_USAGE_REFRESH_WINDOW_MS = 5 * 1000
@@ -752,7 +752,7 @@ const hasOpenAIQuotaObservation = computed(() => {
   return [usageInfo.value?.five_hour, usageInfo.value?.seven_day].some(window => window && !window.utilization_unknown)
 })
 
-const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
+const usageRefreshKey = computed(() => buildAccountUsageRefreshKey(props.account))
 
 const shouldAutoLoadUsageOnMount = computed(() => {
   return shouldFetchUsage.value
@@ -1331,7 +1331,7 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   // Check cache
   if (!options?.bypassCache) {
     const cached = _usageCache.get(props.account.id)
-    if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL) {
+    if (cached && cached.refreshKey === usageRefreshKey.value && Date.now() - cached.ts < USAGE_CACHE_TTL) {
       usageInfo.value = cached.data
       loading.value = false
       return
@@ -1341,7 +1341,8 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   const account = props.account
   const accountKey = currentUsageAccountKey()
   const request = ++usageRequest
-  const isCurrent = () => !unmounted.value && request === usageRequest && accountKey === currentUsageAccountKey()
+  const refreshKey = usageRefreshKey.value
+  const isCurrent = () => !unmounted.value && request === usageRequest && accountKey === currentUsageAccountKey() && refreshKey === usageRefreshKey.value
   loading.value = true
   error.value = null
 
@@ -1352,7 +1353,7 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
     const result = await enqueueUsageRequest(account, fetchFn)
     if (isCurrent()) {
       usageInfo.value = result
-      _usageCache.set(account.id, { data: result, ts: Date.now() })
+      _usageCache.set(account.id, { data: result, ts: Date.now(), refreshKey })
     }
   } catch (e: any) {
     if (isCurrent()) {
@@ -1419,14 +1420,15 @@ const loadActiveUsage = async () => {
   const accountID = props.account.id
   const accountKey = currentUsageAccountKey()
   const request = ++usageRequest
-  const isCurrent = () => !unmounted.value && request === usageRequest && accountKey === currentUsageAccountKey()
+  const refreshKey = usageRefreshKey.value
+  const isCurrent = () => !unmounted.value && request === usageRequest && accountKey === currentUsageAccountKey() && refreshKey === usageRefreshKey.value
   activeQueryLoading.value = true
   error.value = null
   try {
     const result = await adminAPI.accounts.getUsage(accountID, 'active', true)
   if (isCurrent()) {
     usageInfo.value = result
-    _usageCache.set(accountID, { data: result, ts: Date.now() })
+    _usageCache.set(accountID, { data: result, ts: Date.now(), refreshKey })
   }
   } catch (e: any) {
   if (isCurrent()) {
@@ -1610,22 +1612,28 @@ watch(
   { flush: 'pre' }
 )
 
-watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
-  if (!prevKey || nextKey === prevKey) return
-  if (props.account.platform !== 'openai' || props.account.type !== 'oauth') return
-  if (Date.now() < suppressOpenAIUsageRefreshUntil.value) {
-    suppressOpenAIUsageRefreshUntil.value = 0
-    return
-  }
+watch(
+  () => [props.account.id, props.account.platform, props.account.type, usageRefreshKey.value] as const,
+  ([id, platform, type, nextKey], [prevID, prevPlatform, prevType, prevKey]) => {
+    if (id !== prevID || platform !== prevPlatform || type !== prevType || !prevKey || nextKey === prevKey) return
+    if (!shouldFetchUsage.value) return
+    if (props.account.platform === 'openai' && Date.now() < suppressOpenAIUsageRefreshUntil.value) {
+      suppressOpenAIUsageRefreshUntil.value = 0
+      return
+    }
 
-  if (isBatchManaged.value) {
-    requestParentBatchUsage({ force: true })
-    return
-  }
+    ++usageRequest
+    loading.value = false
+    activeQueryLoading.value = false
+    if (isBatchManaged.value) {
+      requestParentBatchUsage(props.account.platform === 'openai' ? { force: true } : undefined)
+      return
+    }
 
-  _usageCache.delete(props.account.id)
-  requestAutoLoad()
-})
+    _usageCache.delete(props.account.id)
+    requestAutoLoad(isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined)
+  }
+)
 
 watch(
   () => props.manualRefreshToken,

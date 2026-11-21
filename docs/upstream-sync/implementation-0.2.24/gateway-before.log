@@ -1,0 +1,71 @@
+2026/11/21 08:33:27 Timezone initialized: UTC (UTC offset: +00:00)
+--- FAIL: TestUpstream024ClaudeTestTemperature (0.00s)
+    --- FAIL: TestUpstream024ClaudeTestTemperature/claude-opus-4-7 (0.00s)
+        upstream_024_gateway_regression_test.go:38: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:38
+            	Error:      	Not equal: 
+            	            	expected: false
+            	            	actual  : true
+            	Test:       	TestUpstream024ClaudeTestTemperature/claude-opus-4-7
+    --- FAIL: TestUpstream024ClaudeTestTemperature/claude-opus-4-8 (0.00s)
+        upstream_024_gateway_regression_test.go:38: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:38
+            	Error:      	Not equal: 
+            	            	expected: false
+            	            	actual  : true
+            	Test:       	TestUpstream024ClaudeTestTemperature/claude-opus-4-8
+    --- FAIL: TestUpstream024ClaudeTestTemperature/anthropic/claude-opus-5.5 (0.00s)
+        upstream_024_gateway_regression_test.go:38: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:38
+            	Error:      	Not equal: 
+            	            	expected: false
+            	            	actual  : true
+            	Test:       	TestUpstream024ClaudeTestTemperature/anthropic/claude-opus-5.5
+    --- FAIL: TestUpstream024ClaudeTestTemperature/us.anthropic.claude-opus-4-8-20261001-v1:0 (0.00s)
+        upstream_024_gateway_regression_test.go:38: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:38
+            	Error:      	Not equal: 
+            	            	expected: false
+            	            	actual  : true
+            	Test:       	TestUpstream024ClaudeTestTemperature/us.anthropic.claude-opus-4-8-20261001-v1:0
+--- FAIL: TestUpstream024ImagesUsageSingleLine (0.00s)
+    --- FAIL: TestUpstream024ImagesUsageSingleLine/{__"input_tokens":_901,__"output_tokens":_37,__"input_tokens_details":_{"text_tokens":_3}_} (0.00s)
+        upstream_024_gateway_regression_test.go:56: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:56
+            	Error:      	"{\"type\":\"image_generation.completed\",\"created_at\":1710000000,\"b64_json\":\"aGVsbG8=\",\"output_format\":\"png\",\"usage\":{\n \"input_tokens\": 901,\n \"output_tokens\": 37,\n \"input_tokens_details\": {\"text_tokens\": 3}\n}}" should not contain "\n"
+            	Test:       	TestUpstream024ImagesUsageSingleLine/{__"input_tokens":_901,__"output_tokens":_37,__"input_tokens_details":_{"text_tokens":_3}_}
+--- FAIL: TestUpstream024GeminiFinalToolTurn (0.00s)
+    --- FAIL: TestUpstream024GeminiFinalToolTurn/tool_and_text (0.00s)
+        upstream_024_gateway_regression_test.go:88: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:88
+            	Error:      	"[map[parts:[map[functionResponse:map[name:inspect response:map[content:done]]] map[text:next instruction]] role:user]]" should have 2 item(s), but has 1
+            	Test:       	TestUpstream024GeminiFinalToolTurn/tool_and_text
+    --- FAIL: TestUpstream024GeminiFinalToolTurn/two_tools_text_image (0.00s)
+        upstream_024_gateway_regression_test.go:88: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:88
+            	Error:      	"[map[parts:[map[functionResponse:map[name:inspect response:map[content:done]]] map[functionResponse:map[name:inspect response:map[content:done]]] map[text:next instruction] map[inlineData:map[data:AQID mimeType:image/png]]] role:user]]" should have 2 item(s), but has 1
+            	Test:       	TestUpstream024GeminiFinalToolTurn/two_tools_text_image
+--- FAIL: TestUpstream024AntigravityCommentFrames (0.00s)
+    --- FAIL: TestUpstream024AntigravityCommentFrames/ordinary_LF (0.00s)
+        upstream_024_gateway_regression_test.go:129: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:129
+            	Error:      	": upstream ping\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hello\"}]}}],\"usageMetadata\":{\"promptTokenCount\":12,\"candidatesTokenCount\":3}}\n\n: tail\ndata: [DONE]\n" does not contain ": upstream ping\n\n"
+            	Test:       	TestUpstream024AntigravityCommentFrames/ordinary_LF
+    --- FAIL: TestUpstream024AntigravityCommentFrames/ordinary_CRLF (0.00s)
+        upstream_024_gateway_regression_test.go:129: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:129
+            	Error:      	": upstream ping\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hello\"}]}}],\"usageMetadata\":{\"promptTokenCount\":12,\"candidatesTokenCount\":3}}\n\n: tail\ndata: [DONE]\n" does not contain ": upstream ping\n\n"
+            	Test:       	TestUpstream024AntigravityCommentFrames/ordinary_CRLF
+    --- FAIL: TestUpstream024AntigravityCommentFrames/go_genai (0.00s)
+        upstream_024_gateway_regression_test.go:132: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:132
+            	Error:      	": upstream ping\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hello\"}]}}],\"usageMetadata\":{\"promptTokenCount\":12,\"candidatesTokenCount\":3}}\n\n: tail\ndata: [DONE]\n" should not contain ": upstream ping"
+            	Test:       	TestUpstream024AntigravityCommentFrames/go_genai
+    --- FAIL: TestUpstream024AntigravityCommentFrames/python_genai (0.00s)
+        upstream_024_gateway_regression_test.go:132: 
+            	Error Trace:	/home/liang/myself/work_space/idea/github/sub2api/backend/internal/service/upstream_024_gateway_regression_test.go:132
+            	Error:      	": upstream ping\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hello\"}]}}],\"usageMetadata\":{\"promptTokenCount\":12,\"candidatesTokenCount\":3}}\n\n: tail\ndata: [DONE]\n" should not contain ": upstream ping"
+            	Test:       	TestUpstream024AntigravityCommentFrames/python_genai
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/service	0.016s
+FAIL

@@ -40,12 +40,8 @@ WITH stats AS (
     ul.model AS model,
     COUNT(*) AS request_count,
     ROUND(
-      AVG(
-        CASE
-          WHEN ul.duration_ms > 0 AND ul.output_tokens > 0
-          THEN ul.output_tokens * 1000.0 / ul.duration_ms
-        END
-      ),
+      1000.0 * SUM(CASE WHEN ul.duration_ms > 0 AND ul.output_tokens > 0 THEN ul.output_tokens END)
+      / NULLIF(SUM(CASE WHEN ul.duration_ms > 0 AND ul.output_tokens > 0 THEN ul.duration_ms END), 0),
       2
     ) AS avg_tokens_per_sec,
     ROUND(AVG(ul.first_token_ms), 2) AS avg_first_token_ms,

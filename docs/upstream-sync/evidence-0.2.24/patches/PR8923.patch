@@ -1,0 +1,114 @@
+diff --git a/backend/internal/service/antigravity_tool_result_images_test.go b/backend/internal/service/antigravity_tool_result_images_test.go
+index f555e0d0d..9459ef223 100644
+--- a/backend/internal/service/antigravity_tool_result_images_test.go
++++ b/backend/internal/service/antigravity_tool_result_images_test.go
+@@ -3,6 +3,7 @@ package service
+ import (
+ 	"context"
+ 	"encoding/json"
++	"strings"
+ 	"testing"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+@@ -75,6 +76,23 @@ func TestAntigravityResponsesParallelToolResultImagesKeepFunctionResponsesContig
+  {"type":"function_call_output","call_id":"call_cmd_3","output":"done"}
+  ]}`)
+ 			wire := toolImageCompatWire(t, raw, model)
++			if strings.HasPrefix(model, "gemini-") {
++				// Gemini rejects a turn whose parts continue past the last
++				// functionResponse ("Requests ending with a model turn are not
++				// supported."), so tool-result images move to the following user
++				// turn and each turn keeps its functionResponses contiguous.
++				frParts := gjson.GetBytes(wire, "request.contents.1.parts").Array()
++				require.Len(t, frParts, 3)
++				require.Equal(t, "view_image", frParts[0].Get("functionResponse.name").String())
++				require.Equal(t, "view_image", frParts[1].Get("functionResponse.name").String())
++				require.Equal(t, "exec_command", frParts[2].Get("functionResponse.name").String())
++				imageParts := gjson.GetBytes(wire, "request.contents.2.parts").Array()
++				require.Len(t, imageParts, 2)
++				require.Equal(t, "user", gjson.GetBytes(wire, "request.contents.2.role").String())
++				require.Equal(t, "AQID", imageParts[0].Get("inlineData.data").String())
++				require.Equal(t, "BAUG", imageParts[1].Get("inlineData.data").String())
++				return
++			}
+ 			parts := gjson.GetBytes(wire, "request.contents.1.parts").Array()
+ 			require.Len(t, parts, 5)
+ 			require.Equal(t, "view_image", parts[0].Get("functionResponse.name").String())
+diff --git a/backend/internal/service/gemini_messages_compat_service.go b/backend/internal/service/gemini_messages_compat_service.go
+index 74b537b37..04add4337 100644
+--- a/backend/internal/service/gemini_messages_compat_service.go
++++ b/backend/internal/service/gemini_messages_compat_service.go
+@@ -3680,6 +3680,34 @@ func convertClaudeMessagesToGeminiContents(messages any, toolUseIDToName map[str
+ 			"parts": parts,
+ 		})
+ 	}
++	// Gemini/Vertex 拒收「以 functionResponse 开头、后面还跟着其它 part」的最后一个 turn，
++	// 报错文案是误导性的 "Requests ending with a model turn are not supported."。
++	// 客户端在工具结果后紧跟一条 user 文本时（例如 ACP nudge），CC→Claude 的
++	// mergeConsecutiveMessages 会把它并进同一个 user 消息，这里再把尾部的非
++	// functionResponse part 拆成独立的一轮 user，语义顺序不变。
++	if n := len(out); n > 0 {
++		if last, ok := out[n-1].(map[string]any); ok {
++			if parts, ok := last["parts"].([]any); ok {
++				lastFR := -1
++				for i, p := range parts {
++					pm, ok := p.(map[string]any)
++					if !ok {
++						continue
++					}
++					if _, isFR := pm["functionResponse"]; isFR {
++						lastFR = i
++					}
++				}
++				if lastFR >= 0 && lastFR < len(parts)-1 {
++					last["parts"] = parts[:lastFR+1]
++					out = append(out, map[string]any{
++						"role":  "user",
++						"parts": parts[lastFR+1:],
++					})
++				}
++			}
++		}
++	}
+ 	return out, nil
+ }
+ 
+diff --git a/backend/internal/service/gemini_messages_compat_service_test.go b/backend/internal/service/gemini_messages_compat_service_test.go
+index a207153b7..8380ea760 100644
+--- a/backend/internal/service/gemini_messages_compat_service_test.go
++++ b/backend/internal/service/gemini_messages_compat_service_test.go
+@@ -990,7 +990,10 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t
+ 	require.True(t, ok)
+ 	parts, ok := content["parts"].([]any)
+ 	require.True(t, ok)
+-	require.Len(t, parts, 4)
++	// Gemini 拒绝 functionResponse 之后仍带其它 part 的轮次
++	//（"Requests ending with a model turn are not supported."），
++	// 工具结果图片因此被拆到紧随其后的独立 user 轮。
++	require.Len(t, parts, 2)
+ 
+ 	firstPart, ok := parts[0].(map[string]any)
+ 	require.True(t, ok)
+@@ -1009,13 +1012,20 @@ func TestConvertClaudeMessagesToGeminiGenerateContent_ExtractsToolResultImages(t
+ 	require.True(t, ok)
+ 	require.Equal(t, "[image attached below]", secondResponseBody["content"])
+ 
+-	firstImagePart, ok := parts[2].(map[string]any)
++	imageContent, ok := contents[2].(map[string]any)
++	require.True(t, ok)
++	require.Equal(t, "user", imageContent["role"])
++	imageParts, ok := imageContent["parts"].([]any)
++	require.True(t, ok)
++	require.Len(t, imageParts, 2)
++
++	firstImagePart, ok := imageParts[0].(map[string]any)
+ 	require.True(t, ok)
+ 	firstImage, ok := firstImagePart["inlineData"].(map[string]any)
+ 	require.True(t, ok)
+ 	require.Equal(t, "image/png", firstImage["mimeType"])
+ 	require.Equal(t, "aGVsbG8=", firstImage["data"])
+-	secondImagePart, ok := parts[3].(map[string]any)
++	secondImagePart, ok := imageParts[1].(map[string]any)
+ 	require.True(t, ok)
+ 	secondImage, ok := secondImagePart["inlineData"].(map[string]any)
+ 	require.True(t, ok)

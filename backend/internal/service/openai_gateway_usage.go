@@ -408,13 +408,13 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.BillingMode = &billingMode
 	}
 	// 添加 UserAgent
-	if input.UserAgent != "" {
-		usageLog.UserAgent = &input.UserAgent
+	if userAgent := input.UserAgent; userAgent != "" {
+		usageLog.UserAgent = &userAgent
 	}
 
 	// 添加 IPAddress
-	if input.IPAddress != "" {
-		usageLog.IPAddress = &input.IPAddress
+	if ipAddress := input.IPAddress; ipAddress != "" {
+		usageLog.IPAddress = &ipAddress
 	}
 
 	// 添加 SessionID（客户端显式会话标识；缺失/无效时保持 nil）

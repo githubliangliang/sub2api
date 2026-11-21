@@ -30,6 +30,7 @@ func resolveOpenAIForwardModel(account *Account, requestedModel, messagesDispatc
 // （调度过滤看到的是改写前的原始模型名）。前缀分类的先例见
 // ResolveThinkingProtocol（thinking_protocol.go）。
 var openAIOAuthForeignModelPrefixes = []string{
+	"claude-",
 	"deepseek-",
 	"glm-",
 	"kimi-",

@@ -55,7 +55,7 @@ func requestBodyReadMessage(c *gin.Context, err error) string {
 	if errors.Is(err, pkghttputil.ErrRequestBodyMemoryBudget) {
 		return "Request body buffering capacity is exhausted; retry later"
 	}
-	return pkghttputil.DescribeRequestBodyReadFailure(c.Request, err).Message
+	return pkghttputil.DescribeRequestBodyReadFailure(c.Request, err).ClientMessage()
 }
 
 func handleRequestBodyReadError(c *gin.Context, err error) bool {

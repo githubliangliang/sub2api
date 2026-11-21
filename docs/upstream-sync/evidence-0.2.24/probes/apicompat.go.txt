@@ -1,0 +1,8 @@
+package apicompat
+import("encoding/json";"testing";"github.com/stretchr/testify/require")
+func TestIntake024StopPreservation(t *testing.T){
+ var req ResponsesRequest
+ require.NoError(t,json.Unmarshal([]byte(`{"model":"gpt-6.2-sol","input":"hello","stop":["END"]}`),&req))
+ got,err:=ResponsesToChatCompletionsRequestWithOptions(&req,nil);require.NoError(t,err);require.JSONEq(t,`["END"]`,string(got.Stop))
+}
+func TestIntake024NoStopControl(t *testing.T){var req ResponsesRequest;require.NoError(t,json.Unmarshal([]byte(`{"model":"gpt-6.2-sol","input":"hello"}`),&req));got,err:=ResponsesToChatCompletionsRequestWithOptions(&req,nil);require.NoError(t,err);require.Empty(t,got.Stop)}

@@ -97,7 +97,7 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 			// 漏过 PAT 类型判断。这里仍允许本次请求换号，但不修改任何账号状态；
 			// 真正的凭据失效由普通 Responses 请求或 whoami 校验判定。
 			shouldDisable := false
-			if shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(resp.StatusCode) {
+			if shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(resp.StatusCode, respBody) {
 				shouldDisable = s.handleFailoverSideEffects(ctx, resp, account, respBody, upstreamModel)
 			}
 			return nil, &UpstreamFailoverError{
@@ -172,7 +172,7 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
 			// 仍按 alpha/search 工具请求处理：PAT 的工具链路失败不能直接永久置错。
 			shouldDisable := false
-			if shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(resp.StatusCode) {
+			if shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(resp.StatusCode, respBody) {
 				shouldDisable = s.handleFailoverSideEffects(ctx, resp, account, respBody, upstreamModel)
 			}
 			return nil, &UpstreamFailoverError{
@@ -520,12 +520,28 @@ func isOpenAIAlphaSearchEndpointUnsupported(account *Account, statusCode int) bo
 	return statusCode == http.StatusNotFound || statusCode == http.StatusMethodNotAllowed
 }
 
-func shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(statusCode int) bool {
+func shouldApplyOpenAIAlphaSearchAccountErrorSideEffects(statusCode int, responseBody []byte) bool {
 	switch statusCode {
 	case http.StatusUnauthorized, http.StatusNotFound, http.StatusMethodNotAllowed:
 		// 401：工具端点的 access enforcement 不代表凭据全局失效；
 		// 404/405：端点不存在只说明该上游不支持独立搜索，账号本身健康。
 		// 两类都只换号，不写账号错误状态。
+		return false
+	case http.StatusForbidden:
+		// A tool-level refusal is not evidence that the account's credentials are invalid.
+		if len(responseBody) == 0 || !gjson.ValidBytes(responseBody) {
+			return false
+		}
+		for _, path := range []string{"error.code", "response.error.code", "detail.code", "code"} {
+			code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(responseBody, path).String()))
+			for _, subject := range []string{"workspace", "account", "organization", "org"} {
+				for _, state := range []string{"deactivated", "disabled", "suspended"} {
+					if code == subject+"_"+state || code == state+"_"+subject {
+						return true
+					}
+				}
+			}
+		}
 		return false
 	default:
 		return true

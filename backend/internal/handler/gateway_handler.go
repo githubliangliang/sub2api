@@ -1158,6 +1158,20 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 
 	// Get available models from account configurations for the selected group platform.
 	availableModels := h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, platform)
+	if platform == service.PlatformAnthropic {
+		var group *service.Group
+		if apiKey != nil {
+			group = apiKey.Group
+		}
+		source := availableModels
+		if len(source) == 0 {
+			source = defaultModelIDsForPlatform(platform)
+		}
+		expanded := h.gatewayService.ExpandAnthropicLongContextModels(c.Request.Context(), group, source)
+		if len(availableModels) > 0 || len(expanded) > len(source) {
+			availableModels = expanded
+		}
+	}
 	if platform == service.PlatformOpenAI && availableModels != nil && len(availableModels) == 0 {
 		writeModelsList(c, platform, availableModels)
 		return

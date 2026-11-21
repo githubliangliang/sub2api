@@ -1,0 +1,103 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import BulkEditAccountModal from '../BulkEditAccountModal.vue'
+import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
+import { adminAPI } from '@/api/admin'
+
+const { showError } = vi.hoisted(() => ({
+  showError: vi.fn()
+}))
+
+vi.mock('@/stores/app', () => ({
+  useAppStore: () => ({
+    showError,
+    showSuccess: vi.fn(),
+    showInfo: vi.fn()
+  })
+}))
+
+vi.mock('@/api/admin', () => ({
+  adminAPI: {
+    accounts: {
+      bulkUpdate: vi.fn(),
+      checkMixedChannelRisk: vi.fn()
+    }
+  }
+}))
+
+vi.mock('@/api/admin/accounts', () => ({
+  getAntigravityDefaultModelMapping: vi.fn()
+}))
+
+vi.mock('vue-i18n', async () => {
+  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (key: string) => key
+    })
+  }
+})
+
+function mountModal(extraProps: Record<string, unknown> = {}) {
+  return mount(BulkEditAccountModal, {
+    props: {
+      show: true,
+      accountIds: [1, 2],
+      selectedPlatforms: ['antigravity'],
+      selectedTypes: ['apikey'],
+      proxies: [],
+      groups: [],
+      ...extraProps
+    } as any,
+    global: {
+      stubs: {
+        BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' },
+        ConfirmDialog: true,
+        Select: {
+          props: ['modelValue', 'options'],
+          emits: ['update:modelValue'],
+          template: `
+            <select
+              v-bind="$attrs"
+              :value="modelValue"
+              @change="$emit('update:modelValue', $event.target.value)"
+            >
+              <option v-for="option in options" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          `
+        },
+        ProxySelector: true,
+        GroupSelector: true,
+        Icon: true
+      }
+    }
+  })
+}
+
+
+describe('Intake024 bulk passthrough',()=>{
+ beforeEach(()=>{
+  vi.mocked(adminAPI.accounts.bulkUpdate).mockReset();vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockReset();showError.mockReset()
+  vi.mocked(adminAPI.accounts.bulkUpdate).mockResolvedValue({success:2,failed:0,results:[]} as any)
+  vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockResolvedValue({has_risk:false} as any)
+ })
+ it.each(['oauth','apikey'])('preserves model-filter configuration when only passthrough changes for %s',async(type)=>{
+  const wrapper=mountModal({selectedPlatforms:['openai'],selectedTypes:[type]})
+  await wrapper.get('#bulk-edit-openai-passthrough-enabled').setValue(true)
+  await wrapper.get('#bulk-edit-openai-passthrough-toggle').trigger('click')
+  await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent');await flushPromises()
+  const payload=vi.mocked(adminAPI.accounts.bulkUpdate).mock.calls[0][1] as any
+  expect(payload.extra).not.toHaveProperty('openai_passthrough_model_filter')
+  wrapper.unmount()
+ })
+ it('keeps an unrelated priority-only edit independent',async()=>{
+  const wrapper=mountModal({selectedPlatforms:['openai'],selectedTypes:['apikey']})
+  await wrapper.get('#bulk-edit-priority-enabled').setValue(true)
+  await wrapper.get('#bulk-edit-priority').setValue(3)
+  await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent');await flushPromises()
+  expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1,2],{priority:3});wrapper.unmount()
+ })
+})

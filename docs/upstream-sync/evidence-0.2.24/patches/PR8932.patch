@@ -1,0 +1,261 @@
+diff --git a/backend/internal/service/openai_codex_model_metadata.go b/backend/internal/service/openai_codex_model_metadata.go
+index 14155d0df..02156de3c 100644
+--- a/backend/internal/service/openai_codex_model_metadata.go
++++ b/backend/internal/service/openai_codex_model_metadata.go
+@@ -228,6 +228,7 @@ func groupCodexModelMetadata(
+ 	publicAlias := upstreamModel != modelID
+ 	candidates := make([]UpstreamModelMetadata, 0)
+ 	missingMetadata := false
++	audioInput := true
+ 	for i := range accounts {
+ 		account := &accounts[i]
+ 		if !codexAccountServesPlatformModel(account, platform, modelID) {
+@@ -252,6 +253,7 @@ func groupCodexModelMetadata(
+ 			publicAlias = true
+ 		}
+ 		metadata, ok := account.GetUpstreamModelMetadata(lookupModel)
++		audioInput = audioInput && accountCodexModelSupportsAudioInput(account, lookupModel, metadata.InputModalities)
+ 		if !ok {
+ 			if explicitTargetsConflict {
+ 				return codexModelMetadataOverride{
+@@ -277,9 +279,25 @@ func groupCodexModelMetadata(
+ 		metadata.DisplayName = modelID
+ 		metadata.Description = configuredCodexCustomDescription
+ 	}
++	metadata.audioInput = audioInput
+ 	return metadata, true
+ }
+ 
++func accountCodexModelSupportsAudioInput(account *Account, modelID string, modalities []string) bool {
++	if account == nil || !account.IsOpenAI() {
++		return false
++	}
++	if resolveUpstreamProtocol(account, APIProtocolResponses, modelID, nil) != APIProtocolResponses {
++		return false
++	}
++	if len(modalities) > 0 {
++		return stringSliceContains(modalities, "audio")
++	}
++	// The bundled Codex subscription manifest declares audio for Sol. The
++	// public API model with the same slug has different input capabilities.
++	return account.IsOpenAIOAuthLike() && openai.GPT62ModelID(modelID) == "gpt-6.2-sol"
++}
++
+ func codexExplicitModelTargetsConflict(accounts []Account, modelID string) bool {
+ 	targets := make(map[string]struct{})
+ 	for i := range accounts {
+diff --git a/backend/internal/service/openai_codex_model_metadata_test.go b/backend/internal/service/openai_codex_model_metadata_test.go
+index aafe8aae1..7a1dcaf31 100644
+--- a/backend/internal/service/openai_codex_model_metadata_test.go
++++ b/backend/internal/service/openai_codex_model_metadata_test.go
+@@ -6,9 +6,102 @@ import (
+ 	"errors"
+ 	"testing"
+ 
++	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+ 	"github.com/stretchr/testify/require"
+ )
+ 
++func TestCodexCatalogAudioInput(t *testing.T) {
++	const sol = "gpt-6.2-sol"
++	const astra = "gpt-6.2-astra"
++	manifest, err := json.Marshal(map[string][]json.RawMessage{"models": {openai.CodexGPT62SolMetadata, openai.CodexGPT62AstraMetadata}})
++	require.NoError(t, err)
++	_, metadata, err := extractUpstreamModelCatalog(manifest, false)
++	require.NoError(t, err)
++	t.Run("sync keeps the declared input modalities", func(t *testing.T) {
++		require.Equal(t, []string{"text", "image", "audio"}, metadata[sol].InputModalities)
++		require.Equal(t, []string{"text", "image"}, metadata[astra].InputModalities)
++	})
++	subscription := Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	synced := Account{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
++	synced.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{Models: metadata})
++	key := Account{ID: 3, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
++	native := Account{ID: 4, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
++		Credentials: map[string]any{"base_url": "https://native.example/v1"}}
++	native.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{Models: metadata})
++	bridged := Account{ID: 5, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
++		Credentials: native.Credentials, Extra: map[string]any{"openai_responses_mode": "force_chat_completions"}}
++	bridged.SetUpstreamModelMetadataSnapshot(UpstreamModelMetadataSnapshot{Models: metadata})
++	for _, tc := range []struct {
++		name     string
++		model    string
++		accounts []Account
++		want     []any
++	}{
++		{"Codex subscription", sol, []Account{subscription}, []any{"text", "image", "audio"}},
++		{"synced Codex subscription", sol, []Account{synced}, []any{"text", "image", "audio"}},
++		{"Astra excludes audio", astra, []Account{synced}, []any{"text", "image"}},
++		{"public API key excludes subscription-only audio", sol, []Account{key}, []any{"text", "image"}},
++		{"mixed subscription and API key", sol, []Account{synced, key}, []any{"text", "image"}},
++		{"native compatible route declares audio", sol, []Account{native}, []any{"text", "image", "audio"}},
++		{"mixed native and chat bridge", sol, []Account{native, bridged}, []any{"text", "image"}},
++		{"empty group has no audio route", sol, nil, []any{"text", "image"}},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			svc := &GatewayService{accountRepo: codexModelsVisibilityAccountRepo{byGroup: map[int64][]Account{1: tc.accounts}}}
++			body, err := svc.BuildCodexModelsManifestForGroup(context.Background(), &Group{ID: 1, Platform: PlatformOpenAI}, "", []string{tc.model})
++			require.NoError(t, err)
++			require.Equal(t, tc.want, decodeCodexManifestModels(t, body)[0]["input_modalities"])
++		})
++	}
++	for _, tc := range []struct {
++		account *Account
++		want    []any
++	}{
++		{&native, []any{"text", "image", "audio"}},
++		{&bridged, []any{"text", "image"}},
++	} {
++		response := &OpenAIModelsResponse{Body: []byte(`{"models":[{"slug":"gpt-6.2-sol"}]}`)}
++		require.NoError(t, (&OpenAIGatewayService{}).CompleteAPIKeyCodexModelsManifestForClient(response, tc.account))
++		require.Equal(t, tc.want, decodeCodexManifestModels(t, response.Body)[0]["input_modalities"])
++	}
++}
++
++func TestCodexCatalogAudioFromLiveAPIKeyManifest(t *testing.T) {
++	native := Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
++		Credentials: map[string]any{"base_url": "https://native.example/v1"}}
++	for _, fixture := range []struct {
++		name, body string
++		converted  bool
++	}{
++		{"Codex manifest", `{"models":[{"slug":"gpt-6.2-sol","input_modalities":["text","image","audio"]}]}`, false},
++		{"OpenAI list", `{"data":[{"id":"gpt-6.2-sol","input_modalities":["text","image","audio"]}]}`, true},
++		{"nested modalities", `{"data":[{"id":"gpt-6.2-sol","modalities":{"input":["text","image","audio"]}}]}`, true},
++	} {
++		for _, tc := range []struct {
++			name  string
++			extra map[string]any
++			want  []any
++		}{
++			{"native Responses", nil, []any{"text", "image", "audio"}},
++			{"forced Chat bridge", map[string]any{"openai_responses_mode": "force_chat_completions"}, []any{"text", "image"}},
++			{"probed Chat fallback", map[string]any{"openai_responses_supported": false}, []any{"text", "image"}},
++		} {
++			t.Run(fixture.name+"/"+tc.name, func(t *testing.T) {
++				account := native
++				account.Extra = tc.extra
++				body := convertOpenAIModelListToCodexManifestForAccount([]byte(fixture.body), &account)
++				response := &OpenAIModelsResponse{
++					Body:                         body,
++					upstreamSourceBody:           []byte(fixture.body),
++					convertedFromOpenAIModelList: fixture.converted,
++				}
++				require.NoError(t, (&OpenAIGatewayService{}).CompleteAPIKeyCodexModelsManifestForClient(response, &account))
++				require.Equal(t, tc.want, decodeCodexManifestModels(t, response.Body)[0]["input_modalities"])
++			})
++		}
++	}
++}
++
+ func TestCodexCatalogUsesAntigravityCapabilitiesInGeminiMixedGroup(t *testing.T) {
+ 	const groupID int64 = 93
+ 	account := Account{
+diff --git a/backend/internal/service/openai_codex_models_service.go b/backend/internal/service/openai_codex_models_service.go
+index edb24b87a..1d60d2c8c 100644
+--- a/backend/internal/service/openai_codex_models_service.go
++++ b/backend/internal/service/openai_codex_models_service.go
+@@ -12,6 +12,7 @@ import (
+ 	"net/http"
+ 	"net/url"
+ 	"regexp"
++	"slices"
+ 	"sort"
+ 	"strings"
+ 	"sync"
+@@ -419,6 +420,7 @@ type configuredCodexModelDescriptor struct {
+ 
+ type codexModelMetadataOverride struct {
+ 	UpstreamModelMetadata
++	audioInput              bool
+ 	reasoningConflict       bool
+ 	inputModalitiesConflict bool
+ }
+@@ -1020,6 +1022,7 @@ func buildCodexModelsManifest(
+ 			// a stale official Astra snapshot cannot downgrade the catalog.
+ 			descriptor.InputModalities = []string{"text", "image"}
+ 		}
++		descriptor.InputModalities = codexAudioInputModalities(descriptor.InputModalities, modelMetadata[modelID].audioInput)
+ 		if metadataModelID != modelID {
+ 			descriptor.DisplayName = modelID
+ 			descriptor.Description = configuredCodexCustomDescription
+@@ -1046,6 +1049,16 @@ func buildCodexModelsManifest(
+ 	}{Models: models})
+ }
+ 
++func codexAudioInputModalities(modalities []string, supported bool) []string {
++	if !supported {
++		return slices.DeleteFunc(modalities, func(modality string) bool { return modality == "audio" })
++	}
++	if !slices.Contains(modalities, "audio") {
++		return append(modalities, "audio")
++	}
++	return modalities
++}
++
+ func codexCatalogMetadataModels(
+ 	platform string,
+ 	modelIDs []string,
+@@ -2227,9 +2240,21 @@ func convertOpenAIModelListToCodexManifestForAccount(body []byte, account *Accou
+ 		metadataModels[id] = capabilityModel
+ 		capabilities := accountCodexToolCapabilities(account, capabilityModel)
+ 		applyCodexToolCapabilities(capabilities, entry, true)
+-		modelMetadata[id] = codexModelMetadataOverride{UpstreamModelMetadata: UpstreamModelMetadata{
+-			CodexToolCapabilities: capabilities,
+-		}}
++		var modalities []string
++		_ = json.Unmarshal(entry["input_modalities"], &modalities)
++		if len(modalities) == 0 {
++			var declared modelsDevModalities
++			_ = json.Unmarshal(entry["modalities"], &declared)
++			modalities = declared.Input
++		}
++		if len(modalities) == 0 && account != nil {
++			synced, _ := account.GetUpstreamModelMetadata(capabilityModel)
++			modalities = synced.InputModalities
++		}
++		modelMetadata[id] = codexModelMetadataOverride{
++			UpstreamModelMetadata: UpstreamModelMetadata{CodexToolCapabilities: capabilities},
++			audioInput:            accountCodexModelSupportsAudioInput(account, capabilityModel, normalizeCodexInputModalities(modalities)),
++		}
+ 	}
+ 	if len(modelIDs) == 0 {
+ 		return body
+@@ -2454,6 +2479,8 @@ func completeAPIKeyCodexModelsManifestMetadata(body []byte, completeAll bool, ac
+ 		}
+ 
+ 		descriptor := newConfiguredCodexModelDescriptor(slug)
++		// A subscription descriptor alone cannot establish audio support for an API key.
++		descriptor.InputModalities = codexAudioInputModalities(descriptor.InputModalities, false)
+ 		descriptor.SupportsSearchTool = shouldForwardOpenAIResponsesViaRawChatCompletions(account)
+ 		if accountCodexModelSupportsImageInput(account, slug) {
+ 			descriptor.InputModalities = []string{"text", "image"}
+@@ -2498,6 +2525,15 @@ func completeAPIKeyCodexModelsManifestMetadata(body []byte, completeAll bool, ac
+ 				model["supports_image_detail_original"] = imageDetailOriginal
+ 				modelChanged = true
+ 			}
++		} else if account != nil && resolveUpstreamProtocol(account, APIProtocolResponses, capabilityModel, nil) != APIProtocolResponses {
++			var modalities []string
++			if json.Unmarshal(model["input_modalities"], &modalities) == nil && slices.Contains(modalities, "audio") {
++				model["input_modalities"], err = json.Marshal(codexAudioInputModalities(modalities, false))
++				if err != nil {
++					return nil, fmt.Errorf("encode input modalities for model %q: %w", slug, err)
++				}
++				modelChanged = true
++			}
+ 		}
+ 		if !modelChanged {
+ 			continue
+diff --git a/backend/internal/service/upstream_models.go b/backend/internal/service/upstream_models.go
+index 82fd9a587..b110c940b 100644
+--- a/backend/internal/service/upstream_models.go
++++ b/backend/internal/service/upstream_models.go
+@@ -1726,7 +1726,7 @@ func normalizeCodexInputModalities(modalities []string) []string {
+ 	normalized := make([]string, 0, len(modalities))
+ 	for _, modality := range modalities {
+ 		modality = strings.ToLower(strings.TrimSpace(modality))
+-		if modality != "text" && modality != "image" {
++		if modality != "text" && modality != "image" && modality != "audio" {
+ 			continue
+ 		}
+ 		if _, exists := seen[modality]; exists {

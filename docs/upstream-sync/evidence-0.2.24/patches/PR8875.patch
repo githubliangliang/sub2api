@@ -1,0 +1,526 @@
+diff --git a/backend/internal/securityaudit/coordinator.go b/backend/internal/securityaudit/coordinator.go
+index e6d9c0d92..023616f8c 100644
+--- a/backend/internal/securityaudit/coordinator.go
++++ b/backend/internal/securityaudit/coordinator.go
+@@ -13,6 +13,8 @@ type LegacyEngine interface {
+ 
+ type PromptEngine interface {
+ 	EffectiveMode() Mode
++	// Enqueue borrows req read-only for this call; implementations must copy
++	// any request memory retained after returning.
+ 	Enqueue(ctx context.Context, req Request) error
+ 	Evaluate(ctx context.Context, req Request) (*PromptDecision, error)
+ }
+@@ -38,7 +40,7 @@ func (c *Coordinator) Check(ctx context.Context, req Request) Decision {
+ 	case ModeAsync:
+ 		// Enqueue is deliberately best-effort. The implementation owns a bounded
+ 		// context and copies request memory before it can outlive the Handler.
+-		_ = c.prompt.Enqueue(ctx, req.Clone())
++		_ = c.prompt.Enqueue(ctx, req)
+ 		legacy, _ := c.checkLegacy(ctx, req)
+ 		return prioritize(legacy, nil)
+ 	case ModeBlocking:
+diff --git a/backend/internal/securityaudit/prompt_memory_optimization_test.go b/backend/internal/securityaudit/prompt_memory_optimization_test.go
+new file mode 100644
+index 000000000..5ed117895
+--- /dev/null
++++ b/backend/internal/securityaudit/prompt_memory_optimization_test.go
+@@ -0,0 +1,225 @@
++package securityaudit
++
++import (
++	"context"
++	"math/rand"
++	"runtime"
++	"strings"
++	"sync"
++	"sync/atomic"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func memoryTestPromptService(cfg ActiveConfig, repo JobRepository) *PromptService {
++	store := &fakeConfigStore{cfg: cfg, active: true}
++	metrics := NewAtomicMetrics()
++	return &PromptService{config: store, metrics: metrics, background: context.Background(), enqueueSlots: make(chan struct{}, 128),
++		enqueuer: NewEnqueuer(store, repo, &fakePayloadStore{}, metrics)}
++}
++
++func TestAsyncAuditOutOfScopeSkipsLargeBodyCopy(t *testing.T) {
++	cfg := asyncConfig()
++	cfg.AllGroups = false
++	cfg.GroupIDs = []int64{1}
++	groupID := int64(2)
++	svc := memoryTestPromptService(cfg, &fakeJobRepository{})
++	req := Request{GroupID: &groupID, Protocol: "openai_responses", Body: []byte(`{"input":"` + strings.Repeat("x", 1<<20) + `"}`)}
++	runtime.GC()
++	var before, after runtime.MemStats
++	runtime.ReadMemStats(&before)
++	decision := NewCoordinator(nil, svc).Check(context.Background(), req)
++	svc.enqueueWG.Wait()
++	runtime.ReadMemStats(&after)
++	require.True(t, decision.AllowNextStage)
++	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(len(req.Body)/2), "out-of-scope audit must not copy the body")
++	runtime.KeepAlive(req)
++}
++
++func TestTrimRunesMatchesOriginalWithoutAllocatingTheWholePrompt(t *testing.T) {
++	for _, value := range []string{"", "abc", "中文😀suffix", "a\xff\xfebc", strings.Repeat("x", 1<<20)} {
++		for _, limit := range []int{0, 1, 3, 96} {
++			want := ""
++			if limit > 0 {
++				runes := []rune(value)
++				want = value
++				if len(runes) > limit {
++					want = string(runes[:limit]) + "…"
++				}
++			}
++			require.Equal(t, want, TrimRunes(value, limit))
++		}
++	}
++	value := strings.Repeat("x", 1<<20)
++	var before, after runtime.MemStats
++	runtime.ReadMemStats(&before)
++	out := TrimRunes(value, 96)
++	runtime.ReadMemStats(&after)
++	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
++	runtime.KeepAlive(out)
++}
++
++func TestSplitRunesPreservesChunksWithoutWholeTranscriptCopies(t *testing.T) {
++	for _, value := range []string{"", "abcdef", "中文😀suffix", "a\xff\xfebc", "abc" + promptAuditPrioritySeparator + "中文😀"} {
++		for _, limit := range []int{1, 3, 4000} {
++			want := []string{}
++			for _, segment := range strings.Split(value, promptAuditPrioritySeparator) {
++				runes := []rune(segment)
++				for start := 0; start < len(runes); start += limit {
++					want = append(want, string(runes[start:min(start+limit, len(runes))]))
++				}
++			}
++			require.Equal(t, want, SplitRunes(value, limit))
++		}
++	}
++	value := strings.Repeat("x", 1<<20)
++	var before, after runtime.MemStats
++	runtime.ReadMemStats(&before)
++	chunks := SplitRunes(value, 4000)
++	runtime.ReadMemStats(&after)
++	require.Equal(t, value, strings.Join(chunks, ""))
++	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
++	runtime.KeepAlive(chunks)
++}
++
++func TestRedactPreviewPreservesCompleteInputReplacementOrder(t *testing.T) {
++	for _, value := range []string{
++		"Bearer abcdefghijklmnop token=abcdefghijkl USER_CANARY_example user@example.org +86 138 1234 5678",
++		strings.Repeat("x", 1<<20),
++		strings.Repeat("前缀😀", 40) + " Bearer abcdefghijklmnop",
++		"short password:abcdefghijkl suffix",
++	} {
++		want := bearerPattern.ReplaceAllString(value, "Bearer ***")
++		want = apiKeyPattern.ReplaceAllStringFunc(want, func(match string) string {
++			if index := strings.IndexAny(match, ":= \t"); index >= 0 {
++				return match[:index+1] + "***"
++			}
++			return "***"
++		})
++		want = canaryPattern.ReplaceAllString(want, "${1}***")
++		want = emailPattern.ReplaceAllString(want, "***@***")
++		want = phonePattern.ReplaceAllString(want, "***PHONE***")
++		require.Equal(t, TrimRunes(want, 96), RedactPreview(value, 96))
++	}
++	value := strings.Repeat("x", 1<<20)
++	var before, after runtime.MemStats
++	runtime.ReadMemStats(&before)
++	out := RedactPreview(value, 96)
++	runtime.ReadMemStats(&after)
++	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
++	runtime.KeepAlive(out)
++}
++
++type memoryTestGatedConfig struct {
++	*fakeConfigStore
++	reads  atomic.Int32
++	resume <-chan struct{}
++}
++
++func (c *memoryTestGatedConfig) Active() (ActiveConfig, bool) {
++	if c.reads.Add(1) >= 2 {
++		<-c.resume
++	}
++	return c.fakeConfigStore.Active()
++}
++
++type memoryTestLegacyMutation struct{ mutate func(Request) }
++
++func (l memoryTestLegacyMutation) Check(_ context.Context, req Request) (*LegacyDecision, error) {
++	l.mutate(req)
++	return &LegacyDecision{Allowed: true}, nil
++}
++
++func TestAsyncAuditOwnsCopyBeforeLegacyOrHandlerCanMutateInput(t *testing.T) {
++	cfg := asyncConfig()
++	cfg.AllGroups = false
++	cfg.GroupIDs = []int64{1}
++	resume := make(chan struct{})
++	store := &memoryTestGatedConfig{fakeConfigStore: &fakeConfigStore{cfg: cfg, active: true}, resume: resume}
++	repo := &fakeJobRepository{}
++	svc := memoryTestPromptService(cfg, repo)
++	svc.config, svc.enqueuer.config = store, store
++	groupID := int64(1)
++	req := asyncRequest()
++	req.GroupID = &groupID
++	want, err := ExtractPromptSnapshot(req)
++	require.NoError(t, err)
++	legacy := memoryTestLegacyMutation{mutate: func(borrowed Request) {
++		borrowed.Body[0] = '!'
++		*borrowed.GroupID = 2
++		close(resume)
++	}}
++	decision := NewCoordinator(legacy, svc).Check(context.Background(), req)
++	svc.enqueueWG.Wait()
++	require.True(t, decision.AllowNextStage)
++	require.Equal(t, AuditMetricsSnapshot{Enqueued: 1}, svc.metrics.AuditSnapshot())
++	require.Equal(t, want.PromptHash, repo.createdSnapshot.PromptHash)
++	require.Equal(t, int64(1), *repo.createdSnapshot.GroupID)
++}
++
++func TestAsyncAuditConcurrentRequestsStillEnqueueWithoutNewDrops(t *testing.T) {
++	svc := memoryTestPromptService(asyncConfig(), &fakeJobRepository{})
++	coordinator := NewCoordinator(nil, svc)
++	req := asyncRequest()
++	var callers sync.WaitGroup
++	for i := 0; i < 8; i++ {
++		callers.Add(1)
++		go func() { defer callers.Done(); coordinator.Check(context.Background(), req) }()
++	}
++	callers.Wait()
++	svc.enqueueWG.Wait()
++	require.Equal(t, AuditMetricsSnapshot{Enqueued: 8}, svc.metrics.AuditSnapshot())
++}
++
++func originalTrimRunesForMemoryTest(value string, limit int) string {
++	if limit <= 0 {
++		return ""
++	}
++	runes := []rune(value)
++	if len(runes) <= limit {
++		return value
++	}
++	return string(runes[:limit]) + "…"
++}
++
++func originalRedactForMemoryTest(value string, limit int) string {
++	value = bearerPattern.ReplaceAllString(value, "Bearer ***")
++	value = apiKeyPattern.ReplaceAllStringFunc(value, func(match string) string {
++		if index := strings.IndexAny(match, ":= \t"); index >= 0 {
++			return match[:index+1] + "***"
++		}
++		return "***"
++	})
++	value = canaryPattern.ReplaceAllString(value, "${1}***")
++	value = emailPattern.ReplaceAllString(value, "***@***")
++	value = phonePattern.ReplaceAllString(value, "***PHONE***")
++	return originalTrimRunesForMemoryTest(value, limit)
++}
++
++func TestAuditTextOptimizationsMatchOriginalOnDeterministicCorpus(t *testing.T) {
++	rng := rand.New(rand.NewSource(20261111))
++	atoms := []string{"x", "中文", "😀", " ", "\xff\xfe", "\x00", "Bearer abcdefghijklmnop", " secret:abcdefghijkl ", " user@example.org ", " +86 138 1234 5678 ", promptAuditPrioritySeparator}
++	for sample := 0; sample < 100; sample++ {
++		var builder strings.Builder
++		for n := rng.Intn(128); n > 0; n-- {
++			_, _ = builder.WriteString(atoms[rng.Intn(len(atoms))])
++		}
++		value := builder.String()
++		for _, limit := range []int{0, 1, 24, 96, 4000} {
++			require.Equal(t, originalTrimRunesForMemoryTest(value, limit), TrimRunes(value, limit))
++			require.Equal(t, originalRedactForMemoryTest(value, limit), RedactPreview(value, limit))
++			var want []string
++			if limit > 0 {
++				want = []string{}
++				for _, segment := range strings.Split(value, promptAuditPrioritySeparator) {
++					runes := []rune(segment)
++					for start := 0; start < len(runes); start += limit {
++						want = append(want, string(runes[start:min(start+limit, len(runes))]))
++					}
++				}
++			}
++			require.Equal(t, want, SplitRunes(value, limit))
++		}
++	}
++}
+diff --git a/backend/internal/securityaudit/prompt_scanner.go b/backend/internal/securityaudit/prompt_scanner.go
+index 103d10045..232fcf422 100644
+--- a/backend/internal/securityaudit/prompt_scanner.go
++++ b/backend/internal/securityaudit/prompt_scanner.go
+@@ -5,6 +5,7 @@ import (
+ 	"sort"
+ 	"strings"
+ 	"time"
++	"unicode/utf8"
+ )
+ 
+ func SplitRunes(value string, limit int) []string {
+@@ -14,18 +15,28 @@ func SplitRunes(value string, limit int) []string {
+ 	segments := strings.Split(value, promptAuditPrioritySeparator)
+ 	chunks := make([]string, 0, len(segments))
+ 	for _, segment := range segments {
+-		runes := []rune(segment)
+-		for start := 0; start < len(runes); start += limit {
+-			end := start + limit
+-			if end > len(runes) {
+-				end = len(runes)
++		start, count := 0, 0
++		for end := range segment {
++			if count == limit {
++				chunks = append(chunks, promptScanChunk(segment[start:end]))
++				start, count = end, 0
+ 			}
+-			chunks = append(chunks, string(runes[start:end]))
++			count++
++		}
++		if start < len(segment) {
++			chunks = append(chunks, promptScanChunk(segment[start:]))
+ 		}
+ 	}
+ 	return chunks
+ }
+ 
++func promptScanChunk(value string) string {
++	if utf8.ValidString(value) {
++		return value // immutable substring; no full-transcript rune buffer/copy
++	}
++	return string([]rune(value)) // preserve the previous invalid-UTF-8 behavior
++}
++
+ func AggregateResults(results []*NormalizedResult, latency time.Duration) (*NormalizedResult, error) {
+ 	if len(results) == 0 {
+ 		return nil, errors.New("prompt guard produced no complete result")
+diff --git a/backend/internal/securityaudit/prompt_service.go b/backend/internal/securityaudit/prompt_service.go
+index 322d3c75e..5f04322b1 100644
+--- a/backend/internal/securityaudit/prompt_service.go
++++ b/backend/internal/securityaudit/prompt_service.go
+@@ -112,6 +112,21 @@ func (s *PromptService) Enqueue(_ context.Context, req Request) error {
+ 	if s == nil || s.enqueuer == nil || s.EffectiveMode() != ModeAsync {
+ 		return nil
+ 	}
++	// Enqueuer rechecks configuration before persistence. Check it here too so
++	// requests outside the audit scope never copy their potentially large body.
++	cfg, ok := s.config.Active()
++	if !ok || cfg.EffectiveMode() != ModeAsync {
++		return nil
++	}
++	if !cfg.IncludesGroup(req.GroupID) {
++		LogInfo(EventEnqueueSkipped, mergeLogFields(requestLogFields(req), map[string]any{"config_version": cfg.ConfigVersion, "status": "skipped", "error_code": "group_out_of_scope"}))
++		return nil
++	}
++	if len(cfg.EnabledEndpoints()) == 0 {
++		s.enqueuer.recordDropped()
++		LogWarn(EventEnqueueDropped, mergeLogFields(requestLogFields(req), map[string]any{"config_version": cfg.ConfigVersion, "status": "dropped", "error_code": "no_enabled_endpoint"}))
++		return nil
++	}
+ 	select {
+ 	case s.enqueueSlots <- struct{}{}:
+ 	default:
+diff --git a/backend/internal/securityaudit/prompt_snapshot.go b/backend/internal/securityaudit/prompt_snapshot.go
+index 74a0d2597..407f32372 100644
+--- a/backend/internal/securityaudit/prompt_snapshot.go
++++ b/backend/internal/securityaudit/prompt_snapshot.go
+@@ -636,16 +636,29 @@ func systemPromptSegments(texts []string) []promptSegment {
+ }
+ 
+ func RedactPreview(value string, maxRunes int) string {
+-	value = bearerPattern.ReplaceAllString(value, "Bearer ***")
+-	value = apiKeyPattern.ReplaceAllStringFunc(value, func(match string) string {
+-		if index := strings.IndexAny(match, ":= \t"); index >= 0 {
+-			return match[:index+1] + "***"
+-		}
+-		return "***"
+-	})
+-	value = canaryPattern.ReplaceAllString(value, "${1}***")
+-	value = emailPattern.ReplaceAllString(value, "***@***")
+-	value = phonePattern.ReplaceAllString(value, "***PHONE***")
++	// ReplaceAllString copies even an unchanged input. Most prompts do not
++	// match these patterns, so avoid ten full-text allocations just to build a
++	// short preview. Preserve the replacement order and complete-input matching.
++	if bearerPattern.MatchString(value) {
++		value = bearerPattern.ReplaceAllString(value, "Bearer ***")
++	}
++	if apiKeyPattern.MatchString(value) {
++		value = apiKeyPattern.ReplaceAllStringFunc(value, func(match string) string {
++			if index := strings.IndexAny(match, ":= \t"); index >= 0 {
++				return match[:index+1] + "***"
++			}
++			return "***"
++		})
++	}
++	if canaryPattern.MatchString(value) {
++		value = canaryPattern.ReplaceAllString(value, "${1}***")
++	}
++	if emailPattern.MatchString(value) {
++		value = emailPattern.ReplaceAllString(value, "***@***")
++	}
++	if phonePattern.MatchString(value) {
++		value = phonePattern.ReplaceAllString(value, "***PHONE***")
++	}
+ 	return TrimRunes(value, maxRunes)
+ }
+ 
+@@ -713,11 +726,21 @@ func TrimRunes(value string, limit int) string {
+ 	if limit <= 0 {
+ 		return ""
+ 	}
+-	runes := []rune(value)
+-	if len(runes) <= limit {
+-		return value
++	count := 0
++	for index := range value {
++		if count == limit {
++			// Decode only the retained prefix. Converting the entire prompt to
++			// []rune just to keep 96/65536 runes allocates four bytes per rune.
++			// Keep the old replacement behavior for invalid UTF-8 prefixes.
++			prefix := value[:index]
++			if utf8.ValidString(prefix) {
++				return prefix + "…"
++			}
++			return string([]rune(prefix)) + "…"
++		}
++		count++
+ 	}
+-	return string(runes[:limit]) + "…"
++	return value
+ }
+ 
+ func stringValue(value any) string {
+diff --git a/backend/internal/service/openai_gateway_chat_completions.go b/backend/internal/service/openai_gateway_chat_completions.go
+index 3cd2421c3..26b81fb05 100644
+--- a/backend/internal/service/openai_gateway_chat_completions.go
++++ b/backend/internal/service/openai_gateway_chat_completions.go
+@@ -241,6 +241,9 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
+ 		if err != nil {
+ 			return nil, fmt.Errorf("marshal responses request: %w", err)
+ 		}
++		// responsesReq lives until billing after the stream; only its scalar
++		// fields are read from here on, so drop the body-sized input.
++		responsesReq.Input = nil
+ 	}
+ 
+ 	logFields := []zap.Field{
+diff --git a/backend/internal/service/openai_gateway_messages.go b/backend/internal/service/openai_gateway_messages.go
+index fff408fae..a406a94d4 100644
+--- a/backend/internal/service/openai_gateway_messages.go
++++ b/backend/internal/service/openai_gateway_messages.go
+@@ -233,6 +233,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
+ 	if err != nil {
+ 		return nil, fmt.Errorf("marshal responses request: %w", err)
+ 	}
++	// responsesReq lives until billing after the stream; only its scalar
++	// fields are read from here on, so drop the body-sized input.
++	responsesReq.Input = nil
+ 
+ 	if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {
+ 		var reqBody map[string]any
+diff --git a/backend/internal/service/openai_gateway_request_body.go b/backend/internal/service/openai_gateway_request_body.go
+index f3f6930db..bc2cfe9ca 100644
+--- a/backend/internal/service/openai_gateway_request_body.go
++++ b/backend/internal/service/openai_gateway_request_body.go
+@@ -1108,12 +1108,17 @@ func newOpenAIRequestView(body []byte) openAIRequestView {
+ 
+ 	view := openAIRequestView{body: body}
+ 	var seen uint8
+-	// parseRawJSONView reads body without copying; view keeps body alive for extracted strings.
++	// parseRawJSONView reads body without copying, so extracted strings alias the
++	// body. They flow into usage logs and async tasks that outlive the request, so
++	// clone them; otherwise a multi-MB body stays alive after its budget is freed.
++	field := func(value gjson.Result) string {
++		return strings.Clone(strings.TrimSpace(value.String()))
++	}
+ 	parseRawJSONView(body).ForEach(func(key, value gjson.Result) bool {
+ 		switch key.Str {
+ 		case "model":
+ 			if seen&modelField == 0 {
+-				view.Model = strings.TrimSpace(value.String())
++				view.Model = field(value)
+ 				seen |= modelField
+ 			}
+ 		case "stream":
+@@ -1123,22 +1128,22 @@ func newOpenAIRequestView(body []byte) openAIRequestView {
+ 			}
+ 		case "prompt_cache_key":
+ 			if seen&promptCacheKeyField == 0 {
+-				view.PromptCacheKey = strings.TrimSpace(value.String())
++				view.PromptCacheKey = field(value)
+ 				seen |= promptCacheKeyField
+ 			}
+ 		case "previous_response_id":
+ 			if seen&previousResponseIDField == 0 {
+-				view.PreviousResponseID = strings.TrimSpace(value.String())
++				view.PreviousResponseID = field(value)
+ 				seen |= previousResponseIDField
+ 			}
+ 		case "service_tier":
+ 			if seen&serviceTierField == 0 {
+-				view.ServiceTier = strings.TrimSpace(value.String())
++				view.ServiceTier = field(value)
+ 				seen |= serviceTierField
+ 			}
+ 		case "reasoning":
+ 			if seen&reasoningField == 0 {
+-				view.ReasoningEffort = strings.TrimSpace(value.Get("effort").String())
++				view.ReasoningEffort = field(value.Get("effort"))
+ 				seen |= reasoningField
+ 			}
+ 		}
+diff --git a/backend/internal/service/openai_gateway_service_hotpath_test.go b/backend/internal/service/openai_gateway_service_hotpath_test.go
+index a703b46a8..916a59f23 100644
+--- a/backend/internal/service/openai_gateway_service_hotpath_test.go
++++ b/backend/internal/service/openai_gateway_service_hotpath_test.go
+@@ -39,6 +39,21 @@ func TestOpenAIRequestView_ExtractsFieldsAfterLargeInput(t *testing.T) {
+ 	require.Equal(t, "high", view.ReasoningEffort)
+ }
+ 
++func TestOpenAIRequestView_FieldsDoNotAliasBody(t *testing.T) {
++	body := []byte(`{"model":"gpt-5","prompt_cache_key":"session-1","previous_response_id":"resp-1","service_tier":"flex","reasoning":{"effort":"high"}}`)
++
++	view := newOpenAIRequestView(body)
++	for i := range body {
++		body[i] = 'x'
++	}
++
++	require.Equal(t, "gpt-5", view.Model)
++	require.Equal(t, "session-1", view.PromptCacheKey)
++	require.Equal(t, "resp-1", view.PreviousResponseID)
++	require.Equal(t, "flex", view.ServiceTier)
++	require.Equal(t, "high", view.ReasoningEffort)
++}
++
+ func TestOpenAIRequestView_KeepsFirstDuplicateField(t *testing.T) {
+ 	view := newOpenAIRequestView([]byte(`{"model":"gpt-5","model":"gpt-5.1","reasoning":{"effort":"low"},"reasoning":{"effort":"high"}}`))
+ 
+diff --git a/backend/internal/service/openai_gateway_usage.go b/backend/internal/service/openai_gateway_usage.go
+index 5626bd841..c20361f0b 100644
+--- a/backend/internal/service/openai_gateway_usage.go
++++ b/backend/internal/service/openai_gateway_usage.go
+@@ -475,14 +475,13 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
+ 		billingMode := string(BillingModeToken)
+ 		usageLog.BillingMode = &billingMode
+ 	}
+-	// 添加 UserAgent
+-	if input.UserAgent != "" {
+-		usageLog.UserAgent = &input.UserAgent
++	// 添加 UserAgent / IPAddress。取副本地址：指向 input 字段会让整个 input（含 Result
++	// 及其引用的请求体）随异步写入的 usageLog 一直存活。
++	if userAgent := input.UserAgent; userAgent != "" {
++		usageLog.UserAgent = &userAgent
+ 	}
+-
+-	// 添加 IPAddress
+-	if input.IPAddress != "" {
+-		usageLog.IPAddress = &input.IPAddress
++	if ipAddress := input.IPAddress; ipAddress != "" {
++		usageLog.IPAddress = &ipAddress
+ 	}
+ 
+ 	// 添加 SessionID（客户端显式会话标识；缺失/无效时保持 nil）

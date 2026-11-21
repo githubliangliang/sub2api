@@ -1,0 +1,356 @@
+diff --git a/backend/internal/service/openai_gateway_deepseek_anthropic_thinking.go b/backend/internal/service/openai_gateway_deepseek_anthropic_thinking.go
+new file mode 100644
+index 000000000..4090989e3
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_deepseek_anthropic_thinking.go
+@@ -0,0 +1,110 @@
++package service
++
++// DeepSeek 官方 Anthropic 原生端点（/v1/messages）的 thinking 历史补位。
++//
++// DeepSeek 在 thinking 模式下要求工具续接请求把 assistant 历史里的 thinking
++// 块完整回传；缺失时上游会按 tool-call ID 尝试自动恢复，恢复失败返回 400
++// "The content[].thinking in the thinking mode must be passed back to the API"。
++// 会话历史中由其他后端（如 Ollama 中转）生成的 tool_use 轮没有 thinking 块，
++// 被 file-owner 固定到 DeepSeek 官方账号后就会触发该 400。
++//
++// Chat Completions 链已有同构先例 ensureDeepSeekChatReasoningPlaceholders
++// （见 openai_gateway_responses_chat_fallback.go），这里为 Anthropic 原生直通链
++// 做对应补位。
++
++import (
++	"strconv"
++	"strings"
++
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// deepSeekAnthropicThinkingPlaceholderBlock 是插到 assistant 历史 content 首位的
++// thinking 占位块。thinking 填单个空格而非空串：DeepSeek 可能把空串按缺失处理
++// （同 Chat 链 ensureDeepSeekChatReasoningPlaceholders 的结论：DeepSeek 拒绝
++// 空串，非空即可通过，LiteLLM 同样注入单个空格）。signature 可以省略：
++// DeepSeek 官方文档说明 input 侧的 signature 不做校验。
++const deepSeekAnthropicThinkingPlaceholderBlock = `{"type":"thinking","thinking":" "}`
++
++// anthropicBodyThinkingEnabled 报告 Anthropic Messages 请求体是否处于 thinking
++// 模式。thinking.type 为 enabled/adaptive 视为启用、disabled 视为关闭；没有
++// type 时看 output_config.effort，none 关闭、其余（含缺失）视为启用——DeepSeek
++// 对 deepseek-flash 默认启用 thinking。
++func anthropicBodyThinkingEnabled(body []byte) bool {
++	switch strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "thinking.type").String())) {
++	case "enabled", "adaptive":
++		return true
++	case "disabled":
++		return false
++	}
++	effort := strings.TrimSpace(gjson.GetBytes(body, "output_config.effort").String())
++	return !strings.EqualFold(effort, "none")
++}
++
++// ensureDeepSeekAnthropicThinkingBlocks 给带 tool_use 但缺 thinking 的 assistant
++// 历史消息补单个空格占位的 thinking 块（DeepSeek 可能把空串按缺失处理），插在
++// content 数组最前面。已有 thinking / redacted_thinking 的消息、只有文本的消息
++// 都不改写。
++//
++// 用 gjson 定位、sjson.SetRawBytes 只重写 messages.<i>.content，保留请求体其余
++// 字节。非法 JSON、messages 非数组、content 非数组（如字符串）时原样返回；
++// 合法 JSON 但无需改动时返回同一份 body。
++func ensureDeepSeekAnthropicThinkingBlocks(body []byte) []byte {
++	if !gjson.ValidBytes(body) {
++		return body
++	}
++	messages := gjson.GetBytes(body, "messages")
++	if !messages.IsArray() {
++		return body
++	}
++	updated := body
++	changed := false
++	for i, msg := range messages.Array() {
++		if strings.TrimSpace(msg.Get("role").String()) != "assistant" {
++			continue
++		}
++		content := msg.Get("content")
++		if !content.IsArray() {
++			continue
++		}
++		hasToolUse := false
++		hasThinking := false
++		for _, block := range content.Array() {
++			switch block.Get("type").String() {
++			case "tool_use":
++				hasToolUse = true
++			case "thinking", "redacted_thinking":
++				hasThinking = true
++			}
++		}
++		if !hasToolUse || hasThinking {
++			continue
++		}
++		raw := content.Raw
++		if len(raw) < 2 || raw[0] != '[' {
++			continue
++		}
++		prefixed := "[" + deepSeekAnthropicThinkingPlaceholderBlock + "," + raw[1:]
++		next, err := sjson.SetRawBytes(updated, "messages."+strconv.Itoa(i)+".content", []byte(prefixed))
++		if err != nil {
++			return body
++		}
++		updated = next
++		changed = true
++	}
++	if !changed {
++		return body
++	}
++	return updated
++}
++
++// shouldRepairDeepSeekAnthropicThinking 报告该请求是否需要做 DeepSeek Anthropic
++// thinking 补位：仅 DeepSeek 官方上游账号（targetsDeepSeekAPIHost）且请求启用
++// thinking 时生效，其他上游保持字节不变。
++func shouldRepairDeepSeekAnthropicThinking(account *Account, body []byte) bool {
++	if account == nil {
++		return false
++	}
++	return targetsDeepSeekAPIHost(account) && anthropicBodyThinkingEnabled(body)
++}
+diff --git a/backend/internal/service/openai_gateway_deepseek_anthropic_thinking_test.go b/backend/internal/service/openai_gateway_deepseek_anthropic_thinking_test.go
+new file mode 100644
+index 000000000..00000c867
+--- /dev/null
++++ b/backend/internal/service/openai_gateway_deepseek_anthropic_thinking_test.go
+@@ -0,0 +1,207 @@
++package service
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++// deepSeekAnthropicOfficialAccount 构造 DeepSeek 官方 Anthropic 原生端点账号。
++func deepSeekAnthropicOfficialAccount() *Account {
++	return &Account{
++		ID:       88,
++		Name:     "deepseek-anthropic-official",
++		Platform: PlatformDeepseek,
++		Type:     AccountTypeAPIKey,
++		Credentials: map[string]any{
++			"api_key":      "sk-test",
++			"base_url":     DefaultDeepseekBaseURL,
++			"api_protocol": APIProtocolAnthropic,
++		},
++	}
++}
++
++// ollamaCloudAnthropicAccount 构造 base_url 指向 ollama.com 的非 DeepSeek 账号。
++func ollamaCloudAnthropicAccount() *Account {
++	return &Account{
++		ID:       89,
++		Name:     "ollama-cloud",
++		Platform: PlatformAnthropic,
++		Type:     AccountTypeAPIKey,
++		Credentials: map[string]any{
++			"api_key":  "ollama-key",
++			"base_url": "https://ollama.com/v1",
++		},
++	}
++}
++
++func TestEnsureDeepSeekAnthropicThinkingBlocks(t *testing.T) {
++	tests := []struct {
++		name        string
++		body        string
++		wantChanged bool
++		check       func(t *testing.T, got []byte)
++	}{
++		{
++			name: "assistant_tool_use_without_thinking_gets_placeholder_block_first",
++			body: `{"model":"deepseek-flash","thinking":{"type":"enabled"},"messages":[` +
++				`{"role":"user","content":"hi"},` +
++				`{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"exec","input":{}}]},` +
++				`{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"ok"}]}]}`,
++			wantChanged: true,
++			check: func(t *testing.T, got []byte) {
++				t.Helper()
++				require.True(t, json.Valid(got))
++				require.Equal(t, "thinking", gjson.GetBytes(got, "messages.1.content.0.type").String())
++				require.Equal(t, " ", gjson.GetBytes(got, "messages.1.content.0.thinking").String())
++				require.False(t, gjson.GetBytes(got, "messages.1.content.0.signature").Exists())
++				require.Equal(t, "tool_use", gjson.GetBytes(got, "messages.1.content.1.type").String())
++				require.Equal(t, "call_1", gjson.GetBytes(got, "messages.1.content.1.id").String())
++				require.Equal(t, "user", gjson.GetBytes(got, "messages.0.role").String())
++				require.Equal(t, 3, len(gjson.GetBytes(got, "messages").Array()))
++			},
++		},
++		{
++			name: "assistant_with_thinking_and_tool_use_unchanged",
++			body: `{"model":"deepseek-flash","thinking":{"type":"enabled"},"messages":[` +
++				`{"role":"assistant","content":[{"type":"thinking","thinking":"real","signature":"sig"},` +
++				`{"type":"tool_use","id":"call_1","name":"exec","input":{}}]}]}`,
++			wantChanged: false,
++			check: func(t *testing.T, got []byte) {
++				t.Helper()
++				require.Equal(t, 2, len(gjson.GetBytes(got, "messages.0.content").Array()))
++				require.Equal(t, "real", gjson.GetBytes(got, "messages.0.content.0.thinking").String())
++			},
++		},
++		{
++			name: "assistant_text_only_unchanged",
++			body: `{"model":"deepseek-flash","thinking":{"type":"enabled"},"messages":[` +
++				`{"role":"assistant","content":[{"type":"text","text":"done"}]}]}`,
++			wantChanged: false,
++		},
++		{
++			name: "only_message_missing_thinking_is_modified",
++			body: `{"model":"deepseek-flash","thinking":{"type":"enabled"},"messages":[` +
++				`{"role":"assistant","content":[{"type":"text","text":"first"}]},` +
++				`{"role":"assistant","content":[{"type":"tool_use","id":"call_2","name":"exec","input":{}}]},` +
++				`{"role":"assistant","content":[{"type":"thinking","thinking":"kept"},{"type":"tool_use","id":"call_3","name":"exec","input":{}}]}]}`,
++			wantChanged: true,
++			check: func(t *testing.T, got []byte) {
++				t.Helper()
++				require.True(t, json.Valid(got))
++				require.Equal(t, "text", gjson.GetBytes(got, "messages.0.content.0.type").String())
++				require.Equal(t, "thinking", gjson.GetBytes(got, "messages.1.content.0.type").String())
++				require.Equal(t, "tool_use", gjson.GetBytes(got, "messages.1.content.1.type").String())
++				require.Equal(t, "kept", gjson.GetBytes(got, "messages.2.content.0.thinking").String())
++				require.Equal(t, 2, len(gjson.GetBytes(got, "messages.2.content").Array()))
++			},
++		},
++		{
++			name: "content_string_unchanged",
++			body: `{"model":"deepseek-flash","thinking":{"type":"enabled"},"messages":[` +
++				`{"role":"assistant","content":"plain text"}]}`,
++			wantChanged: false,
++		},
++		{
++			name:        "messages_not_array_unchanged",
++			body:        `{"model":"deepseek-flash","messages":{"role":"assistant","content":[{"type":"tool_use"}]}}`,
++			wantChanged: false,
++		},
++		{
++			name:        "invalid_json_unchanged",
++			body:        `{"messages":[{"role":"assistant","content":[`,
++			wantChanged: false,
++		},
++		{
++			name:        "empty_body_unchanged",
++			body:        ``,
++			wantChanged: false,
++		},
++		{
++			name:        "empty_messages_unchanged",
++			body:        `{"model":"deepseek-flash","messages":[]}`,
++			wantChanged: false,
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			body := []byte(tt.body)
++			got := ensureDeepSeekAnthropicThinkingBlocks(body)
++			require.Equal(t, tt.wantChanged, string(got) != tt.body)
++			if !tt.wantChanged {
++				require.Equal(t, tt.body, string(got), "无需改动时必须原样返回")
++				if len(body) > 0 {
++					require.True(t, &body[0] == &got[0], "无需改动时必须返回同一份 body")
++				}
++			}
++			if tt.check != nil {
++				tt.check(t, got)
++			}
++		})
++	}
++}
++
++func TestAnthropicBodyThinkingEnabled(t *testing.T) {
++	tests := []struct {
++		name string
++		body string
++		want bool
++	}{
++		{name: "enabled", body: `{"thinking":{"type":"enabled"}}`, want: true},
++		{name: "adaptive", body: `{"thinking":{"type":"adaptive"}}`, want: true},
++		{name: "no_thinking_field", body: `{"model":"deepseek-flash"}`, want: true},
++		{name: "effort_none_disables", body: `{"output_config":{"effort":"none"}}`, want: false},
++		{name: "effort_high_enables", body: `{"output_config":{"effort":"high"}}`, want: true},
++		{name: "disabled", body: `{"thinking":{"type":"disabled"}}`, want: false},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, anthropicBodyThinkingEnabled([]byte(tt.body)))
++		})
++	}
++}
++
++func TestShouldRepairDeepSeekAnthropicThinking(t *testing.T) {
++	thinkingBody := []byte(`{"model":"deepseek-flash","thinking":{"type":"enabled"},"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"exec","input":{}}]}]}`)
++	disabledBody := []byte(`{"model":"deepseek-flash","thinking":{"type":"disabled"},"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"exec","input":{}}]}]}`)
++
++	tests := []struct {
++		name    string
++		account *Account
++		body    []byte
++		want    bool
++	}{
++		{
++			name:    "deepseek_official_thinking_enabled",
++			account: deepSeekAnthropicOfficialAccount(),
++			body:    thinkingBody,
++			want:    true,
++		},
++		{
++			name:    "deepseek_official_thinking_disabled",
++			account: deepSeekAnthropicOfficialAccount(),
++			body:    disabledBody,
++			want:    false,
++		},
++		{
++			name:    "non_deepseek_upstream",
++			account: ollamaCloudAnthropicAccount(),
++			body:    thinkingBody,
++			want:    false,
++		},
++		{
++			name:    "nil_account",
++			account: nil,
++			body:    thinkingBody,
++			want:    false,
++		},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			require.Equal(t, tt.want, shouldRepairDeepSeekAnthropicThinking(tt.account, tt.body))
++		})
++	}
++}
+diff --git a/backend/internal/service/openai_gateway_messages_anthropic_native.go b/backend/internal/service/openai_gateway_messages_anthropic_native.go
+index 971aa7f5d..e3cab739b 100644
+--- a/backend/internal/service/openai_gateway_messages_anthropic_native.go
++++ b/backend/internal/service/openai_gateway_messages_anthropic_native.go
+@@ -31,7 +31,8 @@ import (
+ 
+ // forwardAnthropicViaNativeAnthropicEndpoint 将 Anthropic Messages 请求零转换
+ // 直通到国产供应商的原生 Anthropic 端点。仅做模型名映射与少量 body 清洗
+-// （空文本块 / web-search 历史块），协议本身不转换。
++// （空文本块 / web-search 历史块），协议本身不转换。对 DeepSeek 官方账号补齐
++// tool_use 历史的单个空格占位 thinking 块（thinking 模式下缺 thinking 会被上游 400）。
+ func (s *OpenAIGatewayService) forwardAnthropicViaNativeAnthropicEndpoint(
+ 	ctx context.Context,
+ 	c *gin.Context,
+@@ -77,6 +78,12 @@ func (s *OpenAIGatewayService) forwardAnthropicViaNativeAnthropicEndpoint(
+ 	body = StripEmptyTextBlocks(body)
+ 	body = FilterWebSearchHistoryBlocks(body, upstreamModel)
+ 
++	// thinking 模式下 DeepSeek 要求工具续接历史回传 thinking 块；缺失时上游
++	// 自动恢复失败会返回 400。仅对 DeepSeek 官方账号、thinking 启用时生效。
++	if shouldRepairDeepSeekAnthropicThinking(account, body) {
++		body = ensureDeepSeekAnthropicThinkingBlocks(body)
++	}
++
+ 	logger.LegacyPrintf("service.gateway", "[CN Anthropic 直通] account=%d(%s) platform=%s model=%s upstream=%s stream=%v",
+ 		account.ID, account.Name, account.Platform, originalModel, upstreamModel, clientStream)
+ 

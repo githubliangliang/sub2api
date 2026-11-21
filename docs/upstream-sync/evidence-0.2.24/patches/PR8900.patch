@@ -1,0 +1,354 @@
+diff --git a/backend/internal/service/account_usage_service.go b/backend/internal/service/account_usage_service.go
+index 6999daa2a..07272f5bf 100644
+--- a/backend/internal/service/account_usage_service.go
++++ b/backend/internal/service/account_usage_service.go
+@@ -97,6 +97,13 @@ type apiUsageCache struct {
+ type windowStatsCache struct {
+ 	stats     *WindowStats
+ 	timestamp time.Time
++	startTime time.Time
++}
++
++// Separate quota windows while keeping at most two cached entries per account.
++type windowStatsCacheKey struct {
++	accountID int64
++	duration  time.Duration
+ }
+ 
+ // antigravityUsageCache 缓存 Antigravity 额度数据
+@@ -119,7 +126,7 @@ const (
+ // UsageCache 封装账户使用量相关的缓存
+ type UsageCache struct {
+ 	apiCache          sync.Map           // accountID -> *apiUsageCache
+-	windowStatsCache  sync.Map           // accountID -> *windowStatsCache
++	windowStatsCache  sync.Map           // windowStatsCacheKey -> *windowStatsCache
+ 	antigravityCache  sync.Map           // accountID -> *antigravityUsageCache
+ 	apiFlight         singleflight.Group // 防止同一账号的并发请求击穿缓存（Anthropic）
+ 	antigravityFlight singleflight.Group // 防止同一 Antigravity 账号的并发请求击穿缓存
+@@ -1461,50 +1468,61 @@ func enrichUsageWithAccountError(info *UsageInfo, account *Account) {
+ // addWindowStats 为 usage 数据添加窗口期统计
+ // 使用独立缓存（1 分钟），与 API 缓存分离
+ func (s *AccountUsageService) addWindowStats(ctx context.Context, account *Account, usage *UsageInfo) {
+-	// 修复：即使 FiveHour 为 nil，也要尝试获取统计数据
+-	// 因为 SevenDay/SevenDaySonnet/SevenDayFable 可能需要
+-	if usage.FiveHour == nil && usage.SevenDay == nil && usage.SevenDaySonnet == nil && usage.SevenDayFable == nil {
++	if s.usageLogRepo == nil || usage == nil {
+ 		return
+ 	}
+ 
+-	// 检查窗口统计缓存（1 分钟）
+-	var windowStats *WindowStats
+-	if cached, ok := s.cache.windowStatsCache.Load(account.ID); ok {
+-		if cache, ok := cached.(*windowStatsCache); ok && time.Since(cache.timestamp) < windowStatsCacheTTL {
+-			windowStats = cache.stats
++	now := time.Now()
++	for _, window := range []struct {
++		progress *UsageProgress
++		duration time.Duration
++	}{
++		{usage.FiveHour, 5 * time.Hour},
++		{usage.SevenDay, 7 * 24 * time.Hour},
++	} {
++		if window.progress == nil {
++			continue
+ 		}
+-	}
+ 
+-	// 如果没有缓存，从数据库查询
+-	if windowStats == nil {
+-		// 使用统一的窗口开始时间计算逻辑（考虑窗口过期情况）
+ 		startTime := account.GetCurrentWindowStartTime()
++		if supportsAnthropicPassiveUsage(account) {
++			// Only pair local costs with a known, current upstream quota window.
++			// A rolling lookback or expired sample would produce a misleading estimate.
++			if window.progress.ResetsAt == nil || !now.Before(*window.progress.ResetsAt) {
++				continue
++			}
++			startTime = window.progress.ResetsAt.Add(-window.duration)
++			if startTime.After(now) {
++				continue
++			}
++		} else if window.duration != 5*time.Hour {
++			continue
++		}
++
++		key := windowStatsCacheKey{accountID: account.ID, duration: window.duration}
++		if cached, ok := s.cache.windowStatsCache.Load(key); ok {
++			if cache, ok := cached.(*windowStatsCache); ok && cache.startTime.Equal(startTime) && now.Sub(cache.timestamp) < windowStatsCacheTTL {
++				window.progress.WindowStats = cache.stats
++				continue
++			}
++		}
+ 
+ 		stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, startTime)
+ 		if err != nil {
+ 			log.Printf("Failed to get window stats for account %d: %v", account.ID, err)
+-			return
++			continue
+ 		}
+-
+-		windowStats = &WindowStats{
+-			Requests:     stats.Requests,
+-			Tokens:       stats.Tokens,
+-			Cost:         stats.Cost,
+-			StandardCost: stats.StandardCost,
+-			UserCost:     stats.UserCost,
++		if stats == nil {
++			continue
+ 		}
+-
+-		// 缓存窗口统计（1 分钟）
+-		s.cache.windowStatsCache.Store(account.ID, &windowStatsCache{
++		windowStats := windowStatsFromAccountStats(stats)
++		window.progress.WindowStats = windowStats
++		s.cache.windowStatsCache.Store(key, &windowStatsCache{
+ 			stats:     windowStats,
+-			timestamp: time.Now(),
++			timestamp: now,
++			startTime: startTime,
+ 		})
+ 	}
+-
+-	// 为 FiveHour 添加 WindowStats（5h 窗口统计）
+-	if usage.FiveHour != nil {
+-		usage.FiveHour.WindowStats = windowStats
+-	}
+ }
+ 
+ // GetTodayStats 获取账号今日统计
+diff --git a/backend/internal/service/account_usage_window_cost_test.go b/backend/internal/service/account_usage_window_cost_test.go
+new file mode 100644
+index 000000000..93c07291a
+--- /dev/null
++++ b/backend/internal/service/account_usage_window_cost_test.go
+@@ -0,0 +1,98 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"testing"
++	"time"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
++	"github.com/stretchr/testify/require"
++)
++
++type windowCostRepo struct {
++	usageBatchLogRepoStub
++	starts    []time.Time
++	failStart time.Time
++}
++
++func (r *windowCostRepo) GetAccountWindowStats(_ context.Context, _ int64, start time.Time) (*usagestats.AccountStats, error) {
++	r.starts = append(r.starts, start)
++	if start.Equal(r.failStart) {
++		return nil, errors.New("test query failure")
++	}
++	return &usagestats.AccountStats{Requests: 1, Tokens: 100, Cost: float64(len(r.starts)), UserCost: 99}, nil
++}
++
++func TestAccountUsageService_ClaudeWindowCosts(t *testing.T) {
++	for _, accountType := range []string{AccountTypeOAuth, AccountTypeSetupToken} {
++		t.Run(accountType, func(t *testing.T) {
++			now := time.Now().UTC().Truncate(time.Second)
++			fiveReset, weeklyReset := now.Add(time.Hour), now.Add(48*time.Hour)
++			account := Account{ID: 8510, Platform: PlatformAnthropic, Type: accountType,
++				SessionWindowEnd: &fiveReset,
++				Extra: map[string]any{
++					"session_window_utilization":   0.25,
++					"passive_usage_7d_utilization": 0.4,
++					"passive_usage_7d_reset":       weeklyReset.Unix(),
++				},
++			}
++			repo := &windowCostRepo{}
++			svc := &AccountUsageService{accountRepo: &stubOpenAIAccountRepo{accounts: []Account{account}}, usageLogRepo: repo, cache: NewUsageCache()}
++			usage, err := svc.GetPassiveUsage(t.Context(), account.ID)
++			require.NoError(t, err)
++			require.Len(t, repo.starts, 2)
++			require.True(t, fiveReset.Add(-5*time.Hour).Equal(repo.starts[0]))
++			require.True(t, weeklyReset.Add(-7*24*time.Hour).Equal(repo.starts[1]))
++			require.Equal(t, 1.0, usage.FiveHour.WindowStats.Cost)
++			require.Equal(t, 2.0, usage.SevenDay.WindowStats.Cost)
++
++			// Cached costs remain separated, and a changed reset invalidates the weekly entry.
++			svc.addWindowStats(t.Context(), &account, usage)
++			require.Len(t, repo.starts, 2)
++			nextReset := weeklyReset.Add(time.Hour)
++			usage.SevenDay.ResetsAt = &nextReset
++			svc.addWindowStats(t.Context(), &account, usage)
++			require.Len(t, repo.starts, 3)
++			require.True(t, nextReset.Add(-7*24*time.Hour).Equal(repo.starts[2]))
++			require.Equal(t, 1.0, usage.FiveHour.WindowStats.Cost)
++			require.Equal(t, 3.0, usage.SevenDay.WindowStats.Cost)
++			entries := 0
++			svc.cache.windowStatsCache.Range(func(_, _ any) bool { entries++; return true })
++			require.Equal(t, 2, entries)
++		})
++	}
++}
++
++func TestAccountUsageService_ClaudeWindowCostsMissingOrExpired(t *testing.T) {
++	now := time.Now()
++	expired, futureStart := now.Add(-time.Hour), now.Add(8*24*time.Hour)
++	for name, reset := range map[string]*time.Time{"missing": nil, "expired": &expired, "future_start": &futureStart} {
++		t.Run(name, func(t *testing.T) {
++			repo := &windowCostRepo{}
++			svc := &AccountUsageService{usageLogRepo: repo, cache: NewUsageCache()}
++			usage := &UsageInfo{SevenDay: &UsageProgress{ResetsAt: reset}}
++			svc.addWindowStats(t.Context(), &Account{ID: 8511, Platform: PlatformAnthropic, Type: AccountTypeSetupToken}, usage)
++			require.Empty(t, repo.starts)
++			require.Nil(t, usage.SevenDay.WindowStats)
++		})
++	}
++}
++
++func TestAccountUsageService_ClaudeWindowCostsIndependentFailure(t *testing.T) {
++	now := time.Now().UTC().Truncate(time.Second)
++	fiveReset, weeklyReset := now.Add(time.Hour), now.Add(48*time.Hour)
++	repo := &windowCostRepo{failStart: fiveReset.Add(-5 * time.Hour)}
++	svc := &AccountUsageService{usageLogRepo: repo, cache: NewUsageCache()}
++	usage := &UsageInfo{
++		FiveHour:       &UsageProgress{ResetsAt: &fiveReset},
++		SevenDay:       &UsageProgress{ResetsAt: &weeklyReset},
++		SevenDaySonnet: &UsageProgress{ResetsAt: &weeklyReset},
++		SevenDayFable:  &UsageProgress{ResetsAt: &weeklyReset},
++	}
++	svc.addWindowStats(t.Context(), &Account{ID: 8512, Platform: PlatformAnthropic, Type: AccountTypeOAuth}, usage)
++	require.Nil(t, usage.FiveHour.WindowStats)
++	require.NotNil(t, usage.SevenDay.WindowStats)
++	require.Nil(t, usage.SevenDaySonnet.WindowStats)
++	require.Nil(t, usage.SevenDayFable.WindowStats)
++}
+diff --git a/frontend/src/components/account/AccountUsageCell.vue b/frontend/src/components/account/AccountUsageCell.vue
+index 3efe58803..8a5a8bd0f 100644
+--- a/frontend/src/components/account/AccountUsageCell.vue
++++ b/frontend/src/components/account/AccountUsageCell.vue
+@@ -47,15 +47,18 @@
+           :utilization="usageInfo.five_hour.utilization"
+           :resets-at="usageInfo.five_hour.resets_at"
+           :window-stats="usageInfo.five_hour.window_stats"
++          :estimated-total-cost="estimateWindowTotalCost(usageInfo.five_hour)"
+           color="indigo"
+         />
+ 
+-        <!-- 7d Window (OAuth only) -->
++        <!-- 7d Window (OAuth or Setup Token with passive samples) -->
+         <UsageProgressBar
+           v-if="usageInfo.seven_day"
+           label="7d"
+           :utilization="usageInfo.seven_day.utilization"
+           :resets-at="usageInfo.seven_day.resets_at"
++          :window-stats="usageInfo.seven_day.window_stats"
++          :estimated-total-cost="estimateWindowTotalCost(usageInfo.seven_day)"
+           color="emerald"
+         />
+ 
+@@ -921,12 +924,11 @@ const hasOpenAIQuotaObservation = computed(() => {
+   return windows.some(window => window && !window.utilization_unknown)
+ })
+ 
+-const openAISevenDayEstimatedTotalCost = computed(() => {
+-  const sevenDay = usageInfo.value?.seven_day
+-  const utilization = sevenDay?.utilization
+-  const currentCost = sevenDay?.window_stats?.cost
++function estimateWindowTotalCost(window?: AccountUsageInfo['seven_day']) {
++  const utilization = window?.utilization
++  const currentCost = window?.window_stats?.cost
+   if (
+-    sevenDay?.utilization_unknown ||
++    window?.utilization_unknown ||
+     typeof utilization !== 'number' ||
+     typeof currentCost !== 'number' ||
+     !Number.isFinite(utilization) ||
+@@ -939,7 +941,11 @@ const openAISevenDayEstimatedTotalCost = computed(() => {
+ 
+   const estimate = (currentCost * 100) / utilization
+   return Number.isFinite(estimate) && estimate > 0 ? estimate : null
+-})
++}
++
++const openAISevenDayEstimatedTotalCost = computed(() =>
++  estimateWindowTotalCost(usageInfo.value?.seven_day)
++)
+ 
+ const usageRefreshKey = computed(() => buildAccountUsageRefreshKey(props.account))
+ 
+diff --git a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+index 33a2f6dfd..f62285175 100644
+--- a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
++++ b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+@@ -893,6 +893,73 @@ describe('AccountUsageCell', () => {
+     expect(wrapper.text()).toContain('7d|36|900')
+   })
+ 
++  it.each(['oauth', 'setup-token'] as const)('Claude %s 分别估算 5h 和 7d，不混用模型专属窗口费用', async (type) => {
++    getUsage.mockResolvedValue({
++      five_hour: {
++        utilization: 25, resets_at: null, remaining_seconds: 0,
++        window_stats: { requests: 1, tokens: 100, cost: 2, user_cost: 20 }
++      },
++      seven_day: {
++        utilization: 40, resets_at: null, remaining_seconds: 0,
++        window_stats: { requests: 2, tokens: 200, cost: 12, user_cost: 120 }
++      },
++      seven_day_sonnet: { utilization: 50, resets_at: null, remaining_seconds: 0 },
++      seven_day_fable: { utilization: 60, resets_at: null, remaining_seconds: 0 }
++    })
++    const wrapper = mount(AccountUsageCell, {
++      props: { account: makeAccount({ id: type === 'oauth' ? 6761 : 6762, platform: 'anthropic', type }) },
++      global: {
++        stubs: {
++          UsageProgressBar: {
++            props: ['label', 'windowStats', 'estimatedTotalCost'],
++            template: '<div>{{ label }}|{{ windowStats?.cost ?? "none" }}|{{ estimatedTotalCost ?? "none" }}</div>'
++          },
++          ClaudeResetCreditsCell: true
++        }
++      }
++    })
++    await flushPromises()
++    expect(wrapper.text()).toContain('5h|2|8')
++    expect(wrapper.text()).toContain('7d|12|30')
++    expect(wrapper.text()).toContain('7d S|none|none')
++    expect(wrapper.text()).toContain('7d F|none|none')
++    wrapper.unmount()
++  })
++
++  it.each([
++    { utilization: 0, cost: 12 },
++    { utilization: -1, cost: 12 },
++    { utilization: Number.NaN, cost: 12 },
++    { utilization: Number.POSITIVE_INFINITY, cost: 12 },
++    { utilization: 40, cost: 0 },
++    { utilization: 40, cost: -1 },
++    { utilization: 40, cost: Number.POSITIVE_INFINITY },
++    { utilization: 40, cost: undefined },
++    { utilization: undefined, cost: 12 }
++  ])('Claude 缺少有效费用或使用率时隐藏估算 (%o)', async ({ utilization, cost }) => {
++    const window = {
++      utilization, resets_at: null, remaining_seconds: 0,
++      window_stats: { requests: 1, tokens: 100, cost }
++    }
++    getUsage.mockResolvedValue({ five_hour: window, seven_day: window })
++    const wrapper = mount(AccountUsageCell, {
++      props: { account: makeAccount({ id: 6763, platform: 'anthropic', type: 'setup-token' }) },
++      global: {
++        stubs: {
++          UsageProgressBar: {
++            props: ['label', 'estimatedTotalCost'],
++            template: '<div>{{ label }}|{{ estimatedTotalCost ?? "none" }}</div>'
++          },
++          ClaudeResetCreditsCell: true
++        }
++      }
++    })
++    await flushPromises()
++    expect(wrapper.text()).toContain('5h|none')
++    expect(wrapper.text()).toContain('7d|none')
++    wrapper.unmount()
++  })
++
+   it('仅为 OpenAI OAuth 7d 窗口计算预计总费用', async () => {
+     getUsage.mockResolvedValue({
+       five_hour: {

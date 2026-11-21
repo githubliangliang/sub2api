@@ -1,0 +1,275 @@
+diff --git a/backend/internal/server/routes/composite_platform_test.go b/backend/internal/server/routes/composite_platform_test.go
+index 9841b243c..262e4ec98 100644
+--- a/backend/internal/server/routes/composite_platform_test.go
++++ b/backend/internal/server/routes/composite_platform_test.go
+@@ -415,3 +415,83 @@ func TestCompositeLiveRouteDispatchesBySessionModelNotTopLevelAlias(t *testing.T
+ 
+ 	require.Equal(t, http.StatusNoContent, w.Code)
+ }
++
++// A route that rewrites the model to a Claude 5.5 model also rewrites a
++// thinking mode that model rejects into the nearest one it accepts; a route
++// that keeps the client's model leaves thinking as the client sent it.
++func TestCompositeTargetPlatformMiddlewareAdaptsThinkingToRewrittenModel(t *testing.T) {
++	cases := []struct {
++		name          string
++		publicModel   string
++		upstreamModel string
++		thinking      string
++		wantThinking  string
++	}{
++		{
++			name:          "enabled becomes adaptive on opus 5.5",
++			publicModel:   "claude-sonnet-5",
++			upstreamModel: "claude-opus-5-5",
++			thinking:      `{"type":"enabled","budget_tokens":4096}`,
++			wantThinking:  `{"type":"adaptive"}`,
++		},
++		{
++			name:          "disabled becomes between_tools on sonnet 5.5",
++			publicModel:   "claude-sonnet-5",
++			upstreamModel: "claude-sonnet-5-5",
++			thinking:      `{"type":"disabled"}`,
++			wantThinking:  `{"type":"between_tools"}`,
++		},
++		{
++			name:          "model not rewritten keeps enabled",
++			publicModel:   "claude-opus-5-5",
++			upstreamModel: "claude-opus-5-5",
++			thinking:      `{"type":"enabled","budget_tokens":4096}`,
++			wantThinking:  `{"type":"enabled","budget_tokens":4096}`,
++		},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			gin.SetMode(gin.TestMode)
++			router := gin.New()
++			resolver := service.NewCompositeRouteResolver(compositeRouteRepoStub{
++				routes: []service.CompositeModelRoute{{
++					ID:             1,
++					GroupID:        1,
++					PublicModel:    tc.publicModel,
++					MatchType:      service.CompositeRouteMatchExact,
++					TargetPlatform: service.PlatformAnthropic,
++					UpstreamModel:  tc.upstreamModel,
++					Endpoint:       service.CompositeRouteEndpointAny,
++					Priority:       100,
++					Enabled:        true,
++				}},
++			})
++			router.Use(gin.HandlerFunc(servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
++				groupID := int64(1)
++				c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
++					GroupID: &groupID,
++					Group:   &service.Group{ID: groupID, Platform: service.PlatformComposite},
++				})
++				c.Next()
++			})))
++			router.Use(compositeTargetPlatformMiddleware(resolver))
++			router.POST("/v1/messages", func(c *gin.Context) {
++				body, err := io.ReadAll(c.Request.Body)
++				require.NoError(t, err)
++				require.JSONEq(t,
++					`{"model":"`+tc.upstreamModel+`","max_tokens":64,"thinking":`+tc.wantThinking+`,"messages":[]}`,
++					string(body))
++				c.Status(http.StatusNoContent)
++			})
++
++			req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(
++				`{"model":"`+tc.publicModel+`","max_tokens":64,"thinking":`+tc.thinking+`,"messages":[]}`))
++			req.Header.Set("Content-Type", "application/json")
++			w := httptest.NewRecorder()
++
++			router.ServeHTTP(w, req)
++
++			require.Equal(t, http.StatusNoContent, w.Code)
++		})
++	}
++}
+diff --git a/backend/internal/server/routes/gateway.go b/backend/internal/server/routes/gateway.go
+index 0e7dbef05..d4ce23101 100644
+--- a/backend/internal/server/routes/gateway.go
++++ b/backend/internal/server/routes/gateway.go
+@@ -14,7 +14,6 @@ import (
+ 
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/tidwall/gjson"
+-	"github.com/tidwall/sjson"
+ )
+ 
+ // RegisterGatewayRoutes 注册 API 网关路由（Claude/OpenAI/Gemini 兼容）
+@@ -593,9 +592,7 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
+ 				c.Request = c.Request.WithContext(service.WithCompositeRouteDecision(c.Request.Context(), decision))
+ 				if upstreamModel := strings.TrimSpace(decision.UpstreamModel); upstreamModel != "" && upstreamModel != model && gjson.ValidBytes(body) {
+ 					if _, modelPath := requestmodel.JSONModelPathForRoute(routePath, body); modelPath != "" {
+-						if rewritten, rewriteErr := sjson.SetBytes(body, modelPath, upstreamModel); rewriteErr == nil {
+-							body = rewritten
+-						}
++						body = service.RewriteCompositeRequestModel(body, modelPath, upstreamModel)
+ 					}
+ 				}
+ 			}
+diff --git a/backend/internal/service/bedrock_request.go b/backend/internal/service/bedrock_request.go
+index 74df923e6..0c103f8f5 100644
+--- a/backend/internal/service/bedrock_request.go
++++ b/backend/internal/service/bedrock_request.go
+@@ -765,14 +765,7 @@ func sanitizeBedrockThinking(body []byte, modelID string) []byte {
+ 	}
+ 
+ 	if claude.IsSonnet55(modelID) {
+-		switch thinkingType {
+-		case "enabled":
+-			body, _ = sjson.SetBytes(body, "thinking.type", "adaptive")
+-			body, _ = sjson.DeleteBytes(body, "thinking.budget_tokens")
+-		case "disabled":
+-			body, _ = sjson.SetBytes(body, "thinking.type", "between_tools")
+-		}
+-		return body
++		return adaptThinkingToClaude55(body, modelID)
+ 	}
+ 
+ 	if isBedrockOpus47OrNewer(modelID) {
+diff --git a/backend/internal/service/claude55_thinking.go b/backend/internal/service/claude55_thinking.go
+new file mode 100644
+index 000000000..b74a05420
+--- /dev/null
++++ b/backend/internal/service/claude55_thinking.go
+@@ -0,0 +1,27 @@
++package service
++
++import (
++	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
++	"github.com/tidwall/gjson"
++	"github.com/tidwall/sjson"
++)
++
++// adaptThinkingToClaude55 replaces a thinking mode that a Claude 5.5 model
++// rejects with the nearest mode it accepts: enabled becomes adaptive without
++// budget_tokens, and on Sonnet 5.5 disabled becomes between_tools. Other modes
++// are left for validateClaude55Request to judge.
++func adaptThinkingToClaude55(body []byte, model string) []byte {
++	if !isClaude55SignedThinkingModel(model) {
++		return body
++	}
++	switch gjson.GetBytes(body, "thinking.type").String() {
++	case "enabled":
++		body, _ = sjson.SetBytes(body, "thinking.type", "adaptive")
++		body, _ = sjson.DeleteBytes(body, "thinking.budget_tokens")
++	case "disabled":
++		if claude.IsSonnet55(model) {
++			body, _ = sjson.SetBytes(body, "thinking.type", "between_tools")
++		}
++	}
++	return body
++}
+diff --git a/backend/internal/service/composite_platform.go b/backend/internal/service/composite_platform.go
+index ddaf2d83a..5b65a3604 100644
+--- a/backend/internal/service/composite_platform.go
++++ b/backend/internal/service/composite_platform.go
+@@ -51,6 +51,18 @@ func WithCompositeRouteDecision(ctx context.Context, decision CompositeRouteDeci
+ 	return ctx
+ }
+ 
++// RewriteCompositeRequestModel puts a composite route's upstream model into the
++// request body at modelPath. The client chose its thinking mode for the model
++// it asked for, so a mode the upstream model rejects becomes the nearest mode
++// it accepts. The body is returned unchanged when it cannot be rewritten.
++func RewriteCompositeRequestModel(body []byte, modelPath, upstreamModel string) []byte {
++	rewritten, err := sjson.SetBytes(body, modelPath, upstreamModel)
++	if err != nil {
++		return body
++	}
++	return adaptThinkingToClaude55(rewritten, upstreamModel)
++}
++
+ func ResolvedUpstreamModelFromContext(ctx context.Context) (string, bool) {
+ 	if ctx == nil {
+ 		return "", false
+diff --git a/backend/internal/service/composite_platform_thinking_test.go b/backend/internal/service/composite_platform_thinking_test.go
+new file mode 100644
+index 000000000..b7c2f315e
+--- /dev/null
++++ b/backend/internal/service/composite_platform_thinking_test.go
+@@ -0,0 +1,82 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func forwardCompositeThinkingRequest(t *testing.T, publicModel, upstreamModel, clientBody string) (*httptest.ResponseRecorder, *anthropicHTTPUpstreamRecorder, error) {
++	t.Helper()
++	gin.SetMode(gin.TestMode)
++	rec := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(rec)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
++
++	body := []byte(clientBody)
++	ctx := context.Background()
++	if upstreamModel != publicModel {
++		body = RewriteCompositeRequestModel(body, "model", upstreamModel)
++		ctx = WithCompositeRouteDecision(ctx, CompositeRouteDecision{
++			Matched: true, Source: CompositeRouteSourceExplicit,
++			PublicModel: publicModel, TargetPlatform: PlatformAnthropic, UpstreamModel: upstreamModel,
++		})
++	}
++	c.Request = c.Request.WithContext(ctx)
++	parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), PlatformAnthropic)
++	require.NoError(t, err)
++
++	upstream := &anthropicHTTPUpstreamRecorder{resp: &http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"application/json"}},
++		Body:       io.NopCloser(strings.NewReader(`{"id":"msg_1","type":"message","role":"assistant","model":"` + upstreamModel + `","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`)),
++	}}
++	svc := newForwardPartialUsageServiceForTest(upstream)
++	_, err = svc.Forward(ctx, c, newAnthropicOAuthAccountForPartialUsageTest(), parsed)
++	return rec, upstream, err
++}
++
++// A composite route that rewrites claude-sonnet-5 to claude-opus-5-5 sends the
++// client's budget thinking upstream as adaptive thinking instead of failing
++// Opus 5.5 validation.
++func TestCompositeRewriteToOpus55SendsEnabledThinkingAsAdaptive(t *testing.T) {
++	rec, upstream, err := forwardCompositeThinkingRequest(t, "claude-sonnet-5", "claude-opus-5-5",
++		`{"model":"claude-sonnet-5","max_tokens":64,"stream":false,"thinking":{"type":"enabled","budget_tokens":4096},"messages":[{"role":"user","content":"hi"}]}`)
++
++	require.NoError(t, err)
++	require.NotEqual(t, http.StatusBadRequest, rec.Code)
++	require.NotNil(t, upstream.lastReq, "request must reach the upstream")
++	require.Equal(t, "claude-opus-5-5", gjson.GetBytes(upstream.lastBody, "model").String())
++	require.Equal(t, "adaptive", gjson.GetBytes(upstream.lastBody, "thinking.type").String())
++	require.False(t, gjson.GetBytes(upstream.lastBody, "thinking.budget_tokens").Exists())
++}
++
++func TestCompositeRewriteToSonnet55SendsDisabledThinkingAsBetweenTools(t *testing.T) {
++	rec, upstream, err := forwardCompositeThinkingRequest(t, "claude-sonnet-5", "claude-sonnet-5-5",
++		`{"model":"claude-sonnet-5","max_tokens":64,"stream":false,"thinking":{"type":"disabled"},"messages":[{"role":"user","content":"hi"}]}`)
++
++	require.NoError(t, err)
++	require.NotEqual(t, http.StatusBadRequest, rec.Code)
++	require.NotNil(t, upstream.lastReq, "request must reach the upstream")
++	require.Equal(t, "between_tools", gjson.GetBytes(upstream.lastBody, "thinking.type").String())
++}
++
++// Without a model rewrite the client's own invalid thinking mode is still
++// rejected.
++func TestDirectOpus55RequestWithEnabledThinkingIsStillRejected(t *testing.T) {
++	rec, upstream, err := forwardCompositeThinkingRequest(t, "claude-opus-5-5", "claude-opus-5-5",
++		`{"model":"claude-opus-5-5","max_tokens":64,"stream":false,"thinking":{"type":"enabled","budget_tokens":4096},"messages":[{"role":"user","content":"hi"}]}`)
++
++	require.ErrorContains(t, err, "claude-opus-5-5 requires adaptive thinking")
++	require.Equal(t, http.StatusBadRequest, rec.Code)
++	require.Nil(t, upstream.lastReq)
++}

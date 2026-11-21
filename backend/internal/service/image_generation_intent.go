@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -36,6 +37,23 @@ func GroupAllowsImageGeneration(group *Group) bool {
 	return group == nil || group.AllowImageGeneration
 }
 
+// openAIBodyMayDeclareImageGeneration is a necessary condition only. Escaped
+// and non-ASCII spellings retain the complete parser and model case folding.
+func openAIBodyMayDeclareImageGeneration(body []byte) bool {
+	if bytes.Contains(body, []byte("image_gen")) || bytes.Contains(body, []byte(`\u`)) {
+		return true
+	}
+	for i, c := range body {
+		if c >= 128 {
+			return true
+		}
+		if i+4 <= len(body) && (c|32) == 'i' && (body[i+1]|32) == 'm' && (body[i+2]|32) == 'a' && (body[i+3]|32) == 'g' {
+			return true
+		}
+	}
+	return false
+}
+
 // IsImageGenerationIntent classifies requests that can produce generated images.
 func IsImageGenerationIntent(endpoint string, requestedModel string, body []byte) bool {
 	if IsImageGenerationEndpoint(endpoint) {
@@ -44,7 +62,7 @@ func IsImageGenerationIntent(endpoint string, requestedModel string, body []byte
 	if isOpenAIImageGenerationModel(requestedModel) {
 		return true
 	}
-	if len(body) == 0 || !gjson.ValidBytes(body) {
+	if !openAIBodyMayDeclareImageGeneration(body) || !gjson.ValidBytes(body) {
 		return false
 	}
 
@@ -86,7 +104,7 @@ func IsExplicitImageGenerationIntent(endpoint string, requestedModel string, bod
 	if IsImageGenerationEndpoint(endpoint) || isOpenAIImageGenerationModel(requestedModel) {
 		return true
 	}
-	if len(body) == 0 || !gjson.ValidBytes(body) {
+	if !openAIBodyMayDeclareImageGeneration(body) || !gjson.ValidBytes(body) {
 		return false
 	}
 	var modelSeen, toolsSeen, toolChoiceSeen bool
@@ -133,7 +151,7 @@ func isExplicitGrokImageGenerationIntent(endpoint string, requestedModel string,
 	if IsImageGenerationEndpoint(endpoint) || isOpenAIImageGenerationModel(requestedModel) {
 		return true
 	}
-	if len(body) == 0 || !gjson.ValidBytes(body) {
+	if !openAIBodyMayDeclareImageGeneration(body) || !gjson.ValidBytes(body) {
 		return false
 	}
 

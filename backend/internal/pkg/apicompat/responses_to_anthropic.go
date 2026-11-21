@@ -53,7 +53,14 @@ func ResponsesToAnthropic(resp *ResponsesResponse, model string) *AnthropicRespo
 				Type:  "tool_use",
 				ID:    fromResponsesCallID(item.CallID),
 				Name:  item.Name,
-				Input: sanitizeAnthropicToolUseInput(item.Name, item.Arguments),
+				Input: anthropicToolUseInput(item.Type, item.Name, item.Arguments),
+			})
+		case "custom_tool_call":
+			if !resp.RenderCustomToolCalls || (resp.XAIServerSideSearch && IsServerSideSearchCall(item.Type, item.CallID)) {
+				continue
+			}
+			blocks = append(blocks, AnthropicContentBlock{
+				Type: "tool_use", ID: fromResponsesCallID(item.CallID), Name: item.Name, Input: anthropicToolUseInput(item.Type, item.Name, item.Input),
 			})
 		case "web_search_call":
 			toolUseID := "srvtoolu_" + item.ID
@@ -142,6 +149,21 @@ func containsAnthropicToolUseBlock(blocks []AnthropicContentBlock) bool {
 		}
 	}
 	return false
+}
+
+// Anthropic tool inputs are objects even if a completed generation truncated
+// function arguments. Freeform custom calls use the existing input wrapper.
+func anthropicToolUseInput(itemType, name, raw string) json.RawMessage {
+	if trimmed := strings.TrimSpace(raw); strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed)) {
+		return sanitizeAnthropicToolUseInput(name, raw)
+	}
+	if itemType == "custom_tool_call" && raw != "" {
+		wrapped, err := json.Marshal(map[string]string{"input": raw})
+		if err == nil {
+			return wrapped
+		}
+	}
+	return json.RawMessage("{}")
 }
 
 func sanitizeAnthropicToolUseInput(name string, raw string) json.RawMessage {

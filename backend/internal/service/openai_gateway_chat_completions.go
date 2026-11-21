@@ -37,6 +37,47 @@ var cursorResponsesUnsupportedFields = []string{
 	"safety_identifier",
 	"metadata",
 	"stream_options",
+	"stop",
+}
+
+// Only the API-key bridge lifts in-history declarations. Native Chat forwarding
+// keeps its original bytes; Codex OAuth accepts its existing protocol only.
+func parseChatRequestForBridge(body []byte, account *Account, req *apicompat.ChatCompletionsRequest) error {
+	if account == nil || !account.IsOpenAIApiKey() {
+		return json.Unmarshal(body, req)
+	}
+	var wire struct {
+		*apicompat.ChatCompletionsRequest
+		Messages []struct {
+			apicompat.ChatMessage
+			Tools json.RawMessage `json:"tools"`
+		} `json:"messages"`
+	}
+	wire.ChatCompletionsRequest = req
+	if err := json.Unmarshal(body, &wire); err != nil {
+		return err
+	}
+	req.Messages = make([]apicompat.ChatMessage, 0, len(wire.Messages))
+	for i, msg := range wire.Messages {
+		if msg.Role != "system" || msg.Tools == nil {
+			req.Messages = append(req.Messages, msg.ChatMessage)
+			continue
+		}
+		if msg.Content != nil {
+			return fmt.Errorf("messages[%d]: system tools cannot be used with content", i)
+		}
+		var tools []apicompat.ChatTool
+		if err := json.Unmarshal(msg.Tools, &tools); err != nil {
+			return fmt.Errorf("messages[%d].tools: %w", i, err)
+		}
+		for j, tool := range tools {
+			if tool.Type != "function" || tool.Function == nil || strings.TrimSpace(tool.Function.Name) == "" {
+				return fmt.Errorf("messages[%d].tools[%d]: expected a named function", i, j)
+			}
+		}
+		req.Tools = append(req.Tools, tools...)
+	}
+	return nil
 }
 
 // ForwardAsChatCompletions accepts a Chat Completions request body, converts it
@@ -126,7 +167,7 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 
 	// 1. Parse Chat Completions request
 	var chatReq apicompat.ChatCompletionsRequest
-	if err := json.Unmarshal(body, &chatReq); err != nil {
+	if err := parseChatRequestForBridge(body, account, &chatReq); err != nil {
 		return nil, fmt.Errorf("parse chat completions request: %w", err)
 	}
 	originalModel := chatReq.Model
@@ -209,11 +250,14 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 			return nil, fmt.Errorf("convert chat completions to responses: %w", err)
 		}
 		responsesReq.Model = upstreamModel
+		responsesReq.Stop = nil // Native Responses does not accept Chat stop sequences.
 		normalizeResponsesRequestServiceTier(responsesReq)
 		responsesBody, err = json.Marshal(responsesReq)
 		if err != nil {
 			return nil, fmt.Errorf("marshal responses request: %w", err)
 		}
+		// The serialized body owns the input from here; later billing uses scalars.
+		responsesReq.Input = nil
 	}
 
 	logFields := []zap.Field{
@@ -812,8 +856,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	var streamNonFailoverErr error
 	var providerServiceTier *string
 	// Grok chat bridge reuses Responses SSE; count native search tools for surcharge.
-	searchCount := 0
-	streamSearchSeen := make(map[string]struct{})
+	var searchCounter grokSearchCounter
 	countSearch := account != nil && account.IsGrok()
 	observer := upstreamResponseModelObserverFromContext(c)
 	if observer == nil {
@@ -850,8 +893,8 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			FirstTokenMs:                  firstTokenMs,
 			ServiceTier:                   providerServiceTier,
 		}
-		if searchCount > 0 {
-			out.SearchCount = searchCount
+		if searchCounter.total > 0 {
+			out.SearchCount = searchCounter.total
 		}
 		return out
 	}
@@ -863,7 +906,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			firstTokenMs = &ms
 		}
 		if countSearch {
-			searchCount += countGrokNativeSearchCallsInSSEDataDedup([]byte(payload), streamSearchSeen)
+			searchCounter.Add([]byte(payload))
 		}
 
 		var event apicompat.ResponsesStreamEvent

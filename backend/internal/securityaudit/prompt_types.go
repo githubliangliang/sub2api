@@ -2,6 +2,7 @@ package securityaudit
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -85,6 +86,17 @@ type Request struct {
 
 func (r Request) Clone() Request {
 	r.Body = append([]byte(nil), r.Body...)
+	r.RequestID = strings.Clone(r.RequestID)
+	r.Username = strings.Clone(r.Username)
+	r.UserEmail = strings.Clone(r.UserEmail)
+	r.APIKeyName = strings.Clone(r.APIKeyName)
+	r.GroupName = strings.Clone(r.GroupName)
+	r.Provider = strings.Clone(r.Provider)
+	r.Endpoint = strings.Clone(r.Endpoint)
+	r.Protocol = strings.Clone(r.Protocol)
+	r.Model = strings.Clone(r.Model)
+	r.Stage = strings.Clone(r.Stage)
+
 	if r.GroupID != nil {
 		id := *r.GroupID
 		r.GroupID = &id

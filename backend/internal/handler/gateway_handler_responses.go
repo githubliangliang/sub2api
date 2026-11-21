@@ -72,6 +72,9 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	}
 
 	// Extract model and stream using gjson (like OpenAI handler)
+	// Only unchanged validated bytes may skip a second JSON check.
+	parseRequestBody := service.ParseGatewayRequestValidated
+
 	modelResult := gjson.GetBytes(body, "model")
 	if !modelResult.Exists() || modelResult.Type != gjson.String || modelResult.String() == "" {
 		h.responsesErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
@@ -89,6 +92,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		return
 	} else if changed {
 		body = capped
+		parseRequestBody = service.ParseGatewayRequest
 	}
 	reqStream, ok := parseOpenAICompatibleStream(body)
 	if !ok {
@@ -161,7 +165,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 
 	// Parse request for session hash
 	bodyRef := service.NewRequestBodyRef(body)
-	parsedReq, _ := service.ParseGatewayRequest(bodyRef, "responses")
+	parsedReq, _ := parseRequestBody(bodyRef, "responses")
 	if parsedReq == nil {
 		parsedReq = &service.ParsedRequest{Model: reqModel, Stream: reqStream, Body: bodyRef}
 	}

@@ -14,7 +14,7 @@ var codexSelectedPageName = regexp.MustCompile(`^codex_apps_selected_page_part_(
 // Codex injects external context without a model tool call. Keep it as untrusted
 // user text, including on history replay and mixed bootstrap turns.
 func normalizeCodexPageContext(body []byte) ([]byte, bool) {
-	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context") || !hasUniqueJSONMembers(body) {
+	if !mayContainCodexCallOutputCandidate(body, "codex_apps_open_page", "codex_apps_selected_page_part_", "browser_info", "goal_objective", "untrusted_context", "ide_context", "untrusted_content", "proposed_plan") || !hasUniqueJSONMembers(body) {
 		return body, false
 	}
 	var request map[string]json.RawMessage
@@ -45,13 +45,14 @@ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
 				continue
 			}
 		}
-		name, output := readString("name"), readString("output")
-		if !validCodexUntrustedContext(name, output) {
+		name := readString("name")
+		var output *string
+		if json.Unmarshal(item["output"], &output) != nil || output == nil || !validCodexUntrustedContext(name, *output) {
 			continue
 		}
-		text := "<external_" + name + ">" + output + "</external_" + name + ">"
-		if validCodexPageContext(name, output) {
-			text = "<external_" + name + ">\n" + output + "\n</external_" + name + ">"
+		text := "<external_" + name + ">" + *output + "</external_" + name + ">"
+		if validCodexPageContext(name, *output) {
+			text = "<external_" + name + ">\n" + *output + "\n</external_" + name + ">"
 		}
 		message := map[string]any{
 			"type": "message",
@@ -85,8 +86,12 @@ func normalizeCodexPageContext(body []byte) ([]byte, bool) {
 
 func validCodexUntrustedContext(name, output string) bool {
 	switch name {
-	case "browser_info", "goal_objective", "untrusted_context":
+	case "browser_info", "goal_objective", "untrusted_context", "ide_context":
 		return strings.TrimSpace(output) != ""
+	case "untrusted_content":
+		return true // An unnamed external source may carry empty text.
+	case "proposed_plan":
+		return output != "" // Byte chunks may consist entirely of whitespace.
 	default:
 		return validCodexPageContext(name, output)
 	}

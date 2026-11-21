@@ -1,0 +1,112 @@
+diff --git a/frontend/src/components/modelPlaza/PlazaModelPricingTable.vue b/frontend/src/components/modelPlaza/PlazaModelPricingTable.vue
+index 6daf1194e..a66709532 100644
+--- a/frontend/src/components/modelPlaza/PlazaModelPricingTable.vue
++++ b/frontend/src/components/modelPlaza/PlazaModelPricingTable.vue
+@@ -65,7 +65,18 @@
+           <!-- 模型名 + 非 token 计费模式徽章;分时时段行额外标注时段 -->
+           <td class="border-r border-gray-100 py-2.5 pl-5 pr-4 align-middle dark:border-dark-700/60">
+             <div class="flex flex-wrap items-center gap-1.5">
+-              <span class="font-medium text-gray-900 dark:text-white">{{ m.name }}</span>
++              <span class="inline-flex min-w-0 items-center gap-1">
++                <span class="min-w-0 break-words font-medium text-gray-900 dark:text-white">{{ m.name }}</span>
++                <button
++                  type="button"
++                  class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-dark-300 dark:hover:bg-dark-700 dark:hover:text-primary-400"
++                  :title="t('modelPlaza.table.copyModelId', { model: m.name })"
++                  :aria-label="t('modelPlaza.table.copyModelId', { model: m.name })"
++                  @click="copyToClipboard(m.name)"
++                >
++                  <Icon name="copy" size="sm" aria-hidden="true" />
++                </button>
++              </span>
+               <!-- 时段徽章紧跟模型名,其余徽章排在后面,空间不足时先换行的是它们 -->
+               <span
+                 v-if="period"
+@@ -320,6 +331,8 @@
+ <script setup lang="ts">
+ import { computed } from 'vue'
+ import { useI18n } from 'vue-i18n'
++import Icon from '@/components/icons/Icon.vue'
++import { useClipboard } from '@/composables/useClipboard'
+ import { formatScaled, resolveIntervalPrices } from '@/utils/pricing'
+ import { platformAccentColor, platformBadgeLightClass, platformLabel } from '@/utils/platformColors'
+ import {
+@@ -366,6 +379,7 @@ const props = defineProps<{
+ }>()
+ 
+ const { t } = useI18n()
++const { copyToClipboard } = useClipboard()
+ 
+ /** 实付分区只从平台拿一个主色,浅底/标题/下划线全部由 scoped CSS 用 color-mix 派生。 */
+ const accentStyle = computed(() => ({ '--plaza-accent': platformAccentColor(props.platform ?? '') }))
+diff --git a/frontend/src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts b/frontend/src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts
+index 1cfe916d0..ce2c1108e 100644
+--- a/frontend/src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts
++++ b/frontend/src/components/modelPlaza/__tests__/PlazaModelPricingTable.spec.ts
+@@ -3,6 +3,14 @@ import { mount } from '@vue/test-utils'
+ import PlazaModelPricingTable from '../PlazaModelPricingTable.vue'
+ import type { PlazaModel } from '@/api/modelPlaza'
+ 
++const { copyToClipboard } = vi.hoisted(() => ({
++  copyToClipboard: vi.fn().mockResolvedValue(true)
++}))
++
++vi.mock('@/composables/useClipboard', () => ({
++  useClipboard: () => ({ copyToClipboard })
++}))
++
+ vi.mock('vue-i18n', async () => {
+   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+   return {
+@@ -58,6 +66,27 @@ function mountTable(
+ }
+ 
+ describe('PlazaModelPricingTable', () => {
++  it('copies the exact model ID from the clicked pricing row', async () => {
++    const model = tokenModel({
++      name: 'provider/Model-v2',
++      time_pricing: {
++        timezone: 'Asia/Shanghai',
++        periods: [{ start_time: '09:00', end_time: '12:00', multiplier: 0.5 }]
++      }
++    })
++    const wrapper = mountTable([tokenModel(), model], 1)
++    const rows = wrapper.findAll('tbody tr').filter(row => row.text().includes(model.name))
++    expect(rows).toHaveLength(2)
++
++    for (const row of rows) {
++      const button = row.get('button[aria-label="modelPlaza.table.copyModelId"]')
++      await button.trigger('click')
++    }
++
++    expect(copyToClipboard.mock.calls).toEqual([[model.name], [model.name]])
++    wrapper.unmount()
++  })
++
+   it.each([false, true])('shows independent 12h prices without a 1h label (intervals=%s)', (intervals) => {
+     const model = tokenModel({ name: 'gpt-6-luna', platform: 'openai' })
+     model.pricing!.cache_write_price = null
+diff --git a/frontend/src/i18n/locales/en/dashboard.ts b/frontend/src/i18n/locales/en/dashboard.ts
+index c7792ad47..5b41a4b23 100644
+--- a/frontend/src/i18n/locales/en/dashboard.ts
++++ b/frontend/src/i18n/locales/en/dashboard.ts
+@@ -679,6 +679,7 @@ export default {
+     },
+     table: {
+       model: 'Model',
++      copyModelId: 'Copy model ID {model}',
+       input: 'Input',
+       output: 'Output',
+       cache: 'Cache',
+diff --git a/frontend/src/i18n/locales/zh/dashboard.ts b/frontend/src/i18n/locales/zh/dashboard.ts
+index 6b18eab4c..4bbd070fa 100644
+--- a/frontend/src/i18n/locales/zh/dashboard.ts
++++ b/frontend/src/i18n/locales/zh/dashboard.ts
+@@ -684,6 +684,7 @@ export default {
+     },
+     table: {
+       model: '模型',
++      copyModelId: '复制模型 ID {model}',
+       input: '输入',
+       output: '输出',
+       cache: '缓存',

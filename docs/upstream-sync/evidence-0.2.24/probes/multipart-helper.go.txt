@@ -1,0 +1,6 @@
+package requestmodel
+import("mime";"strings")
+func isMultipartContentType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	return err == nil && strings.EqualFold(mediaType, "multipart/form-data")
+}

@@ -1,0 +1,429 @@
+diff --git a/frontend/src/components/account/AccountUsageCell.vue b/frontend/src/components/account/AccountUsageCell.vue
+index ff73bde66..3efe58803 100644
+--- a/frontend/src/components/account/AccountUsageCell.vue
++++ b/frontend/src/components/account/AccountUsageCell.vue
+@@ -769,7 +769,7 @@ import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'v
+ import { useI18n } from 'vue-i18n'
+ import { adminAPI } from '@/api/admin'
+ import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
+-import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
++import { buildAccountUsageRefreshKey } from '@/utils/accountUsageRefresh'
+ import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
+ import { formatCompactNumber, formatDateTime } from '@/utils/format'
+ import { isOfficialGeminiBaseUrl } from '@/utils/geminiExplicitCache'
+@@ -790,7 +790,7 @@ import {
+ import OpenCodeGoUsageCell from './OpenCodeGoUsageCell.vue'
+ 
+ // Module-level cache shared across all AccountUsageCell instances
+-const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
++const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number; refreshKey: string }>()
+ const USAGE_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+ 
+ const props = withDefaults(
+@@ -941,7 +941,7 @@ const openAISevenDayEstimatedTotalCost = computed(() => {
+   return Number.isFinite(estimate) && estimate > 0 ? estimate : null
+ })
+ 
+-const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
++const usageRefreshKey = computed(() => buildAccountUsageRefreshKey(props.account))
+ 
+ const shouldAutoLoadUsageOnMount = computed(() => {
+   return shouldFetchUsage.value
+@@ -1569,7 +1569,7 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
+   // Check cache
+   if (!options?.bypassCache) {
+     const cached = _usageCache.get(props.account.id)
+-    if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL) {
++    if (cached && cached.refreshKey === usageRefreshKey.value && Date.now() - cached.ts < USAGE_CACHE_TTL) {
+       usageInfo.value = cached.data
+       loading.value = false
+       return
+@@ -1578,6 +1578,7 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
+ 
+   loading.value = true
+   error.value = null
++  const refreshKey = usageRefreshKey.value
+ 
+   try {
+ 		const fetchFn = () => options?.source
+@@ -1586,7 +1587,7 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
+     const result = await enqueueUsageRequest(props.account, fetchFn)
+     if (!unmounted.value) {
+       usageInfo.value = result
+-      _usageCache.set(props.account.id, { data: result, ts: Date.now() })
++      _usageCache.set(props.account.id, { data: result, ts: Date.now(), refreshKey })
+     }
+   } catch (e: any) {
+     if (!unmounted.value) {
+@@ -1650,13 +1651,14 @@ const attachVisibilityObserver = () => {
+ 
+ const loadActiveUsage = async () => {
+   const accountID = props.account.id
++  const refreshKey = usageRefreshKey.value
+   activeQueryLoading.value = true
+   error.value = null
+   try {
+     const result = await adminAPI.accounts.getUsage(accountID, 'active', true)
+     if (!unmounted.value && props.account.id === accountID) {
+       usageInfo.value = result
+-      _usageCache.set(accountID, { data: result, ts: Date.now() })
++      _usageCache.set(accountID, { data: result, ts: Date.now(), refreshKey })
+     }
+   } catch (e: any) {
+     if (!unmounted.value && props.account.id === accountID) {
+@@ -1830,17 +1832,17 @@ watch(
+   { flush: 'post' }
+ )
+ 
+-watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
++watch(usageRefreshKey, (nextKey, prevKey) => {
+   if (!prevKey || nextKey === prevKey) return
+-  if (props.account.platform !== 'openai' || props.account.type !== 'oauth') return
++  if (!shouldFetchUsage.value) return
+ 
+   if (isBatchManaged.value) {
+-    requestParentBatchUsage({ force: true })
++    requestParentBatchUsage(props.account.platform === 'openai' ? { force: true } : undefined)
+     return
+   }
+ 
+   _usageCache.delete(props.account.id)
+-  requestAutoLoad()
++  requestAutoLoad(isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined)
+ })
+ 
+ watch(
+diff --git a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+index 38b7918cc..33a2f6dfd 100644
+--- a/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
++++ b/frontend/src/components/account/__tests__/AccountUsageCell.spec.ts
+@@ -113,6 +113,68 @@ const cnUsageCellStubs = {
+ }
+ 
+ describe('AccountUsageCell', () => {
++  it.each([
++    ['anthropic', 'oauth'], ['anthropic', 'setup-token'], ['gemini', 'oauth'], ['gemini', 'apikey']
++  ] as const)('refreshes %s %s snapshots without forcing upstream reads and reuses the new cache', async (platform, type) => {
++    const account = makeAccount({ id: 98200 + (platform === 'gemini' ? 10 : 0) + (type === 'oauth' ? 1 : 2), platform, type, extra: {} })
++    getUsage.mockResolvedValue({ five_hour: { utilization: 21 }, seven_day: { utilization: 31 }, gemini_shared_daily: { utilization: 31 } })
++    const wrapper = mount(AccountUsageCell, { props: { account } })
++    await flushPromises()
++    expect(getUsage).toHaveBeenCalledTimes(1)
++    getUsage.mockResolvedValue({ five_hour: { utilization: 44 }, seven_day: { utilization: 54 }, gemini_shared_daily: { utilization: 54 } })
++    const next = { ...account, last_used_at: platform === 'gemini' ? '2026-11-16T10:00:00Z' : null, extra: { passive_usage_7d_utilization: 0.54 } }
++    await wrapper.setProps({ account: next })
++    await flushPromises()
++    expect(getUsage).toHaveBeenCalledTimes(2)
++    expect(getUsage).toHaveBeenLastCalledWith(...(platform === 'anthropic' ? [account.id, 'passive', false] : [account.id]))
++    expect(wrapper.text()).toContain('54')
++    await wrapper.setProps({ account: { ...next, updated_at: 'unrelated', current_concurrency: 3 } })
++    await flushPromises()
++    expect(getUsage).toHaveBeenCalledTimes(2)
++    wrapper.unmount()
++  })
++
++  it.each(['anthropic', 'gemini'] as const)('asks the desktop batch manager to refresh %s without force', async (platform) => {
++    const account = makeAccount({ id: 98301, platform, extra: {} })
++    const requestBatchedUsage = vi.fn()
++    const wrapper = mount(AccountUsageCell, { props: { account, requestBatchedUsage } })
++    await flushPromises()
++    requestBatchedUsage.mockClear()
++    await wrapper.setProps({ account: { ...account, last_used_at: '2026-11-16T10:00:00Z' } })
++    expect(requestBatchedUsage).toHaveBeenCalledTimes(1)
++    expect(requestBatchedUsage).toHaveBeenCalledWith(expect.objectContaining({ id: account.id }), undefined)
++    expect(getUsage).not.toHaveBeenCalled()
++    wrapper.unmount()
++  })
++
++  it.each(['anthropic', 'gemini'] as const)('defers mobile %s snapshot refresh until visible', async (platform) => {
++    vi.mocked(window.matchMedia).mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList)
++    let notify: IntersectionObserverCallback = () => {}
++    vi.stubGlobal('IntersectionObserver', class {
++      constructor(callback: IntersectionObserverCallback) { notify = callback }
++      observe() {}
++      disconnect() {}
++    })
++    const account = makeAccount({ id: 98401, platform, extra: {} })
++    getUsage.mockResolvedValue({ five_hour: { utilization: 44 }, gemini_shared_daily: { utilization: 44 } })
++    const wrapper = mount(AccountUsageCell, { props: { account } })
++    try {
++      await flushPromises()
++      await wrapper.setProps({ account: { ...account, last_used_at: '2026-11-16T10:00:00Z' } })
++      expect(getUsage).not.toHaveBeenCalled()
++      notify([{ isIntersecting: true }] as IntersectionObserverEntry[], {} as IntersectionObserver)
++      await flushPromises()
++      expect(getUsage).toHaveBeenCalledTimes(1)
++      expect(getUsage).toHaveBeenLastCalledWith(...(platform === 'anthropic' ? [account.id, 'passive', false] : [account.id]))
++      await wrapper.setProps({ account: { ...account, last_used_at: '2026-11-16T10:01:00Z' } })
++      await flushPromises()
++      expect(getUsage).toHaveBeenCalledTimes(2)
++    } finally {
++      wrapper.unmount()
++      vi.unstubAllGlobals()
++    }
++  })
++
+   beforeEach(() => {
+     getUsage.mockReset()
+     Object.defineProperty(window, 'matchMedia', {
+diff --git a/frontend/src/i18n/locales/en/admin/overview.ts b/frontend/src/i18n/locales/en/admin/overview.ts
+index f777e5f18..250c91163 100644
+--- a/frontend/src/i18n/locales/en/admin/overview.ts
++++ b/frontend/src/i18n/locales/en/admin/overview.ts
+@@ -1274,7 +1274,7 @@ export default {
+         force: 'Force Fast (priority)',
+         hint: 'Forces service_tier=priority on OpenAI requests in this group. The global Fast/Flex policy can still filter or block it. New requests update immediately after saving; existing WebSocket sessions must reconnect.',
+         forceUltrafast: 'Force Ultra Fast (ultrafast)',
+-        ultrafastHint: 'Forces Ultra Fast on supported models. Pro 200 includes GPT-6.2 Sol Ultrafast. Pro 500 includes both Sol and Astra Ultrafast. Other subscriptions use the tiers advertised by their account. If unavailable, Force Fast takes precedence over the client tier. GPT-6.2 Sol and Astra cost 3× Standard through February 28, 2027 (Pacific time), then 6×. GPT-6 Astra and GPT-6.1 Sol cost 6×. Free Fast excludes Ultra Fast.',
++        ultrafastHint: 'Forces Ultra Fast (service_tier=ultrafast) on supported models. Pro 200 includes GPT-6.2 Sol Ultrafast. Pro 500 includes both Sol and Astra Ultrafast. Other subscriptions use the tiers advertised by their account. If unavailable, Force Fast takes precedence over the client tier. GPT-6.2 Sol and Astra cost 3× Standard through February 28, 2027 (Pacific time), then 6×. GPT-6 Astra and GPT-6.1 Sol cost 6×. Free Fast excludes Ultra Fast.',
+         free: 'Free Fast',
+         freeHint: 'Fast requests in this group still use the priority tier, but customers are charged the equivalent Standard price.'
+       },
+diff --git a/frontend/src/i18n/locales/zh/admin/overview.ts b/frontend/src/i18n/locales/zh/admin/overview.ts
+index b360c5d7e..5386e7c5a 100644
+--- a/frontend/src/i18n/locales/zh/admin/overview.ts
++++ b/frontend/src/i18n/locales/zh/admin/overview.ts
+@@ -1272,7 +1272,7 @@ export default {
+         force: '强制使用 Fast（priority）',
+         hint: '开启后，此分组的 OpenAI 请求会强制写入 service_tier=priority；全局 Fast/Flex 策略仍可过滤或拦截。保存后新请求立即生效，已建立的 WebSocket 会话需重连。',
+         forceUltrafast: '强制使用 Ultra Fast（ultrafast）',
+-        ultrafastHint: '对支持的模型强制使用 Ultra Fast。GPT-6.2 订阅档位按套餐补全：Pro 200 支持 Sol，Pro 500 支持 Sol 和 Astra；其他账号使用其目录明确提供的档位。不可用时，若同时开启强制 Fast 则使用 Fast，否则跟随客户端。6.2 Sol 和 Astra 在太平洋时间 2027 年 2 月 28 日及之前按标准价 3 倍计费，之后为 6 倍。GPT-6 Astra 和 GPT-6.1 Sol 为 6 倍。免费 Fast 不包含 Ultra Fast。',
++        ultrafastHint: '对支持的模型强制使用 Ultra Fast（service_tier=ultrafast）。GPT-6.2 订阅档位按套餐补全：Pro 200 支持 Sol，Pro 500 支持 Sol 和 Astra；其他账号使用其目录明确提供的档位。不可用时，若同时开启强制 Fast 则使用 Fast，否则跟随客户端。6.2 Sol 和 Astra 在太平洋时间 2027 年 2 月 28 日及之前按标准价 3 倍计费，之后为 6 倍。GPT-6 Astra 和 GPT-6.1 Sol 为 6 倍。免费 Fast 不包含 Ultra Fast。',
+         free: '免费 Fast',
+         freeHint: '该分组的 Fast 请求仍使用 priority 档位，但客户实际费用按同一请求的 Standard 价格计算。'
+       },
+diff --git a/frontend/src/utils/__tests__/accountUsageRefresh.spec.ts b/frontend/src/utils/__tests__/accountUsageRefresh.spec.ts
+index f9559697e..f2d21a421 100644
+--- a/frontend/src/utils/__tests__/accountUsageRefresh.spec.ts
++++ b/frontend/src/utils/__tests__/accountUsageRefresh.spec.ts
+@@ -1,5 +1,30 @@
+ import { describe, expect, it } from 'vitest'
+-import { buildGrokUsageRefreshKey, buildOpenAIUsageRefreshKey } from '../accountUsageRefresh'
++import { buildAccountUsageRefreshKey, buildGrokUsageRefreshKey, buildOpenAIUsageRefreshKey } from '../accountUsageRefresh'
++
++describe('buildAccountUsageRefreshKey', () => {
++  it.each(['oauth', 'setup-token'])('tracks every Claude %s passive snapshot input', (type) => {
++    const base = { id: 1, platform: 'anthropic', type, extra: {} } as any
++    for (const field of ['last_used_at', 'session_window_start', 'session_window_end', 'session_window_status']) {
++      expect(buildAccountUsageRefreshKey({ ...base, [field]: 'new' })).not.toBe(buildAccountUsageRefreshKey(base))
++    }
++    for (const field of ['session_window_utilization', 'passive_usage_sampled_at', 'passive_usage_7d_utilization', 'passive_usage_7d_reset', 'passive_usage_7d_oi_utilization', 'passive_usage_7d_oi_reset']) {
++      expect(buildAccountUsageRefreshKey({ ...base, extra: { [field]: 1 } })).not.toBe(buildAccountUsageRefreshKey(base))
++    }
++  })
++
++  it.each(['anthropic', 'gemini'])('ignores unrelated %s changes and extra key ordering', (platform) => {
++    const base = { id: 1, platform, type: 'oauth', extra: { session_window_utilization: 0, other: 1 } } as any
++    expect(buildAccountUsageRefreshKey({ ...base, updated_at: 'new', current_concurrency: 5, extra: { other: 2, session_window_utilization: 0 } } as any)).toBe(buildAccountUsageRefreshKey(base))
++    expect(buildAccountUsageRefreshKey({ ...base, last_used_at: 'new' })).not.toBe(buildAccountUsageRefreshKey(base))
++  })
++
++  it('retains OpenAI keys and excludes unsupported platforms/types', () => {
++    const base = { id: 1, platform: 'openai', type: 'oauth', extra: {} } as any
++    expect(buildAccountUsageRefreshKey(base)).toBe(buildOpenAIUsageRefreshKey(base))
++    expect(buildAccountUsageRefreshKey({ ...base, platform: 'anthropic', type: 'apikey' })).toBe('')
++    expect(buildAccountUsageRefreshKey({ ...base, platform: 'antigravity' })).toBe('')
++  })
++})
+ 
+ describe('buildOpenAIUsageRefreshKey', () => {
+   it('会在 codex 快照变化时生成不同 key', () => {
+diff --git a/frontend/src/utils/accountUsageRefresh.ts b/frontend/src/utils/accountUsageRefresh.ts
+index 121dae253..4d64ee789 100644
+--- a/frontend/src/utils/accountUsageRefresh.ts
++++ b/frontend/src/utils/accountUsageRefresh.ts
+@@ -69,3 +69,29 @@ export const buildGrokUsageRefreshKey = (account: Pick<Account, 'platform' | 'ex
+     serializeSnapshotRefreshValue(legacyQuotaFallback)
+   ].join('|')
+ }
++
++export const buildAccountUsageRefreshKey = (account: Pick<Account, 'id' | 'platform' | 'type' | 'updated_at' | 'last_used_at' | 'rate_limit_reset_at' | 'session_window_start' | 'session_window_end' | 'session_window_status' | 'extra'>): string => {
++  if (account.platform === 'openai') return buildOpenAIUsageRefreshKey(account)
++
++  const isClaude = account.platform === 'anthropic' && (account.type === 'oauth' || account.type === 'setup-token')
++  if (!isClaude && account.platform !== 'gemini') return ''
++
++  const extra = account.extra ?? {}
++  return serializeSnapshotRefreshValue([
++    account.id,
++    account.platform,
++    account.type,
++    account.last_used_at ?? null,
++    account.session_window_start ?? null,
++    account.session_window_end ?? null,
++    ...(isClaude ? [
++      account.session_window_status ?? null,
++      extra.session_window_utilization ?? null,
++      extra.passive_usage_sampled_at ?? null,
++      extra.passive_usage_7d_utilization ?? null,
++      extra.passive_usage_7d_reset ?? null,
++      extra.passive_usage_7d_oi_utilization ?? null,
++      extra.passive_usage_7d_oi_reset ?? null
++    ] : [])
++  ])
++}
+diff --git a/frontend/src/views/admin/AccountsView.vue b/frontend/src/views/admin/AccountsView.vue
+index 7384e4858..cb650f706 100644
+--- a/frontend/src/views/admin/AccountsView.vue
++++ b/frontend/src/views/admin/AccountsView.vue
+@@ -531,7 +531,7 @@ import Icon from '@/components/icons/Icon.vue'
+ import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
+ import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
+ import { fetchAllAccountIds } from '@/utils/accountSelection'
+-import { buildGrokUsageRefreshKey, buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
++import { buildGrokUsageRefreshKey, buildAccountUsageRefreshKey } from '@/utils/accountUsageRefresh'
+ import { formatDateTime, formatRelativeTime } from '@/utils/format'
+ import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
+ import { extractApiErrorMessage } from '@/utils/apiError'
+@@ -747,7 +747,7 @@ const usageBatchByAccountId = ref<Record<string, AccountUsageInfo | null>>({})
+ const usageBatchErrorByAccountId = ref<Record<string, string | null>>({})
+ const usageBatchLoadingByAccountId = ref<Record<string, boolean>>({})
+ const usageBatchRequestTokenByAccountId = ref<Record<string, number>>({})
+-const usageBatchCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
++const usageBatchCache = new Map<number, { data: AccountUsageInfo; ts: number; refreshKey: string }>()
+ const USAGE_BATCH_CACHE_TTL = 5 * 60 * 1000
+ const pendingUsageBatchIds = new Set<number>()
+ let usageBatchFlushTimer: ReturnType<typeof setTimeout> | null = null
+@@ -801,6 +801,7 @@ const flushQueuedUsageBatch = async () => {
+   usageBatchFlushTimer = null
+   const accountIDs = Array.from(pendingUsageBatchIds)
+   const force = queuedUsageBatchForce
++  const refreshKeys = new Map(accounts.value.map(account => [account.id, buildAccountUsageRefreshKey(account)]))
+   pendingUsageBatchIds.clear()
+   queuedUsageBatchForce = false
+ 
+@@ -831,7 +832,7 @@ const flushQueuedUsageBatch = async () => {
+       nextErrors[key] = errorMap[key] ?? null
+       nextLoading[key] = false
+       if (usage) {
+-        usageBatchCache.set(accountID, { data: usage, ts: now })
++        usageBatchCache.set(accountID, { data: usage, ts: now, refreshKey: refreshKeys.get(accountID) ?? '' })
+       } else {
+         usageBatchCache.delete(accountID)
+       }
+@@ -869,7 +870,7 @@ const queueBatchedUsage = (account: Account, options?: { force?: boolean }) => {
+     usageBatchCache.delete(cacheKey)
+   } else {
+     const cached = usageBatchCache.get(cacheKey)
+-    if (cached && Date.now() - cached.ts < USAGE_BATCH_CACHE_TTL) {
++    if (cached && cached.refreshKey === buildAccountUsageRefreshKey(account) && Date.now() - cached.ts < USAGE_BATCH_CACHE_TTL) {
+       setUsageBatchState(cacheKey, cached.data, null)
+       setUsageBatchLoading(cacheKey, false)
+       return
+@@ -1435,7 +1436,7 @@ const shouldReplaceAutoRefreshRow = (current: Account, next: Account) => {
+     current.rate_limit_reset_at !== next.rate_limit_reset_at ||
+     current.overload_until !== next.overload_until ||
+     current.temp_unschedulable_until !== next.temp_unschedulable_until ||
+-    buildOpenAIUsageRefreshKey(current) !== buildOpenAIUsageRefreshKey(next) ||
++    buildAccountUsageRefreshKey(current) !== buildAccountUsageRefreshKey(next) ||
+     buildGrokUsageRefreshKey(current) !== buildGrokUsageRefreshKey(next)
+   )
+ }
+diff --git a/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts b/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts
+index 9d8d7266e..64115c43f 100644
+--- a/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts
++++ b/frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts
+@@ -10,6 +10,7 @@ const {
+   listWithEtag,
+   getById,
+   getBatchTodayStats,
++  getBatchUsage,
+   getUpstreamBillingProbeSettings,
+   getAllProxies,
+   getAllGroups,
+@@ -21,6 +22,7 @@ const {
+   listWithEtag: vi.fn(),
+   getById: vi.fn(),
+   getBatchTodayStats: vi.fn(),
++  getBatchUsage: vi.fn(),
+   getUpstreamBillingProbeSettings: vi.fn(),
+   getAllProxies: vi.fn(),
+   getAllGroups: vi.fn(),
+@@ -36,6 +38,7 @@ vi.mock('@/api/admin', () => ({
+       getById,
+       listWithEtag,
+       getBatchTodayStats,
++      getBatchUsage,
+       getUpstreamBillingProbeSettings,
+       delete: vi.fn(),
+       batchClearError: vi.fn(),
+@@ -67,6 +70,7 @@ const DataTableStub = defineComponent({
+     <div>
+       <template v-if="!loading"><div v-for="row in data" :key="row.id" :data-account-name="row.name">
+         <slot name="cell-groups" :row="row" />
++        <slot name="cell-usage" :row="row" />
+         <slot name="cell-actions" :row="row" />
+       </div></template>
+     </div>
+@@ -93,7 +97,7 @@ const AccountStatsModalStub = defineComponent({
+   template: '<div data-test="stats-account">{{ show ? account?.name : "" }}</div>'
+ })
+ 
+-function mountView(stubActionMenu = true) {
++function mountView(stubActionMenu = true, realUsageCell = false) {
+   return mount(AccountsView, {
+     attachTo: document.body,
+     global: {
+@@ -124,7 +128,7 @@ function mountView(stubActionMenu = true) {
+         AccountStatusIndicator: true,
+         AccountTodayStatsCell: true,
+         AccountGroupsCell: AccountGroupsCellStub,
+-        AccountUsageCell: true,
++        AccountUsageCell: !realUsageCell,
+         UpstreamBillingRateCell: true,
+         HelpTooltip: true,
+         Icon: true,
+@@ -163,6 +167,7 @@ describe('admin AccountsView lite account list', () => {
+     listWithEtag.mockReset().mockResolvedValue({ notModified: true, etag: 'compact-etag', data: null })
+     getById.mockReset().mockResolvedValue(fullAccount)
+     getBatchTodayStats.mockReset().mockResolvedValue({ stats: {} })
++    getBatchUsage.mockReset().mockResolvedValue({ usage: { '42': { five_hour: { utilization: 21 }, seven_day: { utilization: 31 } } }, errors: {} })
+     getUpstreamBillingProbeSettings.mockReset().mockResolvedValue({ enabled: true })
+     getAllProxies.mockReset().mockResolvedValue([])
+     getAllGroups.mockReset().mockResolvedValue([{ id: 7, name: 'codex', platform: 'openai' }])
+@@ -176,6 +181,45 @@ describe('admin AccountsView lite account list', () => {
+     vi.restoreAllMocks()
+   })
+ 
++  it.each([
++    ['anthropic', 'oauth'], ['anthropic', 'setup-token'], ['gemini', 'oauth']
++  ])('updates %s %s usage on auto-refresh without force or unrelated probes', async (platform, type) => {
++    vi.useFakeTimers()
++    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
++    vi.spyOn(window, 'matchMedia').mockImplementation(() => ({
++      matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn()
++    }) as unknown as MediaQueryList)
++    localStorage.setItem('account-auto-refresh', JSON.stringify({ enabled: true, interval_seconds: 5 }))
++    const account = { ...listRow, platform, type }
++    listAccounts.mockResolvedValue({ items: [account], total: 1, page: 1, page_size: 20, pages: 1 })
++    const wrapper = mountView(true, true)
++    await flushPromises()
++    await vi.advanceTimersByTimeAsync(1)
++    await flushPromises()
++    expect(getBatchUsage).toHaveBeenCalledTimes(1)
++    expect(getBatchUsage).toHaveBeenCalledWith([42], false)
++
++    const next = { ...account, extra: { session_window_utilization: 0.44, passive_usage_7d_utilization: 0.54 }, last_used_at: platform === 'gemini' ? '2026-11-16T10:00:00Z' : null }
++    getBatchUsage.mockResolvedValue({ usage: { '42': { five_hour: { utilization: 44 }, seven_day: { utilization: 54 } } }, errors: {} })
++    listWithEtag.mockResolvedValue({ notModified: false, etag: 'new', data: { items: [next], total: 1, pages: 1 } })
++    await vi.advanceTimersByTimeAsync(6000)
++    await flushPromises()
++    expect(getBatchUsage).toHaveBeenCalledTimes(2)
++    expect(getBatchUsage).toHaveBeenLastCalledWith([42], false)
++    const cell = wrapper.findComponent({ name: 'AccountUsageCell' })
++    expect(cell.props('account').last_used_at).toBe(next.last_used_at)
++    expect(cell.props('batchedUsage').seven_day.utilization).toBe(54)
++    cell.props('requestBatchedUsage')(cell.props('account'))
++    await vi.advanceTimersByTimeAsync(1)
++    expect(getBatchUsage).toHaveBeenCalledTimes(2)
++
++    listWithEtag.mockResolvedValue({ notModified: false, etag: 'unrelated', data: { items: [{ ...next, updated_at: 'new', current_concurrency: 2, extra: { ...next.extra, unrelated: true } }], total: 1, pages: 1 } })
++    await vi.advanceTimersByTimeAsync(6000)
++    await flushPromises()
++    expect(getBatchUsage).toHaveBeenCalledTimes(2)
++    wrapper.unmount()
++  })
++
+   it('keeps lite=1 on the initial list request', async () => {
+     const wrapper = mountView()
+     await flushPromises()

@@ -1070,7 +1070,11 @@ func enforceCacheControlLimit(body []byte) []byte {
 		}
 		return normalizeCacheControlTTLOrder(body)
 	}
-	return normalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
+	out := enforceCacheControlBlockLimit(body)
+	if !bytes.Contains(body, []byte(`"1h"`)) {
+		return out
+	}
+	return normalizeCacheControlTTLOrder(out)
 }
 
 // enforceCacheControlBlockLimit 强制执行 cache_control 块数量限制（最多 4 个）

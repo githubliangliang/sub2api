@@ -1864,6 +1864,8 @@ func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject
 }
 
 type openAIResponsesWSUsageLogCase struct {
+	firstMessageType          coderws.MessageType
+	secondMessageType         coderws.MessageType
 	apiKeyService             *service.APIKeyService
 	apiKeyCredential          string
 	accountRateMultiplier     *float64
@@ -1871,6 +1873,7 @@ type openAIResponsesWSUsageLogCase struct {
 	accountPlatform           string
 	closeReason               string
 	closeStatus               coderws.StatusCode
+	midFrameCloseExpected     bool
 	midPayload                string
 	group                     *service.Group
 	firstFrameCloseExpected   bool
@@ -3114,7 +3117,11 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	}()
 
 	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.firstPayload))
+	firstType := tc.firstMessageType
+	if firstType == 0 {
+		firstType = coderws.MessageText
+	}
+	err = clientConn.Write(writeCtx, firstType, []byte(tc.firstPayload))
 	cancelWrite()
 	require.NoError(t, err)
 
@@ -3161,11 +3168,27 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.midPayload))
 		cancelWrite()
 		require.NoError(t, err)
+		if tc.midFrameCloseExpected {
+			readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+			_, _, readErr := clientConn.Read(readCtx)
+			cancelRead()
+			var closeErr coderws.CloseError
+			require.ErrorAs(t, readErr, &closeErr)
+			require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+			require.Contains(t, closeErr.Reason, tc.closeReason)
+			require.Len(t, upstreamPayloadCh, 1, "rejected session.update must not reach upstream")
+			_ = clientConn.CloseNow()
+			return openAIResponsesWSUsageLogResult{}
+		}
 		readCompleted()
 	}
 	if strings.TrimSpace(tc.secondPayload) != "" && (turnCount >= 2) {
 		writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
-		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.secondPayload))
+		secondType := tc.secondMessageType
+		if secondType == 0 {
+			secondType = coderws.MessageText
+		}
+		err = clientConn.Write(writeCtx, secondType, []byte(tc.secondPayload))
 		cancelWrite()
 		require.NoError(t, err)
 		if tc.secondTurnCloseExpected {

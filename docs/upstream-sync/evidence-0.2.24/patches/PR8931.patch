@@ -1,0 +1,265 @@
+diff --git a/backend/internal/handler/gateway_compat_effort_policy_test.go b/backend/internal/handler/gateway_compat_effort_policy_test.go
+index 3f13c33da..f9e419431 100644
+--- a/backend/internal/handler/gateway_compat_effort_policy_test.go
++++ b/backend/internal/handler/gateway_compat_effort_policy_test.go
+@@ -14,6 +14,7 @@ import (
+ 	"testing"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
+ 	middleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+@@ -23,6 +24,43 @@ import (
+ 	"github.com/tidwall/gjson"
+ )
+ 
++func TestOpenAIResponsesUsageReportsConfigurationUpdateEffort(t *testing.T) {
++	const input = `[{"role":"user","content":"hello"},{"type":"configuration_update","reasoning":{"effort":"high"}}]`
++	const body = `{"model":"gpt-6.1-sol","input":` + input + `,"reasoning":{"effort":"medium"}}`
++	upstream := newAstraProCapturedUpstream(&http.Response{
++		StatusCode: http.StatusOK,
++		Header:     http.Header{"Content-Type": []string{"application/json"}},
++		Body:       io.NopCloser(strings.NewReader(`{"id":"resp_effort","model":"gpt-6.1-sol","status":"completed","output":[],"usage":{"input_tokens":10,"output_tokens":1}}`)),
++	})
++	account := service.Account{
++		ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
++		Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{"api_key": "test-key"},
++	}
++	usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 1)}
++	cfg := &config.Config{RunMode: config.RunModeSimple}
++	billing := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
++	t.Cleanup(billing.Stop)
++	gateway := service.NewOpenAIGatewayService(
++		&openAIWSUsageHandlerAccountRepoStub{account: account}, usageRepo, nil, nil, nil, nil, nil, cfg,
++		nil, nil, service.NewBillingService(cfg, nil), nil, billing, upstream, &service.DeferredService{},
++		nil, nil, nil, nil, nil, nil, nil,
++	)
++	h := NewOpenAIGatewayHandler(gateway, service.NewConcurrencyService(nil), billing,
++		service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
++	c, rec := newAstraProFailoverContext(t, body)
++	h.Responses(c)
++
++	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
++	_, _, bodies := upstream.snapshot()
++	require.Len(t, bodies, 1)
++	require.Equal(t, "medium", gjson.GetBytes(bodies[0], "reasoning.effort").String())
++	require.JSONEq(t, input, gjson.GetBytes(bodies[0], "input").Raw)
++	require.Len(t, usageRepo.created, 1)
++	log := dto.UsageLogFromService(<-usageRepo.created)
++	require.NotNil(t, log.ReasoningEffort)
++	require.Equal(t, "high", *log.ReasoningEffort)
++}
++
+ type compatEffortPolicyUpstream struct {
+ 	service.HTTPUpstream
+ 	bodies [][]byte
+diff --git a/backend/internal/service/openai_gateway_request_body.go b/backend/internal/service/openai_gateway_request_body.go
+index bc2cfe9ca..951c4f55a 100644
+--- a/backend/internal/service/openai_gateway_request_body.go
++++ b/backend/internal/service/openai_gateway_request_body.go
+@@ -1936,7 +1936,34 @@ func extractOpenAIReasoningEffortFromBody(body []byte, modelCandidates ...string
+ 	return &value
+ }
+ 
++const responsesConfigurationUpdate = "configuration_update"
++
++// Responses clients can keep the top-level effort fixed for prompt caching.
++// Each input update takes effect from its position until another sets effort.
++func latestResponsesInputEffort(body []byte) string {
++	if !bytes.Contains(body, []byte(responsesConfigurationUpdate)) && !JSONMayEscapePlainASCII(body) {
++		return ""
++	}
++	input := parseRawJSONView(body).Get("input")
++	if !input.IsArray() {
++		return ""
++	}
++	var latest string
++	input.ForEach(func(_, item gjson.Result) bool {
++		if item.Get("type").Str == responsesConfigurationUpdate {
++			if effort := strings.TrimSpace(item.Get("reasoning.effort").Str); effort != "" {
++				latest = effort
++			}
++		}
++		return true
++	})
++	return latest
++}
++
+ func explicitRequestedReasoningEffortFromBody(body []byte) string {
++	if latest := latestResponsesInputEffort(body); latest != "" {
++		return latest
++	}
+ 	raw := strings.TrimSpace(gjson.GetBytes(body, "reasoning.effort").String())
+ 	if raw == "" {
+ 		raw = strings.TrimSpace(gjson.GetBytes(body, "reasoning_effort").String())
+@@ -1953,11 +1980,7 @@ func explicitRequestedReasoningEffortFromBody(body []byte) string {
+ // later persist "xhigh".
+ func CanonicalRequestedReasoningEffort(body []byte, modelCandidates ...string) *string {
+ 	if raw := explicitRequestedReasoningEffortFromBody(body); raw != "" {
+-		canonical := NormalizeMaxReasoningEffort(raw)
+-		if canonical == "" {
+-			return nil
+-		}
+-		return &canonical
++		return optionalTrimmedStringPtr(normalizeReasoningEffortMappingSource(raw))
+ 	}
+ 	for _, model := range modelCandidates {
+ 		if value := canonicalReasoningEffortFromModelSuffix(model); value != "" {
+@@ -2781,12 +2804,19 @@ func CanonicalRequestedReasoningEffortFromReqBody(reqBody map[string]any, modelC
+ 			raw = strings.TrimSpace(effort)
+ 		}
+ 	}
+-	if raw != "" {
+-		canonical := NormalizeMaxReasoningEffort(raw)
+-		if canonical == "" {
+-			return nil
++	items, _ := reqBody["input"].([]any)
++	for i := len(items) - 1; i >= 0; i-- {
++		item, _ := items[i].(map[string]any)
++		if item["type"] == responsesConfigurationUpdate {
++			reasoning, _ := item["reasoning"].(map[string]any)
++			if effort, _ := reasoning["effort"].(string); strings.TrimSpace(effort) != "" {
++				raw = effort
++				break
++			}
+ 		}
+-		return &canonical
++	}
++	if raw != "" {
++		return optionalTrimmedStringPtr(normalizeReasoningEffortMappingSource(raw))
+ 	}
+ 	return CanonicalRequestedReasoningEffort(nil, modelCandidates...)
+ }
+diff --git a/backend/internal/service/openai_reasoning_effort_policy_test.go b/backend/internal/service/openai_reasoning_effort_policy_test.go
+index 5de704e8f..da7ff56b6 100644
+--- a/backend/internal/service/openai_reasoning_effort_policy_test.go
++++ b/backend/internal/service/openai_reasoning_effort_policy_test.go
+@@ -2,6 +2,7 @@ package service
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"fmt"
+ 	"testing"
+ 
+@@ -51,6 +52,36 @@ func TestCanonicalRequestedReasoningEffort(t *testing.T) {
+ 	require.Nil(t, CanonicalRequestedReasoningEffort([]byte(`{"model":"gpt-5.4"}`), "gpt-5.4"))
+ }
+ 
++func TestCanonicalRequestedReasoningEffortFromConfigurationUpdates(t *testing.T) {
++	for _, tc := range []struct {
++		name, input, want string
++	}{
++		{"current turn", `[{"role":"user","content":"hi"},{"type":"configuration_update","reasoning":{"effort":"high"}}]`, "high"},
++		{"history and partial updates", `[{"type":"configuration_update","reasoning":{"effort":"high"}},{"type":"configuration_update","reasoning":{"effort":"MAX"}},{"type":"configuration_update","text":{"verbosity":"low"}},{"role":"user","content":"next"}]`, "max"},
++		{"thinking off", `[{"type":"configuration_update","reasoning":{"effort":"none"}}]`, "none"},
++		{"escaped type", `[{"type":"configuration\u005fupdate","reasoning":{"effort":"low"}}]`, "low"},
++		{"no effort selected", `[{"type":"configuration_update","text":{"verbosity":"low"}}]`, "medium"},
++		{"non-string effort", `[{"type":"configuration_update","reasoning":{"effort":123}}]`, "medium"},
++		{"nested in message", `[{"role":"user","content":[{"type":"configuration_update","reasoning":{"effort":"low"}}]}]`, "medium"},
++		{"non-array input", `{"item":{"type":"configuration_update","reasoning":{"effort":"low"}}}`, "medium"},
++		{"unknown explicit effort", `[{"type":"configuration_update","reasoning":{"effort":"unknown"}}]`, ""},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			body := []byte(`{"model":"gpt-6.1-sol","reasoning":{"effort":"medium"},"input":` + tc.input + `}`)
++			var parsed map[string]any
++			require.NoError(t, json.Unmarshal(body, &parsed))
++			for _, got := range []*string{CanonicalRequestedReasoningEffort(body), CanonicalRequestedReasoningEffortFromReqBody(parsed)} {
++				if tc.want == "" {
++					require.Nil(t, got)
++				} else {
++					require.NotNil(t, got)
++					require.Equal(t, tc.want, *got)
++				}
++			}
++		})
++	}
++}
++
+ func TestRequestedReasoningEffortContext(t *testing.T) {
+ 	t.Parallel()
+ 
+diff --git a/backend/internal/service/openai_ws_forwarder_ingress.go b/backend/internal/service/openai_ws_forwarder_ingress.go
+index 0366a2a92..d34aead4a 100644
+--- a/backend/internal/service/openai_ws_forwarder_ingress.go
++++ b/backend/internal/service/openai_ws_forwarder_ingress.go
+@@ -696,6 +696,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 			if bridgeErr != nil && isOpenAIWSSessionPreempted(ctx) {
+ 				return errOpenAIWSSessionPreempted
+ 			}
++			if result != nil {
++				// The HTTP payload can contain a policy rewrite or replayed configuration from an earlier turn.
++				result.RequestedReasoningEffort = currentBridgePayload.requestedReasoningEffort
++			}
+ 			if hooks != nil && hooks.AfterTurn != nil {
+ 				hooks.AfterTurn(turn, result, bridgeErr)
+ 			}
+diff --git a/backend/internal/service/openai_ws_http_bridge.go b/backend/internal/service/openai_ws_http_bridge.go
+index 01f7f250f..ce7a7dfae 100644
+--- a/backend/internal/service/openai_ws_http_bridge.go
++++ b/backend/internal/service/openai_ws_http_bridge.go
+@@ -697,7 +697,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
+ 			UpstreamResponseServiceTier:   responseModelObserver.ServiceTier(),
+ 			ServiceTier:                   resolvedOpenAIUpstreamServiceTierFromObserver(responseModelObserver, extractOpenAIServiceTierFromBody(body)),
+ 			ReasoningEffort:               ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(body, mappedModel, originalModel), body, mappedModel),
+-			RequestedReasoningEffort:      CanonicalRequestedReasoningEffort(body, originalModel, mappedModel),
+ 			Stream:                        reqStream,
+ 			OpenAIWSMode:                  true,
+ 			UpstreamTerminalEvent:         upstreamTerminalEvent,
+diff --git a/backend/internal/service/openai_ws_http_bridge_test.go b/backend/internal/service/openai_ws_http_bridge_test.go
+index b65c1ac68..dfa42702e 100644
+--- a/backend/internal/service/openai_ws_http_bridge_test.go
++++ b/backend/internal/service/openai_ws_http_bridge_test.go
+@@ -2164,6 +2164,15 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
+ 		Schedulable: true,
+ 	}
+ 
++	var requestedEfforts []string
++	hooks := &OpenAIWSIngressHooks{
++		MaxReasoningEffort: "medium",
++		AfterTurn: func(_ int, result *OpenAIForwardResult, _ error) {
++			if result != nil {
++				requestedEfforts = append(requestedEfforts, optionalStringValue(result.RequestedReasoningEffort))
++			}
++		},
++	}
+ 	errCh := make(chan error, 1)
+ 	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
+@@ -2192,7 +2201,7 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
+ 		req.Header.Set("User-Agent", "codex_cli_rs/0.135.0")
+ 		ginCtx.Request = req
+ 
+-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
++		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, hooks)
+ 	}))
+ 	defer wsServer.Close()
+ 
+@@ -2216,12 +2225,12 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
+ 		return event
+ 	}
+ 
+-	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":true,"input":"first"}`)
++	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":true,"reasoning":{"effort":"high"},"input":"first"}`)
+ 	firstTurnEvent := readMessage()
+ 	require.Equal(t, "response.completed", gjson.GetBytes(firstTurnEvent, "type").String())
+ 	require.Equal(t, "resp_bridge_first", gjson.GetBytes(firstTurnEvent, "response.id").String())
+ 
+-	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false,"previous_response_id":"resp_bridge_first","input":[{"type":"function_call_output","call_id":"call_bridge_1","output":"ok"}]}`)
++	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false,"reasoning":{"effort":"xhigh"},"previous_response_id":"resp_bridge_first","input":[{"type":"function_call_output","call_id":"call_bridge_1","output":"ok"}]}`)
+ 	secondTurnEvent := readMessage()
+ 	require.Equal(t, "response.completed", gjson.GetBytes(secondTurnEvent, "type").String())
+ 	require.Equal(t, "resp_bridge_second", gjson.GetBytes(secondTurnEvent, "response.id").String())
+@@ -2244,6 +2253,11 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
+ 	require.Equal(t, "call_bridge_1", secondInput[1].Get("call_id").String())
+ 	require.Equal(t, "function_call_output", secondInput[2].Get("type").String())
+ 	require.Equal(t, "call_bridge_1", secondInput[2].Get("call_id").String())
++	// The bridge sends capped efforts while usage records each turn's own inbound selection.
++	for _, body := range upstream.bodies {
++		require.Equal(t, "medium", gjson.GetBytes(body, "reasoning.effort").String())
++	}
++	require.Equal(t, []string{"high", "xhigh"}, requestedEfforts)
+ 	require.Equal(t, 0, captureDialer.DialCount())
+ 	require.Empty(t, captureConn.writes)
+ }

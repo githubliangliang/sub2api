@@ -1,0 +1,2272 @@
+diff --git a/backend/internal/handler/openai_gateway_handler.go b/backend/internal/handler/openai_gateway_handler.go
+index a0cd8ddd6..68a2f51ab 100644
+--- a/backend/internal/handler/openai_gateway_handler.go
++++ b/backend/internal/handler/openai_gateway_handler.go
+@@ -2610,12 +2610,23 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
+ 	// 必须在合成路由解析和上游模型映射之前执行。
+ 	// 与 HTTP 准入一致：帧内重复 model 键/大小写变体可能被上游按末值绑定，
+ 	// 全部候选值逐一校验，任一未命中即拒绝。
+-	if blocked := blockedModelAllowlistCandidate(apiKey.Group, requestmodel.FromBodyCandidates("", "application/json", firstMessage)); blocked != "" {
++	firstModelCandidates := requestmodel.FromBodyCandidates("", "application/json", firstMessage)
++	if blocked := blockedModelAllowlistCandidate(apiKey.Group, firstModelCandidates); blocked != "" {
+ 		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
+ 		middleware2.MarkIngressRejected(c, middleware2.IngressRejectModelNotAllowed)
+ 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, fmt.Sprintf("Model %q is not available for this group", blocked))
+ 		return
+ 	}
++	// 帧内重复字段（model、service_tier、reasoning.effort 等，含大小写变体与
++	// 嵌套对象）会让计费/策略读到的首个值与上游实际绑定的值分叉；取值相同也不
++	// 放行，因为网关的 sjson 改写只动首个（GHSA-p3r4-jcm3-2hph）。与 HTTP 入口
++	// （RejectConflictingRequestFields）同一规则，对所有分组生效。放在白名单
++	// 之后，白名单的拒绝原因保持不变。
++	if field, conflict := requestmodel.ConflictingField("application/json", firstMessage); conflict {
++		middleware2.MarkIngressRejected(c, middleware2.IngressRejectConflictingRequestFields)
++		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, fmt.Sprintf("response.create payload declares field %.64q more than once", field))
++		return
++	}
+ 	// Keep the client model in the frame for admission, response identity and usage.
+ 	// Apply the resolved upstream model through MapRequestModel on every turn.
+ 	wsRouteModel := reqModel
+@@ -3087,12 +3098,19 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
+ 				// 则关闭整条连接，与推理强度 deny 一致。实际生效模型始终参与校验；
+ 				// 帧内重复 model 键/大小写变体/嵌套 session.model 额外逐一校验，
+ 				// 防止候选集非空时掩盖被轮换掉的禁用模型。
+-				candidates := append([]string{model}, requestmodel.FromBodyCandidates("", "application/json", payload)...)
++				frameModelCandidates := requestmodel.FromBodyCandidates("", "application/json", payload)
++				candidates := append([]string{model}, frameModelCandidates...)
+ 				if blocked := blockedModelAllowlistCandidate(apiKey.Group, candidates); blocked != "" {
+ 					service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
+ 					middleware2.MarkIngressRejected(c, middleware2.IngressRejectModelNotAllowed)
+ 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, fmt.Sprintf("Model %q is not available for this group", blocked), nil)
+ 				}
++				// 后续 turn 同首帧：帧内有重复字段即关闭连接，避免计费/策略读到的
++				// 值与上游实际绑定的值分叉。
++				if field, conflict := requestmodel.ConflictingField("application/json", payload); conflict {
++					middleware2.MarkIngressRejected(c, middleware2.IngressRejectConflictingRequestFields)
++					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, fmt.Sprintf("websocket request payload declares field %.64q more than once", field), nil)
++				}
+ 				if decision := h.checkSecurityAuditStage(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, model, payload, "subsequent_turn"); decision != nil && !decision.AllowNextStage {
+ 					writeSecurityAuditWSError(ctx, wsConn, decision)
+ 					return service.NewOpenAIWSClientCloseError(securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision), nil)
+diff --git a/backend/internal/handler/openai_gateway_handler_test.go b/backend/internal/handler/openai_gateway_handler_test.go
+index b17d92255..0803ac0f3 100644
+--- a/backend/internal/handler/openai_gateway_handler_test.go
++++ b/backend/internal/handler/openai_gateway_handler_test.go
+@@ -1959,6 +1959,8 @@ type openAIResponsesWSUsageLogCase struct {
+ 	firstFrameCloseExpected bool
+ 	// secondTurnCloseExpected：第二个 turn 被拒（连接被 1008 关闭）。
+ 	secondTurnCloseExpected bool
++	// midFrameCloseExpected：midPayload 被拒（连接被 1008 关闭），帧不到达上游。
++	midFrameCloseExpected bool
+ }
+ 
+ type openAIResponsesWSUsageLogResult struct {
+@@ -3236,6 +3238,19 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
+ 		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.midPayload))
+ 		cancelWrite()
+ 		require.NoError(t, err)
++		if tc.midFrameCloseExpected {
++			readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
++			_, _, readErr := clientConn.Read(readCtx)
++			cancelRead()
++			require.Error(t, readErr, "mid frame should have been rejected with a close")
++			var closeErr coderws.CloseError
++			require.ErrorAs(t, readErr, &closeErr)
++			require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
++			require.Contains(t, closeErr.Reason, tc.closeReason)
++			require.Len(t, upstreamPayloadCh, 1, "rejected mid frame must not reach upstream")
++			_ = clientConn.CloseNow()
++			return openAIResponsesWSUsageLogResult{}
++		}
+ 		readCompleted()
+ 	}
+ 	if strings.TrimSpace(tc.secondPayload) != "" && (turnCount >= 2) {
+diff --git a/backend/internal/handler/openai_gateway_ws_model_allowlist_test.go b/backend/internal/handler/openai_gateway_ws_model_allowlist_test.go
+index bf70d4ce9..524532276 100644
+--- a/backend/internal/handler/openai_gateway_ws_model_allowlist_test.go
++++ b/backend/internal/handler/openai_gateway_ws_model_allowlist_test.go
+@@ -127,6 +127,8 @@ func TestOpenAIResponsesWebSocket_FirstFrameCaseVariantModelKeyRejected(t *testi
+ // 后续 turn 含重复 model 键（首个在白名单、末个不在）：拒绝并关闭连接。
+ func TestOpenAIResponsesWebSocket_SubsequentTurnDuplicateModelKeysRejected(t *testing.T) {
+ 	for _, mode := range []string{service.OpenAIWSIngressModePassthrough, service.OpenAIWSIngressModeDedicated} {
++		// 两种模式都在读取任何字段之前先做字段歧义检查（帧必须在兼容归一化等
++		// 重编码之前拦截），所以由歧义检查而不是白名单关闭连接，帧不到达上游。
+ 		t.Run(mode, func(t *testing.T) {
+ 			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+ 				firstPayload:            `{"type":"response.create","model":"gpt-5.4","stream":false}`,
+@@ -134,21 +136,21 @@ func TestOpenAIResponsesWebSocket_SubsequentTurnDuplicateModelKeysRejected(t *te
+ 				group:                   wsAllowlistGroup(true, "gpt-5.4"),
+ 				ingressMode:             mode,
+ 				secondTurnCloseExpected: true,
++				closeReason:             `declares field "model" more than once`,
+ 			})
+ 		})
+ 	}
+ }
+ 
+-// 重复但同值的 model 键不误伤，连接正常完成两个 turn。
+-func TestOpenAIResponsesWebSocket_DuplicateIdenticalModelKeysAllowed(t *testing.T) {
+-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+-		firstPayload:  `{"type":"response.create","model":"gpt-5.4","model":"gpt-5.4","stream":false}`,
+-		secondPayload: `{"type":"response.create","model":"gpt-5.4","stream":false}`,
+-		group:         wsAllowlistGroup(true, "gpt-5.4"),
++// 重复但同值的 model 键：白名单本身放行（两个候选都在名单内），但字段歧义检查
++// 拒绝——网关的 sjson 模型改写只改首个，改写后两者就会分叉（GHSA-p3r4-jcm3-2hph）。
++func TestOpenAIResponsesWebSocket_DuplicateIdenticalModelKeysRejected(t *testing.T) {
++	runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++		firstPayload:            `{"type":"response.create","model":"gpt-5.4","model":"gpt-5.4","stream":false}`,
++		group:                   wsAllowlistGroup(true, "gpt-5.4"),
++		firstFrameCloseExpected: true,
++		closeReason:             `declares field "model" more than once`,
+ 	})
+-	if len(got.clientEvents) != 2 {
+-		t.Fatalf("expected two completed events, got %d", len(got.clientEvents))
+-	}
+ }
+ 
+ // session.update 轮换绕过：首帧用白名单内模型建立会话，session.update 把会话
+diff --git a/backend/internal/handler/openai_gateway_ws_model_conflict_test.go b/backend/internal/handler/openai_gateway_ws_model_conflict_test.go
+new file mode 100644
+index 000000000..da824c247
+--- /dev/null
++++ b/backend/internal/handler/openai_gateway_ws_model_conflict_test.go
+@@ -0,0 +1,128 @@
++package handler
++
++import (
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/service"
++)
++
++const wsModelConflictCloseReason = "more than once"
++
++// 没有开启白名单的分组：首帧里重复 model 键取值不一致（计费按第一个、上游可能
++// 按最后一个绑定）必须以 1008 关闭，帧不到达上游。
++func TestOpenAIResponsesWebSocket_FirstFrameConflictingModelKeysRejectedWithoutAllowlist(t *testing.T) {
++	for _, mode := range []string{service.OpenAIWSIngressModePassthrough, service.OpenAIWSIngressModeDedicated} {
++		t.Run(mode, func(t *testing.T) {
++			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++				firstPayload:            `{"type":"response.create","model":"gpt-5.4-nano","model":"gpt-5.4","stream":false}`,
++				group:                   wsAllowlistGroup(false),
++				ingressMode:             mode,
++				firstFrameCloseExpected: true,
++				closeReason:             wsModelConflictCloseReason,
++			})
++		})
++	}
++}
++
++// 大小写变体键同样会被 encoding/json 绑定到同一个字段。
++func TestOpenAIResponsesWebSocket_FirstFrameConflictingCaseVariantModelKeyRejected(t *testing.T) {
++	runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++		firstPayload:            `{"type":"response.create","model":"gpt-5.4-nano","Model":"gpt-5.4","stream":false}`,
++		group:                   wsAllowlistGroup(false),
++		ingressMode:             service.OpenAIWSIngressModePassthrough,
++		firstFrameCloseExpected: true,
++		closeReason:             wsModelConflictCloseReason,
++	})
++}
++
++// 白名单开启且两个模型都在名单内：白名单放行，模型歧义检查仍要拒绝。
++func TestOpenAIResponsesWebSocket_FirstFrameConflictingAllowlistedModelKeysRejected(t *testing.T) {
++	runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++		firstPayload:            `{"type":"response.create","model":"gpt-5.4-nano","model":"gpt-5.4","stream":false}`,
++		group:                   wsAllowlistGroup(true, "gpt-5.4-nano", "gpt-5.4"),
++		ingressMode:             service.OpenAIWSIngressModePassthrough,
++		firstFrameCloseExpected: true,
++		closeReason:             wsModelConflictCloseReason,
++	})
++}
++
++// 后续 turn 的帧同样检查。
++func TestOpenAIResponsesWebSocket_SubsequentTurnConflictingModelKeysRejectedWithoutAllowlist(t *testing.T) {
++	for _, mode := range []string{service.OpenAIWSIngressModePassthrough, service.OpenAIWSIngressModeDedicated} {
++		t.Run(mode, func(t *testing.T) {
++			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++				firstPayload:            `{"type":"response.create","model":"gpt-5.4","stream":false}`,
++				secondPayload:           `{"type":"response.create","model":"gpt-5.4-nano","model":"gpt-5.4","stream":false}`,
++				group:                   wsAllowlistGroup(false),
++				ingressMode:             mode,
++				secondTurnCloseExpected: true,
++				closeReason:             wsModelConflictCloseReason,
++			})
++		})
++	}
++}
++
++// 取值相同的重复键同样拒绝：网关的 sjson 改写（模型映射、推理强度降级）只改
++// 首个，改写后两者就会分叉。首帧与后续 turn 都要关闭连接。
++func TestOpenAIResponsesWebSocket_IdenticalDuplicateKeysRejectedWithoutAllowlist(t *testing.T) {
++	for _, mode := range []string{service.OpenAIWSIngressModePassthrough, service.OpenAIWSIngressModeDedicated} {
++		t.Run(mode+"/first_frame", func(t *testing.T) {
++			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++				firstPayload:            `{"type":"response.create","model":"gpt-5.4","model":"gpt-5.4","stream":false}`,
++				group:                   wsAllowlistGroup(false),
++				ingressMode:             mode,
++				firstFrameCloseExpected: true,
++				closeReason:             `declares field "model" more than once`,
++			})
++		})
++		t.Run(mode+"/subsequent_turn", func(t *testing.T) {
++			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++				firstPayload:            `{"type":"response.create","model":"gpt-5.4","stream":false}`,
++				secondPayload:           `{"type":"response.create","model":"gpt-5.4","reasoning":{"effort":"xhigh","effort":"xhigh"},"stream":false}`,
++				group:                   wsAllowlistGroup(false),
++				ingressMode:             mode,
++				secondTurnCloseExpected: true,
++				closeReason:             `declares field "reasoning.effort" more than once`,
++			})
++		})
++	}
++}
++
++// 非 model 字段同样参与计费与策略：首帧 service_tier、后续 turn 嵌套的
++// reasoning.effort 取值不一致都必须关闭连接。
++func TestOpenAIResponsesWebSocket_ConflictingBillingFieldsRejected(t *testing.T) {
++	for _, mode := range []string{service.OpenAIWSIngressModePassthrough, service.OpenAIWSIngressModeDedicated} {
++		t.Run(mode+"/first_frame_service_tier", func(t *testing.T) {
++			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++				firstPayload:            `{"type":"response.create","model":"gpt-5.4","service_tier":"flex","stream":false,"service_tier":"priority"}`,
++				group:                   wsAllowlistGroup(false),
++				ingressMode:             mode,
++				firstFrameCloseExpected: true,
++				closeReason:             `declares field "service_tier" more than once`,
++			})
++		})
++		t.Run(mode+"/subsequent_turn_reasoning_effort", func(t *testing.T) {
++			runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++				firstPayload:            `{"type":"response.create","model":"gpt-5.4","stream":false}`,
++				secondPayload:           `{"type":"response.create","model":"gpt-5.4","reasoning":{"effort":"low","effort":"xhigh"},"stream":false}`,
++				group:                   wsAllowlistGroup(false),
++				ingressMode:             mode,
++				secondTurnCloseExpected: true,
++				closeReason:             `declares field "reasoning.effort" more than once`,
++			})
++		})
++	}
++}
++
++// passthrough 原样转发 session.update 等非 response.create 事件：帧内重复字段
++// 同样必须关闭连接，不能到达上游。
++func TestOpenAIResponsesWebSocket_PassthroughSessionUpdateDuplicateRejected(t *testing.T) {
++	runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
++		firstPayload:          `{"type":"response.create","model":"gpt-5.4","stream":false}`,
++		midPayload:            `{"type":"session.update","session":{"model":"gpt-5.4","model":"gpt-4.1"}}`,
++		group:                 wsAllowlistGroup(false),
++		ingressMode:           service.OpenAIWSIngressModePassthrough,
++		midFrameCloseExpected: true,
++		closeReason:           `declares field "session.model" more than once`,
++	})
++}
+diff --git a/backend/internal/handler/request_body_limit.go b/backend/internal/handler/request_body_limit.go
+index a52bb0bfb..2da6d1009 100644
+--- a/backend/internal/handler/request_body_limit.go
++++ b/backend/internal/handler/request_body_limit.go
+@@ -1,7 +1,6 @@
+ package handler
+ 
+ import (
+-	"fmt"
+ 	"net/http"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/config"
+@@ -26,18 +25,6 @@ func handleRequestBodyReadError(c *gin.Context, reqLog *zap.Logger, err error) b
+ 	return middleware2.RejectRequestBodyMemoryOverload(c, err)
+ }
+ 
+-func formatBodyLimit(limit int64) string {
+-	const mb = 1024 * 1024
+-	if limit >= mb {
+-		return fmt.Sprintf("%dMB", limit/mb)
+-	}
+-	return fmt.Sprintf("%dB", limit)
+-}
+-
+-func buildBodyTooLargeMessage(limit int64) string {
+-	return fmt.Sprintf("Request body too large, limit is %s", formatBodyLimit(limit))
+-}
+-
+ func readLenientJSONRequestBodyWithPrealloc(req *http.Request, cfg *config.Config) ([]byte, error) {
+ 	return pkghttputil.ReadLenientJSONRequestBodyWithPrealloc(req, gatewayMaxBodySize(cfg))
+ }
+diff --git a/backend/internal/handler/request_body_limit_test.go b/backend/internal/handler/request_body_limit_test.go
+index bbb3d2a07..d857a7e0f 100644
+--- a/backend/internal/handler/request_body_limit_test.go
++++ b/backend/internal/handler/request_body_limit_test.go
+@@ -10,6 +10,7 @@ import (
+ 	"os"
+ 	"testing"
+ 
++	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+ 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/stretchr/testify/require"
+@@ -37,7 +38,7 @@ func TestRequestBodyLimitTooLarge(t *testing.T) {
+ 	router.ServeHTTP(recorder, req)
+ 
+ 	require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+-	require.Contains(t, recorder.Body.String(), buildBodyTooLargeMessage(limit))
++	require.Contains(t, recorder.Body.String(), pkghttputil.BodyTooLargeMessage(limit))
+ }
+ 
+ func TestHandleRequestBodyReadErrorCancellation(t *testing.T) {
+diff --git a/backend/internal/handler/request_body_read_log.go b/backend/internal/handler/request_body_read_log.go
+index 0068c7921..7be40b3bb 100644
+--- a/backend/internal/handler/request_body_read_log.go
++++ b/backend/internal/handler/request_body_read_log.go
+@@ -16,11 +16,10 @@ import (
+ // logging request content.
+ func requestBodyReadFailure(reqLog *zap.Logger, req *http.Request, err error) (int, string) {
+ 	failure := pkghttputil.DescribeRequestBodyReadFailure(req, err)
+-	if failure.Kind == pkghttputil.RequestBodyReadErrorMaxBytes {
+-		return failure.Status, buildBodyTooLargeMessage(failure.MaxBytesLimit)
++	if failure.Kind != pkghttputil.RequestBodyReadErrorMaxBytes {
++		logRequestBodyReadFailure(reqLog, failure)
+ 	}
+-	logRequestBodyReadFailure(reqLog, failure)
+-	return failure.Status, failure.Message
++	return failure.Status, failure.ClientMessage()
+ }
+ 
+ func logRequestBodyReadFailure(reqLog *zap.Logger, failure pkghttputil.RequestBodyReadFailure) {
+diff --git a/backend/internal/handler/request_body_read_log_test.go b/backend/internal/handler/request_body_read_log_test.go
+index f9eef560a..881aa8c92 100644
+--- a/backend/internal/handler/request_body_read_log_test.go
++++ b/backend/internal/handler/request_body_read_log_test.go
+@@ -16,6 +16,7 @@ import (
+ 	"testing"
+ 	"testing/iotest"
+ 
++	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+ 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+ 	"github.com/gin-gonic/gin"
+@@ -47,7 +48,7 @@ func TestRequestBodyReadFailureKeepsBodyLimitMessageWithoutLogging(t *testing.T)
+ 	log, logs := newObservedLogger(t)
+ 	status, message := requestBodyReadFailure(log, nil, &http.MaxBytesError{Limit: 2 << 20})
+ 	require.Equal(t, http.StatusRequestEntityTooLarge, status)
+-	require.Equal(t, buildBodyTooLargeMessage(2<<20), message)
++	require.Equal(t, pkghttputil.BodyTooLargeMessage(2<<20), message)
+ 	require.Empty(t, logs.All())
+ }
+ 
+diff --git a/backend/internal/pkg/httputil/body_read_error.go b/backend/internal/pkg/httputil/body_read_error.go
+index 5acaa741d..07b106fae 100644
+--- a/backend/internal/pkg/httputil/body_read_error.go
++++ b/backend/internal/pkg/httputil/body_read_error.go
+@@ -3,6 +3,7 @@ package httputil
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"io"
+ 	"net"
+ 	"net/http"
+@@ -102,6 +103,24 @@ func DescribeRequestBodyReadFailure(req *http.Request, err error) RequestBodyRea
+ 	return failure
+ }
+ 
++// ClientMessage returns the message shown to the client. A size-limit failure
++// names the limit so callers can tell which limit they hit.
++func (f RequestBodyReadFailure) ClientMessage() string {
++	if f.Kind == RequestBodyReadErrorMaxBytes {
++		return BodyTooLargeMessage(f.MaxBytesLimit)
++	}
++	return f.Message
++}
++
++// BodyTooLargeMessage formats the 413 message for a request body limit.
++func BodyTooLargeMessage(limit int64) string {
++	const mb = 1024 * 1024
++	if limit >= mb {
++		return fmt.Sprintf("Request body too large, limit is %dMB", limit/mb)
++	}
++	return fmt.Sprintf("Request body too large, limit is %dB", limit)
++}
++
+ // LogFields returns diagnostics that never include request content or error
+ // text, which may embed peer addresses or decoder input.
+ func (f RequestBodyReadFailure) LogFields() []zap.Field {
+diff --git a/backend/internal/pkg/requestmodel/conflict.go b/backend/internal/pkg/requestmodel/conflict.go
+new file mode 100644
+index 000000000..4aab752be
+--- /dev/null
++++ b/backend/internal/pkg/requestmodel/conflict.go
+@@ -0,0 +1,472 @@
++package requestmodel
++
++import (
++	"bytes"
++	"hash/maphash"
++	"io"
++	"mime"
++	"mime/multipart"
++	"strconv"
++	"strings"
++	"unicode"
++	"unicode/utf16"
++	"unicode/utf8"
++)
++
++// utf8BOM 是部分客户端写在 JSON 文档前的 UTF-8 字节序标记。网关 handler 的宽容
++// 读取（httputil.ReadLenientJSONRequestBodyWithPrealloc）会先剥掉它再解析，
++// 准入与歧义检查必须看同一份字节。
++var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
++
++// TrimUTF8BOM 去掉请求体开头的 UTF-8 BOM（与宽容读取的规则一致），否则原样返回。
++func TrimUTF8BOM(body []byte) []byte {
++	return bytes.TrimPrefix(body, utf8BOM)
++}
++
++// LooksLikeJSON 判断（已去 BOM 的）请求体首个非空白字节是否为 JSON 对象或数组。
++//
++// 是否按 JSON 检查只看内容、不看 Content-Type：JSON handler 从不校验请求头，
++// 把 JSON 请求体标成 multipart/form-data 不能绕过检查。
++func LooksLikeJSON(body []byte) bool {
++	for _, c := range body {
++		// 与 gjson 一致：首个值之前所有 <= 0x20 的字节都当空白跳过。
++		if c <= ' ' {
++			continue
++		}
++		return c == '{' || c == '['
++	}
++	return false
++}
++
++// ConflictingField 返回请求体中第一个重复声明的字段路径。
++//
++// 网关读取 model、service_tier、reasoning.effort 等字段用的是 gjson（重复键取
++// 第一个、大小写敏感），sjson 改写（模型映射、推理强度降级、fast policy 删除
++// service_tier）也只改第一个；而改写并转发请求体的路径会经过 encoding/json
++// （解码到 map 时重复键取最后一个，绑定到结构体时键名大小写不敏感、取最后一个），
++// 上游解析器也可能取最后一个。同名字段一旦重复，准入、计费、策略看到的值和上游
++// 实际收到的值就可能分叉，例如 {"model":"便宜模型",...,"model":"贵模型"} 按便宜
++// 模型计费、转发贵模型。取值相同的重复同样拒绝：网关自己的 sjson 改写只动第一个，
++// 改写后两者就不再相同。调用方应在任何解析器读取字段之前拒绝这类请求。
++//
++// 判定范围：
++//   - JSON（按内容识别，见 LooksLikeJSON）：任意深度的对象（含数组元素）内，
++//     成员名经转义解码（无效 UTF-8 与孤立代理项按 encoding/json 替换为 U+FFFD）
++//     后按 encoding/json 结构体绑定的大小写折叠规则相同。用户自定义键空间
++//     （JSON Schema 的 properties/$defs、工具调用参数、模板变量等，见
++//     isFreeformMember）内只比较精确名字，因为 id 与 ID 在那里是合法的不同键。
++//     字段路径形如 reasoning.effort、messages[1].role。
++//   - multipart（按 Content-Type 声明）：见 multipartConflictingField。
++//   - 声明为 multipart、请求体又以 JSON 开头且解析出了表单 part：两种解读并存，
++//     报告 Content-Type。
++//
++// 扫描是一次线性遍历，键名以带随机种子的 64 位哈希判重，CPU 与内存都与请求体
++// 大小成线性关系；嵌套超过 maxConflictDepth 的部分只计括号不检查（encoding/json
++// 本身拒绝这种深度），其后的同层成员仍继续检查。扫描在首个顶层值结束时停止，
++// 与 gjson 读取的范围一致（其后的内容 encoding/json 会拒绝）。
++func ConflictingField(contentType string, body []byte) (string, bool) {
++	// 两种解读都要检查：JSON handler 不看请求头，按 JSON 读首个值；multipart
++	// handler 按 boundary 解析，并跳过首个 boundary 之前的前导内容（RFC 2046
++	// preamble），前导内容可以是任意 JSON。
++	looksJSON := LooksLikeJSON(TrimUTF8BOM(body))
++	if looksJSON {
++		if field, conflict := scanDuplicateMember(TrimUTF8BOM(body)); conflict {
++			return field, true
++		}
++	}
++	if !isMultipartContentType(contentType) {
++		return "", false
++	}
++	field, conflict, parts := multipartConflictingField(contentType, body)
++	if conflict {
++		return field, true
++	}
++	if looksJSON && parts > 0 {
++		// 同一请求体既是 JSON 又含 multipart 字段：合成路由、白名单、JSON 与
++		// multipart handler 会各取一种解读（例如前导 JSON 的 model 与表单的
++		// model），整体视为歧义。
++		return "Content-Type", true
++	}
++	return "", false
++}
++
++// maxConflictDepth 与 encoding/json 的嵌套上限一致。
++const maxConflictDepth = 10000
++
++// conflictLinearScanLimit 以内的对象线性比较哈希，超过后改用 map。
++const conflictLinearScanLimit = 32
++
++// conflictHashSeed 每个进程随机生成：客户端无法构造哈希碰撞。碰撞只会让请求被
++// 误拒（fail closed），不会放过重复键。
++var conflictHashSeed = maphash.MakeSeed()
++
++type scanFrame struct {
++	object  bool
++	fold    bool // 是否按大小写折叠比较本对象的成员名
++	wantKey bool // object：下一个字符串是成员名
++	// 当前成员名在请求体中的原始范围（不含引号），用于路径与自由键判定。
++	keyStart, keyEnd int
++	keyEscaped       bool
++	index            int // array：当前元素下标
++	hashStart        int // object：本对象成员哈希在 scanner.hashes 中的起点
++	seen             map[uint64]struct{}
++}
++
++type duplicateScanner struct {
++	body   []byte
++	stack  []scanFrame
++	hashes []uint64
++	hash   maphash.Hash
++	runes  []byte
++	names  []byte
++}
++
++func scanDuplicateMember(body []byte) (string, bool) {
++	s := duplicateScanner{body: body}
++	s.hash.SetSeed(conflictHashSeed)
++	overflow := 0 // 超过 maxConflictDepth 后未闭合的括号数
++	for i := 0; i < len(body); {
++		switch c := body[i]; c {
++		case '{', '[':
++			if overflow > 0 || len(s.stack) >= maxConflictDepth {
++				overflow++
++			} else {
++				s.push(c == '{')
++			}
++			i++
++		case '}', ']':
++			if overflow > 0 {
++				overflow--
++			} else if n := len(s.stack); n > 0 {
++				if top := s.stack[n-1]; top.object {
++					s.hashes = s.hashes[:top.hashStart]
++				}
++				s.stack = s.stack[:n-1]
++				if n == 1 {
++					return "", false
++				}
++			}
++			i++
++		case ',':
++			if n := len(s.stack); overflow == 0 && n > 0 {
++				if top := &s.stack[n-1]; top.object {
++					top.wantKey = true
++				} else {
++					top.index++
++				}
++			}
++			i++
++		case '"':
++			end, escaped := scanJSONString(body, i+1)
++			if n := len(s.stack); overflow == 0 && n > 0 && s.stack[n-1].object && s.stack[n-1].wantKey {
++				top := &s.stack[n-1]
++				top.wantKey = false
++				top.keyStart, top.keyEnd, top.keyEscaped = i+1, end, escaped
++				if s.repeated(top) {
++					return s.path(), true
++				}
++			}
++			i = end + 1
++		default:
++			i++
++		}
++	}
++	return "", false
++}
++
++func (s *duplicateScanner) push(object bool) {
++	fold := true
++	if n := len(s.stack); n > 0 {
++		parent := &s.stack[n-1]
++		fold = parent.fold
++		if fold && parent.object {
++			s.names = appendMemberName(s.names[:0], s.body[parent.keyStart:parent.keyEnd], parent.keyEscaped, false)
++			fold = !isFreeformMember(s.names, n > 1)
++		}
++	}
++	s.stack = append(s.stack, scanFrame{object: object, fold: fold, wantKey: object, hashStart: len(s.hashes)})
++}
++
++// repeated 登记 top 的当前成员名，返回它是否与本对象中更早的成员重名。
++func (s *duplicateScanner) repeated(top *scanFrame) bool {
++	s.hash.Reset()
++	s.runes = appendMemberName(s.runes[:0], s.body[top.keyStart:top.keyEnd], top.keyEscaped, top.fold)
++	_, _ = s.hash.Write(s.runes)
++	sum := s.hash.Sum64()
++
++	if top.seen != nil {
++		if _, dup := top.seen[sum]; dup {
++			return true
++		}
++		top.seen[sum] = struct{}{}
++		return false
++	}
++	for _, seen := range s.hashes[top.hashStart:] {
++		if seen == sum {
++			return true
++		}
++	}
++	s.hashes = append(s.hashes, sum)
++	if len(s.hashes)-top.hashStart > conflictLinearScanLimit {
++		// 子对象的哈希总在其闭合时截掉，本对象的哈希在切片末尾连续。
++		top.seen = make(map[uint64]struct{}, 4*conflictLinearScanLimit)
++		for _, seen := range s.hashes[top.hashStart:] {
++			top.seen[seen] = struct{}{}
++		}
++		s.hashes = s.hashes[:top.hashStart]
++	}
++	return false
++}
++
++// path 把当前栈拼成 a.b[0].c；结果是新分配的字符串，不引用请求体。
++func (s *duplicateScanner) path() string {
++	var out []byte
++	for _, frame := range s.stack {
++		if !frame.object {
++			out = append(out, '[')
++			out = strconv.AppendInt(out, int64(frame.index), 10)
++			out = append(out, ']')
++			continue
++		}
++		if len(out) > 0 {
++			out = append(out, '.')
++		}
++		out = appendMemberName(out, s.body[frame.keyStart:frame.keyEnd], frame.keyEscaped, false)
++	}
++	return string(out)
++}
++
++// freeformMembers 的值是用户自定义键空间：JSON Schema 的属性表与取值、工具调用
++// 参数、提示词模板变量、MCP 请求头、标签。这些子树内的成员名只做精确比较（成员名
++// 解码后不区分大小写地匹配本表）。它们都不在网关计费/策略读取、也不被结构体绑定
++// 的字段路径上；input / response 只在非顶层时算（顶层 input 是 Responses 的输入
++// 列表，顶层 response 是 realtime response.create 的参数）。metadata 不在表内：
++// Antigravity 把 metadata.user_id 绑定到结构体（大小写不敏感），而网关的粘性会话
++// 用 gjson 读它。
++var freeformMembers = []string{
++	"properties", "patternProperties", "$defs", "definitions", "dependentSchemas",
++	"dependentRequired", "dependencies", "default", "const", "examples", "enum",
++	"args", "arguments", "variables", "headers", "labels",
++}
++
++func isFreeformMember(name []byte, nested bool) bool {
++	for _, candidate := range freeformMembers {
++		if bytes.EqualFold(name, []byte(candidate)) {
++			return true
++		}
++	}
++	return nested && (bytes.EqualFold(name, []byte("input")) || bytes.EqualFold(name, []byte("response")))
++}
++
++// scanJSONString 从字符串内容起点 i 找到闭合引号的下标（找不到返回 len(b)），
++// 并报告内容中是否含转义。每个字节最多访问常数次：先找下一个引号，再看它前面
++// 连续反斜杠的个数，奇数说明引号被转义，从引号之后继续找。
++func scanJSONString(b []byte, i int) (int, bool) {
++	escaped := false
++	for i < len(b) {
++		quote := bytes.IndexByte(b[i:], '"')
++		if quote < 0 {
++			return len(b), escaped || bytes.IndexByte(b[i:], '\\') >= 0
++		}
++		end := i + quote
++		if !escaped && bytes.IndexByte(b[i:end], '\\') >= 0 {
++			escaped = true
++		}
++		backslashes := 0
++		for j := end - 1; j >= i && b[j] == '\\'; j-- {
++			backslashes++
++		}
++		if backslashes%2 == 0 {
++			return end, escaped
++		}
++		i = end + 1
++	}
++	return len(b), escaped
++}
++
++// appendMemberName 把原始成员名按 encoding/json 的规则解码（转义、无效 UTF-8 与
++// 孤立代理项替换为 U+FFFD）后追加到 dst；fold 时逐字符做大小写折叠。
++func appendMemberName(dst, raw []byte, escaped, fold bool) []byte {
++	for i := 0; i < len(raw); {
++		var r rune
++		if raw[i] == '\\' && escaped && i+1 < len(raw) {
++			r, i = decodeJSONEscape(raw, i)
++		} else if raw[i] < utf8.RuneSelf {
++			r = rune(raw[i])
++			i++
++		} else {
++			var size int
++			r, size = utf8.DecodeRune(raw[i:])
++			i += size
++		}
++		if fold {
++			r = foldRune(r)
++		}
++		dst = utf8.AppendRune(dst, r)
++	}
++	return dst
++}
++
++// decodeJSONEscape 解码 raw[i] 处的转义序列，返回字符与下一个下标。
++func decodeJSONEscape(raw []byte, i int) (rune, int) {
++	switch raw[i+1] {
++	case 'b':
++		return '\b', i + 2
++	case 'f':
++		return '\f', i + 2
++	case 'n':
++		return '\n', i + 2
++	case 'r':
++		return '\r', i + 2
++	case 't':
++		return '\t', i + 2
++	case 'u':
++		r, ok := hex4(raw, i+2)
++		if !ok {
++			return rune(raw[i+1]), i + 2
++		}
++		if utf16.IsSurrogate(r) {
++			if i+11 < len(raw) && raw[i+6] == '\\' && raw[i+7] == 'u' {
++				if r2, ok := hex4(raw, i+8); ok {
++					if dec := utf16.DecodeRune(r, r2); dec != unicode.ReplacementChar {
++						return dec, i + 12
++					}
++				}
++			}
++			return unicode.ReplacementChar, i + 6
++		}
++		return r, i + 6
++	default:
++		return rune(raw[i+1]), i + 2
++	}
++}
++
++func hex4(raw []byte, i int) (rune, bool) {
++	if i+4 > len(raw) {
++		return 0, false
++	}
++	var r rune
++	for _, c := range raw[i : i+4] {
++		switch {
++		case '0' <= c && c <= '9':
++			c -= '0'
++		case 'a' <= c && c <= 'f':
++			c = c - 'a' + 10
++		case 'A' <= c && c <= 'F':
++			c = c - 'A' + 10
++		default:
++			return 0, false
++		}
++		r = r*16 + rune(c)
++	}
++	return r, true
++}
++
++// foldRune 返回 r 所在大小写折叠轨道上的固定代表，只有大小写不同的字符映射到
++// 同一个值（与 encoding/json 结构体字段的大小写不敏感匹配一致，覆盖 ſ、开尔文
++// 符号 K）。拉丁字母取小写。
++func foldRune(r rune) rune {
++	if r < utf8.RuneSelf {
++		// ASCII 字母的轨道代表就是其小写（k、s 的非 ASCII 成员都更大）。
++		if 'A' <= r && r <= 'Z' {
++			return r + 'a' - 'A'
++		}
++		return r
++	}
++	folded := r
++	for next := unicode.SimpleFold(r); next != r; next = unicode.SimpleFold(next) {
++		if next < folded {
++			folded = next
++		}
++	}
++	if folded >= 'A' && folded <= 'Z' {
++		folded += 'a' - 'A'
++	}
++	return folded
++}
++
++// hasExtendedNameParam 报告 Content-Disposition 是否带 RFC 2231 扩展形式的字段名
++// 参数（name*=、name*0=、name*0*=）。Go 以扩展值优先，忽略扩展参数的上游读的是
++// name=，同一 part 会被读成两个不同的字段。filename* 是非 ASCII 文件名的合法写法，
++// 不在此列。
++func hasExtendedNameParam(disposition string) bool {
++	lower := strings.ToLower(disposition)
++	for i := 0; ; {
++		idx := strings.Index(lower[i:], "name*")
++		if idx < 0 {
++			return false
++		}
++		idx += i
++		start := idx
++		for start > 0 && (lower[start-1] == ' ' || lower[start-1] == '\t') {
++			start--
++		}
++		if start == 0 || lower[start-1] == ';' {
++			return true
++		}
++		i = idx + len("name*")
++	}
++}
++
++// isRepeatableMultipartField 报告表单字段是否按列表语义合法重复：以 [] 结尾的
++// 数组字段（如 timestamp_granularities[]）、多图输入（image、image[...]、
++// Grok 媒体的 image_url）。其余文本字段（model、n、size、quality、duration 等
++// 计费/策略标量）出现多次即为歧义。
++func isRepeatableMultipartField(name string) bool {
++	return strings.HasSuffix(name, "[]") || name == "image" || name == "image_url" || strings.HasPrefix(name, "image[")
++}
++
++// multipartConflictingField 检查 multipart 表单：同名标量字段出现多次（文件与
++// 文本 part 合并计数，列表字段见 isRepeatableMultipartField）；名为 model /
++// session 的文件 part（网关 handler 跳过文件 part，宽容的上游可能当字段读）；
++// 没有可解析名字、带多个 Content-Disposition 头或 RFC 2231 扩展字段名参数的 part
++// （各解析器可能取不同的名字）；session 字段的 JSON 值内部按 JSON 规则检查。
++//
++// parts 返回成功解析出的 part 数，供调用方判断请求体是否同时含 multipart 内容。
++func multipartConflictingField(contentType string, body []byte) (field string, conflict bool, parts int) {
++	_, params, err := mime.ParseMediaType(strings.TrimSpace(contentType))
++	if err != nil {
++		return "", false, 0
++	}
++	boundary := strings.TrimSpace(params["boundary"])
++	if boundary == "" {
++		return "", false, 0
++	}
++	reader := multipart.NewReader(bytes.NewReader(body), boundary)
++	seen := make(map[string]struct{})
++	for {
++		part, err := reader.NextPart()
++		if err != nil {
++			return "", false, parts
++		}
++		parts++
++		name := strings.TrimSpace(part.FormName())
++		dispositions := part.Header.Values("Content-Disposition")
++		if name == "" || len(dispositions) > 1 || hasExtendedNameParam(dispositions[0]) {
++			return "Content-Disposition", true, parts
++		}
++		isFile := part.FileName() != ""
++		if isFile && (name == "model" || name == "session") {
++			return name, true, parts
++		}
++		if isRepeatableMultipartField(name) {
++			continue
++		}
++		if _, dup := seen[name]; dup {
++			return name, true, parts
++		}
++		seen[name] = struct{}{}
++		if isFile || name != "session" {
++			continue
++		}
++		data, err := io.ReadAll(part)
++		if err != nil {
++			continue
++		}
++		if doc := TrimUTF8BOM(data); LooksLikeJSON(doc) {
++			if field, conflict := scanDuplicateMember(doc); conflict {
++				return "session." + field, true, parts
++			}
++		}
++	}
++}
+diff --git a/backend/internal/pkg/requestmodel/conflict_test.go b/backend/internal/pkg/requestmodel/conflict_test.go
+new file mode 100644
+index 000000000..f343ab96d
+--- /dev/null
++++ b/backend/internal/pkg/requestmodel/conflict_test.go
+@@ -0,0 +1,379 @@
++package requestmodel
++
++import (
++	"bytes"
++	"encoding/json"
++	"fmt"
++	"mime/multipart"
++	"runtime"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++	"github.com/tidwall/gjson"
++)
++
++func TestConflictingFieldJSONReportsDuplicates(t *testing.T) {
++	tests := []struct {
++		name string
++		body string
++		want string
++	}{
++		{name: "重复 model 取值不同", body: `{"model":"claude-3-5-haiku-20241022","max_tokens":64,"model":"claude-opus-4-8"}`, want: "model"},
++		{name: "取值相同的重复 model", body: `{"model":"gpt-5.4","input":"hi","model":"gpt-5.4"}`, want: "model"},
++		{name: "三个 model", body: `{"model":"a","model":"a","model":"b"}`, want: "model"},
++		{name: "大小写变体", body: `{"model":"gpt-5.4-nano","MODEL":"gpt-5.4"}`, want: "MODEL"},
++		{name: "取值相同的大小写变体", body: `{"model":"gpt-5.4","Model":"gpt-5.4"}`, want: "Model"},
++		{name: "转义写法", body: `{"model":"cheap","\u006dodel":"expensive"}`, want: "model"},
++		{name: "代理对转义", body: `{"\ud83d\ude00":1,"` + "\U0001F600" + `":2}`, want: "\U0001F600"},
++		{name: "孤立代理项与无效 UTF-8 都解码为 U+FFFD", body: "{\"m\\ud800\":1,\"m\xff\":2}", want: "m\uFFFD"},
++		{name: "长 s 折叠为 s", body: "{\"service_tier\":\"flex\",\"\u017Fervice_tier\":\"priority\"}", want: "\u017Fervice_tier"},
++		{name: "开尔文符号折叠为 k", body: "{\"top_k\":1,\"top_\u212a\":2}", want: "top_\u212a"},
++		{name: "service_tier 取值不同", body: `{"model":"gpt-5.4","service_tier":"default","input":"hi","service_tier":"priority"}`, want: "service_tier"},
++		{name: "类型不同", body: `{"model":"cheap","model":null}`, want: "model"},
++		{name: "内容字段", body: `{"messages":[],"model":"a","messages":[{"role":"user","content":"hi"}]}`, want: "messages"},
++		{name: "session 内的 model", body: `{"sdp":"v=0","session":{"model":"gpt-live-a","model":"gpt-live-b"}}`, want: "session.model"},
++		{name: "前导空白", body: " \n" + `{"model":"a","model":"b"}`, want: "model"},
++		{name: "UTF-8 BOM", body: "\xef\xbb\xbf" + `{"model":"a","model":"b"}`, want: "model"},
++		{name: "嵌套 reasoning.effort 取值不同", body: `{"model":"gpt-5.4","reasoning":{"effort":"low","effort":"xhigh"},"input":"hi"}`, want: "reasoning.effort"},
++		{name: "嵌套 reasoning.effort 取值相同", body: `{"model":"gpt-5.4","reasoning":{"effort":"xhigh","effort":"xhigh"},"input":"hi"}`, want: "reasoning.effort"},
++		{name: "嵌套大小写变体", body: `{"model":"gpt-5.4","input":"hi","reasoning":{"effort":"low","Effort":"xhigh"}}`, want: "reasoning.Effort"},
++		{name: "output_config 大小写变体", body: `{"model":"m","output_config":{"effort":"low","EFFORT":"max"}}`, want: "output_config.EFFORT"},
++		{name: "嵌套 thinking.type", body: `{"model":"m","thinking":{"type":"disabled","budget_tokens":1024,"type":"enabled"}}`, want: "thinking.type"},
++		{name: "嵌套对象里的重复键", body: `{"model":"a","metadata":{"user_id":"1","user_id":"2"}}`, want: "metadata.user_id"},
++		{name: "数组元素里的重复键", body: `{"messages":[{"role":"user","content":"a"},{"role":"user","role":"assistant"}]}`, want: "messages[1].role"},
++		{name: "嵌套转义写法", body: `{"reasoning":{"effort":"low","\u0065ffort":"xhigh"}}`, want: "reasoning.effort"},
++		{name: "深层嵌套", body: `{"a":[[{"b":{"c":1,"c":2}}]]}`, want: "a[0][0].b.c"},
++		{name: "session 内嵌套", body: `{"session":{"audio":{"voice":"a","voice":"b"}}}`, want: "session.audio.voice"},
++		{name: "自由键空间内的精确重复", body: `{"tools":[{"input_schema":{"properties":{"id":{},"id":{}}}}]}`, want: "tools[0].input_schema.properties.id"},
++		{name: "metadata 大小写变体（Antigravity 结构体绑定）", body: `{"metadata":{"user_id":"A","USER_ID":"B"}}`, want: "metadata.USER_ID"},
++		{name: "前导控制字节（gjson 当空白跳过）", body: "\x0b{\"model\":\"a\",\"model\":\"b\"}", want: "model"},
++		{name: "顶层 input 仍做折叠", body: `{"input":[{"role":"user","Role":"system","content":"x"}]}`, want: "input[0].Role"},
++		{name: "超深子树之后的同层重复", body: `{"model":"a","x":` + strings.Repeat("[", maxConflictDepth+5) + strings.Repeat("]", maxConflictDepth+5) + `,"model":"b"}`, want: "model"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got, conflict := ConflictingField("application/json", []byte(tt.body))
++			require.True(t, conflict)
++			require.Equal(t, tt.want, got)
++		})
++	}
++}
++
++func TestConflictingFieldJSONAcceptsUnambiguousBodies(t *testing.T) {
++	tests := []struct {
++		name string
++		body string
++	}{
++		{name: "空请求体", body: ""},
++		{name: "空对象", body: `{}`},
++		{name: "普通请求", body: `{"model":"a","max_tokens":1,"stream":true,"messages":[]}`},
++		{name: "相近但不同的字段名", body: `{"model":"a","models":"b","model_id":"c"}`},
++		{name: "兄弟对象里的同名键", body: `{"a":{"x":1},"b":{"x":2},"c":[{"x":1},{"x":2}]}`},
++		{name: "父子对象同名键", body: `{"model":"m","metadata":{"model":"other"}}`},
++		{name: "schema 属性大小写不同", body: `{"tools":[{"input_schema":{"type":"object","properties":{"id":{"type":"string"},"ID":{"type":"integer"}}}}]}`},
++		{name: "tool_use 参数大小写不同", body: `{"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"f","input":{"path":"a","Path":"b"}}]}]}`},
++		{name: "Gemini 函数参数与返回大小写不同", body: `{"contents":[{"parts":[{"functionCall":{"name":"f","args":{"k":1,"K":2}}},{"functionResponse":{"name":"f","response":{"v":1,"V":2}}}]}]}`},
++		{name: "提示词模板变量大小写不同", body: `{"prompt":{"id":"p","variables":{"name":"a","Name":"b"}}}`},
++		{name: "MCP 请求头大小写不同", body: `{"tools":[{"type":"mcp","headers":{"Authorization":"a","authorization":"b"}}]}`},
++		{name: "dependentRequired 大小写不同", body: `{"s":{"dependentRequired":{"a":[],"A":[]}}}`},
++		{name: "转义写法的自由键名", body: `{"tools":[{"input_schema":{"prop\u0065rties":{"id":{},"ID":{}}}}]}`},
++		{name: "只读首个顶层值", body: `{"model":"a"}{"model":"a","model":"b"}`},
++		{name: "字符串值里出现字段名", body: `{"model":"a","input":"{\"model\":\"b\",\"model\":\"c\"}"}`},
++		{name: "字符串里的括号与逗号", body: `{"a":"{[,\"]}","b":"\\","c":1}`},
++		{name: "顶层数组里的不同对象", body: `[{"model":"a"},{"model":"b"}]`},
++		{name: "不是 JSON", body: `model=a&model=b`},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got, conflict := ConflictingField("application/json", []byte(tt.body))
++			require.False(t, conflict, got)
++			require.Empty(t, got)
++		})
++	}
++}
++
++// 回归：JSON handler 不看 Content-Type，把 JSON 请求体标成 multipart 不能绕过检查。
++func TestConflictingFieldIgnoresMultipartLabelOnJSONBody(t *testing.T) {
++	body := []byte(`{"model":"claude-3-5-haiku-20241022","messages":[],"model":"claude-opus-4-8"}`)
++	for _, contentType := range []string{"multipart/form-data", "multipart/form-data; boundary=zzz", `Multipart/Form-Data; boundary="a"`, "text/plain", ""} {
++		got, conflict := ConflictingField(contentType, body)
++		require.True(t, conflict, contentType)
++		require.Equal(t, "model", got)
++	}
++}
++
++// 规则和它要防的解析器行为绑在一起：未报告冲突的请求体，gjson（首个、大小写
++// 敏感）和 encoding/json 结构体绑定（末值、大小写不敏感）读到的值必须一致。
++func TestConflictingFieldMatchesParserDisagreement(t *testing.T) {
++	tests := []struct {
++		body            string
++		conflict        bool
++		parsersDisagree bool
++	}{
++		{body: `{"model":"first","model":"last"}`, conflict: true, parsersDisagree: true},
++		{body: `{"model":"first","MODEL":"last"}`, conflict: true, parsersDisagree: true},
++		{body: `{"MODEL":"first","model":"last"}`, conflict: true},
++		{body: `{"model":"same","Model":"same"}`, conflict: true},
++		{body: `{"model":"only","reasoning":{"effort":"low","Effort":"xhigh"}}`, conflict: true},
++		{body: `{"model":"only","reasoning":{"effort":"low"}}`},
++	}
++	for _, tt := range tests {
++		t.Run(tt.body, func(t *testing.T) {
++			var decoded struct {
++				Model     string `json:"model"`
++				Reasoning struct {
++					Effort string `json:"effort"`
++				} `json:"reasoning"`
++			}
++			require.NoError(t, json.Unmarshal([]byte(tt.body), &decoded))
++			first := gjson.Get(tt.body, "model").String()
++			require.Equal(t, tt.parsersDisagree, first != decoded.Model)
++
++			_, conflict := ConflictingField("application/json", []byte(tt.body))
++			require.Equal(t, tt.conflict, conflict)
++			if !conflict {
++				require.Equal(t, first, decoded.Model)
++				require.Equal(t, gjson.Get(tt.body, "reasoning.effort").String(), decoded.Reasoning.Effort)
++			}
++		})
++	}
++}
++
++func TestConflictingFieldReturnsIndependentCopy(t *testing.T) {
++	body := []byte(`{"outer":{"model":"a","model":"b"}}`)
++	got, conflict := ConflictingField("application/json", body)
++	require.True(t, conflict)
++	for i := range body {
++		body[i] = 'x'
++	}
++	require.Equal(t, "outer.model", got)
++}
++
++func TestConflictingFieldManyMembersUsesIndex(t *testing.T) {
++	var b strings.Builder
++	_, _ = b.WriteString(`{"model":"m","tool":{`)
++	for i := 0; i < 100; i++ {
++		fmt.Fprintf(&b, `"k%d":%d,`, i, i)
++	}
++	body := b.String()
++
++	got, conflict := ConflictingField("application/json", []byte(body+`"K3":3}}`))
++	require.True(t, conflict, "duplicates past the linear-scan limit must be found")
++	require.Equal(t, "tool.K3", got)
++
++	_, conflict = ConflictingField("application/json", []byte(body+`"k100":0}}`))
++	require.False(t, conflict)
++}
++
++// 回归：扫描是线性的，深嵌套不能放大 CPU（逐层递归时 1 MB、9990 层约 1.6 s）。
++func TestConflictingFieldDeepNestingIsLinear(t *testing.T) {
++	depth := maxConflictDepth - 10
++	body := []byte(`{"input":` + strings.Repeat("[", depth) + `"` + strings.Repeat("a", 1<<20) + `"` + strings.Repeat("]", depth) + `}`)
++	start := time.Now()
++	_, conflict := ConflictingField("application/json", body)
++	require.False(t, conflict)
++	require.Less(t, time.Since(start), 200*time.Millisecond)
++
++	objects := []byte(strings.Repeat(`{"a":`, maxConflictDepth+50) + "1" + strings.Repeat("}", maxConflictDepth+50))
++	_, conflict = ConflictingField("application/json", objects)
++	require.False(t, conflict)
++}
++
++// 回归：大对象的判重内存与请求体同一量级（逐键存字符串时峰值约为请求体的 16 倍）。
++// 64 位哈希 map 含扩容过程的累计分配约 6～7 倍，峰值约 2～3 倍。
++func TestConflictingFieldManyKeysMemoryIsBounded(t *testing.T) {
++	var b strings.Builder
++	_, _ = b.WriteString(`{"x":{`)
++	const keys = 1 << 20
++	for i := 0; i < keys; i++ {
++		if i > 0 {
++			_ = b.WriteByte(',')
++		}
++		fmt.Fprintf(&b, `"%d":1`, i)
++	}
++	_, _ = b.WriteString(`}}`)
++	body := []byte(b.String())
++
++	var before, after runtime.MemStats
++	runtime.GC()
++	runtime.ReadMemStats(&before)
++	_, conflict := ConflictingField("application/json", body)
++	runtime.ReadMemStats(&after)
++	require.False(t, conflict)
++	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(8*len(body)))
++}
++
++// 回归：字符串扫描对转义数量是线性的（此前每个转义都会重扫到字符串末尾，
++// 20 万个 \n 约 0.56 s）。
++func TestConflictingFieldManyEscapesIsLinear(t *testing.T) {
++	body := []byte(`{"model":"m","input":"` + strings.Repeat(`\n`, 1<<20) + `\\","model":"x"}`)
++	start := time.Now()
++	got, conflict := ConflictingField("application/json", body)
++	require.Less(t, time.Since(start), 100*time.Millisecond)
++	require.True(t, conflict)
++	require.Equal(t, "model", got)
++
++	for _, tricky := range []string{
++		`{"a":"\\","a":1}`,
++		`{"a":"x\\\"y","a":1}`,
++		`{"a":"\\\\\\\\","a":1}`,
++		`{"a":"\"","a":1}`,
++	} {
++		got, conflict := ConflictingField("application/json", []byte(tricky))
++		require.True(t, conflict, tricky)
++		require.Equal(t, "a", got, tricky)
++	}
++}
++
++func multipartBody(t *testing.T, fields ...[2]string) (string, []byte) {
++	t.Helper()
++	var body bytes.Buffer
++	writer := multipart.NewWriter(&body)
++	for _, field := range fields {
++		require.NoError(t, writer.WriteField(field[0], field[1]))
++	}
++	require.NoError(t, writer.Close())
++	return writer.FormDataContentType(), body.Bytes()
++}
++
++func TestConflictingFieldMultipart(t *testing.T) {
++	reject := []struct {
++		name   string
++		fields [][2]string
++		want   string
++	}{
++		{name: "model 字段取值不同", fields: [][2]string{{"model", "gpt-image-1"}, {"prompt", "cat"}, {"model", "gpt-image-1.5"}}, want: "model"},
++		{name: "model 字段取值相同", fields: [][2]string{{"model", "gpt-image-1"}, {"model", "gpt-image-1"}}, want: "model"},
++		{name: "计费标量 size 重复", fields: [][2]string{{"model", "gpt-image-1"}, {"size", "1024x1024"}, {"size", "1536x1024"}}, want: "size"},
++		{name: "计费标量 n 重复", fields: [][2]string{{"n", "1"}, {"n", "8"}}, want: "n"},
++		{name: "session 字段重复", fields: [][2]string{{"sdp", "v=0"}, {"session", `{"model":"a"}`}, {"session", `{"model":"b"}`}}, want: "session"},
++		{name: "session JSON 内的 model 重复", fields: [][2]string{{"sdp", "v=0"}, {"session", `{"model":"a","instructions":"hi","model":"b"}`}}, want: "session.model"},
++		{name: "session JSON 内的嵌套重复", fields: [][2]string{{"sdp", "v=0"}, {"session", `{"model":"a","audio":{"voice":"x","voice":"y"}}`}}, want: "session.audio.voice"},
++	}
++	for _, tt := range reject {
++		t.Run(tt.name, func(t *testing.T) {
++			contentType, body := multipartBody(t, tt.fields...)
++			got, conflict := ConflictingField(contentType, body)
++			require.True(t, conflict)
++			require.Equal(t, tt.want, got)
++		})
++	}
++
++	accept := []struct {
++		name   string
++		fields [][2]string
++	}{
++		{name: "普通表单", fields: [][2]string{{"model", "gpt-image-1"}, {"prompt", `{"model":"a","model":"b"}`}}},
++		{name: "数组字段", fields: [][2]string{{"model", "whisper-1"}, {"timestamp_granularities[]", "word"}, {"timestamp_granularities[]", "segment"}}},
++		{name: "多图输入", fields: [][2]string{{"model", "grok-imagine"}, {"image_url", "https://a"}, {"image_url", "https://b"}, {"image", "https://c"}, {"image", "https://d"}}},
++	}
++	for _, tt := range accept {
++		t.Run(tt.name, func(t *testing.T) {
++			contentType, body := multipartBody(t, tt.fields...)
++			got, conflict := ConflictingField(contentType, body)
++			require.False(t, conflict, got)
++		})
++	}
++}
++
++func BenchmarkConflictingField(b *testing.B) {
++	var sb strings.Builder
++	_, _ = sb.WriteString(`{"model":"claude-sonnet-4-5","max_tokens":4096,"stream":true,"system":[{"type":"text","text":"sys"}],"tools":[`)
++	for i := 0; i < 40; i++ {
++		if i > 0 {
++			_, _ = sb.WriteString(",")
++		}
++		fmt.Fprintf(&sb, `{"name":"tool_%d","description":"%s","input_schema":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path"]}}`, i, strings.Repeat("d", 200))
++	}
++	_, _ = sb.WriteString(`],"messages":[`)
++	for i := 0; i < 200; i++ {
++		if i > 0 {
++			_, _ = sb.WriteString(",")
++		}
++		fmt.Fprintf(&sb, `{"role":"user","content":[{"type":"text","text":"%s"}]}`, strings.Repeat("t", 1000))
++	}
++	_, _ = sb.WriteString(`]}`)
++	body := []byte(sb.String())
++	b.SetBytes(int64(len(body)))
++	b.ReportAllocs()
++	b.ResetTimer()
++	for i := 0; i < b.N; i++ {
++		if _, conflict := ConflictingField("application/json", body); conflict {
++			b.Fatal("unexpected conflict")
++		}
++	}
++}
++
++// rawMultipart 用固定 boundary 拼出原始 multipart 请求体，便于构造畸形 part。
++func rawMultipart(preamble string, parts ...string) (string, []byte) {
++	var b strings.Builder
++	_, _ = b.WriteString(preamble)
++	for _, part := range parts {
++		_, _ = b.WriteString("--BOUNDARY\r\n")
++		_, _ = b.WriteString(part)
++		_, _ = b.WriteString("\r\n")
++	}
++	_, _ = b.WriteString("--BOUNDARY--\r\n")
++	return "multipart/form-data; boundary=BOUNDARY", []byte(b.String())
++}
++
++func textPart(name, value string) string {
++	return "Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value
++}
++
++// 回归：multipart handler 跳过首个 boundary 之前的前导内容；前导内容是 JSON 时
++// 不能让请求体只被当成 JSON 检查，也不能让 JSON 与表单两种解读并存。
++func TestConflictingFieldMultipartPreambleAndMalformedParts(t *testing.T) {
++	cases := []struct {
++		name  string
++		build func() (string, []byte)
++		want  string
++	}{
++		{name: "JSON 前导内容后的重复 n", want: "n", build: func() (string, []byte) {
++			return rawMultipart("{}\r\n", textPart("model", "gpt-image-2"), textPart("n", "8"), textPart("n", "1"))
++		}},
++		{name: "JSON 前导内容与表单 model 并存", want: "Content-Type", build: func() (string, []byte) {
++			return rawMultipart(`{"model":"gpt-image-1-mini"}`+"\r\n", textPart("model", "gpt-image-2"))
++		}},
++		{name: "数组前导内容", want: "Content-Type", build: func() (string, []byte) {
++			return rawMultipart("[]\r\n", textPart("model", "gpt-image-2"))
++		}},
++		{name: "名为 model 的文件 part", want: "model", build: func() (string, []byte) {
++			return rawMultipart("", "Content-Disposition: form-data; name=\"model\"; filename=\"m.txt\"\r\n\r\ngpt-image-2")
++		}},
++		{name: "文件与文本同名", want: "size", build: func() (string, []byte) {
++			return rawMultipart("", textPart("size", "1024x1024"), "Content-Disposition: form-data; name=\"size\"; filename=\"s\"\r\n\r\n1536x1024")
++		}},
++		{name: "无法解析名字的 part", want: "Content-Disposition", build: func() (string, []byte) {
++			return rawMultipart("", "Content-Disposition: form-data; name=\"a\"; name=\"model\"\r\n\r\ngpt-image-2")
++		}},
++		{name: "RFC 2231 扩展字段名", want: "Content-Disposition", build: func() (string, []byte) {
++			return rawMultipart("", "Content-Disposition: form-data; name=\"model\"; name*=UTF-8''prompt\r\n\r\ngpt-image-2")
++		}},
++		{name: "分段的扩展字段名", want: "Content-Disposition", build: func() (string, []byte) {
++			return rawMultipart("", "Content-Disposition: form-data; name=\"model\";name*0=\"pro\"; name*1=\"mpt\"\r\n\r\ngpt-image-2")
++		}},
++		{name: "两个 Content-Disposition 头", want: "Content-Disposition", build: func() (string, []byte) {
++			return rawMultipart("", "Content-Disposition: form-data; name=\"prompt\"\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngpt-image-2")
++		}},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			contentType, body := tc.build()
++			got, conflict := ConflictingField(contentType, body)
++			require.True(t, conflict)
++			require.Equal(t, tc.want, got)
++		})
++	}
++
++	contentType, body := rawMultipart("", textPart("model", "gpt-image-2"), textPart("prompt", "cat"))
++	_, conflict := ConflictingField(contentType, body)
++	require.False(t, conflict, "a well-formed form must pass")
++
++	// 非 ASCII 文件名的 filename* 写法是合法的，不能误拒。
++	contentType, body = rawMultipart("", textPart("model", "gpt-image-2"), "Content-Disposition: form-data; name=\"image\"; filename=\"a.png\"; filename*=UTF-8''%E5%9B%BE.png\r\nContent-Type: image/png\r\n\r\nPNG")
++	_, conflict = ConflictingField(contentType, body)
++	require.False(t, conflict, "filename* must not be treated as an extended field name")
++}
+diff --git a/backend/internal/pkg/requestmodel/requestmodel.go b/backend/internal/pkg/requestmodel/requestmodel.go
+index ead8e1e27..a9ceab22c 100644
+--- a/backend/internal/pkg/requestmodel/requestmodel.go
++++ b/backend/internal/pkg/requestmodel/requestmodel.go
+@@ -44,15 +44,19 @@ func IsLiveRequestRoute(routePath string) bool {
+ // （为空回落 session 候选）。候选包含重复键、大小写变体的全部出现。
+ func FromBodyCandidates(routePath, contentType string, body []byte) []string {
+ 	var topLevel, session []string
++	if doc := TrimUTF8BOM(body); LooksLikeJSON(doc) {
++		// 按内容识别 JSON，不看 Content-Type：JSON handler 不校验请求头，且宽容
++		// 读取会剥掉 BOM，两者都不能成为绕过准入的手段。gjson 只读首个顶层值。
++		topLevel = jsonModelCandidates(doc)
++		session = jsonSessionModelCandidates(doc)
++	}
+ 	if isMultipartContentType(contentType) {
+-		// 声明为 multipart 的请求体只做 multipart 解析——gjson 的部分扫描
+-		// 会在 multipart 字节流里误匹配 session JSON 内的 model 字段。
++		// multipart handler 跳过首个 boundary 之前的前导内容（可以是任意 JSON），
++		// 所以两种解读的候选都要收集。只有声明为 multipart 时才按 multipart 解析，
++		// 不对非 multipart 字节流做 gjson 部分扫描。
+ 		models, sessions := multipartModelCandidates(contentType, body)
+-		topLevel = models
+-		session = sessionModelCandidates(sessions)
+-	} else {
+-		topLevel = jsonModelCandidates(body)
+-		session = jsonSessionModelCandidates(body)
++		topLevel = append(topLevel, models...)
++		session = append(session, sessionModelCandidates(sessions)...)
+ 	}
+ 
+ 	if IsLiveRequestRoute(routePath) {
+diff --git a/backend/internal/pkg/requestmodel/requestmodel_test.go b/backend/internal/pkg/requestmodel/requestmodel_test.go
+index 5d59a0d34..a1636c99d 100644
+--- a/backend/internal/pkg/requestmodel/requestmodel_test.go
++++ b/backend/internal/pkg/requestmodel/requestmodel_test.go
+@@ -255,3 +255,40 @@ func TestFromBodyForRouteReturnsFirstCandidate(t *testing.T) {
+ 		t.Fatalf("dispatch helper keeps gjson-first semantics, got %q", got)
+ 	}
+ }
++
++// 回归：JSON handler 不看 Content-Type、宽容读取会剥掉 BOM，准入候选必须与之
++// 一致，否则把请求体标成 multipart 或加 BOM 就能让白名单拿不到任何模型而放行。
++func TestFromBodyCandidatesFollowsWhatJSONHandlersParse(t *testing.T) {
++	body := []byte(`{"model":"claude-opus-4-8","messages":[]}`)
++	cases := []struct {
++		name        string
++		contentType string
++		body        []byte
++	}{
++		{name: "multipart 标签", contentType: "multipart/form-data; boundary=zzz", body: body},
++		{name: "无 boundary 的 multipart 标签", contentType: "multipart/form-data", body: body},
++		{name: "UTF-8 BOM", contentType: "application/json", body: append([]byte{0xEF, 0xBB, 0xBF}, body...)},
++		{name: "BOM 加 multipart 标签", contentType: "multipart/form-data", body: append([]byte{0xEF, 0xBB, 0xBF}, body...)},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			got := FromBodyCandidates("/v1/messages", tc.contentType, tc.body)
++			if len(got) != 1 || got[0] != "claude-opus-4-8" {
++				t.Fatalf("candidates = %v, want [claude-opus-4-8]", got)
++			}
++			if route := FromBodyForRoute("/v1/messages", tc.contentType, tc.body); route != "claude-opus-4-8" {
++				t.Fatalf("route model = %q", route)
++			}
++		})
++	}
++}
++
++// 回归：multipart handler 跳过首个 boundary 之前的前导内容，前导内容是 JSON 时
++// 白名单必须同时看到表单里的 model，不能只取 JSON 解读。
++func TestFromBodyCandidatesMultipartWithJSONPreamble(t *testing.T) {
++	body := []byte("{}\r\n--B\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngpt-image-2\r\n--B--\r\n")
++	got := FromBodyCandidates("/v1/images/edits", "multipart/form-data; boundary=B", body)
++	if len(got) != 1 || got[0] != "gpt-image-2" {
++		t.Fatalf("candidates = %v, want [gpt-image-2]", got)
++	}
++}
+diff --git a/backend/internal/server/middleware/group_model_allowlist_test.go b/backend/internal/server/middleware/group_model_allowlist_test.go
+index 4015dbc82..b83070783 100644
+--- a/backend/internal/server/middleware/group_model_allowlist_test.go
++++ b/backend/internal/server/middleware/group_model_allowlist_test.go
+@@ -141,8 +141,9 @@ func TestGroupModelAllowlistRequestBodyTooLargePassesThrough413(t *testing.T) {
+ 	if w.Code != http.StatusRequestEntityTooLarge {
+ 		t.Fatalf("expected 413, got %d: %s", w.Code, w.Body.String())
+ 	}
+-	if !strings.Contains(w.Body.String(), "Request body is too large") {
+-		t.Fatalf("expected too-large message, got %s", w.Body.String())
++	// 与 handler 读取失败时一致：Messages 入口用 Anthropic 格式，文案带上限。
++	if !strings.Contains(w.Body.String(), "Request body too large, limit is 64B") || !strings.Contains(w.Body.String(), `"type":"error"`) {
++		t.Fatalf("expected Anthropic-shaped too-large message, got %s", w.Body.String())
+ 	}
+ 	if len(*calls) != 0 {
+ 		t.Fatalf("expected handler not to run, got %v", *calls)
+diff --git a/backend/internal/server/middleware/ingress_reject.go b/backend/internal/server/middleware/ingress_reject.go
+index 7c7af027a..15c0b36f1 100644
+--- a/backend/internal/server/middleware/ingress_reject.go
++++ b/backend/internal/server/middleware/ingress_reject.go
+@@ -29,6 +29,8 @@ const (
+ 	IngressRejectInvalidAuthRateLimited IngressRejectReason = "invalid_auth_rate_limited"
+ 	IngressRejectAPIKeyAuthOverloaded   IngressRejectReason = "api_key_auth_overloaded"
+ 	IngressRejectModelNotAllowed        IngressRejectReason = "model_not_allowed"
++	// IngressRejectConflictingRequestFields：请求体同名字段重复声明（GHSA-p3r4-jcm3-2hph）。
++	IngressRejectConflictingRequestFields IngressRejectReason = "conflicting_request_fields"
+ )
+ 
+ const ingressRejectReasonContextKey = "ingress_reject_reason"
+diff --git a/backend/internal/server/middleware/request_body_read_failure.go b/backend/internal/server/middleware/request_body_read_failure.go
+index a41430a62..32adbdb2d 100644
+--- a/backend/internal/server/middleware/request_body_read_failure.go
++++ b/backend/internal/server/middleware/request_body_read_failure.go
+@@ -9,13 +9,16 @@ import (
+ 
+ // AbortWithRequestBodyReadFailure writes the shared response for a failed body
+ // read in middleware that inspects the body before the handler. It applies the
+-// same classification and payload-free diagnostics as the gateway handlers.
++// same classification, client message, protocol-shaped error body and
++// payload-free diagnostics as the gateway handlers, so a body read in
++// middleware fails exactly as it would in the handler.
+ func AbortWithRequestBodyReadFailure(c *gin.Context, component string, err error) {
+ 	failure := httputil.DescribeRequestBodyReadFailure(c.Request, err)
+ 	if failure.Kind != httputil.RequestBodyReadErrorMaxBytes {
+ 		logRequestBodyReadFailure(c, component, failure)
+ 	}
+-	c.AbortWithStatusJSON(failure.Status, gin.H{"error": gin.H{"type": "invalid_request_error", "message": failure.Message}})
++	writeGatewayInvalidRequest(c, failure.Status, failure.ClientMessage())
++	c.Abort()
+ }
+ 
+ func logRequestBodyReadFailure(c *gin.Context, component string, failure httputil.RequestBodyReadFailure) {
+diff --git a/backend/internal/server/middleware/request_field_conflict.go b/backend/internal/server/middleware/request_field_conflict.go
+new file mode 100644
+index 000000000..912933163
+--- /dev/null
++++ b/backend/internal/server/middleware/request_field_conflict.go
+@@ -0,0 +1,95 @@
++package middleware
++
++import (
++	"fmt"
++	"net/http"
++	"strings"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel"
++
++	"github.com/gin-gonic/gin"
++)
++
++// RejectConflictingRequestFields 拒绝「同名字段重复声明」的网关请求。
++//
++// 挂载位置：每条网关链的 GroupModelAllowlist 之后、compositeTarget 之前，
++// 白名单对不在名单内的模型仍按原有格式拒绝。与白名单准入不同，这里对所有分组
++// 生效：重复 model 键让计费模型（gjson 取第一个）和实际转发的模型
++// （encoding/json 重新序列化后取最后一个）分叉，和分组是否开启白名单无关；
++// service_tier、reasoning.effort 等按首个值做计费/策略判断、由 sjson 只改首个的
++// 字段也是如此（GHSA-p3r4-jcm3-2hph）。
++//
++// 行为：
++//   - 只检查带请求体的方法（POST/PUT/PATCH）。
++//   - JSON 按内容识别（不看 Content-Type），开头的 UTF-8 BOM 在这里剥掉后回填
++//     （PrereadBody，下游零拷贝重读），与 handler 宽容读取的规则一致，保证
++//     合成路由、handler 与这里检查的是同一份字节。
++//   - 判定规则见 requestmodel.ConflictingField；不是 JSON 也不是 multipart 的
++//     请求体放行，交给 handler 自己校验。
++//   - 拒绝：按入口协议格式返回 400，标记 ingress 拒绝原因
++//     conflicting_request_fields，请求不会进入合成路由、调度和计费。
++//
++// Responses WebSocket 的帧不经过这里，由 ResponsesWebSocket 对每一帧执行同一规则。
++func RejectConflictingRequestFields() gin.HandlerFunc {
++	return func(c *gin.Context) {
++		if c.Request == nil || c.Request.Body == nil || c.Request.Body == http.NoBody {
++			c.Next()
++			return
++		}
++		switch c.Request.Method {
++		case http.MethodPost, http.MethodPut, http.MethodPatch:
++		default:
++			c.Next()
++			return
++		}
++
++		body, err := httputil.ReadRequestBodyWithPrealloc(c.Request)
++		if err != nil {
++			if RejectRequestBodyReadError(c, "middleware.request_field_conflict", err) {
++				return
++			}
++			AbortWithRequestBodyReadFailure(c, "middleware.request_field_conflict", err)
++			return
++		}
++		if doc := requestmodel.TrimUTF8BOM(body); len(doc) != len(body) && requestmodel.LooksLikeJSON(doc) {
++			body = doc
++		}
++		requestmodel.ResetRequestBody(c.Request, body)
++
++		field, conflict := requestmodel.ConflictingField(c.GetHeader("Content-Type"), body)
++		if !conflict {
++			c.Next()
++			return
++		}
++		MarkIngressRejected(c, IngressRejectConflictingRequestFields)
++		// 字段名来自客户端请求体，回显时加引号并限制在 64 个字符以内。
++		writeGatewayInvalidRequest(c, http.StatusBadRequest, fmt.Sprintf("Request body declares field %.64q more than once", field))
++		c.Abort()
++	}
++}
++
++// writeGatewayInvalidRequest 按入口协议输出 invalid_request_error：
++// Gemini 原生（/v1beta、/antigravity/v1beta）用 Google 格式，Messages 入口用
++// Anthropic 格式，其余用 OpenAI 格式。协议划分与 groupModelAllowlistErrorWriter
++// 相同；不复用它，是因为现有的 Anthropic / OpenAI 写入器把非 404/403 的状态写成
++// api_error / model_not_found。
++func writeGatewayInvalidRequest(c *gin.Context, status int, message string) {
++	path := ""
++	if c.Request != nil && c.Request.URL != nil {
++		path = c.Request.URL.Path
++	}
++	switch {
++	case strings.HasPrefix(path, "/v1beta") || strings.HasPrefix(path, "/antigravity/v1beta"):
++		GoogleErrorWriter(c, status, message)
++	case strings.Contains(path, "/messages"):
++		c.JSON(status, gin.H{
++			"type":  "error",
++			"error": gin.H{"type": "invalid_request_error", "message": message},
++		})
++	default:
++		c.JSON(status, gin.H{
++			"error": gin.H{"type": "invalid_request_error", "message": message},
++		})
++	}
++}
+diff --git a/backend/internal/server/middleware/request_field_conflict_test.go b/backend/internal/server/middleware/request_field_conflict_test.go
+new file mode 100644
+index 000000000..9dec9e247
+--- /dev/null
++++ b/backend/internal/server/middleware/request_field_conflict_test.go
+@@ -0,0 +1,282 @@
++package middleware
++
++import (
++	"bytes"
++	"mime/multipart"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++
++	"github.com/gin-gonic/gin"
++)
++
++// newRequestFieldConflictTestRouter 按网关链的顺序挂载：白名单准入在前，
++// 字段歧义拒绝在后。handlerBodies 记录 handler 实际读到的请求体。
++func newRequestFieldConflictTestRouter(apiKey *service.APIKey) (*gin.Engine, *[]string) {
++	gin.SetMode(gin.TestMode)
++	router := gin.New()
++	var handlerBodies []string
++	router.Use(func(c *gin.Context) {
++		if apiKey != nil {
++			c.Set(string(ContextKeyAPIKey), apiKey)
++		}
++		c.Next()
++	})
++	router.Use(GroupModelAllowlist())
++	router.Use(RejectConflictingRequestFields())
++	handler := func(c *gin.Context) {
++		body, _ := httputil.ReadRequestBodyWithPrealloc(c.Request)
++		handlerBodies = append(handlerBodies, string(body))
++		c.Status(http.StatusOK)
++	}
++	for _, path := range []string{
++		"/v1/messages", "/v1/responses", "/v1/chat/completions", "/v1/images/edits", "/v1/live",
++		"/v1beta/models/*modelAction",
++	} {
++		router.POST(path, handler)
++	}
++	router.GET("/v1/models", handler)
++	return router, &handlerBodies
++}
++
++// 复现报告的请求体：第一个 model 是便宜模型，最后一个是贵模型。分组没有开启
++// 白名单时旧行为是放行并按第一个计费，现在必须在进入 handler 之前拒绝。
++func TestRejectConflictingRequestFieldsBlocksDisagreeingModelWithoutAllowlist(t *testing.T) {
++	for _, apiKey := range []*service.APIKey{nil, {}, allowlistAPIKey(false)} {
++		router, handlerBodies := newRequestFieldConflictTestRouter(apiKey)
++
++		w := doJSON(t, router, http.MethodPost, "/v1/responses",
++			`{"model":"gpt-5.4-nano","stream":false,"input":"hi","model":"gpt-5.4"}`)
++		if w.Code != http.StatusBadRequest {
++			t.Fatalf("conflicting model keys must be rejected, got %d: %s", w.Code, w.Body.String())
++		}
++		if !strings.Contains(w.Body.String(), `\"model\"`) || !strings.Contains(w.Body.String(), "invalid_request_error") {
++			t.Fatalf("expected the field name and invalid_request_error, got %s", w.Body.String())
++		}
++		if len(*handlerBodies) != 0 {
++			t.Fatalf("expected handler not to run, got %v", *handlerBodies)
++		}
++	}
++}
++
++// 白名单开启且两个模型都在名单内时，白名单会放行；字段歧义检查仍要拒绝，
++// 否则计费模型和转发模型照样分叉。
++func TestRejectConflictingRequestFieldsBlocksEvenWhenAllCandidatesAllowlisted(t *testing.T) {
++	router, handlerBodies := newRequestFieldConflictTestRouter(allowlistAPIKey(true, "claude-3-5-haiku-20241022", "claude-opus-4-8"))
++
++	w := doJSON(t, router, http.MethodPost, "/v1/messages",
++		`{"model":"claude-3-5-haiku-20241022","max_tokens":64,"messages":[{"role":"user","content":"hi"}],"model":"claude-opus-4-8"}`)
++	if w.Code != http.StatusBadRequest {
++		t.Fatalf("conflicting model keys must be rejected, got %d: %s", w.Code, w.Body.String())
++	}
++	if len(*handlerBodies) != 0 {
++		t.Fatalf("expected handler not to run, got %v", *handlerBodies)
++	}
++}
++
++func TestRejectConflictingRequestFieldsCoversOtherFields(t *testing.T) {
++	router, handlerBodies := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++
++	for _, body := range []string{
++		`{"model":"gpt-5.4","service_tier":"default","input":"hi","service_tier":"priority"}`,
++		`{"model":"gpt-5.4","Model":"gpt-5.4-nano"}`,
++		`{"model":"gpt-5.4","messages":[],"messages":[{"role":"user","content":"hi"}]}`,
++	} {
++		w := doJSON(t, router, http.MethodPost, "/v1/chat/completions", body)
++		if w.Code != http.StatusBadRequest {
++			t.Fatalf("body %s must be rejected, got %d: %s", body, w.Code, w.Body.String())
++		}
++	}
++	if len(*handlerBodies) != 0 {
++		t.Fatalf("expected handler not to run, got %v", *handlerBodies)
++	}
++}
++
++func TestRejectConflictingRequestFieldsErrorFormats(t *testing.T) {
++	router, _ := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++	body := `{"model":"a","contents":[],"model":"b"}`
++
++	openai := doJSON(t, router, http.MethodPost, "/v1/responses", body)
++	if !strings.Contains(openai.Body.String(), `"error":{"message"`) || strings.Contains(openai.Body.String(), "model_not_found") {
++		t.Fatalf("unexpected OpenAI error format: %s", openai.Body.String())
++	}
++	anthropic := doJSON(t, router, http.MethodPost, "/v1/messages", body)
++	if !strings.Contains(anthropic.Body.String(), `"type":"error"`) || !strings.Contains(anthropic.Body.String(), `"type":"invalid_request_error"`) {
++		t.Fatalf("unexpected Anthropic error format: %s", anthropic.Body.String())
++	}
++	google := doJSON(t, router, http.MethodPost, "/v1beta/models/gemini-2.5-pro:generateContent", body)
++	if google.Code != http.StatusBadRequest || !strings.Contains(google.Body.String(), `"status":"INVALID_ARGUMENT"`) {
++		t.Fatalf("unexpected Google error format: %d %s", google.Code, google.Body.String())
++	}
++}
++
++// 普通请求体和非对象请求体都放行，handler 读到的请求体与客户端发送的完全一致。
++func TestRejectConflictingRequestFieldsPassesUnambiguousBodiesUnchanged(t *testing.T) {
++	for _, body := range []string{
++		`{"model":"gpt-5.4","input":"hi"}`,
++		`{"model":"gpt-5.4","prompt":{"id":"p","variables":{"k":"1","K":"1"}}}`,
++		`not json`,
++		``,
++	} {
++		router, handlerBodies := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++		w := doJSON(t, router, http.MethodPost, "/v1/responses", body)
++		if w.Code != http.StatusOK {
++			t.Fatalf("body %q should pass, got %d: %s", body, w.Code, w.Body.String())
++		}
++		if len(*handlerBodies) != 1 || (*handlerBodies)[0] != body {
++			t.Fatalf("handler must read the original body %q, got %v", body, *handlerBodies)
++		}
++	}
++}
++
++func TestRejectConflictingRequestFieldsMultipart(t *testing.T) {
++	send := func(models ...string) *httptest.ResponseRecorder {
++		router, _ := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++		var body bytes.Buffer
++		writer := multipart.NewWriter(&body)
++		for _, model := range models {
++			_ = writer.WriteField("model", model)
++		}
++		_ = writer.WriteField("prompt", "cat")
++		_ = writer.Close()
++		req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", &body)
++		req.Header.Set("Content-Type", writer.FormDataContentType())
++		w := httptest.NewRecorder()
++		router.ServeHTTP(w, req)
++		return w
++	}
++
++	if w := send("gpt-image-1", "gpt-image-1.5"); w.Code != http.StatusBadRequest {
++		t.Fatalf("conflicting multipart model fields must be rejected, got %d: %s", w.Code, w.Body.String())
++	}
++	if w := send("gpt-image-1", "gpt-image-1"); w.Code != http.StatusBadRequest {
++		t.Fatalf("repeated multipart model fields must be rejected even when identical, got %d: %s", w.Code, w.Body.String())
++	}
++	if w := send("gpt-image-1"); w.Code != http.StatusOK {
++		t.Fatalf("single multipart model field should pass, got %d: %s", w.Code, w.Body.String())
++	}
++}
++
++func TestRejectConflictingRequestFieldsLiveSessionModel(t *testing.T) {
++	router, _ := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++
++	w := doJSON(t, router, http.MethodPost, "/v1/live", `{"sdp":"v=0","session":{"model":"gpt-live-a","model":"gpt-live-b"}}`)
++	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "session.model") {
++		t.Fatalf("conflicting session.model must be rejected, got %d: %s", w.Code, w.Body.String())
++	}
++}
++
++// GET/DELETE 不带需要检查的请求体：中间件不读取，直接放行。
++func TestRejectConflictingRequestFieldsDoesNotReadBodylessMethods(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	router := gin.New()
++	router.Use(RejectConflictingRequestFields())
++	called := false
++	router.GET("/v1/models", func(c *gin.Context) {
++		called = true
++		c.Status(http.StatusOK)
++	})
++
++	body := &readTrackingBody{Reader: strings.NewReader(`{"model":"a","model":"b"}`)}
++	req := httptest.NewRequest(http.MethodGet, "/v1/models", body)
++	w := httptest.NewRecorder()
++	router.ServeHTTP(w, req)
++
++	if w.Code != http.StatusOK || !called {
++		t.Fatalf("GET must reach the handler, got %d", w.Code)
++	}
++	if body.read {
++		t.Fatal("middleware must not read the body of a GET request")
++	}
++}
++
++// 413 传递：请求体超过上限时保持现有的 413 响应，不被改写成 400。
++func TestRejectConflictingRequestFieldsRequestBodyTooLargePassesThrough413(t *testing.T) {
++	router, handlerBodies := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++
++	bigBody := `{"model":"a","padding":"` + strings.Repeat("x", 512) + `","model":"b"}`
++	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(bigBody))
++	req.Header.Set("Content-Type", "application/json")
++	req.Body = http.MaxBytesReader(httptest.NewRecorder(), req.Body, 64)
++	w := httptest.NewRecorder()
++	router.ServeHTTP(w, req)
++
++	if w.Code != http.StatusRequestEntityTooLarge {
++		t.Fatalf("expected 413, got %d: %s", w.Code, w.Body.String())
++	}
++	// 与 handler 读取失败时一致：Messages 入口用 Anthropic 格式，文案带上限。
++	if !strings.Contains(w.Body.String(), `"type":"error"`) || !strings.Contains(w.Body.String(), "Request body too large, limit is 64B") {
++		t.Fatalf("expected an Anthropic-shaped 413 naming the limit, got %s", w.Body.String())
++	}
++	if len(*handlerBodies) != 0 {
++		t.Fatalf("expected handler not to run, got %v", *handlerBodies)
++	}
++}
++
++// 取值相同的重复字段同样拒绝：网关的 sjson 改写（推理强度降级、模型映射、
++// fast policy 删除 service_tier）只改首个，改写后两者就会分叉。
++func TestRejectConflictingRequestFieldsRejectsIdenticalDuplicates(t *testing.T) {
++	for _, body := range []string{
++		`{"model":"gpt-5.4","input":"hi","model":"gpt-5.4"}`,
++		`{"model":"gpt-5.4","input":"hi","reasoning":{"effort":"xhigh","effort":"xhigh"}}`,
++		`{"model":"gpt-5.4","service_tier":"priority","input":"hi","service_tier":"priority"}`,
++	} {
++		router, handlerBodies := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++		w := doJSON(t, router, http.MethodPost, "/v1/responses", body)
++		if w.Code != http.StatusBadRequest || len(*handlerBodies) != 0 {
++			t.Fatalf("body %q must be rejected before the handler, got %d: %s", body, w.Code, w.Body.String())
++		}
++	}
++}
++
++// JSON handler 不看 Content-Type：把 JSON 请求体标成 multipart 不能绕过检查。
++func TestRejectConflictingRequestFieldsIgnoresMultipartLabelOnJSONBody(t *testing.T) {
++	for _, contentType := range []string{"multipart/form-data", "multipart/form-data; boundary=zzz", "text/plain"} {
++		router, handlerBodies := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++		req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"haiku","messages":[],"model":"opus"}`))
++		req.Header.Set("Content-Type", contentType)
++		w := httptest.NewRecorder()
++		router.ServeHTTP(w, req)
++		if w.Code != http.StatusBadRequest || len(*handlerBodies) != 0 {
++			t.Fatalf("Content-Type %q must not bypass the check, got %d: %s", contentType, w.Code, w.Body.String())
++		}
++	}
++}
++
++// BOM 在这里剥掉后回填：合成路由与 handler 读到的是本层检查过的同一份字节。
++func TestRejectConflictingRequestFieldsStripsBOMForDownstream(t *testing.T) {
++	router, handlerBodies := newRequestFieldConflictTestRouter(allowlistAPIKey(false))
++	w := doJSON(t, router, http.MethodPost, "/v1/responses", "\xef\xbb\xbf"+`{"model":"gpt-5.4","input":"hi"}`)
++	if w.Code != http.StatusOK {
++		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
++	}
++	if len(*handlerBodies) != 1 || (*handlerBodies)[0] != `{"model":"gpt-5.4","input":"hi"}` {
++		t.Fatalf("handler must read the BOM-free body, got %q", *handlerBodies)
++	}
++
++	w = doJSON(t, router, http.MethodPost, "/v1/responses", "\xef\xbb\xbf"+`{"model":"a","input":"hi","model":"b"}`)
++	if w.Code != http.StatusBadRequest {
++		t.Fatalf("BOM-prefixed duplicate must be rejected, got %d: %s", w.Code, w.Body.String())
++	}
++}
++
++func TestRejectConflictingRequestFieldsMarksIngressReject(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	router := gin.New()
++	var reason any
++	router.Use(func(c *gin.Context) {
++		c.Next()
++		reason, _ = c.Get(ingressRejectReasonContextKey)
++	})
++	router.Use(RejectConflictingRequestFields())
++	router.POST("/v1/responses", func(c *gin.Context) { c.Status(http.StatusOK) })
++
++	w := doJSON(t, router, http.MethodPost, "/v1/responses", `{"model":"a","model":"b"}`)
++	if w.Code != http.StatusBadRequest || reason != IngressRejectConflictingRequestFields {
++		t.Fatalf("expected 400 with ingress reason %q, got %d reason=%v", IngressRejectConflictingRequestFields, w.Code, reason)
++	}
++}
+diff --git a/backend/internal/server/routes/gateway.go b/backend/internal/server/routes/gateway.go
+index d4ce23101..375d36320 100644
+--- a/backend/internal/server/routes/gateway.go
++++ b/backend/internal/server/routes/gateway.go
+@@ -31,6 +31,21 @@ func RegisterGatewayRoutes(
+ 	bodyMemoryBudget := pkghttputil.NewBodyMemoryBudget(cfg.Gateway.RequestBodyMemoryBudgetBytes)
+ 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize, bodyMemoryBudget)
+ 	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize, bodyMemoryBudget)
++	// 分组链上的中间件（白名单、字段歧义检查、合成路由）会在 handler 之前读完
++	// 请求体，路由级的上限来不及生效；纯文本入口的上限必须在分组层按路由选择。
++	textBodyRoutes := map[string]bool{
++		"/v1/systemone":                   true,
++		"/v1/alpha/search":                true,
++		"/v1/embeddings":                  true,
++		"/backend-api/codex/alpha/search": true,
++	}
++	groupBodyLimit := func(c *gin.Context) {
++		if textBodyRoutes[c.FullPath()] {
++			textBodyLimit(c)
++			return
++		}
++		bodyLimit(c)
++	}
+ 	clientRequestID := middleware.ClientRequestID()
+ 	opsErrorLogger := handler.OpsErrorLoggerMiddleware(opsService)
+ 	endpointNorm := handler.InboundEndpointMiddleware()
+@@ -45,6 +60,11 @@ func RegisterGatewayRoutes(
+ 	// 保证校验发生在合成路由改写与调度之前，且只看客户端书写的模型名。
+ 	groupModelAllowlist := middleware.GroupModelAllowlist()
+ 
++	// 请求体字段歧义拒绝：同名字段重复且取值不一致（如两个不同的 model）时，
++	// 计费读到的值和实际转发的值会分叉。对所有分组生效，紧跟在白名单准入之后、
++	// 合成路由改写之前，白名单的拒绝响应保持不变。
++	rejectConflictingFields := middleware.RejectConflictingRequestFields()
++
+ 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
+ 		// openai、grok 与多协议 API Key 供应商经 OpenAI 网关转发（平台清单）。
+ 		return domain.UsesOpenAIGateway(getGroupPlatform(c))
+@@ -177,13 +197,14 @@ func RegisterGatewayRoutes(
+ 
+ 	// API网关（Claude API兼容）
+ 	gateway := r.Group("/v1")
+-	gateway.Use(bodyLimit)
++	gateway.Use(groupBodyLimit)
+ 	gateway.Use(clientRequestID)
+ 	gateway.Use(opsErrorLogger)
+ 	gateway.Use(endpointNorm)
+ 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
+ 	gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
+ 	gateway.Use(groupModelAllowlist)
++	gateway.Use(rejectConflictingFields)
+ 	gateway.Use(compositeTarget)
+ 	gateway.Use(requireGroupAnthropic)
+ 	{
+@@ -195,8 +216,8 @@ func RegisterGatewayRoutes(
+ 			}
+ 			h.Gateway.Messages(c)
+ 		})
+-		// System One carries only JSON text, so it uses the text body limit.
+-		gateway.POST("/systemone", textBodyLimit, h.Gateway.SystemOne)
++		// System One carries only JSON text; groupBodyLimit applies the text body limit.
++		gateway.POST("/systemone", h.Gateway.SystemOne)
+ 		// /v1/messages/count_tokens: OpenAI bridges upstream, Grok estimates
+ 		// locally, and Anthropic-compatible platforms retain their existing path.
+ 		gateway.POST("/messages/count_tokens", countTokensHandler)
+@@ -224,7 +245,7 @@ func RegisterGatewayRoutes(
+ 			}
+ 			h.Gateway.Responses(c)
+ 		}))
+-		gateway.POST("/alpha/search", textBodyLimit, h.OpenAIGateway.AlphaSearch)
++		gateway.POST("/alpha/search", h.OpenAIGateway.AlphaSearch)
+ 		gateway.GET("/responses", func(c *gin.Context) {
+ 			h.OpenAIGateway.ResponsesWebSocket(c)
+ 		})
+@@ -236,7 +257,7 @@ func RegisterGatewayRoutes(
+ 			}
+ 			h.Gateway.ChatCompletions(c)
+ 		})
+-		gateway.POST("/embeddings", textBodyLimit, func(c *gin.Context) {
++		gateway.POST("/embeddings", func(c *gin.Context) {
+ 			if !isOpenAIOnlyEndpointGatewayPlatform(c) {
+ 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+ 				c.JSON(http.StatusNotFound, gin.H{
+@@ -341,6 +362,7 @@ func RegisterGatewayRoutes(
+ 	gemini.Use(endpointNorm)
+ 	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
+ 	gemini.Use(groupModelAllowlist)
++	gemini.Use(rejectConflictingFields)
+ 	gemini.Use(compositeGeminiTarget)
+ 	gemini.Use(requireGroupGoogle)
+ 	{
+@@ -367,7 +389,7 @@ func RegisterGatewayRoutes(
+ 	// 根路径别名共用中间件链：白名单准入在 apiKeyAuth 之后、compositeTarget
+ 	// 之前，避免逐条路由手工维护链导致漏挂。
+ 	rootRoute := func(method, path string, limit gin.HandlerFunc, handler gin.HandlerFunc) {
+-		r.Handle(method, path, limit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, compositeTarget, requireGroupAnthropic, handler)
++		r.Handle(method, path, limit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, rejectConflictingFields, compositeTarget, requireGroupAnthropic, handler)
+ 	}
+ 	for _, prefix := range []string{"/api/v3", "/v3", "/v1", ""} {
+ 		rootRoute(http.MethodPost, prefix+"/contents/generations/tasks", bodyLimit, h.OpenAIGateway.SeedanceTasks)
+@@ -384,13 +406,13 @@ func RegisterGatewayRoutes(
+ 	rootRoute(http.MethodGet, "/models/:model", bodyLimit, h.Gateway.Models)
+ 	rootRoute(http.MethodPost, "/messages/count_tokens", bodyLimit, countTokensHandler)
+ 	codexDirect := r.Group("/backend-api/codex")
+-	codexDirect.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, compositeTarget, requireGroupAnthropic)
++	codexDirect.Use(groupBodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, rejectConflictingFields, compositeTarget, requireGroupAnthropic)
+ 	{
+ 		codexDirect.POST("/realtime/calls", h.OpenAIGateway.Live)
+ 		codexDirect.GET("/:call_id", h.OpenAIGateway.LiveSideband)
+ 		codexDirect.POST("/responses", responsesHandler)
+ 		codexDirect.POST("/responses/*subpath", guardResponsesSubpath(responsesHandler))
+-		codexDirect.POST("/alpha/search", textBodyLimit, h.OpenAIGateway.AlphaSearch)
++		codexDirect.POST("/alpha/search", h.OpenAIGateway.AlphaSearch)
+ 		codexDirect.GET("/responses", func(c *gin.Context) {
+ 			h.OpenAIGateway.ResponsesWebSocket(c)
+ 		})
+@@ -498,6 +520,7 @@ func RegisterGatewayRoutes(
+ 	antigravityV1.Use(middleware.ForcePlatform(service.PlatformAntigravity))
+ 	antigravityV1.Use(gin.HandlerFunc(apiKeyAuth))
+ 	antigravityV1.Use(groupModelAllowlist)
++	antigravityV1.Use(rejectConflictingFields)
+ 	antigravityV1.Use(requireGroupAnthropic)
+ 	{
+ 		antigravityV1.POST("/messages", h.Gateway.Messages)
+@@ -514,6 +537,7 @@ func RegisterGatewayRoutes(
+ 	antigravityV1Beta.Use(middleware.ForcePlatform(service.PlatformAntigravity))
+ 	antigravityV1Beta.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
+ 	antigravityV1Beta.Use(groupModelAllowlist)
++	antigravityV1Beta.Use(rejectConflictingFields)
+ 	antigravityV1Beta.Use(requireGroupGoogle)
+ 	{
+ 		antigravityV1Beta.GET("/models", h.Gateway.GeminiV1BetaListModels)
+diff --git a/backend/internal/server/routes/gateway_model_allowlist_test.go b/backend/internal/server/routes/gateway_model_allowlist_test.go
+index 1115bd0d8..8c8bc359d 100644
+--- a/backend/internal/server/routes/gateway_model_allowlist_test.go
++++ b/backend/internal/server/routes/gateway_model_allowlist_test.go
+@@ -69,7 +69,7 @@ func TestGatewayRoutesGroupModelAllowlistMountedOnEveryGatewayRoute(t *testing.T
+ 	source := string(routeSource)
+ 
+ 	// rootRoute helper：apiKeyAuth 之后、compositeTarget 之前。
+-	rootHelper := regexp.MustCompile(regexp.QuoteMeta(`r.Handle(method, path, limit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, compositeTarget, requireGroupAnthropic, handler)`))
++	rootHelper := regexp.MustCompile(regexp.QuoteMeta(`r.Handle(method, path, limit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, rejectConflictingFields, compositeTarget, requireGroupAnthropic, handler)`))
+ 	require.Regexp(t, rootHelper, source,
+ 		"root alias helper must place the allowlist between apiKeyAuth and compositeTarget")
+ 
+@@ -94,7 +94,7 @@ func TestGatewayRoutesGroupModelAllowlistMountedOnEveryGatewayRoute(t *testing.T
+ 	}
+ 
+ 	// codexDirect 链是一条 Use 调用，直接断言顺序。
+-	codexDirect := regexp.MustCompile(regexp.QuoteMeta(`codexDirect.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, compositeTarget, requireGroupAnthropic)`))
++	codexDirect := regexp.MustCompile(regexp.QuoteMeta(`codexDirect.Use(groupBodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, rejectConflictingFields, compositeTarget, requireGroupAnthropic)`))
+ 	require.Regexp(t, codexDirect, source, "codexDirect chain must mount the allowlist after auth and before compositeTarget")
+ 
+ 	// 所有带 apiKeyAuth 的根路径路由必须收敛到 rootRoute，避免漏挂。
+diff --git a/backend/internal/server/routes/gateway_request_field_conflict_test.go b/backend/internal/server/routes/gateway_request_field_conflict_test.go
+new file mode 100644
+index 000000000..fb3acd43b
+--- /dev/null
++++ b/backend/internal/server/routes/gateway_request_field_conflict_test.go
+@@ -0,0 +1,238 @@
++package routes
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"regexp"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/handler"
++	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
++	"github.com/Wei-Shaw/sub2api/internal/service"
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++// TestGatewayRoutesRejectConflictingFieldsMountedOnEveryGatewayRoute 沿用
++// gateway_model_allowlist_test.go 的源码级断言：每条网关链都必须紧跟在白名单
++// 准入之后挂载 rejectConflictingFields，这样它也在合成路由改写之前。
++func TestGatewayRoutesRejectConflictingFieldsMountedOnEveryGatewayRoute(t *testing.T) {
++	routeSource, err := os.ReadFile("gateway.go")
++	require.NoError(t, err)
++	source := string(routeSource)
++
++	// 每一处白名单挂载点后面都紧跟着字段歧义拒绝，两者数量一致。
++	allowlistUses := regexp.MustCompile(`\bgroupModelAllowlist\b`).FindAllStringIndex(source, -1)
++	followedByConflict := regexp.MustCompile(`\bgroupModelAllowlist(\)\s+\w+\.Use\(|, )rejectConflictingFields\b`).FindAllStringIndex(source, -1)
++	// allowlistUses 里有一处是变量定义本身。
++	require.Len(t, followedByConflict, len(allowlistUses)-1,
++		"every chain that mounts groupModelAllowlist must mount rejectConflictingFields right after it")
++	require.GreaterOrEqual(t, len(followedByConflict), 6, "gateway, gemini, root aliases, codexDirect and both antigravity chains")
++
++	// 带合成路由改写的链：歧义拒绝必须在改写之前。
++	for _, chain := range []string{
++		`gateway.Use(rejectConflictingFields)` + "\n\t" + `gateway.Use(compositeTarget)`,
++		`gemini.Use(rejectConflictingFields)` + "\n\t" + `gemini.Use(compositeGeminiTarget)`,
++		`groupModelAllowlist, rejectConflictingFields, compositeTarget, requireGroupAnthropic, handler)`,
++		`groupModelAllowlist, rejectConflictingFields, compositeTarget, requireGroupAnthropic)`,
++	} {
++		require.Contains(t, source, chain)
++	}
++}
++
++// TestGatewayRoutesRejectConflictingFieldsCoversGatewayRoutes 用没有开启白名单
++// 的分组请求各个入口：重复声明且取值不一致的 model 必须在进入 handler 之前
++// 得到 400。分组不需要任何额外配置，这正是计费绕过的前提条件。
++func TestGatewayRoutesRejectConflictingFieldsCoversGatewayRoutes(t *testing.T) {
++	router := newGatewayRoutesTestRouterWithGroup(allowlistGroup(service.PlatformOpenAI, false))
++
++	const duplicate = `"model":"gpt-5.4-nano","input":"hi","model":"gpt-5.4"`
++	paths := []struct {
++		path string
++		body string
++	}{
++		{"/responses", `{` + duplicate + `}`},
++		{"/responses/compact", `{` + duplicate + `}`},
++		{"/chat/completions", `{` + duplicate + `}`},
++		{"/embeddings", `{` + duplicate + `}`},
++		{"/images/generations", `{` + duplicate + `}`},
++		{"/videos/generations", `{` + duplicate + `}`},
++		{"/messages/count_tokens", `{` + duplicate + `}`},
++		{"/tts", `{` + duplicate + `}`},
++		{"/alpha/search", `{` + duplicate + `}`},
++		{"/v1/responses", `{` + duplicate + `}`},
++		{"/v1/messages", `{` + duplicate + `}`},
++		{"/v1/messages/count_tokens", `{` + duplicate + `}`},
++		{"/v1/chat/completions", `{` + duplicate + `}`},
++		{"/v1/embeddings", `{` + duplicate + `}`},
++		{"/v1/images/generations", `{` + duplicate + `}`},
++		{"/v1/videos/generations", `{` + duplicate + `}`},
++		{"/v1/systemone", `{` + duplicate + `}`},
++		{"/v1/contents/generations/tasks", `{` + duplicate + `}`},
++		{"/api/v3/contents/generations/tasks", `{` + duplicate + `}`},
++		{"/v1/live", `{"sdp":"v=0","session":{"model":"gpt-live-a","model":"gpt-live-b"}}`},
++		{"/backend-api/codex/responses", `{` + duplicate + `}`},
++		{"/backend-api/codex/realtime/calls", `{"sdp":"v=0","session":{"model":"gpt-live-a","model":"gpt-live-b"}}`},
++		{"/antigravity/v1/messages", `{` + duplicate + `}`},
++	}
++
++	for _, tc := range paths {
++		req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
++		req.Header.Set("Content-Type", "application/json")
++		w := httptest.NewRecorder()
++		router.ServeHTTP(w, req)
++
++		require.Equal(t, http.StatusBadRequest, w.Code, "POST %s should be rejected, got body: %s", tc.path, w.Body.String())
++		require.Contains(t, w.Body.String(), "more than once", "POST %s", tc.path)
++	}
++}
++
++// 白名单开启时，不在名单内的模型仍由白名单按原有格式拒绝（404），不会被这层
++// 改写成 400；两个候选都在名单内但取值不同时，由这层拒绝。
++func TestGatewayRoutesRejectConflictingFieldsKeepsAllowlistResponse(t *testing.T) {
++	router := newGatewayRoutesTestRouterWithGroup(allowlistGroup(service.PlatformOpenAI, true, "gpt-5.4", "gpt-5.4-nano"))
++
++	send := func(body string) *httptest.ResponseRecorder {
++		req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
++		req.Header.Set("Content-Type", "application/json")
++		w := httptest.NewRecorder()
++		router.ServeHTTP(w, req)
++		return w
++	}
++
++	blocked := send(`{"model":"gpt-5.4","input":"hi","model":"gpt-4.1"}`)
++	require.Equal(t, http.StatusNotFound, blocked.Code, blocked.Body.String())
++	require.Contains(t, blocked.Body.String(), "not available for this group")
++
++	bothAllowed := send(`{"model":"gpt-5.4-nano","input":"hi","model":"gpt-5.4"}`)
++	require.Equal(t, http.StatusBadRequest, bothAllowed.Code, bothAllowed.Body.String())
++	require.Contains(t, bothAllowed.Body.String(), "more than once")
++}
++
++// 取值相同的重复字段同样拒绝：网关的 sjson 改写只改首个，改写后两者就会分叉。
++func TestGatewayRoutesRejectConflictingFieldsRejectsIdenticalDuplicates(t *testing.T) {
++	router := newGatewayRoutesTestRouterWithGroup(allowlistGroup(service.PlatformOpenAI, false))
++
++	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5.4","input":"hi","reasoning":{"effort":"xhigh","effort":"xhigh"}}`))
++	req.Header.Set("Content-Type", "application/json")
++	w := httptest.NewRecorder()
++	router.ServeHTTP(w, req)
++
++	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
++	require.Contains(t, w.Body.String(), "reasoning.effort")
++}
++
++// 回归：Content-Type 标成 multipart 的 JSON 请求体，既不能绕过歧义检查，也不能
++// 绕过分组白名单（此前白名单按请求头只做 multipart 解析，拿不到模型就放行）。
++func TestGatewayRoutesMultipartLabelDoesNotBypassChecks(t *testing.T) {
++	send := func(group *service.Group, contentType, body string) *httptest.ResponseRecorder {
++		router := newGatewayRoutesTestRouterWithGroup(group)
++		req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
++		req.Header.Set("Content-Type", contentType)
++		w := httptest.NewRecorder()
++		router.ServeHTTP(w, req)
++		return w
++	}
++	for _, contentType := range []string{"multipart/form-data", "multipart/form-data; boundary=zzz"} {
++		w := send(allowlistGroup(service.PlatformAnthropic, false), contentType, `{"model":"claude-3-5-haiku-20241022","messages":[],"model":"claude-opus-4-8"}`)
++		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
++		require.Contains(t, w.Body.String(), "more than once")
++
++		w = send(allowlistGroup(service.PlatformAnthropic, true, "claude-3-5-haiku-20241022"), contentType, `{"model":"claude-opus-4-8","messages":[]}`)
++		require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
++		require.Contains(t, w.Body.String(), "not available for this group")
++	}
++}
++
++// 回归：带 UTF-8 BOM 的请求体（handler 宽容读取会剥掉 BOM）不能绕过分组白名单。
++func TestGatewayRoutesBOMDoesNotBypassAllowlist(t *testing.T) {
++	router := newGatewayRoutesTestRouterWithGroup(allowlistGroup(service.PlatformAnthropic, true, "claude-3-5-haiku-20241022"))
++	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader("\xef\xbb\xbf"+`{"model":"claude-opus-4-8","messages":[]}`))
++	req.Header.Set("Content-Type", "application/json")
++	w := httptest.NewRecorder()
++	router.ServeHTTP(w, req)
++	require.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
++	require.Contains(t, w.Body.String(), "not available for this group")
++}
++
++// 回归：纯文本入口的上限必须在分组中间件读体之前生效，否则中间件会先按通用
++// 上限把请求体整体读入并解析。超出文本上限的请求体直接 413，不会走到歧义检查。
++func TestGatewayRoutesTextBodyLimitAppliesBeforeGroupMiddleware(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	router := gin.New()
++	RegisterGatewayRoutes(
++		router,
++		&handler.Handlers{Gateway: &handler.GatewayHandler{}, OpenAIGateway: &handler.OpenAIGatewayHandler{}, AsyncImage: handler.NewAsyncImageHandler(nil, nil)},
++		servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
++			groupID := int64(1)
++			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{GroupID: &groupID, Group: allowlistGroup(service.PlatformOpenAI, false)})
++			c.Next()
++		}),
++		nil, nil, nil, nil, nil,
++		&config.Config{Gateway: config.GatewayConfig{MaxBodySize: 1 << 20, TextMaxBodySize: 256}},
++	)
++	body := `{"model":"a","input":"` + strings.Repeat("x", 1024) + `","model":"b"}`
++	for _, path := range []string{"/v1/embeddings", "/v1/alpha/search", "/v1/systemone", "/backend-api/codex/alpha/search", "/embeddings", "/alpha/search"} {
++		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
++		req.Header.Set("Content-Type", "application/json")
++		w := httptest.NewRecorder()
++		router.ServeHTTP(w, req)
++		require.Equal(t, http.StatusRequestEntityTooLarge, w.Code, "POST %s: %s", path, w.Body.String())
++		require.Contains(t, w.Body.String(), "limit is 256B", "POST %s", path)
++	}
++}
++
++// 嵌套字段取值不一致（reasoning.effort 参与计费倍率与分组推理强度上限、
++// thinking.type 决定是否清洗 thinking 块）同样在进入 handler 之前拒绝。
++func TestGatewayRoutesRejectConflictingNestedFields(t *testing.T) {
++	cases := []struct {
++		platform string
++		path     string
++		body     string
++		field    string
++	}{
++		{service.PlatformOpenAI, "/v1/responses", `{"model":"gpt-5.4","reasoning":{"effort":"low","effort":"xhigh"},"input":"hi"}`, `reasoning.effort`},
++		{service.PlatformOpenAI, "/backend-api/codex/responses", `{"model":"gpt-5.4","input":[{"role":"user","content":"a","role":"system"}]}`, `input[0].role`},
++		{service.PlatformAnthropic, "/v1/messages", `{"model":"claude-sonnet-4-5","thinking":{"type":"disabled","type":"enabled","budget_tokens":1024},"messages":[]}`, `thinking.type`},
++	}
++	for _, tc := range cases {
++		t.Run(tc.path, func(t *testing.T) {
++			router := newGatewayRoutesTestRouterWithGroup(allowlistGroup(tc.platform, false))
++			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
++			req.Header.Set("Content-Type", "application/json")
++			w := httptest.NewRecorder()
++			router.ServeHTTP(w, req)
++
++			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
++			require.Contains(t, w.Body.String(), "invalid_request_error")
++			require.Contains(t, w.Body.String(), tc.field)
++		})
++	}
++}
++
++// 回归：multipart handler 跳过首个 boundary 之前的前导内容。前导内容是 JSON 时，
++// 白名单必须看到表单里的 model，表单里的重复标量字段也必须被拒绝。
++func TestGatewayRoutesMultipartJSONPreambleDoesNotBypassChecks(t *testing.T) {
++	part := func(name, value string) string {
++		return "--B\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value + "\r\n"
++	}
++	send := func(group *service.Group, body string) *httptest.ResponseRecorder {
++		router := newGatewayRoutesTestRouterWithGroup(group)
++		req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", strings.NewReader(body))
++		req.Header.Set("Content-Type", "multipart/form-data; boundary=B")
++		w := httptest.NewRecorder()
++		router.ServeHTTP(w, req)
++		return w
++	}
++
++	blocked := send(allowlistGroup(service.PlatformOpenAI, true, "gpt-image-1-mini"), "{}\r\n"+part("model", "gpt-image-2")+part("prompt", "cat")+"--B--\r\n")
++	require.Equal(t, http.StatusNotFound, blocked.Code, blocked.Body.String())
++	require.Contains(t, blocked.Body.String(), "gpt-image-2")
++
++	repeated := send(allowlistGroup(service.PlatformOpenAI, false), "{}\r\n"+part("model", "gpt-image-2")+part("n", "8")+part("n", "1")+"--B--\r\n")
++	require.Equal(t, http.StatusBadRequest, repeated.Code, repeated.Body.String())
++	require.Contains(t, repeated.Body.String(), `\"n\"`)
++}
+diff --git a/backend/internal/service/openai_ws_forwarder_ingress.go b/backend/internal/service/openai_ws_forwarder_ingress.go
+index d34aead4a..e97faa44e 100644
+--- a/backend/internal/service/openai_ws_forwarder_ingress.go
++++ b/backend/internal/service/openai_ws_forwarder_ingress.go
+@@ -12,6 +12,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel"
+ 	coderws "github.com/coder/websocket"
+ 	"github.com/gin-gonic/gin"
+ 	"github.com/tidwall/gjson"
+@@ -236,6 +237,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
+ 		if !gjson.ValidBytes(trimmed) {
+ 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", errors.New("invalid json"))
+ 		}
++		// 帧内重复字段会让这里 gjson 读到的首个值与后续重编码/上游读到的值分叉
++		// （GHSA-p3r4-jcm3-2hph），在读取任何字段之前拒绝。
++		if field, conflict := requestmodel.ConflictingField("application/json", trimmed); conflict {
++			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, fmt.Sprintf("websocket request payload declares field %.64q more than once", field), nil)
++		}
+ 
+ 		values := gjson.GetManyBytes(trimmed, "type", "model", "prompt_cache_key", "previous_response_id")
+ 		eventType := strings.TrimSpace(values[0].String())
+diff --git a/backend/internal/service/openai_ws_forwarder_ingress_session_test.go b/backend/internal/service/openai_ws_forwarder_ingress_session_test.go
+index 98003200c..2c6537e96 100644
+--- a/backend/internal/service/openai_ws_forwarder_ingress_session_test.go
++++ b/backend/internal/service/openai_ws_forwarder_ingress_session_test.go
+@@ -4073,7 +4073,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_StoreDisabledStr
+ 	require.Equal(t, "world", gjson.Get(secondWrite, "input.1.text").String())
+ }
+ 
+-func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PreviousResponseNotFoundRecoveryRemovesDuplicatePrevID(t *testing.T) {
++func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_RejectsDuplicatePrevIDBeforeRecovery(t *testing.T) {
+ 	gin.SetMode(gin.TestMode)
+ 
+ 	cfg := &config.Config{}
+@@ -4196,32 +4196,27 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PreviousResponse
+ 	firstTurn := readMessage()
+ 	require.Equal(t, "resp_turn_prev_once_1", gjson.GetBytes(firstTurn, "response.id").String())
+ 
+-	// duplicate previous_response_id: 恢复重试时应删除所有重复键，避免再次 previous_response_not_found。
++	// 重复的 previous_response_id：网关 gjson 读首个、上游可能读末个，帧在读取
++	// 任何字段之前即被拒绝（GHSA-p3r4-jcm3-2hph），不会进入恢复重试，也不会发往上游。
+ 	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false,"previous_response_id":"resp_turn_prev_once_1","input":[],"previous_response_id":"resp_turn_prev_duplicate"}`)
+-	secondTurn := readMessage()
+-	require.Equal(t, "resp_turn_prev_once_2", gjson.GetBytes(secondTurn, "response.id").String())
+-
+-	require.NoError(t, clientConn.Close(coderws.StatusNormalClosure, "done"))
+ 	select {
+ 	case serverErr := <-serverErrCh:
+-		require.NoError(t, serverErr)
++		var closeErr *OpenAIWSClientCloseError
++		require.ErrorAs(t, serverErr, &closeErr)
++		require.Equal(t, coderws.StatusPolicyViolation, closeErr.StatusCode())
++		require.Contains(t, closeErr.Reason(), `declares field "previous_response_id" more than once`)
+ 	case <-time.After(5 * time.Second):
+ 		t.Fatal("等待 ingress websocket 结束超时")
+ 	}
+ 
+-	require.Equal(t, 2, dialer.DialCount(), "previous_response_not_found 恢复应只重试一次")
+-
++	require.Equal(t, 1, dialer.DialCount(), "被拒绝的帧不应触发恢复重连")
+ 	firstConn.mu.Lock()
+ 	firstWrites := append([]map[string]any(nil), firstConn.writes...)
+ 	firstConn.mu.Unlock()
+-	require.Len(t, firstWrites, 2)
+-	require.True(t, gjson.Get(requestToJSONString(firstWrites[1]), "previous_response_id").Exists())
+-
++	require.Len(t, firstWrites, 1, "被拒绝的帧不应发往上游")
+ 	secondConn.mu.Lock()
+-	secondWrites := append([]map[string]any(nil), secondConn.writes...)
++	require.Empty(t, secondConn.writes)
+ 	secondConn.mu.Unlock()
+-	require.Len(t, secondWrites, 1)
+-	require.False(t, gjson.Get(requestToJSONString(secondWrites[0]), "previous_response_id").Exists(), "重复键场景恢复重试后不应保留 previous_response_id")
+ }
+ 
+ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
+diff --git a/backend/internal/service/openai_ws_v2_passthrough_adapter.go b/backend/internal/service/openai_ws_v2_passthrough_adapter.go
+index 22d74f58d..e4c4bac0a 100644
+--- a/backend/internal/service/openai_ws_v2_passthrough_adapter.go
++++ b/backend/internal/service/openai_ws_v2_passthrough_adapter.go
+@@ -13,6 +13,7 @@ import (
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/requestmodel"
+ 	openaiwsv2 "github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2"
+ 	coderws "github.com/coder/websocket"
+ 	"github.com/gin-gonic/gin"
+@@ -980,6 +981,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
+ 			if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
+ 				return payload, nil, nil
+ 			}
++			// passthrough 原样转发 session.update 等所有客户端事件；任何帧内的重复
++			// 字段都会让网关（gjson 取首个、sjson 只改首个）与上游读到不同的值
++			// （GHSA-p3r4-jcm3-2hph），在读取任何字段之前拒绝。
++			if field, conflict := requestmodel.ConflictingField("application/json", payload); conflict {
++				return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, fmt.Sprintf("websocket request payload declares field %.64q more than once", field), nil)
++			}
+ 			eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
+ 			isResponseCreate := eventType == "response.create"
+ 			responseCreateAt := time.Time{}
