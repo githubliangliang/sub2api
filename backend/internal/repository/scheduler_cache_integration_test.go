@@ -101,8 +101,13 @@ func TestSchedulerCacheSnapshotUsesSlimMetadataButKeepsFullAccount(t *testing.T)
 	require.NotNil(t, full)
 	require.Equal(t, "secret-access-token", full.GetCredential("access_token"))
 	require.Equal(t, strings.Repeat("x", 4096), full.GetCredential("huge_blob"))
+	require.Equal(t, account.GroupIDs, full.GroupIDs)
 	require.Len(t, full.AccountGroups, 1)
-	require.NotNil(t, full.AccountGroups[0].Group)
+	require.Equal(t, account.ID, full.AccountGroups[0].AccountID)
+	require.Equal(t, bucket.GroupID, full.AccountGroups[0].GroupID)
+	require.Equal(t, 5, full.AccountGroups[0].Priority)
+	require.Nil(t, full.AccountGroups[0].Group)
+	require.NotNil(t, account.AccountGroups[0].Group, "serialization must preserve the caller's relationships")
 }
 
 func TestSchedulerCacheRetireAndReopenFencesOldEpochIntegration(t *testing.T) {

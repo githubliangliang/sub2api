@@ -44,3 +44,11 @@
 4. 推送后核对远端main、tag对象与peeled commit，按实际发布SHA跟踪Release工作流，检查正文及实际产物。后续对象SHA与结果由真实执行产生，不预写到本提交。
 
 历史PORTING、来源、实施/发布证据及已完成活动OpenSpec保留原文和当时状态，不归档或操作业务实例。第三档新能力、5图扩展、完整group allowlist/QuotaSummary及支付不在本次发布准备的新增实现范围。
+
+## 同日推送后集成门禁跟进
+
+上述首次准备与检查对应提交`8bf50be352c2a7f2ec57b140738dcbad5c189d3c`。首轮Release的preflight、前端构建与后端unit成功，integration失败，发布job跳过、Release仍404。匿名下载日志需认证，公开注解只提供退出码；独立本地CI=true/UTC全量integration复现唯一失败为旧缓存Group非空断言。
+
+最终发布范围补充一个integration测试文件：完整缓存保留凭据/配置/成员标量，省略展开关系，调用者关系图不变。业务源码、前端、VERSION与构建流程不变。修正后真实Redis三项控制通过，完整integration49包/6163顶层/12395含子例通过、14项测试跳过，约206.6秒。相对原4032清单的有意差异因此为VERSION和这一个测试文件；初轮source-verification及检查记录保留原时点，最终差异另见[跟进记录](./integration-followup/README.md)。
+
+初轮tag对象`ba1fbede506606a3b7a15fc1e97c40af439fe652`保留在本地`refs/backups/v1.1.27-before-integration-fix-20261121`。先提交本次测试/说明/证据并正常推送main，再用该精确旧对象lease更正尚未发布的v1.1.27；不强推main，不修改v1.1.26。最终SHA、远端refs和新Release结果按真实执行核对。
