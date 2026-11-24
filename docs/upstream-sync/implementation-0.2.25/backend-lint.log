@@ -1,0 +1,36 @@
+internal/handler/admin/gorilla_security_test.go:29:18: Error return value of `(*github.com/gorilla/websocket.Conn).Close` is not checked (errcheck)
+				defer c.Close()
+				             ^
+internal/handler/admin/gorilla_security_test.go:52:23: Error return value of `(net.Conn).Close` is not checked (errcheck)
+				defer remote.Close()
+				                  ^
+internal/handler/admin/gorilla_security_test.go:53:28: Error return value is not checked (errcheck)
+				client, buffer, err := w.(http.Hijacker).Hijack()
+				                       ^
+internal/handler/admin/gorilla_security_test.go:57:23: Error return value of `(net.Conn).Close` is not checked (errcheck)
+				defer client.Close()
+				                  ^
+internal/handler/admin/gorilla_security_test.go:79:17: Error return value of `(*github.com/gorilla/websocket.Conn).Close` is not checked (errcheck)
+			defer c.Close()
+			             ^
+internal/handler/admin/ops_ws_security_test.go:102:29: Error return value of `(io.Closer).Close` is not checked (errcheck)
+			defer response.Body.Close()
+			                         ^
+internal/handler/admin/ops_ws_security_test.go:112:19: Error return value of `(*github.com/gorilla/websocket.Conn).Close` is not checked (errcheck)
+		defer conn.Close()
+		                ^
+internal/service/openai_passthrough_error_lifecycle_test.go:139:12: Error return value is not checked (errcheck)
+							if !v.(*openAICompactSSEKeepalive).beat() {
+							    ^
+internal/handler/admin/gorilla_security_test.go:40:40: ST1013: should use constant http.StatusMethodNotAllowed instead of numeric literal 405 (staticcheck)
+					http.Error(w, "CONNECT required", 405)
+					                                  ^
+internal/handler/admin/gorilla_security_test.go:44:37: ST1013: should use constant http.StatusProxyAuthRequired instead of numeric literal 407 (staticcheck)
+					http.Error(w, "auth required", 407)
+					                               ^
+internal/handler/admin/gorilla_security_test.go:49:33: ST1013: should use constant http.StatusBadGateway instead of numeric literal 502 (staticcheck)
+					http.Error(w, err.Error(), 502)
+					                           ^
+11 issues:
+* errcheck: 8
+* staticcheck: 3

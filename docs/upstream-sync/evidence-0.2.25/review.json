@@ -1,0 +1,44 @@
+[
+  {
+    "id": "F01",
+    "tier": 1,
+    "title": "透传上下文错误的账号凭据与主机名脱敏",
+    "candidates": [
+      "PR9045"
+    ],
+    "evidence": "当前 Forward→handleErrorResponsePassthrough 直接保留上下文超限文案；query 参数已净化，但配置的主机名与独立 api_key 仍出现在下游。隔离目标失败。",
+    "base": "sanitizeUpstreamErrorMessage、Account.GetCredential、现有错误信封均在；新增账号感知脱敏和安全大小写替换即可，无新供应商或依赖。",
+    "sites": "backend/internal/service/openai_gateway_passthrough.go：handleErrorResponsePassthrough、writeOpenAIPassthroughErrorEnvelope；复用现有 query 净化，不全局改变其它平台策略。",
+    "behavior": "已有 OpenAI 透传错误向客户端保留上游消息时 SHALL 隐去配置的账号凭据与上游主机名，并保留有助于客户端恢复的非敏感错误语义。",
+    "acceptance": "真实本地 HTTP 上游返回上下文超限；API Key/access_token/refresh_token、主机名大小写、IPv6/无 base_url、Ⱥ/Kelvin/非法 UTF-8、query 凭据、正则元字符、无匹配和普通 403 对照；不得 panic 或多写响应。",
+    "boundary": "只修改面向客户端的错误文本，不改变管理员内部取证、账号惩罚、换号、模型/计费或响应头净化；不引入上游中间提交中以 ToLower 下标切原串的错误实现。"
+  },
+  {
+    "id": "S01",
+    "tier": 2,
+    "title": "透传结构化错误、规则与 compact 终态一致性",
+    "candidates": [
+      "PR9045"
+    ],
+    "evidence": "400 invalid_encrypted_content/context_length_exceeded 的 type/code/param 被重建丢弃；配置的 422/自定义文案未应用；compact 心跳后 code 变为 upstream_error；关闭详情日志时仅匹配原始 code 的 skip_monitoring 未命中。四个目标失败。",
+    "base": "ErrorPassthroughService.MatchRule、runtime wrapper、compact keepalive/bridge、容量可重试码均在。需完整提取匹配规则、有限标量字段和 compact writer。保留本地 NextOpenAIResponsesSequence，不能照抄来源 sequence_number=0。",
+    "sites": "backend/internal/service/error_passthrough_runtime.go；openai_gateway_passthrough.go：handleErrorResponsePassthrough 及标准字段信封；openai_compact_stream_bridge.go：终态 writer；ops_upstream_context.go 为已有监控控制，非整体重写。",
+    "behavior": "OpenAI 透传最终错误 SHALL 应用既有管理员规则，并在允许的确定性 400 或 passthrough_body 规则下保留经过脱敏和限长的标准标量字段；compact 已提交心跳后 SHALL 仅输出有序 response.failed 终态，保留确定性 code 并将容量降载 code 改为可重试值。",
+    "acceptance": "HTTP/compact 心跳前后，规则优先级/平台/原状态与原 body、passthrough_body、自定义状态/文案、无规则、错误 body 标量类型/256 字节/内嵌 JSON/空白 code；监控/账号副作用、终态序号、取消/停止/无重复写、失败不计成功用量和 SQLite 结算去重控制。",
+    "boundary": "F01 为脱敏前置；保留既有 failover/池重试和成功流语义。状态码匹配的 skip_monitoring 已在事件链生效；容量码重写是新增结构化 compact 路径的配套保护，不把它们整体列成当前缺陷。"
+  },
+  {
+    "id": "S02",
+    "tier": 2,
+    "title": "Gorilla WebSocket 定向安全依赖维护",
+    "candidates": [
+      "PR9008"
+    ],
+    "evidence": "本地 v1.5.3 命中官方 GO-2026-6278 范围；newMaskKey 使用 math/rand。唯一生产 import 为管理员 ops WS 服务端，弱客户端 mask 机制没有确认的生产调用；不是已复现的 Codex 网关漏洞。",
+    "base": "官方固定修复为 v1.5.4-0.20240701034025-d67f41855da4；现有 Go1.27.4/x/net0.62.0 足够。临时 modfile MVS 仅变化这一模块，但模块内容含 18 文件差异及代理/握手行为改变。",
+    "sites": "backend/go.mod、backend/go.sum；backend/internal/handler/admin/ops_ws_handler.go 及现有 WS 消费者仅验证，不为升级扩展生产调用。",
+    "behavior": "定向维护 SHALL 使用官方修复的 Gorilla mask 随机源并保持现有管理员 WS 鉴权、单一 subprotocol、连接释放及网关互通；最终模块选择与未解决的依赖测试差异 SHALL 可核验。",
+    "acceptance": "核对官方漏洞范围、模块来源/校验和/MVS，复核完整模块差异；实际管理员 WS 鉴权/Origin/限额/控制帧/关闭，HTTP CONNECT 与 Basic-auth 隧道、现有网关 HTTP/WS 及 targeted race、build；保留并定因依赖包历史代理测试失败。",
+    "boundary": "独立摘取混合 PR 的依赖子项，保持 Go/VERSION/schema/前端依赖；不随带名称同步。两项依赖包代理测试在旧/候选版本均 EOF，真实 CONNECT 对照通过仍不能冒称依赖全量绿灯或已验证利用。"
+  }
+]

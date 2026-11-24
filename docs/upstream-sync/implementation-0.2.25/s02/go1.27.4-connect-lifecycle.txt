@@ -1,0 +1,71 @@
+source /home/liang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.4.linux-amd64/src/net/http/server.go
+sha256 10c0a1fa7cc5224c949f57b7054e025bede1a6d0662fef90473d799ee95e405b
+
+1320: 	isHEAD := w.conn.lastMethod == "HEAD"
+1321: 	isCONNECT := w.conn.lastMethod == "CONNECT"
+1322: 
+1323: 	// header is written out to w.conn.buf below. Depending on the
+1432: 
+1433: 	if isCONNECT {
+1434: 		// Don't reuse a connection after a CONNECT, even if we reject it.
+1435: 		w.closeAfterReply = true
+1436: 	}
+1437: 
+1515: 
+1516: 	isSuccessfulCONNECT := isCONNECT && code >= 200 && code < 300
+1517: 	if isSuccessfulCONNECT {
+1518: 		// Tunnel established, connection is no longer HTTP.
+1519: 		delHeader("Transfer-Encoding")
+1520: 		delHeader("Content-Length")
+1521: 		setHeader.contentLength = nil
+1522: 	} else if isHEAD || !bodyAllowedForStatus(code) || code == StatusNoContent {
+1523: 		// Response has no body.
+1567: 
+1568: 	// Only override the Connection header if it is not a successful
+1569: 	// protocol switch response and if KeepAlives are not enabled.
+1570: 	// See https://golang.org/issue/36381.
+1571: 	delConnectionHeader := w.closeAfterReply &&
+1572: 		(!keepAlivesEnabled || !hasToken(cw.header.get("Connection"), "close")) &&
+1573: 		!isProtocolSwitchResponse(w.status, header)
+1574: 	if delConnectionHeader {
+1575: 		delHeader("Connection")
+1576: 		// Don't set Connection: close on a 2xx CONNECT response,
+1577: 		// even though we will close the connection if the handler doesn't hijack it.
+1578: 		// If the handler does hijack the connection, the Connection: close is confusing.
+1579: 		if w.req.ProtoAtLeast(1, 1) && !isSuccessfulCONNECT {
+1580: 			setHeader.connection = "close"
+1581: 		} else {
+1582: 			setHeader.connection = ""
+1583: 		}
+1584: 	}
+1585: 
+1586: 	writeStatusLine(w.conn.bufw, w.req.ProtoAtLeast(1, 1), code, w.statusBuf[:])
+2080: 		if c.r.remain != c.server.initialReadLimitSize() {
+2081: 			// If we read any bytes off the wire, we're active.
+2082: 			c.setState(c.rwc, StateActive, runHooks)
+2083: 		}
+2084: 		if c.server.shuttingDown() {
+2085: 			return
+2086: 		}
+2087: 		if err != nil {
+2088: 			const errorHeaders = "\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n"
+2089: 
+2090: 			switch {
+2091: 			case err == errTooLarge:
+2092: 				// Their HTTP client may or may not be
+2093: 				// able to read this if we're
+2094: 				// responding to them and hanging up
+2095: 				// while they're still writing their
+2096: 				// request. Undefined behavior.
+2097: 				const publicErr = "431 Request Header Fields Too Large"
+2098: 				fmt.Fprintf(c.rwc, "HTTP/1.1 "+publicErr+errorHeaders+publicErr)
+2099: 				c.closeWriteAndWait()
+2100: 				return
+2101: 
+2102: 			case isUnsupportedTEError(err):
+2103: 				// Respond as per RFC 7230 Section 3.3.1 which says,
+2104: 				//      A server that receives a request message with a
+2105: 				//      transfer coding it does not understand SHOULD
+2106: 				//      respond with 501 (Unimplemented).
+2107: 				code := StatusNotImplemented
+2108: 

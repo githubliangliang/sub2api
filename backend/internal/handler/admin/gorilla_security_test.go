@@ -1,0 +1,96 @@
+package admin
+
+import (
+	"encoding/base64"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+// Use an actual CONNECT tunnel. The dependency's historical fixture returns
+// from a net/http CONNECT handler without hijacking the connection.
+func TestGorillaSecurityRealConnectProxy(t *testing.T) {
+	for _, withAuth := range []bool{false, true} {
+		name := map[bool]string{false: "plain", true: "basic-auth"}[withAuth]
+		t.Run(name, func(t *testing.T) {
+			upgrader := websocket.Upgrader{}
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				c, err := upgrader.Upgrade(w, r, nil)
+				if err != nil {
+					return
+				}
+				defer func() { _ = c.Close() }()
+				_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+				typ, body, err := c.ReadMessage()
+				if err == nil {
+					_ = c.WriteMessage(typ, body)
+				}
+			}))
+			defer upstream.Close()
+			finished := make(chan struct{}, 1)
+			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodConnect {
+					http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
+					return
+				}
+				if withAuth && r.Header.Get("Proxy-Authorization") != "Basic "+base64.StdEncoding.EncodeToString([]byte("synthetic-user:synthetic-password")) {
+					http.Error(w, "auth required", http.StatusProxyAuthRequired)
+					return
+				}
+				remote, err := net.DialTimeout("tcp", r.Host, time.Second)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadGateway)
+					return
+				}
+				defer func() { _ = remote.Close() }()
+				client, buffer, err := http.NewResponseController(w).Hijack()
+				if err != nil {
+					return
+				}
+				defer func() { _ = client.Close() }()
+				defer func() { finished <- struct{}{} }()
+				_, _ = buffer.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
+				if buffer.Flush() != nil {
+					return
+				}
+				done := make(chan struct{})
+				go func() { _, _ = io.Copy(remote, buffer); _ = remote.Close(); close(done) }()
+				_, _ = io.Copy(client, remote)
+				_ = client.Close()
+				<-done
+			}))
+			defer proxy.Close()
+			proxyURL, _ := url.Parse(proxy.URL)
+			if withAuth {
+				proxyURL.User = url.UserPassword("synthetic-user", "synthetic-password")
+			}
+			dialer := websocket.Dialer{Proxy: http.ProxyURL(proxyURL), HandshakeTimeout: time.Second}
+			c, _, err := dialer.Dial("ws"+strings.TrimPrefix(upstream.URL, "http"), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = c.Close() }()
+			if err := c.WriteMessage(websocket.TextMessage, []byte("synthetic-loopback")); err != nil {
+				t.Fatal(err)
+			}
+			_ = c.SetReadDeadline(time.Now().Add(time.Second))
+			_, body, err := c.ReadMessage()
+			if err != nil || string(body) != "synthetic-loopback" {
+				t.Fatalf("echo = %q, err = %v", body, err)
+			}
+			_ = c.Close()
+			select {
+			case <-finished:
+			case <-time.After(2 * time.Second):
+				t.Fatal("tunnel did not release")
+			}
+		})
+	}
+}

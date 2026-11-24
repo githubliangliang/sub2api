@@ -1,6 +1,9 @@
 package service
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/Wei-Shaw/sub2api/internal/model"
+	"github.com/gin-gonic/gin"
+)
 
 const errorPassthroughServiceContextKey = "error_passthrough_service"
 
@@ -40,6 +43,16 @@ func applyErrorPassthroughRule(
 	return applyErrorPassthroughRuleWithMessage(c, platform, upstreamStatus, responseBody, defaultStatus, defaultErrType, defaultErrMsg, ExtractUpstreamErrorMessage)
 }
 
+// applyErrorPassthroughRuleWithRule also returns the matched policy so callers
+// can distinguish structured passthrough from an explicit administrator message.
+func applyErrorPassthroughRuleWithRule(
+	c *gin.Context, platform string, upstreamStatus int, responseBody []byte,
+	defaultStatus int, defaultErrType, defaultErrMsg string,
+) (status int, errType, errMsg string, rule *model.ErrorPassthroughRule, matched bool) {
+	return applyErrorPassthroughRuleDetailed(c, platform, upstreamStatus, responseBody,
+		defaultStatus, defaultErrType, defaultErrMsg, ExtractUpstreamErrorMessage)
+}
+
 // Grok media supplies its own extractor for xAI's flat error fields.
 func applyErrorPassthroughRuleWithMessage(
 	c *gin.Context,
@@ -51,18 +64,27 @@ func applyErrorPassthroughRuleWithMessage(
 	defaultErrMsg string,
 	extractMessage func([]byte) string,
 ) (status int, errType string, errMsg string, matched bool) {
+	status, errType, errMsg, _, matched = applyErrorPassthroughRuleDetailed(c, platform, upstreamStatus,
+		responseBody, defaultStatus, defaultErrType, defaultErrMsg, extractMessage)
+	return
+}
+
+func applyErrorPassthroughRuleDetailed(
+	c *gin.Context, platform string, upstreamStatus int, responseBody []byte,
+	defaultStatus int, defaultErrType, defaultErrMsg string, extractMessage func([]byte) string,
+) (status int, errType, errMsg string, rule *model.ErrorPassthroughRule, matched bool) {
 	status = defaultStatus
 	errType = defaultErrType
 	errMsg = defaultErrMsg
 
 	svc := getBoundErrorPassthroughService(c)
 	if svc == nil {
-		return status, errType, errMsg, false
+		return status, errType, errMsg, nil, false
 	}
 
-	rule := svc.MatchRule(platform, upstreamStatus, responseBody)
+	rule = svc.MatchRule(platform, upstreamStatus, responseBody)
 	if rule == nil {
-		return status, errType, errMsg, false
+		return status, errType, errMsg, nil, false
 	}
 
 	status = upstreamStatus
@@ -82,5 +104,5 @@ func applyErrorPassthroughRuleWithMessage(
 
 	// 与现有 failover 场景保持一致：命中规则时统一返回 upstream_error。
 	errType = "upstream_error"
-	return status, errType, errMsg, true
+	return status, errType, errMsg, rule, true
 }

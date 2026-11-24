@@ -1,0 +1,18 @@
+--- /home/liang/go/pkg/mod/github.com/gorilla/websocket@v1.5.4-0.20240701034025-d67f41855da4/client_server_test.go
++++ test-only-explicit-connect-framing
+@@ -181,6 +181,7 @@
+ 		func(w http.ResponseWriter, r *http.Request) {
+ 			if r.Method == http.MethodConnect {
+ 				connect = true
++				w.Header().Set("Content-Length", "0")
+ 				w.WriteHeader(http.StatusOK)
+ 				return
+ 			}
+@@ -221,6 +222,7 @@
+ 			expectedProxyAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("username:password"))
+ 			if r.Method == http.MethodConnect && proxyAuth == expectedProxyAuth {
+ 				connect = true
++				w.Header().Set("Content-Length", "0")
+ 				w.WriteHeader(http.StatusOK)
+ 				return
+ 			}

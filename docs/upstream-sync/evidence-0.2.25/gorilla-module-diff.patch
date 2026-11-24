@@ -1,0 +1,1212 @@
+--- v1.5.3/.circleci/config.yml
++++ candidate/.circleci/config.yml
+@@ -67,4 +67,4 @@
+       - test:
+           matrix:
+             parameters:
+-              version: ["1.18", "1.17", "1.16"]
++              version: ["1.22", "1.21", "1.20"]
+--- v1.5.3/README.md
++++ candidate/README.md
+@@ -10,10 +10,10 @@
+ ### Documentation
+ 
+ * [API Reference](https://pkg.go.dev/github.com/gorilla/websocket?tab=doc)
+-* [Chat example](https://github.com/gorilla/websocket/tree/master/examples/chat)
+-* [Command example](https://github.com/gorilla/websocket/tree/master/examples/command)
+-* [Client and server example](https://github.com/gorilla/websocket/tree/master/examples/echo)
+-* [File watch example](https://github.com/gorilla/websocket/tree/master/examples/filewatch)
++* [Chat example](https://github.com/gorilla/websocket/tree/main/examples/chat)
++* [Command example](https://github.com/gorilla/websocket/tree/main/examples/command)
++* [Client and server example](https://github.com/gorilla/websocket/tree/main/examples/echo)
++* [File watch example](https://github.com/gorilla/websocket/tree/main/examples/filewatch)
+ 
+ ### Status
+ 
+@@ -29,5 +29,4 @@
+ 
+ The Gorilla WebSocket package passes the server tests in the [Autobahn Test
+ Suite](https://github.com/crossbario/autobahn-testsuite) using the application in the [examples/autobahn
+-subdirectory](https://github.com/gorilla/websocket/tree/master/examples/autobahn).
+-
++subdirectory](https://github.com/gorilla/websocket/tree/main/examples/autobahn).
+--- v1.5.3/client.go
++++ candidate/client.go
+@@ -11,7 +11,6 @@
+ 	"errors"
+ 	"fmt"
+ 	"io"
+-	"io/ioutil"
+ 	"net"
+ 	"net/http"
+ 	"net/http/httptrace"
+@@ -53,7 +52,7 @@
+ // It is safe to call Dialer's methods concurrently.
+ type Dialer struct {
+ 	// NetDial specifies the dial function for creating TCP connections. If
+-	// NetDial is nil, net.Dial is used.
++	// NetDial is nil, net.Dialer DialContext is used.
+ 	NetDial func(network, addr string) (net.Conn, error)
+ 
+ 	// NetDialContext specifies the dial function for creating TCP connections. If
+@@ -245,46 +244,25 @@
+ 		defer cancel()
+ 	}
+ 
+-	// Get network dial function.
+-	var netDial func(network, add string) (net.Conn, error)
+-
+-	switch u.Scheme {
+-	case "http":
+-		if d.NetDialContext != nil {
+-			netDial = func(network, addr string) (net.Conn, error) {
+-				return d.NetDialContext(ctx, network, addr)
+-			}
+-		} else if d.NetDial != nil {
+-			netDial = d.NetDial
+-		}
+-	case "https":
+-		if d.NetDialTLSContext != nil {
+-			netDial = func(network, addr string) (net.Conn, error) {
+-				return d.NetDialTLSContext(ctx, network, addr)
+-			}
+-		} else if d.NetDialContext != nil {
+-			netDial = func(network, addr string) (net.Conn, error) {
+-				return d.NetDialContext(ctx, network, addr)
+-			}
+-		} else if d.NetDial != nil {
+-			netDial = d.NetDial
++	var netDial netDialerFunc
++	switch {
++	case u.Scheme == "https" && d.NetDialTLSContext != nil:
++		netDial = d.NetDialTLSContext
++	case d.NetDialContext != nil:
++		netDial = d.NetDialContext
++	case d.NetDial != nil:
++		netDial = func(ctx context.Context, net, addr string) (net.Conn, error) {
++			return d.NetDial(net, addr)
+ 		}
+ 	default:
+-		return nil, nil, errMalformedURL
+-	}
+-
+-	if netDial == nil {
+-		netDialer := &net.Dialer{}
+-		netDial = func(network, addr string) (net.Conn, error) {
+-			return netDialer.DialContext(ctx, network, addr)
+-		}
++		netDial = (&net.Dialer{}).DialContext
+ 	}
+ 
+ 	// If needed, wrap the dial function to set the connection deadline.
+ 	if deadline, ok := ctx.Deadline(); ok {
+ 		forwardDial := netDial
+-		netDial = func(network, addr string) (net.Conn, error) {
+-			c, err := forwardDial(network, addr)
++		netDial = func(ctx context.Context, network, addr string) (net.Conn, error) {
++			c, err := forwardDial(ctx, network, addr)
+ 			if err != nil {
+ 				return nil, err
+ 			}
+@@ -304,11 +282,10 @@
+ 			return nil, nil, err
+ 		}
+ 		if proxyURL != nil {
+-			dialer, err := proxy_FromURL(proxyURL, netDialerFunc(netDial))
++			netDial, err = proxyFromURL(proxyURL, netDial)
+ 			if err != nil {
+ 				return nil, nil, err
+ 			}
+-			netDial = dialer.Dial
+ 		}
+ 	}
+ 
+@@ -318,7 +295,7 @@
+ 		trace.GetConn(hostPort)
+ 	}
+ 
+-	netConn, err := netDial("tcp", hostPort)
++	netConn, err := netDial(ctx, "tcp", hostPort)
+ 	if err != nil {
+ 		return nil, nil, err
+ 	}
+@@ -400,7 +377,7 @@
+ 		// debugging.
+ 		buf := make([]byte, 1024)
+ 		n, _ := io.ReadFull(resp.Body, buf)
+-		resp.Body = ioutil.NopCloser(bytes.NewReader(buf[:n]))
++		resp.Body = io.NopCloser(bytes.NewReader(buf[:n]))
+ 		return nil, resp, ErrBadHandshake
+ 	}
+ 
+@@ -418,7 +395,7 @@
+ 		break
+ 	}
+ 
+-	resp.Body = ioutil.NopCloser(bytes.NewReader([]byte{}))
++	resp.Body = io.NopCloser(bytes.NewReader([]byte{}))
+ 	conn.subprotocol = resp.Header.Get("Sec-Websocket-Protocol")
+ 
+ 	netConn.SetDeadline(time.Time{})
+--- v1.5.3/client_server_test.go
++++ candidate/client_server_test.go
+@@ -14,7 +14,6 @@
+ 	"errors"
+ 	"fmt"
+ 	"io"
+-	"io/ioutil"
+ 	"log"
+ 	"net"
+ 	"net/http"
+@@ -24,6 +23,7 @@
+ 	"net/url"
+ 	"reflect"
+ 	"strings"
++	"sync"
+ 	"testing"
+ 	"time"
+ )
+@@ -45,12 +45,15 @@
+ 	HandshakeTimeout: 30 * time.Second,
+ }
+ 
+-type cstHandler struct{ *testing.T }
++type cstHandler struct {
++	*testing.T
++	s *cstServer
++}
+ 
+ type cstServer struct {
+-	*httptest.Server
+-	URL string
+-	t   *testing.T
++	URL    string
++	Server *httptest.Server
++	wg     sync.WaitGroup
+ }
+ 
+ const (
+@@ -59,9 +62,15 @@
+ 	cstRequestURI = cstPath + "?" + cstRawQuery
+ )
+ 
++func (s *cstServer) Close() {
++	s.Server.Close()
++	// Wait for handler functions to complete.
++	s.wg.Wait()
++}
++
+ func newServer(t *testing.T) *cstServer {
+ 	var s cstServer
+-	s.Server = httptest.NewServer(cstHandler{t})
++	s.Server = httptest.NewServer(cstHandler{T: t, s: &s})
+ 	s.Server.URL += cstRequestURI
+ 	s.URL = makeWsProto(s.Server.URL)
+ 	return &s
+@@ -69,13 +78,19 @@
+ 
+ func newTLSServer(t *testing.T) *cstServer {
+ 	var s cstServer
+-	s.Server = httptest.NewTLSServer(cstHandler{t})
++	s.Server = httptest.NewTLSServer(cstHandler{T: t, s: &s})
+ 	s.Server.URL += cstRequestURI
+ 	s.URL = makeWsProto(s.Server.URL)
+ 	return &s
+ }
+ 
+ func (t cstHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
++	// Because tests wait for a response from a server, we are guaranteed that
++	// the wait group count is incremented before the test waits on the group
++	// in the call to (*cstServer).Close().
++	t.s.wg.Add(1)
++	defer t.s.wg.Done()
++
+ 	if r.URL.Path != cstPath {
+ 		t.Logf("path=%v, want %v", r.URL.Path, cstPath)
+ 		http.Error(w, "bad path", http.StatusBadRequest)
+@@ -482,6 +497,37 @@
+ 	}
+ }
+ 
++func TestNoUpgrade(t *testing.T) {
++	t.Parallel()
++	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		ws, err := cstUpgrader.Upgrade(w, r, nil)
++		if err == nil {
++			t.Errorf("handshake succeeded, expect fail")
++			ws.Close()
++		}
++	}))
++	defer s.Close()
++
++	req, err := http.NewRequest(http.MethodGet, s.URL, strings.NewReader(""))
++	if err != nil {
++		t.Fatalf("NewRequest returned error %v", err)
++	}
++	req.Header.Set("Connection", "upgrade")
++	req.Header.Set("Sec-Websocket-Version", "13")
++
++	resp, err := http.DefaultClient.Do(req)
++	if err != nil {
++		t.Fatalf("Do returned error %v", err)
++	}
++	resp.Body.Close()
++	if u := resp.Header.Get("Upgrade"); u != "websocket" {
++		t.Errorf("Uprade response header is %q, want %q", u, "websocket")
++	}
++	if resp.StatusCode != http.StatusUpgradeRequired {
++		t.Errorf("Status = %d, want %d", resp.StatusCode, http.StatusUpgradeRequired)
++	}
++}
++
+ func TestDialExtraTokensInRespHeaders(t *testing.T) {
+ 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		challengeKey := r.Header.Get("Sec-Websocket-Key")
+@@ -549,7 +595,7 @@
+ 		t.Errorf("resp.StatusCode=%d, want %d", resp.StatusCode, expectedStatus)
+ 	}
+ 
+-	p, err := ioutil.ReadAll(resp.Body)
++	p, err := io.ReadAll(resp.Body)
+ 	if err != nil {
+ 		t.Fatalf("ReadFull(resp.Body) returned error %v", err)
+ 	}
+--- v1.5.3/compression_test.go
++++ candidate/compression_test.go
+@@ -4,7 +4,6 @@
+ 	"bytes"
+ 	"fmt"
+ 	"io"
+-	"io/ioutil"
+ 	"testing"
+ )
+ 
+@@ -42,7 +41,7 @@
+ }
+ 
+ func BenchmarkWriteNoCompression(b *testing.B) {
+-	w := ioutil.Discard
++	w := io.Discard
+ 	c := newTestConn(nil, w, false)
+ 	messages := textMessages(100)
+ 	b.ResetTimer()
+@@ -53,7 +52,7 @@
+ }
+ 
+ func BenchmarkWriteWithCompression(b *testing.B) {
+-	w := ioutil.Discard
++	w := io.Discard
+ 	c := newTestConn(nil, w, false)
+ 	messages := textMessages(100)
+ 	c.enableWriteCompression = true
+--- v1.5.3/conn.go
++++ candidate/conn.go
+@@ -6,11 +6,10 @@
+ 
+ import (
+ 	"bufio"
++	"crypto/rand"
+ 	"encoding/binary"
+ 	"errors"
+ 	"io"
+-	"io/ioutil"
+-	"math/rand"
+ 	"net"
+ 	"strconv"
+ 	"strings"
+@@ -181,9 +180,16 @@
+ 	errInvalidControlFrame = errors.New("websocket: invalid control frame")
+ )
+ 
++// maskRand is an io.Reader for generating mask bytes. The reader is initialized
++// to crypto/rand Reader. Tests swap the reader to a math/rand reader for
++// reproducible results.
++var maskRand = rand.Reader
++
++// newMaskKey returns a new 32 bit value for masking client frames.
+ func newMaskKey() [4]byte {
+-	n := rand.Uint32()
+-	return [4]byte{byte(n), byte(n >> 8), byte(n >> 16), byte(n >> 24)}
++	var k [4]byte
++	_, _ = io.ReadFull(maskRand, k[:])
++	return k
+ }
+ 
+ func hideTempErr(err error) error {
+@@ -795,7 +801,7 @@
+ 	// 1. Skip remainder of previous frame.
+ 
+ 	if c.readRemaining > 0 {
+-		if _, err := io.CopyN(ioutil.Discard, c.br, c.readRemaining); err != nil {
++		if _, err := io.CopyN(io.Discard, c.br, c.readRemaining); err != nil {
+ 			return noFrame, err
+ 		}
+ 	}
+@@ -1094,7 +1100,7 @@
+ 	if err != nil {
+ 		return messageType, nil, err
+ 	}
+-	p, err = ioutil.ReadAll(r)
++	p, err = io.ReadAll(r)
+ 	return messageType, p, err
+ }
+ 
+--- v1.5.3/conn_broadcast_test.go
++++ candidate/conn_broadcast_test.go
+@@ -6,7 +6,6 @@
+ 
+ import (
+ 	"io"
+-	"io/ioutil"
+ 	"sync/atomic"
+ 	"testing"
+ )
+@@ -45,7 +44,7 @@
+ 
+ func newBroadcastBench(usePrepared, compression bool) *broadcastBench {
+ 	bench := &broadcastBench{
+-		w:           ioutil.Discard,
++		w:           io.Discard,
+ 		doneCh:      make(chan struct{}),
+ 		closeCh:     make(chan struct{}),
+ 		usePrepared: usePrepared,
+--- v1.5.3/conn_test.go
++++ candidate/conn_test.go
+@@ -10,7 +10,6 @@
+ 	"errors"
+ 	"fmt"
+ 	"io"
+-	"io/ioutil"
+ 	"net"
+ 	"reflect"
+ 	"sync"
+@@ -125,7 +124,7 @@
+ 						}
+ 
+ 						t.Logf("frame size: %d", n)
+-						rbuf, err := ioutil.ReadAll(r)
++						rbuf, err := io.ReadAll(r)
+ 						if err != nil {
+ 							t.Errorf("%s: ReadFull() returned rbuf, %v", name, err)
+ 							continue
+@@ -367,7 +366,7 @@
+ 	if op != BinaryMessage || err != nil {
+ 		t.Fatalf("NextReader() returned %d, %v", op, err)
+ 	}
+-	_, err = io.Copy(ioutil.Discard, r)
++	_, err = io.Copy(io.Discard, r)
+ 	if !reflect.DeepEqual(err, expectedErr) {
+ 		t.Fatalf("io.Copy() returned %v, want %v", err, expectedErr)
+ 	}
+@@ -401,7 +400,7 @@
+ 		if op != BinaryMessage || err != nil {
+ 			t.Fatalf("%d: NextReader() returned %d, %v", n, op, err)
+ 		}
+-		_, err = io.Copy(ioutil.Discard, r)
++		_, err = io.Copy(io.Discard, r)
+ 		if err != errUnexpectedEOF {
+ 			t.Fatalf("%d: io.Copy() returned %v, want %v", n, err, errUnexpectedEOF)
+ 		}
+@@ -426,7 +425,7 @@
+ 	if op != BinaryMessage || err != nil {
+ 		t.Fatalf("NextReader() returned %d, %v", op, err)
+ 	}
+-	_, err = io.Copy(ioutil.Discard, r)
++	_, err = io.Copy(io.Discard, r)
+ 	if err != errUnexpectedEOF {
+ 		t.Fatalf("io.Copy() returned %v, want %v", err, errUnexpectedEOF)
+ 	}
+@@ -490,7 +489,7 @@
+ 		if op != BinaryMessage || err != nil {
+ 			t.Fatalf("2: NextReader() returned %d, %v", op, err)
+ 		}
+-		_, err = io.Copy(ioutil.Discard, r)
++		_, err = io.Copy(io.Discard, r)
+ 		if err != ErrReadLimit {
+ 			t.Fatalf("io.Copy() returned %v", err)
+ 		}
+--- v1.5.3/examples/autobahn/server.go
++++ candidate/examples/autobahn/server.go
+@@ -84,7 +84,7 @@
+ }
+ 
+ // echoReadAll echoes messages from the client by reading the entire message
+-// with ioutil.ReadAll.
++// with io.ReadAll.
+ func echoReadAll(w http.ResponseWriter, r *http.Request, writeMessage, writePrepared bool) {
+ 	conn, err := upgrader.Upgrade(w, r, nil)
+ 	if err != nil {
+--- v1.5.3/examples/chat/README.md
++++ candidate/examples/chat/README.md
+@@ -38,7 +38,7 @@
+ ### Hub 
+ 
+ The code for the `Hub` type is in
+-[hub.go](https://github.com/gorilla/websocket/blob/master/examples/chat/hub.go). 
++[hub.go](https://github.com/gorilla/websocket/blob/main/examples/chat/hub.go).
+ The application's `main` function starts the hub's `run` method as a goroutine.
+ Clients send requests to the hub using the `register`, `unregister` and
+ `broadcast` channels.
+@@ -57,7 +57,7 @@
+ 
+ ### Client
+ 
+-The code for the `Client` type is in [client.go](https://github.com/gorilla/websocket/blob/master/examples/chat/client.go).
++The code for the `Client` type is in [client.go](https://github.com/gorilla/websocket/blob/main/examples/chat/client.go).
+ 
+ The `serveWs` function is registered by the application's `main` function as
+ an HTTP handler. The handler upgrades the HTTP connection to the WebSocket
+@@ -85,7 +85,7 @@
+ 
+ ## Frontend
+ 
+-The frontend code is in [home.html](https://github.com/gorilla/websocket/blob/master/examples/chat/home.html).
++The frontend code is in [home.html](https://github.com/gorilla/websocket/blob/main/examples/chat/home.html).
+ 
+ On document load, the script checks for websocket functionality in the browser.
+ If websocket functionality is available, then the script opens a connection to
+--- v1.5.3/examples/filewatch/main.go
++++ candidate/examples/filewatch/main.go
+@@ -7,7 +7,6 @@
+ import (
+ 	"flag"
+ 	"html/template"
+-	"io/ioutil"
+ 	"log"
+ 	"net/http"
+ 	"os"
+@@ -49,7 +48,7 @@
+ 	if !fi.ModTime().After(lastMod) {
+ 		return nil, lastMod, nil
+ 	}
+-	p, err := ioutil.ReadFile(filename)
++	p, err := os.ReadFile(filename)
+ 	if err != nil {
+ 		return nil, fi.ModTime(), err
+ 	}
+--- v1.5.3/go.mod
++++ candidate/go.mod
+@@ -1,3 +1,9 @@
+ module github.com/gorilla/websocket
+ 
+-go 1.12
++go 1.20
++
++retract (
++    v1.5.2 // tag accidentally overwritten
++)
++
++require golang.org/x/net v0.26.0
+--- v1.5.3/go.sum
++++ candidate/go.sum
+@@ -0,0 +1,2 @@
++golang.org/x/net v0.26.0 h1:soB7SVo0PWrY4vPW/+ay0jKDNScG2X9wFeYlXIvJsOQ=
++golang.org/x/net v0.26.0/go.mod h1:5YKkiSynbBIh3p6iOc/vibscux0x38BZDkn8sCUPxHE=
+--- v1.5.3/prepared_test.go
++++ candidate/prepared_test.go
+@@ -33,6 +33,11 @@
+ }
+ 
+ func TestPreparedMessage(t *testing.T) {
++	testRand := rand.New(rand.NewSource(99))
++	prevMaskRand := maskRand
++	maskRand = testRand
++	defer func() { maskRand = prevMaskRand }()
++
+ 	for _, tt := range preparedMessageTests {
+ 		var data = []byte("this is a test")
+ 		var buf bytes.Buffer
+@@ -43,7 +48,7 @@
+ 		c.SetCompressionLevel(tt.compressionLevel)
+ 
+ 		// Seed random number generator for consistent frame mask.
+-		rand.Seed(1234)
++		testRand.Seed(1234)
+ 
+ 		if err := c.WriteMessage(tt.messageType, data); err != nil {
+ 			t.Fatal(err)
+@@ -59,7 +64,7 @@
+ 		copy(data, "hello world")
+ 
+ 		// Seed random number generator for consistent frame mask.
+-		rand.Seed(1234)
++		testRand.Seed(1234)
+ 
+ 		buf.Reset()
+ 		if err := c.WritePreparedMessage(pm); err != nil {
+--- v1.5.3/proxy.go
++++ candidate/proxy.go
+@@ -6,34 +6,52 @@
+ 
+ import (
+ 	"bufio"
++	"bytes"
++	"context"
+ 	"encoding/base64"
+ 	"errors"
+ 	"net"
+ 	"net/http"
+ 	"net/url"
+ 	"strings"
++
++	"golang.org/x/net/proxy"
+ )
+ 
+-type netDialerFunc func(network, addr string) (net.Conn, error)
++type netDialerFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+ 
+ func (fn netDialerFunc) Dial(network, addr string) (net.Conn, error) {
+-	return fn(network, addr)
++	return fn(context.Background(), network, addr)
+ }
+ 
+-func init() {
+-	proxy_RegisterDialerType("http", func(proxyURL *url.URL, forwardDialer proxy_Dialer) (proxy_Dialer, error) {
+-		return &httpProxyDialer{proxyURL: proxyURL, forwardDial: forwardDialer.Dial}, nil
+-	})
++func (fn netDialerFunc) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
++	return fn(ctx, network, addr)
++}
++
++func proxyFromURL(proxyURL *url.URL, forwardDial netDialerFunc) (netDialerFunc, error) {
++	if proxyURL.Scheme == "http" {
++		return (&httpProxyDialer{proxyURL: proxyURL, forwardDial: forwardDial}).DialContext, nil
++	}
++	dialer, err := proxy.FromURL(proxyURL, forwardDial)
++	if err != nil {
++		return nil, err
++	}
++	if d, ok := dialer.(proxy.ContextDialer); ok {
++		return d.DialContext, nil
++	}
++	return func(ctx context.Context, net, addr string) (net.Conn, error) {
++		return dialer.Dial(net, addr)
++	}, nil
+ }
+ 
+ type httpProxyDialer struct {
+ 	proxyURL    *url.URL
+-	forwardDial func(network, addr string) (net.Conn, error)
++	forwardDial netDialerFunc
+ }
+ 
+-func (hpd *httpProxyDialer) Dial(network string, addr string) (net.Conn, error) {
++func (hpd *httpProxyDialer) DialContext(ctx context.Context, network string, addr string) (net.Conn, error) {
+ 	hostPort, _ := hostPortNoPort(hpd.proxyURL)
+-	conn, err := hpd.forwardDial(network, hostPort)
++	conn, err := hpd.forwardDial(ctx, network, hostPort)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -68,8 +86,18 @@
+ 		return nil, err
+ 	}
+ 
+-	if resp.StatusCode != 200 {
+-		conn.Close()
++	// Close the response body to silence false positives from linters. Reset
++	// the buffered reader first to ensure that Close() does not read from
++	// conn.
++	// Note: Applications must call resp.Body.Close() on a response returned
++	// http.ReadResponse to inspect trailers or read another response from the
++	// buffered reader. The call to resp.Body.Close() does not release
++	// resources.
++	br.Reset(bytes.NewReader(nil))
++	_ = resp.Body.Close()
++
++	if resp.StatusCode != http.StatusOK {
++		_ = conn.Close()
+ 		f := strings.SplitN(resp.Status, " ", 2)
+ 		return nil, errors.New(f[1])
+ 	}
+--- v1.5.3/server.go
++++ candidate/server.go
+@@ -101,8 +101,8 @@
+ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header) string {
+ 	if u.Subprotocols != nil {
+ 		clientProtocols := Subprotocols(r)
+-		for _, serverProtocol := range u.Subprotocols {
+-			for _, clientProtocol := range clientProtocols {
++		for _, clientProtocol := range clientProtocols {
++			for _, serverProtocol := range u.Subprotocols {
+ 				if clientProtocol == serverProtocol {
+ 					return clientProtocol
+ 				}
+@@ -130,7 +130,8 @@
+ 	}
+ 
+ 	if !tokenListContainsValue(r.Header, "Upgrade", "websocket") {
+-		return u.returnError(w, r, http.StatusBadRequest, badHandshake+"'websocket' token not found in 'Upgrade' header")
++		w.Header().Set("Upgrade", "websocket")
++		return u.returnError(w, r, http.StatusUpgradeRequired, badHandshake+"'websocket' token not found in 'Upgrade' header")
+ 	}
+ 
+ 	if r.Method != http.MethodGet {
+@@ -172,14 +173,10 @@
+ 		}
+ 	}
+ 
+-	h, ok := w.(http.Hijacker)
+-	if !ok {
+-		return u.returnError(w, r, http.StatusInternalServerError, "websocket: response does not implement http.Hijacker")
+-	}
+-	var brw *bufio.ReadWriter
+-	netConn, brw, err := h.Hijack()
++	netConn, brw, err := http.NewResponseController(w).Hijack()
+ 	if err != nil {
+-		return u.returnError(w, r, http.StatusInternalServerError, err.Error())
++		return u.returnError(w, r, http.StatusInternalServerError,
++			"websocket: hijack: "+err.Error())
+ 	}
+ 
+ 	if brw.Reader.Buffered() > 0 {
+--- v1.5.3/server_test.go
++++ candidate/server_test.go
+@@ -7,8 +7,10 @@
+ import (
+ 	"bufio"
+ 	"bytes"
++	"errors"
+ 	"net"
+ 	"net/http"
++	"net/http/httptest"
+ 	"reflect"
+ 	"strings"
+ 	"testing"
+@@ -51,6 +53,36 @@
+ 		if tt.ok != ok {
+ 			t.Errorf("IsWebSocketUpgrade(%v) returned %v, want %v", tt.h, ok, tt.ok)
+ 		}
++	}
++}
++
++func TestSubProtocolSelection(t *testing.T) {
++	upgrader := Upgrader{
++		Subprotocols: []string{"foo", "bar", "baz"},
++	}
++
++	r := http.Request{Header: http.Header{"Sec-Websocket-Protocol": {"foo", "bar"}}}
++	s := upgrader.selectSubprotocol(&r, nil)
++	if s != "foo" {
++		t.Errorf("Upgrader.selectSubprotocol returned %v, want %v", s, "foo")
++	}
++
++	r = http.Request{Header: http.Header{"Sec-Websocket-Protocol": {"bar", "foo"}}}
++	s = upgrader.selectSubprotocol(&r, nil)
++	if s != "bar" {
++		t.Errorf("Upgrader.selectSubprotocol returned %v, want %v", s, "bar")
++	}
++
++	r = http.Request{Header: http.Header{"Sec-Websocket-Protocol": {"baz"}}}
++	s = upgrader.selectSubprotocol(&r, nil)
++	if s != "baz" {
++		t.Errorf("Upgrader.selectSubprotocol returned %v, want %v", s, "baz")
++	}
++
++	r = http.Request{Header: http.Header{"Sec-Websocket-Protocol": {"quux"}}}
++	s = upgrader.selectSubprotocol(&r, nil)
++	if s != "" {
++		t.Errorf("Upgrader.selectSubprotocol returned %v, want %v", s, "empty string")
+ 	}
+ }
+ 
+@@ -117,3 +149,23 @@
+ 		}
+ 	}
+ }
++
++func TestHijack_NotSupported(t *testing.T) {
++	t.Parallel()
++
++	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
++	req.Header.Set("Upgrade", "websocket")
++	req.Header.Set("Connection", "upgrade")
++	req.Header.Set("Sec-Websocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
++	req.Header.Set("Sec-Websocket-Version", "13")
++
++	recorder := httptest.NewRecorder()
++
++	upgrader := Upgrader{}
++	_, err := upgrader.Upgrade(recorder, req, nil)
++
++	if want := (HandshakeError{}); !errors.As(err, &want) || recorder.Code != http.StatusInternalServerError {
++		t.Errorf("want %T and status_code=%d", want, http.StatusInternalServerError)
++		t.Fatalf("got err=%T and status_code=%d", err, recorder.Code)
++	}
++}
+--- v1.5.3/x_net_proxy.go
++++ candidate/x_net_proxy.go
+@@ -1,473 +0,0 @@
+-// Code generated by golang.org/x/tools/cmd/bundle. DO NOT EDIT.
+-//go:generate bundle -o x_net_proxy.go golang.org/x/net/proxy
+-
+-// Package proxy provides support for a variety of protocols to proxy network
+-// data.
+-//
+-
+-package websocket
+-
+-import (
+-	"errors"
+-	"io"
+-	"net"
+-	"net/url"
+-	"os"
+-	"strconv"
+-	"strings"
+-	"sync"
+-)
+-
+-type proxy_direct struct{}
+-
+-// Direct is a direct proxy: one that makes network connections directly.
+-var proxy_Direct = proxy_direct{}
+-
+-func (proxy_direct) Dial(network, addr string) (net.Conn, error) {
+-	return net.Dial(network, addr)
+-}
+-
+-// A PerHost directs connections to a default Dialer unless the host name
+-// requested matches one of a number of exceptions.
+-type proxy_PerHost struct {
+-	def, bypass proxy_Dialer
+-
+-	bypassNetworks []*net.IPNet
+-	bypassIPs      []net.IP
+-	bypassZones    []string
+-	bypassHosts    []string
+-}
+-
+-// NewPerHost returns a PerHost Dialer that directs connections to either
+-// defaultDialer or bypass, depending on whether the connection matches one of
+-// the configured rules.
+-func proxy_NewPerHost(defaultDialer, bypass proxy_Dialer) *proxy_PerHost {
+-	return &proxy_PerHost{
+-		def:    defaultDialer,
+-		bypass: bypass,
+-	}
+-}
+-
+-// Dial connects to the address addr on the given network through either
+-// defaultDialer or bypass.
+-func (p *proxy_PerHost) Dial(network, addr string) (c net.Conn, err error) {
+-	host, _, err := net.SplitHostPort(addr)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	return p.dialerForRequest(host).Dial(network, addr)
+-}
+-
+-func (p *proxy_PerHost) dialerForRequest(host string) proxy_Dialer {
+-	if ip := net.ParseIP(host); ip != nil {
+-		for _, net := range p.bypassNetworks {
+-			if net.Contains(ip) {
+-				return p.bypass
+-			}
+-		}
+-		for _, bypassIP := range p.bypassIPs {
+-			if bypassIP.Equal(ip) {
+-				return p.bypass
+-			}
+-		}
+-		return p.def
+-	}
+-
+-	for _, zone := range p.bypassZones {
+-		if strings.HasSuffix(host, zone) {
+-			return p.bypass
+-		}
+-		if host == zone[1:] {
+-			// For a zone ".example.com", we match "example.com"
+-			// too.
+-			return p.bypass
+-		}
+-	}
+-	for _, bypassHost := range p.bypassHosts {
+-		if bypassHost == host {
+-			return p.bypass
+-		}
+-	}
+-	return p.def
+-}
+-
+-// AddFromString parses a string that contains comma-separated values
+-// specifying hosts that should use the bypass proxy. Each value is either an
+-// IP address, a CIDR range, a zone (*.example.com) or a host name
+-// (localhost). A best effort is made to parse the string and errors are
+-// ignored.
+-func (p *proxy_PerHost) AddFromString(s string) {
+-	hosts := strings.Split(s, ",")
+-	for _, host := range hosts {
+-		host = strings.TrimSpace(host)
+-		if len(host) == 0 {
+-			continue
+-		}
+-		if strings.Contains(host, "/") {
+-			// We assume that it's a CIDR address like 127.0.0.0/8
+-			if _, net, err := net.ParseCIDR(host); err == nil {
+-				p.AddNetwork(net)
+-			}
+-			continue
+-		}
+-		if ip := net.ParseIP(host); ip != nil {
+-			p.AddIP(ip)
+-			continue
+-		}
+-		if strings.HasPrefix(host, "*.") {
+-			p.AddZone(host[1:])
+-			continue
+-		}
+-		p.AddHost(host)
+-	}
+-}
+-
+-// AddIP specifies an IP address that will use the bypass proxy. Note that
+-// this will only take effect if a literal IP address is dialed. A connection
+-// to a named host will never match an IP.
+-func (p *proxy_PerHost) AddIP(ip net.IP) {
+-	p.bypassIPs = append(p.bypassIPs, ip)
+-}
+-
+-// AddNetwork specifies an IP range that will use the bypass proxy. Note that
+-// this will only take effect if a literal IP address is dialed. A connection
+-// to a named host will never match.
+-func (p *proxy_PerHost) AddNetwork(net *net.IPNet) {
+-	p.bypassNetworks = append(p.bypassNetworks, net)
+-}
+-
+-// AddZone specifies a DNS suffix that will use the bypass proxy. A zone of
+-// "example.com" matches "example.com" and all of its subdomains.
+-func (p *proxy_PerHost) AddZone(zone string) {
+-	if strings.HasSuffix(zone, ".") {
+-		zone = zone[:len(zone)-1]
+-	}
+-	if !strings.HasPrefix(zone, ".") {
+-		zone = "." + zone
+-	}
+-	p.bypassZones = append(p.bypassZones, zone)
+-}
+-
+-// AddHost specifies a host name that will use the bypass proxy.
+-func (p *proxy_PerHost) AddHost(host string) {
+-	if strings.HasSuffix(host, ".") {
+-		host = host[:len(host)-1]
+-	}
+-	p.bypassHosts = append(p.bypassHosts, host)
+-}
+-
+-// A Dialer is a means to establish a connection.
+-type proxy_Dialer interface {
+-	// Dial connects to the given address via the proxy.
+-	Dial(network, addr string) (c net.Conn, err error)
+-}
+-
+-// Auth contains authentication parameters that specific Dialers may require.
+-type proxy_Auth struct {
+-	User, Password string
+-}
+-
+-// FromEnvironment returns the dialer specified by the proxy related variables in
+-// the environment.
+-func proxy_FromEnvironment() proxy_Dialer {
+-	allProxy := proxy_allProxyEnv.Get()
+-	if len(allProxy) == 0 {
+-		return proxy_Direct
+-	}
+-
+-	proxyURL, err := url.Parse(allProxy)
+-	if err != nil {
+-		return proxy_Direct
+-	}
+-	proxy, err := proxy_FromURL(proxyURL, proxy_Direct)
+-	if err != nil {
+-		return proxy_Direct
+-	}
+-
+-	noProxy := proxy_noProxyEnv.Get()
+-	if len(noProxy) == 0 {
+-		return proxy
+-	}
+-
+-	perHost := proxy_NewPerHost(proxy, proxy_Direct)
+-	perHost.AddFromString(noProxy)
+-	return perHost
+-}
+-
+-// proxySchemes is a map from URL schemes to a function that creates a Dialer
+-// from a URL with such a scheme.
+-var proxy_proxySchemes map[string]func(*url.URL, proxy_Dialer) (proxy_Dialer, error)
+-
+-// RegisterDialerType takes a URL scheme and a function to generate Dialers from
+-// a URL with that scheme and a forwarding Dialer. Registered schemes are used
+-// by FromURL.
+-func proxy_RegisterDialerType(scheme string, f func(*url.URL, proxy_Dialer) (proxy_Dialer, error)) {
+-	if proxy_proxySchemes == nil {
+-		proxy_proxySchemes = make(map[string]func(*url.URL, proxy_Dialer) (proxy_Dialer, error))
+-	}
+-	proxy_proxySchemes[scheme] = f
+-}
+-
+-// FromURL returns a Dialer given a URL specification and an underlying
+-// Dialer for it to make network requests.
+-func proxy_FromURL(u *url.URL, forward proxy_Dialer) (proxy_Dialer, error) {
+-	var auth *proxy_Auth
+-	if u.User != nil {
+-		auth = new(proxy_Auth)
+-		auth.User = u.User.Username()
+-		if p, ok := u.User.Password(); ok {
+-			auth.Password = p
+-		}
+-	}
+-
+-	switch u.Scheme {
+-	case "socks5":
+-		return proxy_SOCKS5("tcp", u.Host, auth, forward)
+-	}
+-
+-	// If the scheme doesn't match any of the built-in schemes, see if it
+-	// was registered by another package.
+-	if proxy_proxySchemes != nil {
+-		if f, ok := proxy_proxySchemes[u.Scheme]; ok {
+-			return f(u, forward)
+-		}
+-	}
+-
+-	return nil, errors.New("proxy: unknown scheme: " + u.Scheme)
+-}
+-
+-var (
+-	proxy_allProxyEnv = &proxy_envOnce{
+-		names: []string{"ALL_PROXY", "all_proxy"},
+-	}
+-	proxy_noProxyEnv = &proxy_envOnce{
+-		names: []string{"NO_PROXY", "no_proxy"},
+-	}
+-)
+-
+-// envOnce looks up an environment variable (optionally by multiple
+-// names) once. It mitigates expensive lookups on some platforms
+-// (e.g. Windows).
+-// (Borrowed from net/http/transport.go)
+-type proxy_envOnce struct {
+-	names []string
+-	once  sync.Once
+-	val   string
+-}
+-
+-func (e *proxy_envOnce) Get() string {
+-	e.once.Do(e.init)
+-	return e.val
+-}
+-
+-func (e *proxy_envOnce) init() {
+-	for _, n := range e.names {
+-		e.val = os.Getenv(n)
+-		if e.val != "" {
+-			return
+-		}
+-	}
+-}
+-
+-// SOCKS5 returns a Dialer that makes SOCKSv5 connections to the given address
+-// with an optional username and password. See RFC 1928 and RFC 1929.
+-func proxy_SOCKS5(network, addr string, auth *proxy_Auth, forward proxy_Dialer) (proxy_Dialer, error) {
+-	s := &proxy_socks5{
+-		network: network,
+-		addr:    addr,
+-		forward: forward,
+-	}
+-	if auth != nil {
+-		s.user = auth.User
+-		s.password = auth.Password
+-	}
+-
+-	return s, nil
+-}
+-
+-type proxy_socks5 struct {
+-	user, password string
+-	network, addr  string
+-	forward        proxy_Dialer
+-}
+-
+-const proxy_socks5Version = 5
+-
+-const (
+-	proxy_socks5AuthNone     = 0
+-	proxy_socks5AuthPassword = 2
+-)
+-
+-const proxy_socks5Connect = 1
+-
+-const (
+-	proxy_socks5IP4    = 1
+-	proxy_socks5Domain = 3
+-	proxy_socks5IP6    = 4
+-)
+-
+-var proxy_socks5Errors = []string{
+-	"",
+-	"general failure",
+-	"connection forbidden",
+-	"network unreachable",
+-	"host unreachable",
+-	"connection refused",
+-	"TTL expired",
+-	"command not supported",
+-	"address type not supported",
+-}
+-
+-// Dial connects to the address addr on the given network via the SOCKS5 proxy.
+-func (s *proxy_socks5) Dial(network, addr string) (net.Conn, error) {
+-	switch network {
+-	case "tcp", "tcp6", "tcp4":
+-	default:
+-		return nil, errors.New("proxy: no support for SOCKS5 proxy connections of type " + network)
+-	}
+-
+-	conn, err := s.forward.Dial(s.network, s.addr)
+-	if err != nil {
+-		return nil, err
+-	}
+-	if err := s.connect(conn, addr); err != nil {
+-		conn.Close()
+-		return nil, err
+-	}
+-	return conn, nil
+-}
+-
+-// connect takes an existing connection to a socks5 proxy server,
+-// and commands the server to extend that connection to target,
+-// which must be a canonical address with a host and port.
+-func (s *proxy_socks5) connect(conn net.Conn, target string) error {
+-	host, portStr, err := net.SplitHostPort(target)
+-	if err != nil {
+-		return err
+-	}
+-
+-	port, err := strconv.Atoi(portStr)
+-	if err != nil {
+-		return errors.New("proxy: failed to parse port number: " + portStr)
+-	}
+-	if port < 1 || port > 0xffff {
+-		return errors.New("proxy: port number out of range: " + portStr)
+-	}
+-
+-	// the size here is just an estimate
+-	buf := make([]byte, 0, 6+len(host))
+-
+-	buf = append(buf, proxy_socks5Version)
+-	if len(s.user) > 0 && len(s.user) < 256 && len(s.password) < 256 {
+-		buf = append(buf, 2 /* num auth methods */, proxy_socks5AuthNone, proxy_socks5AuthPassword)
+-	} else {
+-		buf = append(buf, 1 /* num auth methods */, proxy_socks5AuthNone)
+-	}
+-
+-	if _, err := conn.Write(buf); err != nil {
+-		return errors.New("proxy: failed to write greeting to SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-	}
+-
+-	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+-		return errors.New("proxy: failed to read greeting from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-	}
+-	if buf[0] != 5 {
+-		return errors.New("proxy: SOCKS5 proxy at " + s.addr + " has unexpected version " + strconv.Itoa(int(buf[0])))
+-	}
+-	if buf[1] == 0xff {
+-		return errors.New("proxy: SOCKS5 proxy at " + s.addr + " requires authentication")
+-	}
+-
+-	// See RFC 1929
+-	if buf[1] == proxy_socks5AuthPassword {
+-		buf = buf[:0]
+-		buf = append(buf, 1 /* password protocol version */)
+-		buf = append(buf, uint8(len(s.user)))
+-		buf = append(buf, s.user...)
+-		buf = append(buf, uint8(len(s.password)))
+-		buf = append(buf, s.password...)
+-
+-		if _, err := conn.Write(buf); err != nil {
+-			return errors.New("proxy: failed to write authentication request to SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-		}
+-
+-		if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+-			return errors.New("proxy: failed to read authentication reply from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-		}
+-
+-		if buf[1] != 0 {
+-			return errors.New("proxy: SOCKS5 proxy at " + s.addr + " rejected username/password")
+-		}
+-	}
+-
+-	buf = buf[:0]
+-	buf = append(buf, proxy_socks5Version, proxy_socks5Connect, 0 /* reserved */)
+-
+-	if ip := net.ParseIP(host); ip != nil {
+-		if ip4 := ip.To4(); ip4 != nil {
+-			buf = append(buf, proxy_socks5IP4)
+-			ip = ip4
+-		} else {
+-			buf = append(buf, proxy_socks5IP6)
+-		}
+-		buf = append(buf, ip...)
+-	} else {
+-		if len(host) > 255 {
+-			return errors.New("proxy: destination host name too long: " + host)
+-		}
+-		buf = append(buf, proxy_socks5Domain)
+-		buf = append(buf, byte(len(host)))
+-		buf = append(buf, host...)
+-	}
+-	buf = append(buf, byte(port>>8), byte(port))
+-
+-	if _, err := conn.Write(buf); err != nil {
+-		return errors.New("proxy: failed to write connect request to SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-	}
+-
+-	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
+-		return errors.New("proxy: failed to read connect reply from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-	}
+-
+-	failure := "unknown error"
+-	if int(buf[1]) < len(proxy_socks5Errors) {
+-		failure = proxy_socks5Errors[buf[1]]
+-	}
+-
+-	if len(failure) > 0 {
+-		return errors.New("proxy: SOCKS5 proxy at " + s.addr + " failed to connect: " + failure)
+-	}
+-
+-	bytesToDiscard := 0
+-	switch buf[3] {
+-	case proxy_socks5IP4:
+-		bytesToDiscard = net.IPv4len
+-	case proxy_socks5IP6:
+-		bytesToDiscard = net.IPv6len
+-	case proxy_socks5Domain:
+-		_, err := io.ReadFull(conn, buf[:1])
+-		if err != nil {
+-			return errors.New("proxy: failed to read domain length from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-		}
+-		bytesToDiscard = int(buf[0])
+-	default:
+-		return errors.New("proxy: got unknown address type " + strconv.Itoa(int(buf[3])) + " from SOCKS5 proxy at " + s.addr)
+-	}
+-
+-	if cap(buf) < bytesToDiscard {
+-		buf = make([]byte, bytesToDiscard)
+-	} else {
+-		buf = buf[:bytesToDiscard]
+-	}
+-	if _, err := io.ReadFull(conn, buf); err != nil {
+-		return errors.New("proxy: failed to read address from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-	}
+-
+-	// Also need to discard the port number
+-	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+-		return errors.New("proxy: failed to read port from SOCKS5 proxy at " + s.addr + ": " + err.Error())
+-	}
+-
+-	return nil
+-}

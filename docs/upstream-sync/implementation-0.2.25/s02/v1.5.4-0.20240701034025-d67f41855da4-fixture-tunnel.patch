@@ -1,0 +1,53 @@
+--- a/client_server_test.go
++++ b/client_server_test.go
+@@ -172,6 +172,7 @@
+ 
+ 	cstDialer := cstDialer // make local copy for modification on next line.
+ 	cstDialer.Proxy = http.ProxyURL(surl)
++	cstDialer.NetDial = traceDial
+ 
+ 	connect := false
+ 	origHandler := s.Server.Config.Handler
+@@ -181,7 +182,7 @@
+ 		func(w http.ResponseWriter, r *http.Request) {
+ 			if r.Method == http.MethodConnect {
+ 				connect = true
+-				w.WriteHeader(http.StatusOK)
++				tunnelHistoricalCONNECT(w, r)
+ 				return
+ 			}
+ 
+@@ -210,6 +211,7 @@
+ 
+ 	cstDialer := cstDialer // make local copy for modification on next line.
+ 	cstDialer.Proxy = http.ProxyURL(surl)
++	cstDialer.NetDial = traceDial
+ 
+ 	connect := false
+ 	origHandler := s.Server.Config.Handler
+@@ -221,7 +223,7 @@
+ 			expectedProxyAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("username:password"))
+ 			if r.Method == http.MethodConnect && proxyAuth == expectedProxyAuth {
+ 				connect = true
+-				w.WriteHeader(http.StatusOK)
++				tunnelHistoricalCONNECT(w, r)
+ 				return
+ 			}
+ 
+--- /dev/null
++++ b/trace_test.go
+@@ -0,0 +1,14 @@
++package websocket
++import("net";"fmt";"net/http";"io")
++type traceConn struct{ net.Conn }
++func(c traceConn)Read(p []byte)(int,error){n,e:=c.Conn.Read(p);fmt.Printf("TRACE READ %q error=%v\n",p[:n],e);return n,e}
++func(c traceConn)Write(p []byte)(int,error){n,e:=c.Conn.Write(p);fmt.Printf("TRACE WRITE %q error=%v\n",p[:n],e);return n,e}
++func traceDial(network,addr string)(net.Conn,error){c,e:=net.Dial(network,addr);if e!=nil{return nil,e};return traceConn{c},nil}
++
++func tunnelHistoricalCONNECT(w http.ResponseWriter,r *http.Request) {
++ remote,err:=net.Dial("tcp",r.Host);if err!=nil {http.Error(w,err.Error(),502);return};defer remote.Close()
++ client,buf,err:=w.(http.Hijacker).Hijack();if err!=nil{return};defer client.Close()
++ _,_=buf.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n");if buf.Flush()!=nil{return}
++ done:=make(chan struct{});go func(){_,_=io.Copy(remote,buf);_=remote.Close();close(done)}()
++ _,_=io.Copy(client,remote);_=client.Close();<-done
++}

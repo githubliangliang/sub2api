@@ -21,6 +21,8 @@ import (
 // "stream closed before response.completed" 并无限重连（#3875）。
 const openAICompactClientStreamKey = "openai_compact_client_stream"
 
+const openAICompactFailureWrittenKey = "openai_compact_failure_written"
+
 // MarkOpenAICompactClientStream 由 handler 在 body-signal 提升时调用，记录
 // 客户端的原始 stream 意图，供响应写回阶段决定是否合成 SSE。
 func MarkOpenAICompactClientStream(c *gin.Context) {
@@ -110,10 +112,30 @@ func writeOpenAICompactSSEFailure(c *gin.Context, statusCode int, errorBody []by
 // 不被识别，会退化为 "stream closed before response.completed" 盲重连）。
 // 同时标记流内错误，保证挂在 200 流上的失败仍进入 ops 错误看板。
 func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType, message string) {
+	writeOpenAICompactSSEFailureEvent(c, statusCode, errType, errType, message)
+}
+
+// Keep deterministic client codes separate from the internal monitoring type.
+func writeOpenAICompactSSEFailureWithCode(c *gin.Context, statusCode int, code, message string) {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "":
+		code = "upstream_error"
+	case "server_is_overloaded", "slow_down":
+		code = openAICapacityShedRetryableClientCode
+	}
+	writeOpenAICompactSSEFailureEvent(c, statusCode, "upstream_error", code, message)
+}
+
+func writeOpenAICompactSSEFailureEvent(c *gin.Context, statusCode int, opsErrType, code, message string) {
 	if c == nil {
 		return
 	}
-	MarkOpsStreamError(c, errType, message, statusCode)
+	if done, _ := c.Get(openAICompactFailureWrittenKey); done == true {
+		return
+	}
+	c.Set(openAICompactFailureWrittenKey, true)
+	MarkResponseCommitted(c)
+	MarkOpsStreamError(c, opsErrType, message, statusCode)
 	payload, err := json.Marshal(map[string]any{
 		"type":            "response.failed",
 		"sequence_number": NextOpenAIResponsesSequence(c),
@@ -123,7 +145,7 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 			"status": "failed",
 			"output": []any{},
 			"error": map[string]any{
-				"code":    errType,
+				"code":    code,
 				"message": message,
 			},
 		},

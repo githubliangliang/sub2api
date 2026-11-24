@@ -1,5 +1,20 @@
 # 上游合并指南
 
+2026-11-24 用户后续已授权将v0.2.25两档实现提交并推送origin/main；本次提交包含实现、两档OpenSpec、评估来源和实际验收证据。原先未跟踪的Fast诊断留在工作区。产品/模块与通过验收的最终哈希一致；VERSION1.1.27及现有tag保持，不发布、不归档、不操作业务实例。下方实施与intake段落保留完成时的快照措辞。
+
+2026-11-24 两档已实现并验收：[第一档F01，6/6任务](../../openspec/changes/port-upstream-0.2.25-tier1/verification.md)、[第二档S01/S02，11/11任务](../../openspec/changes/port-upstream-0.2.25-tier2/verification.md)。[实施证据](./implementation-0.2.25/README.md)记录账号凭据/主机脱敏、有限结构化错误/原body规则/compact单次有序终态及Gorilla精确安全维护。55包unit、10,793顶层/22,386含子例通过，16既有跳过；三包错误/SQLite race332/669、五包WS race693/1,351、embed、lint0与实际HTTP/compact/管理员WS/CONNECT/SQLite/miniredis/计费配额控制通过。原库两项代理EOF由Go1.27.4非Hijack CONNECT夹具关闭定因；失败保留，临时真隧道夹具双版本通过。MVS仅Gorilla变化；版本/schema/其它依赖/前端/生成代码/资源默认与旧13活动change、439任务、冻结历史和初始Fast诊断保持。改动留在工作区，未提交/推送/发布/归档或操作业务实例。下方同日intake保留实施前措辞。
+
+最新评估（2026-11-24）：[PORTING-0.2.25.md](./PORTING-0.2.25.md)，v0.2.24→v0.2.25；正式版发布于2026-11-24 11:21:08上海时间。当前基线v1.1.27 / `39ca66d51` / Go1.27.4 / SQLite230 / auth21，已含v0.2.24两档。12非merge、3整PR+1 VERSION提交，98文件状态A0/C56/X32/N10。建议[第一档1簇/6任务](../../openspec/changes/port-upstream-0.2.25-tier1/README.md)、[第二档2簇/11任务](../../openspec/changes/port-upstream-0.2.25-tier2/README.md)，**均未实施，验收槽为空**。优先已有透传消息泄露、标准错误字段/规则与compact；Gorilla安全维护独立评估。头身份变量、上游名称同步留第三档，支付排除。[来源与完整局限](./evidence-0.2.25/MANIFEST.md)。下方保留历史原文。
+
+- [x] 官方API/tag/main/fork冻结，完整候选覆盖、先反后正，保护产品/历史与初始Fast诊断。
+- [x] 全候选四档定界，复核实际消费者、最小前置及旧13份活动change/439已完成任务。
+- [x] 当前backend274顶层/548含子例、前端67测试通过；隔离探针5目标顶层失败/4控制通过。
+- [x] 来源helper独立10含子例通过；临时MVS只改Gorilla，应用WS376/700与真实CONNECT通过，库自身失败保留。
+- [x] 两档完整未实施OpenSpec与来源/链接/范围核验，无VERSION/schema/依赖/生成代码变动。
+- [ ] 后续按选定范围实施验收；依赖历史代理EOF仍需定因，不把可行性写成升级完成。
+
+本轮教训：新增函数安全修复不等于本地已有漏洞；监控事件与最终writer可能只执行部分规则；标准code保留需与脱敏、compact容量码和共享序号组合；单模块升级也看完整行为diff；真实隧道通过不能擦掉依赖历史失败。见[§9](./PORTING-0.2.25.md#9-本轮通用教训)。
+
 2026-11-21 两档已实现并验收：[第一档37/37](../../openspec/changes/port-upstream-0.2.24-tier1/verification.md)、[第二档52/52](../../openspec/changes/port-upstream-0.2.24-tier2/verification.md)，25簇共89任务。[联合证据](./implementation-0.2.24/README.md)记录全入口/WS防重复、协议/账号/快照/配额/目录/统计与窄热点适配。55包unit、9包race、lint0/embed/Wire、实际HTTP/WS/SQLite/miniredis/成本与固定quota/dedup、前端2254/2原skip和桌面移动通过；1C1G独立并发夹具与单P函数成本分开限定。VERSION1.1.26/Go1.27.4/SQLite230/auth21、依赖/Ent与资源默认保持。实现随本次本地提交保存，等待归档；无push/release/业务实例操作。下方intake评估原文保留当时时点的未实施措辞。
 
 最新评估（2026-11-21）：[PORTING-0.2.24.md](./PORTING-0.2.24.md)，v0.2.23→v0.2.24；最新正式版发布于2026-11-20 17:19:50上海时间。基线`d2488b110` / VERSION1.1.26 / Go1.27.4 / SQLite230 / auth21，包含两档旧移植、GPT-6.2及过滤/effort日志。65非merge、39PR+1直接提交+1安全合并簇，217文件态A0/C135/X62/N20。建议[第一档10簇](../../openspec/changes/port-upstream-0.2.24-tier1/README.md)、[第二档15簇](../../openspec/changes/port-upstream-0.2.24-tier2/README.md)，选30PR+安全簇，**均未实施，37/52任务全未勾选**。[来源与核验](./evidence-0.2.24/MANIFEST.md)。

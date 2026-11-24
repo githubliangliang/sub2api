@@ -244,7 +244,7 @@ type OpsUpstreamErrorEvent struct {
 	Detail  string `json:"detail,omitempty"`
 }
 
-func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
+func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent, originalBody ...[]byte) {
 	if c == nil {
 		return
 	}
@@ -276,7 +276,7 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 	existing = append(existing, &evCopy)
 	c.Set(OpsUpstreamErrorsKey, existing)
 
-	checkSkipMonitoringForUpstreamEvent(c, &evCopy)
+	checkSkipMonitoringForUpstreamEvent(c, &evCopy, originalBody...)
 }
 
 // checkSkipMonitoringForUpstreamEvent checks whether the upstream error event
@@ -284,7 +284,7 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 // OpsSkipPassthroughKey on the context.  This ensures intermediate retry /
 // failover errors (which never go through the final applyErrorPassthroughRule
 // path) can still suppress ops_error_logs recording.
-func checkSkipMonitoringForUpstreamEvent(c *gin.Context, ev *OpsUpstreamErrorEvent) {
+func checkSkipMonitoringForUpstreamEvent(c *gin.Context, ev *OpsUpstreamErrorEvent, originalBody ...[]byte) {
 	if ev.UpstreamStatusCode == 0 {
 		return
 	}
@@ -294,15 +294,16 @@ func checkSkipMonitoringForUpstreamEvent(c *gin.Context, ev *OpsUpstreamErrorEve
 		return
 	}
 
-	// Use the best available body representation for keyword matching.
-	// Even when body is empty, MatchRule can still match rules that only
-	// specify ErrorCodes (no Keywords), so we always call it.
-	body := ev.Detail
-	if body == "" {
-		body = ev.Message
+	// Final passthrough errors have an original body available even when detail
+	// logging is disabled. Use it for policy precedence without retaining it in logs.
+	body := []byte(ev.Detail)
+	if len(body) == 0 {
+		body = []byte(ev.Message)
 	}
-
-	rule := svc.MatchRule(ev.Platform, ev.UpstreamStatusCode, []byte(body))
+	if len(originalBody) > 0 {
+		body = originalBody[0]
+	}
+	rule := svc.MatchRule(ev.Platform, ev.UpstreamStatusCode, body)
 	if rule != nil && rule.SkipMonitoring {
 		c.Set(OpsSkipPassthroughKey, true)
 	}

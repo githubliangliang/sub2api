@@ -1,0 +1,567 @@
+diff --git a/backend/internal/handler/admin/account_upstream_billing_probe.go b/backend/internal/handler/admin/account_upstream_billing_probe.go
+index efaca8f73..46ef79dad 100644
+--- a/backend/internal/handler/admin/account_upstream_billing_probe.go
++++ b/backend/internal/handler/admin/account_upstream_billing_probe.go
+@@ -2,6 +2,7 @@ package admin
+ 
+ import (
+ 	"strconv"
++	"strings"
+ 
+ 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+ 	"github.com/Wei-Shaw/sub2api/internal/service"
+@@ -91,6 +92,63 @@ func (h *AccountHandler) ProbeUpstreamBilling(c *gin.Context) {
+ 	response.Success(c, service.UpstreamBillingProbeResult{AccountID: accountID, Snapshot: snapshot})
+ }
+ 
++// PreviewUpstreamGroup reads the saved account's connection or the editor's draft credentials.
++func (h *AccountHandler) PreviewUpstreamGroup(c *gin.Context) {
++	if h.upstreamBillingProbe == nil {
++		response.ErrorFrom(c, service.ErrUpstreamBillingProbeUnavailable)
++		return
++	}
++	var req struct {
++		AccountID int64  `json:"account_id" binding:"min=0"`
++		Platform  string `json:"platform"`
++		BaseURL   string `json:"base_url"`
++		APIKey    string `json:"api_key"`
++		ProxyID   *int64 `json:"proxy_id" binding:"omitempty,gt=0"`
++	}
++	if err := c.ShouldBindJSON(&req); err != nil {
++		response.BadRequest(c, "Invalid group preview request")
++		return
++	}
++	ctx := c.Request.Context()
++	var account *service.Account
++	if req.AccountID > 0 {
++		// A stored key must only be sent with its stored URL, headers and proxy.
++		if req.Platform != "" || req.BaseURL != "" || req.APIKey != "" || req.ProxyID != nil {
++			response.BadRequest(c, "Use either a saved account or draft credentials")
++			return
++		}
++		var err error
++		account, err = h.adminService.GetAccount(ctx, req.AccountID)
++		if err != nil {
++			response.ErrorFrom(c, err)
++			return
++		}
++	} else {
++		if !service.IsUpstreamBillingProbeIdentity(req.Platform, service.AccountTypeAPIKey) || strings.TrimSpace(req.BaseURL) == "" || strings.TrimSpace(req.APIKey) == "" {
++			response.BadRequest(c, "A supported platform, base URL and API key are required")
++			return
++		}
++		account = &service.Account{
++			Platform: req.Platform, Type: service.AccountTypeAPIKey, ProxyID: req.ProxyID,
++			Credentials: map[string]any{"base_url": strings.TrimSpace(req.BaseURL), "api_key": strings.TrimSpace(req.APIKey)},
++		}
++		if req.ProxyID != nil {
++			proxy, err := h.adminService.GetProxy(ctx, *req.ProxyID)
++			if err != nil {
++				response.ErrorFrom(c, err)
++				return
++			}
++			account.Proxy = proxy
++		}
++	}
++	group, err := h.upstreamBillingProbe.PreviewGroup(ctx, account)
++	if err != nil {
++		response.ErrorFrom(c, err)
++		return
++	}
++	response.Success(c, group)
++}
++
+ func (h *AccountHandler) ProbeUpstreamBillingBatch(c *gin.Context) {
+ 	if h.upstreamBillingProbe == nil {
+ 		response.ErrorFrom(c, service.ErrUpstreamBillingProbeUnavailable)
+diff --git a/backend/internal/repository/account_repo.go b/backend/internal/repository/account_repo.go
+index 80bebe831..bdbf25219 100644
+--- a/backend/internal/repository/account_repo.go
++++ b/backend/internal/repository/account_repo.go
+@@ -61,6 +61,7 @@ var schedulerNeutralExtraKeyPrefixes = []string{
+ 	"passive_usage_",
+ 	"upstream_billing_probe",
+ 	"upstream_billing_rate_sync",
++	"upstream_billing_group_sync",
+ 	"ollama_cloud_usage",
+ }
+ 
+@@ -449,7 +450,7 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
+ 	if scoped := r.accountTransactionScope(ctx); scoped != r {
+ 		return scoped.Update(ctx, account)
+ 	}
+-	return r.updateAccount(ctx, account, nil, nil, account.RateMultiplier)
++	return r.updateAccount(ctx, account, service.AccountBillingSettingsUpdate{RateMultiplier: account.RateMultiplier, SetName: true, SetNotes: true})
+ }
+ 
+ // UpdateWithAccountBillingSettings applies an admin account edit while
+@@ -458,19 +459,15 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
+ func (r *accountRepository) UpdateWithAccountBillingSettings(
+ 	ctx context.Context,
+ 	account *service.Account,
+-	probeEnabled *bool,
+-	rateSyncEnabled *bool,
+-	rateMultiplier *float64,
++	settings service.AccountBillingSettingsUpdate,
+ ) error {
+-	return r.updateAccount(ctx, account, probeEnabled, rateSyncEnabled, rateMultiplier)
++	return r.updateAccount(ctx, account, settings)
+ }
+ 
+ func (r *accountRepository) updateAccount(
+ 	ctx context.Context,
+ 	account *service.Account,
+-	explicitProbeEnabled *bool,
+-	explicitRateSyncEnabled *bool,
+-	explicitRateMultiplier *float64,
++	settings service.AccountBillingSettingsUpdate,
+ ) error {
+ 	if account == nil {
+ 		return nil
+@@ -499,9 +496,7 @@ func (r *accountRepository) updateAccount(
+ 		ctx,
+ 		client,
+ 		account,
+-		explicitProbeEnabled,
+-		explicitRateSyncEnabled,
+-		explicitRateMultiplier,
++		settings,
+ 	)
+ 	if err != nil {
+ 		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
+@@ -528,11 +523,9 @@ func (r *accountRepository) updateLockedAccount(
+ 	ctx context.Context,
+ 	client *dbent.Client,
+ 	account *service.Account,
+-	explicitProbeEnabled *bool,
+-	explicitRateSyncEnabled *bool,
+-	explicitRateMultiplier *float64,
++	settings service.AccountBillingSettingsUpdate,
+ ) (*dbent.Account, error) {
+-	extra, err := lockAndMergeAccountProbeExtra(ctx, client, account, explicitProbeEnabled, explicitRateSyncEnabled)
++	extra, err := lockAndMergeAccountProbeExtra(ctx, client, account, settings)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -544,8 +537,6 @@ func (r *accountRepository) updateLockedAccount(
+ 	}
+ 
+ 	builder := client.Account.UpdateOneID(account.ID).
+-		SetName(account.Name).
+-		SetNillableNotes(account.Notes).
+ 		SetPlatform(account.Platform).
+ 		SetType(account.Type).
+ 		SetCredentials(normalizeJSONMap(account.Credentials)).
+@@ -557,8 +548,18 @@ func (r *accountRepository) updateLockedAccount(
+ 		SetSchedulable(schedulable).
+ 		SetAutoPauseOnExpired(account.AutoPauseOnExpired)
+ 
+-	if explicitRateMultiplier != nil {
+-		builder.SetRateMultiplier(*explicitRateMultiplier)
++	if settings.SetName {
++		builder.SetName(account.Name)
++	}
++	if settings.SetNotes {
++		if account.Notes == nil {
++			builder.ClearNotes()
++		} else {
++			builder.SetNotes(*account.Notes)
++		}
++	}
++	if settings.RateMultiplier != nil {
++		builder.SetRateMultiplier(*settings.RateMultiplier)
+ 	}
+ 	if account.LoadFactor != nil {
+ 		builder.SetLoadFactor(*account.LoadFactor)
+@@ -611,10 +612,6 @@ func (r *accountRepository) updateLockedAccount(
+ 	} else {
+ 		builder.ClearSessionWindowStatus()
+ 	}
+-	if account.Notes == nil {
+-		builder.ClearNotes()
+-	}
+-
+ 	builder.SetQuotaDimension(dbaccount.QuotaDimension(account.QuotaDimensionOrDefault()))
+ 	builder.SetNillableParentAccountID(account.ParentAccountID)
+ 
+@@ -625,8 +622,7 @@ func lockAndMergeAccountProbeExtra(
+ 	ctx context.Context,
+ 	client *dbent.Client,
+ 	account *service.Account,
+-	explicitProbeEnabled *bool,
+-	explicitRateSyncEnabled *bool,
++	settings service.AccountBillingSettingsUpdate,
+ ) (map[string]any, error) {
+ 	credentials, err := json.Marshal(normalizeJSONMap(account.Credentials))
+ 	if err != nil {
+@@ -682,7 +678,8 @@ func lockAndMergeAccountProbeExtra(
+ 			extra -> 'opencode_go_usage_auto_refresh',
+ 			extra -> 'opencode_go_usage_snapshot',
+ 			extra -> 'grok_observed_models',
+-			extra -> 'upstream_model_metadata'
++			extra -> 'upstream_model_metadata',
++			extra -> 'upstream_billing_group_sync_enabled'
+ 		FROM accounts
+ 		WHERE id = $1 AND deleted_at IS NULL
+ 		FOR NO KEY UPDATE
+@@ -705,6 +702,7 @@ func lockAndMergeAccountProbeExtra(
+ 		opencodeGroupIdentityUnchanged bool
+ 		currentEnabled                 []byte
+ 		currentRateSyncEnabled         []byte
++		currentGroupSyncEnabled        []byte
+ 		currentSnapshot                []byte
+ 		currentOllamaSession           []byte
+ 		currentOllamaAutoRefresh       []byte
+@@ -729,6 +727,7 @@ func lockAndMergeAccountProbeExtra(
+ 		&currentOpenCodeSnapshot,
+ 		&currentGrokObservedModels,
+ 		&currentUpstreamModelMetadata,
++		&currentGroupSyncEnabled,
+ 	); err != nil {
+ 		return nil, err
+ 	}
+@@ -740,6 +739,7 @@ func lockAndMergeAccountProbeExtra(
+ 	for _, key := range []string{
+ 		service.UpstreamBillingProbeEnabledExtraKey,
+ 		service.UpstreamBillingRateSyncEnabledExtraKey,
++		service.UpstreamBillingGroupSyncEnabledExtraKey,
+ 		service.UpstreamBillingProbeExtraKey,
+ 		service.OllamaCloudUsageSessionExtraKey,
+ 		service.OllamaCloudUsageAutoRefreshExtraKey,
+@@ -759,40 +759,32 @@ func lockAndMergeAccountProbeExtra(
+ 			probeEnabled = value
+ 			probeEnabledPresent = true
+ 		}
+-		if explicitProbeEnabled != nil {
+-			probeEnabled = *explicitProbeEnabled
++		if settings.ProbeEnabled != nil {
++			probeEnabled = *settings.ProbeEnabled
+ 			probeEnabledPresent = true
+ 		}
+-	}
+-	rateSyncEnabled := false
+-	rateSyncEnabledPresent := false
+-	if probeAccount {
+-		if enabled, ok, err := decodeAccountExtraJSON(currentRateSyncEnabled); err != nil {
+-			return nil, err
+-		} else if value, isBool := enabled.(bool); ok && isBool {
+-			rateSyncEnabled = value
+-			rateSyncEnabledPresent = true
+-		}
+-		if explicitRateSyncEnabled != nil {
+-			rateSyncEnabled = *explicitRateSyncEnabled
+-			rateSyncEnabledPresent = true
+-		}
+-		if explicitProbeEnabled != nil && !*explicitProbeEnabled {
+-			rateSyncEnabled = false
+-			rateSyncEnabledPresent = true
+-		}
+-		// 同步依赖探测，方向是单向的：探测关闭（或探测键缺失）一律把同步归零。
+-		// 不做反向推导——由 rate_sync=true 推出 probe=true 会让一条"同步开、探测键
+-		// 缺失"的僵尸记录在任意一次无关编辑时静默打开周期性外呼。需要同时打开两个
+-		// 开关的调用方（管理端编辑）自己显式传 explicitProbeEnabled=true。
+-		if !probeEnabled {
+-			rateSyncEnabled = false
+-		}
+ 		if probeEnabledPresent {
+ 			extra[service.UpstreamBillingProbeEnabledExtraKey] = probeEnabled
+ 		}
+-		if rateSyncEnabledPresent {
+-			extra[service.UpstreamBillingRateSyncEnabledExtraKey] = rateSyncEnabled
++		for _, flag := range []struct {
++			key       string
++			stored    []byte
++			requested *bool
++		}{
++			{service.UpstreamBillingRateSyncEnabledExtraKey, currentRateSyncEnabled, settings.RateSyncEnabled},
++			{service.UpstreamBillingGroupSyncEnabledExtraKey, currentGroupSyncEnabled, settings.GroupSyncEnabled},
++		} {
++			value, _, err := decodeAccountExtraJSON(flag.stored)
++			if err != nil {
++				return nil, err
++			}
++			enabled, present := value.(bool)
++			if flag.requested != nil {
++				enabled, present = *flag.requested, true
++			}
++			if present || (settings.ProbeEnabled != nil && !*settings.ProbeEnabled) {
++				extra[flag.key] = probeEnabled && enabled
++			}
+ 		}
+ 	}
+ 	probeExplicitlyDisabled := probeEnabledPresent && !probeEnabled
+@@ -2973,24 +2965,26 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
+ 	account *service.Account,
+ 	snapshot *service.UpstreamBillingProbeSnapshot,
+ 	rateMultiplier *float64,
++	group service.BillingGroupInfo,
+ ) error {
+ 	if account == nil || snapshot == nil {
+ 		return service.ErrAccountNilInput
+ 	}
+ 	if snapshot.Status != service.UpstreamBillingProbeStatusOK {
+ 		rateMultiplier = nil
++		group = service.BillingGroupInfo{}
+ 	}
+ 	if dbent.TxFromContext(ctx) == nil {
+ 		tx, err := r.client.Tx(ctx)
+ 		if errors.Is(err, dbent.ErrTxStarted) {
+-			return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier)
++			return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier, group)
+ 		}
+ 		if err != nil {
+ 			return err
+ 		}
+ 		defer func() { _ = tx.Rollback() }()
+ 
+-		if err := r.updateUpstreamBillingProbeSnapshotInTx(dbent.NewTxContext(ctx, tx), account, snapshot, rateMultiplier); err != nil {
++		if err := r.updateUpstreamBillingProbeSnapshotInTx(dbent.NewTxContext(ctx, tx), account, snapshot, rateMultiplier, group); err != nil {
+ 			return err
+ 		}
+ 		if err := tx.Commit(); err != nil {
+@@ -3001,7 +2995,7 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
+ 		r.syncSchedulerAccountSnapshot(ctx, account.ID)
+ 		return nil
+ 	}
+-	return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier)
++	return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier, group)
+ }
+ 
+ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+@@ -3009,6 +3003,7 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+ 	account *service.Account,
+ 	snapshot *service.UpstreamBillingProbeSnapshot,
+ 	rateMultiplier *float64,
++	group service.BillingGroupInfo,
+ ) error {
+ 	payload, err := json.Marshal(map[string]any{service.UpstreamBillingProbeExtraKey: snapshot})
+ 	if err != nil {
+@@ -3065,6 +3060,10 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+ 				THEN $10::numeric
+ 				ELSE rate_multiplier
+ 			END,
++			name = CASE WHEN extra @> '{"upstream_billing_group_sync_enabled": true, "upstream_billing_probe_enabled": true}'::jsonb
++				THEN COALESCE(NULLIF($11, ''), name) ELSE name END,
++			notes = CASE WHEN extra @> '{"upstream_billing_group_sync_enabled": true, "upstream_billing_probe_enabled": true}'::jsonb
++				THEN COALESCE(NULLIF($12, ''), notes) ELSE notes END,
+ 			updated_at = NOW()
+ 		WHERE id = $2
+ 			AND platform = $3
+@@ -3075,7 +3074,7 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+ 			AND COALESCE(extra -> 'upstream_billing_probe_enabled', 'null'::jsonb) = $8::jsonb
+ 			AND COALESCE(extra -> 'upstream_billing_rate_sync_enabled', 'null'::jsonb) = $9::jsonb
+ 			AND deleted_at IS NULL
+-	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier)
++	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier, group.Name, group.Description)
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/backend/internal/service/admin_account.go b/backend/internal/service/admin_account.go
+index 0521f7a90..3649f5e11 100644
+--- a/backend/internal/service/admin_account.go
++++ b/backend/internal/service/admin_account.go
+@@ -100,6 +100,8 @@ func cloneAccountJSONMap(value map[string]any) (map[string]any, error) {
+ var duplicateAccountDiscardedExtraKeys = map[string]struct{}{
+ 	// A retry identity belongs to the operation that created one copy, not to later copies.
+ 	duplicateAccountOperationIDExtraKey: {},
++	// Keep the copy's local name until its administrator opts into group sync.
++	UpstreamBillingGroupSyncEnabledExtraKey: {},
+ 	// External sync identity belongs to one local account only.
+ 	"crs_account_id": {},
+ 	"crs_kind":       {},
+@@ -414,9 +416,10 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
+ 	if input.Platform == PlatformTypeSafe && input.Type != AccountTypeAPIKey {
+ 		return nil, errors.New("typesafe accounts only support apikey credentials")
+ 	}
+-	// Probe/session state is system-managed. New accounts always start with automatic refresh disabled.
++	// Probe/session state is system-managed. Only explicit account settings can enable it.
+ 	delete(accountExtra, UpstreamBillingProbeEnabledExtraKey)
+ 	delete(accountExtra, UpstreamBillingRateSyncEnabledExtraKey)
++	delete(accountExtra, UpstreamBillingGroupSyncEnabledExtraKey)
+ 	delete(accountExtra, UpstreamBillingProbeExtraKey)
+ 	delete(accountExtra, OllamaCloudUsageSessionExtraKey)
+ 	delete(accountExtra, OllamaCloudUsageAutoRefreshExtraKey)
+@@ -437,7 +440,11 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
+ 		Status:      StatusActive,
+ 		Schedulable: true,
+ 	}
+-	if input.ProbeEnabled != nil && *input.ProbeEnabled {
++	groupSync := input.GroupSyncEnabled != nil && *input.GroupSyncEnabled
++	if groupSync && input.ProbeEnabled != nil && !*input.ProbeEnabled {
++		return nil, ErrUpstreamBillingGroupSyncRequiresProbe
++	}
++	if groupSync || (input.ProbeEnabled != nil && *input.ProbeEnabled) {
+ 		if !isUpstreamBillingProbeAccount(account) {
+ 			return nil, ErrUpstreamBillingProbeAccountInvalid
+ 		}
+@@ -445,6 +452,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
+ 			account.Extra = make(map[string]any)
+ 		}
+ 		account.Extra[UpstreamBillingProbeEnabledExtraKey] = true
++		if groupSync {
++			account.Extra[UpstreamBillingGroupSyncEnabledExtraKey] = true
++		}
+ 	}
+ 	// 预计算固定时间重置的下次重置时间
+ 	if account.Extra != nil {
+@@ -667,6 +677,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
+ 	requestedProbeEnabledUpdate := input.ProbeEnabled
+ 	requestedRateSyncEnabledUpdate := input.RateSyncEnabled
++	groupSyncUpdate := input.GroupSyncEnabled
+ 	if input.Extra != nil {
+ 		requestedProbeEnabled, hasRequestedProbeEnabled := normalizedExtra[UpstreamBillingProbeEnabledExtraKey]
+ 		if hasRequestedProbeEnabled {
+@@ -681,6 +692,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 		}
+ 		delete(normalizedExtra, UpstreamBillingProbeEnabledExtraKey)
+ 		delete(normalizedExtra, UpstreamBillingRateSyncEnabledExtraKey)
++		delete(normalizedExtra, UpstreamBillingGroupSyncEnabledExtraKey)
+ 		delete(normalizedExtra, UpstreamBillingProbeExtraKey)
+ 		delete(normalizedExtra, OllamaCloudUsageSessionExtraKey)
+ 		delete(normalizedExtra, OllamaCloudUsageAutoRefreshExtraKey)
+@@ -702,6 +714,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 			UpstreamModelMetadataExtraKey,
+ 			UpstreamBillingProbeEnabledExtraKey,
+ 			UpstreamBillingRateSyncEnabledExtraKey,
++			UpstreamBillingGroupSyncEnabledExtraKey,
+ 			UpstreamBillingProbeExtraKey,
+ 			OllamaCloudUsageSessionExtraKey,
+ 			OllamaCloudUsageAutoRefreshExtraKey,
+@@ -737,6 +750,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 	if input.Extra == nil {
+ 		account.Extra = prepareCodexFingerprintExtraForUpdate(account, account.Extra)
+ 	}
++	if groupSyncUpdate != nil && *groupSyncUpdate {
++		if requestedProbeEnabledUpdate != nil && !*requestedProbeEnabledUpdate {
++			return nil, ErrUpstreamBillingGroupSyncRequiresProbe
++		}
++		requestedProbeEnabledUpdate = groupSyncUpdate
++	}
+ 	if requestedRateSyncEnabledUpdate != nil && *requestedRateSyncEnabledUpdate {
+ 		if requestedProbeEnabledUpdate != nil && !*requestedProbeEnabledUpdate {
+ 			return nil, infraerrors.BadRequest(
+@@ -750,6 +769,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 	if requestedProbeEnabledUpdate != nil && !*requestedProbeEnabledUpdate {
+ 		disabled := false
+ 		requestedRateSyncEnabledUpdate = &disabled
++		groupSyncUpdate = &disabled
+ 	}
+ 	if (requestedProbeEnabledUpdate != nil && *requestedProbeEnabledUpdate) ||
+ 		(requestedRateSyncEnabledUpdate != nil && *requestedRateSyncEnabledUpdate) {
+@@ -757,7 +777,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 			return nil, ErrUpstreamBillingProbeAccountInvalid
+ 		}
+ 	}
+-	if account.Extra == nil && (requestedProbeEnabledUpdate != nil || requestedRateSyncEnabledUpdate != nil) {
++	if account.Extra == nil && (requestedProbeEnabledUpdate != nil || requestedRateSyncEnabledUpdate != nil || groupSyncUpdate != nil) {
+ 		account.Extra = make(map[string]any)
+ 	}
+ 	if requestedProbeEnabledUpdate != nil {
+@@ -766,6 +786,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 	if requestedRateSyncEnabledUpdate != nil {
+ 		account.Extra[UpstreamBillingRateSyncEnabledExtraKey] = *requestedRateSyncEnabledUpdate
+ 	}
++	if groupSyncUpdate != nil {
++		account.Extra[UpstreamBillingGroupSyncEnabledExtraKey] = *groupSyncUpdate
++	}
+ 	// 影子代理恒继承母账号(由 propagateProxyToShadows 同步),不接受独立编辑——外审 B/P1;
+ 	// 否则要等母账号下次改 proxy 才被覆盖,期间影子会出现"有时继承、有时独立"的漂移。
+ 	if input.ProxyID != nil && !account.IsCredentialShadow() {
+@@ -782,6 +805,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 		if !isUpstreamBillingProbeAccount(account) {
+ 			delete(account.Extra, UpstreamBillingProbeEnabledExtraKey)
+ 			delete(account.Extra, UpstreamBillingRateSyncEnabledExtraKey)
++			delete(account.Extra, UpstreamBillingGroupSyncEnabledExtraKey)
+ 		}
+ 	}
+ 	if account.Extra != nil {
+@@ -878,11 +902,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 	}
+ 	if updater != nil {
+ 		if err := updater.UpdateWithAccountBillingSettings(
+-			ctx,
+-			account,
+-			requestedProbeEnabledUpdate,
+-			requestedRateSyncEnabledUpdate,
+-			input.RateMultiplier,
++			ctx, account, AccountBillingSettingsUpdate{
++				ProbeEnabled: requestedProbeEnabledUpdate, RateSyncEnabled: requestedRateSyncEnabledUpdate,
++				GroupSyncEnabled: groupSyncUpdate, RateMultiplier: input.RateMultiplier,
++				SetName: input.Name != "", SetNotes: input.Notes != nil,
++			},
+ 		); err != nil {
+ 			return nil, err
+ 		}
+@@ -892,15 +916,18 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 		if err := s.accountRepo.Update(ctx, account); err != nil {
+ 			return nil, err
+ 		}
+-		if (requestedProbeEnabledUpdate != nil || requestedRateSyncEnabledUpdate != nil) &&
++		if (requestedProbeEnabledUpdate != nil || requestedRateSyncEnabledUpdate != nil || groupSyncUpdate != nil) &&
+ 			isUpstreamBillingProbeAccount(account) {
+-			settings := make(map[string]any, 2)
++			settings := make(map[string]any, 3)
+ 			if requestedProbeEnabledUpdate != nil {
+ 				settings[UpstreamBillingProbeEnabledExtraKey] = *requestedProbeEnabledUpdate
+ 			}
+ 			if requestedRateSyncEnabledUpdate != nil {
+ 				settings[UpstreamBillingRateSyncEnabledExtraKey] = *requestedRateSyncEnabledUpdate
+ 			}
++			if groupSyncUpdate != nil {
++				settings[UpstreamBillingGroupSyncEnabledExtraKey] = *groupSyncUpdate
++			}
+ 			if err := s.accountRepo.UpdateExtra(ctx, account.ID, settings); err != nil {
+ 				return nil, err
+ 			}
+@@ -937,6 +964,7 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
+ 	updates = stripOpenAIAutoResetCreditManagedExtra(updates, true)
+ 	delete(updates, UpstreamBillingProbeEnabledExtraKey)
+ 	delete(updates, UpstreamBillingRateSyncEnabledExtraKey)
++	delete(updates, UpstreamBillingGroupSyncEnabledExtraKey)
+ 	delete(updates, UpstreamBillingProbeExtraKey)
+ 	delete(updates, OllamaCloudUsageSessionExtraKey)
+ 	delete(updates, OllamaCloudUsageAutoRefreshExtraKey)
+@@ -966,6 +994,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
+ 	input.Extra = stripOpenAIAutoResetCreditManagedExtra(input.Extra, true)
+ 	delete(input.Extra, UpstreamBillingProbeEnabledExtraKey)
+ 	delete(input.Extra, UpstreamBillingRateSyncEnabledExtraKey)
++	delete(input.Extra, UpstreamBillingGroupSyncEnabledExtraKey)
+ 	delete(input.Extra, UpstreamBillingProbeExtraKey)
+ 	delete(input.Extra, OllamaCloudUsageSessionExtraKey)
+ 	delete(input.Extra, OllamaCloudUsageAutoRefreshExtraKey)
+@@ -1132,6 +1161,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
+ 		repoUpdates.Extra[UpstreamBillingProbeEnabledExtraKey] = *input.ProbeEnabled
+ 		if !*input.ProbeEnabled {
+ 			repoUpdates.Extra[UpstreamBillingRateSyncEnabledExtraKey] = false
++			repoUpdates.Extra[UpstreamBillingGroupSyncEnabledExtraKey] = false
+ 		}
+ 	}
+ 	if updatesUpstreamBillingProbeIdentity(input.Credentials) || input.ProxyID != nil {
+diff --git a/backend/internal/service/api_key_service.go b/backend/internal/service/api_key_service.go
+index 6b504ee55..c203a7208 100644
+--- a/backend/internal/service/api_key_service.go
++++ b/backend/internal/service/api_key_service.go
+@@ -1043,6 +1043,22 @@ func (s *APIKeyService) IncrementUsage(ctx context.Context, keyID int64) error {
+ 	return nil
+ }
+ 
++// BillingGroupInfo contains the display text for the group bound to an API key.
++type BillingGroupInfo struct {
++	Name        string `json:"group_name"`
++	Description string `json:"group_description"`
++}
++
++// GetBillingGroupInfo loads display text only when requested by the billing endpoint.
++func (s *APIKeyService) GetBillingGroupInfo(ctx context.Context, groupID int64, language string) (*BillingGroupInfo, error) {
++	group, err := s.groupRepo.GetByIDLite(ctx, groupID)
++	if err != nil {
++		return nil, err
++	}
++	name, description := group.I18n.Localize(language, group.Name, group.Description)
++	return &BillingGroupInfo{Name: name, Description: description}, nil
++}
++
+ // GetAvailableGroups 获取用户有权限绑定的分组列表
+ // 返回用户可以选择的分组：
+ // - 标准类型分组：公开的（非专属）或用户被明确允许的

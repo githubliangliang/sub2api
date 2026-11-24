@@ -1,0 +1,2650 @@
+diff --git a/backend/internal/server/middleware/api_key_auth.go b/backend/internal/server/middleware/api_key_auth.go
+index c2dd7bf8f..c28cd41cc 100644
+--- a/backend/internal/server/middleware/api_key_auth.go
++++ b/backend/internal/server/middleware/api_key_auth.go
+@@ -172,6 +172,8 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
+ 			return
+ 		}
+ 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
++		// 请求头覆写变量（{{user_id}} 等）的取值来源：只在此处由已认证的 Key 建立。
++		ctx = service.WithHeaderOverrideRequestScope(ctx, apiKey.User.ID, apiKey.ID, apiKey.GroupID)
+ 		c.Request = c.Request.WithContext(ctx)
+ 		billingInfoRequest := c.Request.URL.Path == "/v1/sub2api/billing"
+ 		// Async image task polling only reads data that already belongs to the
+diff --git a/backend/internal/server/middleware/api_key_auth_google.go b/backend/internal/server/middleware/api_key_auth_google.go
+index ec0c34411..1a340e513 100644
+--- a/backend/internal/server/middleware/api_key_auth_google.go
++++ b/backend/internal/server/middleware/api_key_auth_google.go
+@@ -116,6 +116,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
+ 			abortWithGoogleError(c, 401, "User account is not active")
+ 			return
+ 		}
++		// 请求头覆写变量（{{user_id}} 等）的取值来源，与 APIKeyAuth 保持一致。
++		c.Request = c.Request.WithContext(service.WithHeaderOverrideRequestScope(
++			c.Request.Context(), apiKey.User.ID, apiKey.ID, apiKey.GroupID))
+ 		if code, message, ok := validateAPIKeyGroupAvailable(apiKey); !ok {
+ 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
+ 			if code == "GROUP_DELETED" {
+diff --git a/backend/internal/server/middleware/api_key_auth_test.go b/backend/internal/server/middleware/api_key_auth_test.go
+index daf5cfe1d..a61f3d9ee 100644
+--- a/backend/internal/server/middleware/api_key_auth_test.go
++++ b/backend/internal/server/middleware/api_key_auth_test.go
+@@ -386,6 +386,24 @@ func TestAPIKeyAuthSetsGroupContext(t *testing.T) {
+ 			c.JSON(http.StatusInternalServerError, gin.H{"ok": false})
+ 			return
+ 		}
++		// 请求头覆写变量的身份来源：认证后的 context 能解析出 user/key/group
++		account := &service.Account{
++			ID:       1,
++			Platform: service.PlatformAnthropic,
++			Type:     service.AccountTypeAPIKey,
++			Credentials: map[string]any{
++				"header_override_enabled": true,
++				"header_overrides": map[string]any{
++					"x-identity": "{{user_id}}/{{api_key_id}}/{{group_id}}",
++				},
++			},
++		}
++		upstreamHeaders := http.Header{}
++		account.ApplyHeaderOverrides(c.Request.Context(), upstreamHeaders)
++		if got := upstreamHeaders["x-identity"]; len(got) != 1 || got[0] != "7/100/101" {
++			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "identity": got})
++			return
++		}
+ 		c.JSON(http.StatusOK, gin.H{"ok": true})
+ 	})
+ 
+@@ -394,7 +412,7 @@ func TestAPIKeyAuthSetsGroupContext(t *testing.T) {
+ 	req.Header.Set("x-api-key", apiKey.Key)
+ 	router.ServeHTTP(w, req)
+ 
+-	require.Equal(t, http.StatusOK, w.Code)
++	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+ }
+ 
+ func TestAPIKeyAuthRejectsExclusiveGroupWhenUserNoLongerAllowed(t *testing.T) {
+diff --git a/backend/internal/service/account_header_override.go b/backend/internal/service/account_header_override.go
+index e807cac15..66574836f 100644
+--- a/backend/internal/service/account_header_override.go
++++ b/backend/internal/service/account_header_override.go
+@@ -1,6 +1,7 @@
+ package service
+ 
+ import (
++	"context"
+ 	"net/http"
+ 	"strings"
+ 
+@@ -164,16 +165,24 @@ func resolveHeaderOverrides(raw map[string]string) map[string]string {
+ 
+ // HeaderOverrideValue 返回指定 header（小写名）的生效覆写值。
+ // 供转发链路在 header 写入前感知覆写结果（如 anthropic-beta 需要参与 body 净化）。
++// 含变量的覆写值在此视为未覆写：它的最终值逐请求变化，不能当静态值参与 body 净化。
+ func (a *Account) HeaderOverrideValue(lowerName string) (string, bool) {
+ 	value, ok := a.GetHeaderOverrides()[lowerName]
+-	return value, ok
++	if !ok || headerOverrideHasVariable(value) {
++		return "", false
++	}
++	return value, true
+ }
+ 
+ // ApplyHeaderOverrides 将账号配置的请求头覆写应用到出站请求头。
+ // 对每个覆写条目：先删除所有大小写变体（转发链路会以 wire casing 直接写入 map，
+ // 可能存在非 canonical key），再按已知 wire casing 写入，避免产生重复头。
+ // 账号未启用或不符合条件时为 no-op，可安全地在 OAuth/api_key 共用的构建器中调用。
+-func (a *Account) ApplyHeaderOverrides(h http.Header) {
++//
++// 覆写值含变量（{{user_id}} 等）时用 ctx 中的入站请求身份替换；规则见
++// account_header_override_vars.go：非 api_key 账号、或变量取不到值时，该请求头
++// 整条不发送（既有同名头照样删除，客户端无法伪造上报头）。
++func (a *Account) ApplyHeaderOverrides(ctx context.Context, h http.Header) {
+ 	if h == nil {
+ 		return
+ 	}
+@@ -190,6 +199,17 @@ func (a *Account) ApplyHeaderOverrides(h http.Header) {
+ 				delete(h, existing)
+ 			}
+ 		}
++		if headerOverrideHasVariable(value) {
++			if !a.supportsHeaderOverrideVariables() {
++				continue
++			}
++			expanded, loggable, ok := expandHeaderOverrideTemplate(ctx, value)
++			if !ok {
++				continue
++			}
++			value = expanded
++			headerOverrideScopeFromContext(ctx).record(a.ID, name, loggable)
++		}
+ 		h[resolveWireCasing(name)] = []string{value}
+ 	}
+ }
+@@ -245,6 +265,11 @@ func NormalizeHeaderOverrideCredentials(credentials map[string]any) error {
+ 		if lowerName == "" {
+ 			continue // 丢弃完全为空的占位行
+ 		}
++		// 变量语法只在保存路径校验：应用路径必须保留模板不合法的存量条目，
++		// 由 ApplyHeaderOverrides 按"解析失败"处理（删除同名头且不发送）。
++		if err := validateHeaderOverrideTemplate(lowerName, value); err != nil {
++			return err
++		}
+ 		if _, dup := normalized[lowerName]; dup {
+ 			return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
+ 				"duplicate header name %q (matching is case-insensitive)", lowerName)
+diff --git a/backend/internal/service/account_header_override_test.go b/backend/internal/service/account_header_override_test.go
+index e90051df2..c20d1f959 100644
+--- a/backend/internal/service/account_header_override_test.go
++++ b/backend/internal/service/account_header_override_test.go
+@@ -3,6 +3,7 @@
+ package service
+ 
+ import (
++	"context"
+ 	"net/http"
+ 	"strings"
+ 	"testing"
+@@ -143,7 +144,7 @@ func TestApplyHeaderOverrides(t *testing.T) {
+ 	h["anthropic-beta"] = []string{"claude-code-20250219,oauth-2025-04-20"} // 非 canonical 原样 key
+ 	h.Set("Content-Type", "application/json")
+ 
+-	acc.ApplyHeaderOverrides(h)
++	acc.ApplyHeaderOverrides(context.Background(), h)
+ 
+ 	// user-agent 覆盖且只有一个值（已知头恢复 wire casing）
+ 	require.Equal(t, []string{"override-agent/2.0"}, h["User-Agent"])
+@@ -179,7 +180,7 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
+ 		credKeyHeaderOverrides:       map[string]any{"user-agent": "hacked"},
+ 	})
+ 	h := baseline()
+-	oauth.ApplyHeaderOverrides(h)
++	oauth.ApplyHeaderOverrides(context.Background(), h)
+ 	require.Equal(t, "orig", h.Get("User-Agent"))
+ 
+ 	// 未启用开关
+@@ -187,7 +188,7 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
+ 		credKeyHeaderOverrides: map[string]any{"user-agent": "hacked"},
+ 	})
+ 	h = baseline()
+-	off.ApplyHeaderOverrides(h)
++	off.ApplyHeaderOverrides(context.Background(), h)
+ 	require.Equal(t, "orig", h.Get("User-Agent"))
+ 
+ 	// 禁止覆写的头（authorization / x-api-key / host 等）不会被应用
+@@ -202,13 +203,13 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
+ 	})
+ 	h = http.Header{}
+ 	h.Set("Authorization", "Bearer real-key")
+-	blocked.ApplyHeaderOverrides(h)
++	blocked.ApplyHeaderOverrides(context.Background(), h)
+ 	require.Equal(t, "Bearer real-key", h.Get("Authorization"))
+ 	require.Empty(t, h.Get("X-Api-Key"))
+ 	require.Empty(t, h.Get("Host"))
+ 
+ 	// nil header 不 panic
+-	blocked.ApplyHeaderOverrides(nil)
++	blocked.ApplyHeaderOverrides(context.Background(), nil)
+ }
+ 
+ func TestNormalizeHeaderOverrideCredentials(t *testing.T) {
+diff --git a/backend/internal/service/account_header_override_vars.go b/backend/internal/service/account_header_override_vars.go
+new file mode 100644
+index 000000000..b7cc1611f
+--- /dev/null
++++ b/backend/internal/service/account_header_override_vars.go
+@@ -0,0 +1,334 @@
++package service
++
++import (
++	"context"
++	"net/http"
++	"sort"
++	"strconv"
++	"strings"
++	"sync"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
++
++	"golang.org/x/net/http/httpguts"
++)
++
++// 请求头覆写变量（magic variables）：覆写值中的 {{name}} 在转发时替换为本次请求的
++// 网关身份，用于把"是哪个用户发的请求"逐层上报给上游，便于排错与违规溯源。
++//
++// 不变式（改动前必读）：
++//   - 仅 api_key 账号解析变量。其它类型（含 Grok OAuth）即使配置了带变量的覆写值，
++//     该请求头也整条不发送：官方订阅上游绝不能收到网关内部身份。
++//   - 变量取不到值（无用户上下文的后台请求、未知变量名）时整条请求头不发送，并且
++//     同名的既有请求头仍会被删除——客户端不能借此伪造上报头。
++//   - 只对管理员配置的模板做替换，替换结果不再二次解析；客户端请求内容永远不参与插值。
++const (
++	headerOverrideVarOpen  = "{{"
++	headerOverrideVarClose = "}}"
++
++	HeaderOverrideVarUserID    = "user_id"
++	HeaderOverrideVarAPIKeyID  = "api_key_id"
++	HeaderOverrideVarGroupID   = "group_id"
++	HeaderOverrideVarRequestID = "request_id"
++)
++
++var headerOverrideVariableNames = map[string]struct{}{
++	HeaderOverrideVarUserID:    {},
++	HeaderOverrideVarAPIKeyID:  {},
++	HeaderOverrideVarGroupID:   {},
++	HeaderOverrideVarRequestID: {},
++}
++
++// HeaderOverrideRequestScope 是一次入站请求的上报身份，以及本次请求实际上报给各账号的
++// 请求头记录（供错误记录展示）。由 API Key 认证中间件创建并挂到请求 context。
++type HeaderOverrideRequestScope struct {
++	userID   int64
++	apiKeyID int64
++	groupID  int64
++
++	mu       sync.Mutex
++	reported map[int64]map[string]string // accountID -> 请求头名(小写) -> 实际发送的值
++}
++
++type headerOverrideScopeKey struct{}
++
++type headerOverrideConnectionScopeKey struct{}
++
++// withHeaderOverrideConnectionScope 标记 ctx 用于构造"连接级"请求头（OpenAI WS 握手）。
++// 一条上游连接会承载多次请求，{{request_id}} 在握手头里无法如实表达，因此不解析，
++// 含它的请求头整条不发送；user_id 等在连接生命周期内稳定的变量照常解析。
++func withHeaderOverrideConnectionScope(ctx context.Context) context.Context {
++	return context.WithValue(ctx, headerOverrideConnectionScopeKey{}, true)
++}
++
++// WithHeaderOverrideRequestScope 把本次请求的网关身份挂到 context。
++// 非正数的 ID 视为"无该身份"，对应变量解析失败。
++func WithHeaderOverrideRequestScope(ctx context.Context, userID, apiKeyID int64, groupID *int64) context.Context {
++	scope := &HeaderOverrideRequestScope{userID: userID, apiKeyID: apiKeyID}
++	if groupID != nil {
++		scope.groupID = *groupID
++	}
++	return context.WithValue(ctx, headerOverrideScopeKey{}, scope)
++}
++
++// withoutHeaderOverrideRequestScope 去掉 ctx 中的入站用户身份。
++// 用于结果会被跨用户缓存/共享的上游请求（模型列表等）：这类请求不代表某个用户的
++// 推理流量，不上报身份；同时避免逐用户/逐请求的头把按请求头分桶的缓存打散。
++func withoutHeaderOverrideRequestScope(ctx context.Context) context.Context {
++	if headerOverrideScopeFromContext(ctx) == nil {
++		return ctx
++	}
++	return context.WithValue(ctx, headerOverrideScopeKey{}, (*HeaderOverrideRequestScope)(nil))
++}
++
++func headerOverrideScopeFromContext(ctx context.Context) *HeaderOverrideRequestScope {
++	if ctx == nil {
++		return nil
++	}
++	scope, _ := ctx.Value(headerOverrideScopeKey{}).(*HeaderOverrideRequestScope)
++	return scope
++}
++
++func (s *HeaderOverrideRequestScope) record(accountID int64, lowerName, value string) {
++	if s == nil || accountID <= 0 {
++		return
++	}
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.reported == nil {
++		s.reported = make(map[int64]map[string]string)
++	}
++	headers := s.reported[accountID]
++	if headers == nil {
++		headers = make(map[string]string)
++		s.reported[accountID] = headers
++	}
++	headers[lowerName] = value
++}
++
++// reportedHeaders 返回本次请求上报给指定账号的请求头副本；没有上报时返回 nil。
++func (s *HeaderOverrideRequestScope) reportedHeaders(accountID int64) map[string]string {
++	if s == nil || accountID <= 0 {
++		return nil
++	}
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	headers := s.reported[accountID]
++	if len(headers) == 0 {
++		return nil
++	}
++	out := make(map[string]string, len(headers))
++	for name, value := range headers {
++		out[name] = value
++	}
++	return out
++}
++
++// headerOverrideReportedHeaders 返回 ctx 所属请求上报给指定账号的请求头。
++func headerOverrideReportedHeaders(ctx context.Context, accountID int64) map[string]string {
++	return headerOverrideScopeFromContext(ctx).reportedHeaders(accountID)
++}
++
++func headerOverrideHasVariable(value string) bool {
++	return strings.Contains(value, headerOverrideVarOpen)
++}
++
++// walkHeaderOverrideTemplate 逐段扫描模板：字面量交给 literal，变量名交给 variable。
++// 任何 "{{" 都必须构成一个完整的 {{name}}（name 两侧允许空白）；否则返回 false。
++// variable 返回 false 时中止并整体返回 false。
++func walkHeaderOverrideTemplate(value string, literal func(string), variable func(string) bool) bool {
++	rest := value
++	for {
++		open := strings.Index(rest, headerOverrideVarOpen)
++		if open < 0 {
++			literal(rest)
++			return true
++		}
++		literal(rest[:open])
++		rest = rest[open+len(headerOverrideVarOpen):]
++		end := strings.Index(rest, headerOverrideVarClose)
++		if end < 0 {
++			return false
++		}
++		if !variable(strings.TrimSpace(rest[:end])) {
++			return false
++		}
++		rest = rest[end+len(headerOverrideVarClose):]
++	}
++}
++
++// validateHeaderOverrideTemplate 校验覆写值中的变量语法与变量名（保存路径）。
++func validateHeaderOverrideTemplate(lowerName, value string) error {
++	if !headerOverrideHasVariable(value) {
++		return nil
++	}
++	unknown := ""
++	ok := walkHeaderOverrideTemplate(value, func(string) {}, func(name string) bool {
++		if _, known := headerOverrideVariableNames[name]; !known {
++			unknown = name
++			return false
++		}
++		return true
++	})
++	if ok {
++		return nil
++	}
++	if unknown != "" {
++		return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
++			"header %q uses unknown variable %q", lowerName, unknown)
++	}
++	return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
++		"header %q has a malformed variable placeholder", lowerName)
++}
++
++// headerOverrideRedactedLiteral 在可记录形态中代替模板的固定文本。
++const headerOverrideRedactedLiteral = "…"
++
++// expandHeaderOverrideTemplate 用本次请求的身份替换模板中的变量。
++// 任一变量无法解析、或结果不是合法的请求头值时 ok 为 false，调用方必须整条不发送。
++//
++// loggable 是可写入错误记录的形态，固定文本可能是中转密钥（如 "sk-xxx-{{user_id}}"），
++// 不得进入日志：
++//   - 模板只有变量时，loggable 就是实际发送的值；
++//   - 混有固定文本时，固定文本替换为 "…"，变量写成 name=value 以便辨认。
++func expandHeaderOverrideTemplate(ctx context.Context, value string) (expanded, loggable string, ok bool) {
++	scope := headerOverrideScopeFromContext(ctx)
++	var sent, tagged strings.Builder
++	hasLiteral := false
++	ok = walkHeaderOverrideTemplate(value, func(literal string) {
++		_, _ = sent.WriteString(literal)
++		if strings.TrimSpace(literal) != "" {
++			hasLiteral = true
++			_, _ = tagged.WriteString(headerOverrideRedactedLiteral)
++		}
++	}, func(name string) bool {
++		resolved := resolveHeaderOverrideVariable(ctx, scope, name)
++		if resolved == "" {
++			return false
++		}
++		_, _ = sent.WriteString(resolved)
++		_, _ = tagged.WriteString(name + "=" + resolved)
++		return true
++	})
++	if !ok {
++		return "", "", false
++	}
++	expanded = strings.TrimSpace(sent.String())
++	if expanded == "" || len(expanded) > maxHeaderOverrideValueLength || !httpguts.ValidHeaderFieldValue(expanded) {
++		return "", "", false
++	}
++	if !hasLiteral {
++		return expanded, expanded, true
++	}
++	return expanded, tagged.String(), true
++}
++
++func resolveHeaderOverrideVariable(ctx context.Context, scope *HeaderOverrideRequestScope, name string) string {
++	// 没有入站用户身份（账号测试、模型同步、探针等后台请求）时一律不解析，
++	// 避免把管理端操作的 request_id 当成用户请求上报。
++	if scope == nil || scope.userID <= 0 {
++		return ""
++	}
++	positive := func(id int64) string {
++		if id <= 0 {
++			return ""
++		}
++		return strconv.FormatInt(id, 10)
++	}
++	switch name {
++	case HeaderOverrideVarUserID:
++		return positive(scope.userID)
++	case HeaderOverrideVarAPIKeyID:
++		return positive(scope.apiKeyID)
++	case HeaderOverrideVarGroupID:
++		return positive(scope.groupID)
++	case HeaderOverrideVarRequestID:
++		if connectionScoped, _ := ctx.Value(headerOverrideConnectionScopeKey{}).(bool); connectionScoped {
++			return ""
++		}
++		requestID, _ := ctx.Value(ctxkey.RequestID).(string)
++		return sanitizeHeaderOverrideRequestID(requestID)
++	default:
++		return ""
++	}
++}
++
++const maxHeaderOverrideRequestIDLength = 128
++
++// sanitizeHeaderOverrideRequestID 约束代入模板的请求 ID。
++// 请求 ID 可由客户端通过 X-Request-ID 自带，是变量里唯一受客户端控制的内容：
++// 原样代入组合模板（如 "u={{user_id}};r={{request_id}}"）会让客户端借分隔符伪造
++// 其它身份字段。因此只保留 [A-Za-z0-9._-]，其余字符替换为 "_" 并限长；
++// 不直接丢弃整条请求头，否则客户端可借此让上报头消失。
++func sanitizeHeaderOverrideRequestID(requestID string) string {
++	requestID = strings.TrimSpace(requestID)
++	if len(requestID) > maxHeaderOverrideRequestIDLength {
++		requestID = requestID[:maxHeaderOverrideRequestIDLength]
++	}
++	return strings.Map(func(r rune) rune {
++		switch {
++		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
++			return r
++		default:
++			return '_'
++		}
++	}, requestID)
++}
++
++// supportsHeaderOverrideVariables 报告账号是否允许解析覆写变量：仅 api_key 账号。
++func (a *Account) supportsHeaderOverrideVariables() bool {
++	return a != nil && a.Type == AccountTypeAPIKey
++}
++
++// ValidateHeaderOverrideVariableUsage 在保存路径拒绝非 api_key 账号使用覆写变量。
++// 运行时 ApplyHeaderOverrides 仍会独立拦截，这里只是让管理员尽早看到明确的错误。
++func ValidateHeaderOverrideVariableUsage(accountType string, credentials map[string]any) error {
++	if accountType == AccountTypeAPIKey || credentials == nil {
++		return nil
++	}
++	for name, value := range stringMappingFromRaw(credentials[credKeyHeaderOverrides]) {
++		if headerOverrideHasVariable(value) {
++			return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
++				"header %q uses variables, which are only available on API key accounts", name)
++		}
++	}
++	return nil
++}
++
++// headerOverrideReportedIdentity 返回出站请求头中由覆写变量生成的部分的规范串
++// （按名排序的 name=value）。用于会跨请求复用的上游连接（OpenAI WS 连接池）：
++// 握手头在建连时固定，上报身份不同的请求不得共用同一条连接。
++func (a *Account) headerOverrideReportedIdentity(h http.Header) string {
++	if !a.supportsHeaderOverrideVariables() {
++		return ""
++	}
++	var names []string
++	for name, value := range a.GetHeaderOverrides() {
++		if headerOverrideHasVariable(value) {
++			names = append(names, name)
++		}
++	}
++	if len(names) == 0 {
++		return ""
++	}
++	sort.Strings(names)
++	var b strings.Builder
++	for _, name := range names {
++		_, _ = b.WriteString(name)
++		_ = b.WriteByte('=')
++		_, _ = b.WriteString(strings.Join(headerValuesFold(h, name), ","))
++		_ = b.WriteByte('\n')
++	}
++	return b.String()
++}
++
++func headerValuesFold(h http.Header, lowerName string) []string {
++	var values []string
++	for existing, vals := range h {
++		if strings.EqualFold(existing, lowerName) {
++			values = append(values, vals...)
++		}
++	}
++	return values
++}
+diff --git a/backend/internal/service/account_header_override_vars_test.go b/backend/internal/service/account_header_override_vars_test.go
+new file mode 100644
+index 000000000..72f13aff7
+--- /dev/null
++++ b/backend/internal/service/account_header_override_vars_test.go
+@@ -0,0 +1,379 @@
++//go:build unit
++
++package service
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/Wei-Shaw/sub2api/internal/config"
++	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++
++	"github.com/gin-gonic/gin"
++	"github.com/stretchr/testify/require"
++)
++
++func headerOverrideVarsAccount(platform, accountType string, overrides map[string]any) *Account {
++	acc := headerOverrideTestAccount(platform, accountType, map[string]any{
++		credKeyHeaderOverrideEnabled: true,
++		credKeyHeaderOverrides:       overrides,
++	})
++	acc.ID = 42
++	return acc
++}
++
++func headerOverrideUserContext() context.Context {
++	groupID := int64(9)
++	ctx := context.WithValue(context.Background(), ctxkey.RequestID, "req-abc")
++	return WithHeaderOverrideRequestScope(ctx, 7, 31, &groupID)
++}
++
++func TestApplyHeaderOverridesExpandsVariables(t *testing.T) {
++	acc := headerOverrideVarsAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
++		"x-end-user":   "{{user_id}}",
++		"x-trace":      "u={{ user_id }};k={{api_key_id}};g={{group_id}};r={{request_id}}",
++		"x-static":     "plain",
++		"x-json-value": `{"team":"a"}`,
++	})
++	ctx := headerOverrideUserContext()
++	h := http.Header{}
++	h.Set("X-End-User", "spoofed-by-client")
++
++	acc.ApplyHeaderOverrides(ctx, h)
++
++	require.Equal(t, []string{"7"}, h["x-end-user"])
++	require.Equal(t, []string{"u=7;k=31;g=9;r=req-abc"}, h["x-trace"])
++	require.Equal(t, []string{"plain"}, h["x-static"])
++	require.Equal(t, []string{`{"team":"a"}`}, h["x-json-value"])
++	require.Empty(t, h.Values("X-End-User"), "client-supplied casing must be replaced, not kept alongside")
++
++	// 只记录变量生成的请求头，静态覆写值（可能是中转密钥）不进记录
++	require.Equal(t, map[string]string{
++		"x-end-user": "7",
++		"x-trace":    "…user_id=7…api_key_id=31…group_id=9…request_id=req-abc",
++	}, headerOverrideReportedHeaders(ctx, acc.ID))
++	require.Nil(t, headerOverrideReportedHeaders(ctx, acc.ID+1))
++}
++
++func TestApplyHeaderOverridesNeverExpandsForOAuth(t *testing.T) {
++	// Grok OAuth 账号支持静态覆写，但变量绝不解析、也不把模板原文发给上游
++	acc := headerOverrideVarsAccount(PlatformGrok, AccountTypeOAuth, map[string]any{
++		"x-end-user": "{{user_id}}",
++		"x-static":   "plain",
++	})
++	ctx := headerOverrideUserContext()
++	h := http.Header{}
++	h.Set("X-End-User", "spoofed-by-client")
++
++	acc.ApplyHeaderOverrides(ctx, h)
++
++	require.Empty(t, headerValuesFold(h, "x-end-user"))
++	require.Equal(t, []string{"plain"}, h["x-static"])
++	require.Nil(t, headerOverrideReportedHeaders(ctx, acc.ID))
++	require.Empty(t, acc.headerOverrideReportedIdentity(h))
++
++	// 不具备覆写资格的 OAuth 账号整体 no-op
++	anthropicOAuth := headerOverrideVarsAccount(PlatformAnthropic, AccountTypeOAuth, map[string]any{
++		"x-end-user": "{{user_id}}",
++	})
++	h = http.Header{}
++	anthropicOAuth.ApplyHeaderOverrides(ctx, h)
++	require.Empty(t, h)
++}
++
++func TestApplyHeaderOverridesOmitsUnresolvedVariables(t *testing.T) {
++	acc := headerOverrideVarsAccount(PlatformAnthropic, AccountTypeAPIKey, map[string]any{
++		"x-end-user": "{{user_id}}",
++		"x-group":    "{{group_id}}",
++		"x-request":  "{{request_id}}",
++		"x-static":   "plain",
++	})
++
++	t.Run("no user context", func(t *testing.T) {
++		// 账号测试/探针等后台请求：即使 ctx 带 request_id 也不上报
++		ctx := context.WithValue(context.Background(), ctxkey.RequestID, "admin-req")
++		h := http.Header{}
++		h.Set("X-End-User", "spoofed-by-client")
++		acc.ApplyHeaderOverrides(ctx, h)
++		require.Equal(t, http.Header{"x-static": []string{"plain"}}, h)
++	})
++
++	t.Run("key without group", func(t *testing.T) {
++		ctx := WithHeaderOverrideRequestScope(context.Background(), 7, 31, nil)
++		h := http.Header{}
++		acc.ApplyHeaderOverrides(ctx, h)
++		require.Equal(t, []string{"7"}, h["x-end-user"])
++		require.Empty(t, headerValuesFold(h, "x-group"))
++		require.Empty(t, headerValuesFold(h, "x-request"))
++	})
++
++	t.Run("connection scope drops request_id only", func(t *testing.T) {
++		ctx := withHeaderOverrideConnectionScope(headerOverrideUserContext())
++		h := http.Header{}
++		acc.ApplyHeaderOverrides(ctx, h)
++		require.Equal(t, []string{"7"}, h["x-end-user"])
++		require.Equal(t, []string{"9"}, h["x-group"])
++		require.Empty(t, headerValuesFold(h, "x-request"))
++	})
++
++	t.Run("legacy invalid template still blocks the client header", func(t *testing.T) {
++		// 未经保存校验的存量数据：模板不合法的条目不发送，但同名客户端头照样删除
++		legacy := headerOverrideVarsAccount(PlatformAnthropic, AccountTypeAPIKey, map[string]any{
++			"x-legacy": "{{user_email}}",
++			"x-open":   "id-{{user_id",
++		})
++		h := http.Header{}
++		h.Set("X-Legacy", "spoofed-by-client")
++		h.Set("X-Open", "spoofed-by-client")
++		legacy.ApplyHeaderOverrides(headerOverrideUserContext(), h)
++		require.Empty(t, h)
++	})
++}
++
++func TestHeaderOverrideSharedFetchCarriesNoIdentity(t *testing.T) {
++	acc := headerOverrideVarsAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
++		"x-end-user": "{{user_id}}",
++		"x-static":   "plain",
++	})
++	userCtx := headerOverrideUserContext()
++	h := http.Header{}
++	h.Set("X-End-User", "spoofed-by-client")
++	acc.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(userCtx), h)
++	require.Equal(t, http.Header{"x-static": []string{"plain"}}, h)
++	require.Nil(t, headerOverrideReportedHeaders(userCtx, acc.ID))
++
++	// 无身份的 ctx 原样返回
++	plain := context.Background()
++	require.Equal(t, plain, withoutHeaderOverrideRequestScope(plain))
++}
++
++func TestHeaderOverrideReportedHeadersRedactLiterals(t *testing.T) {
++	acc := headerOverrideVarsAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
++		"x-relay-auth": "sk-relay-secret-{{user_id}}",
++		"x-trace":      "key={{api_key_id}};req={{request_id}}",
++		"x-end-user":   "{{user_id}}{{api_key_id}}",
++	})
++	ctx := headerOverrideUserContext()
++	h := http.Header{}
++	acc.ApplyHeaderOverrides(ctx, h)
++
++	require.Equal(t, []string{"sk-relay-secret-7"}, h["x-relay-auth"], "upstream still gets the full value")
++	require.Equal(t, map[string]string{
++		"x-relay-auth": "…user_id=7",
++		"x-trace":      "…api_key_id=31…request_id=req-abc",
++		"x-end-user":   "731",
++	}, headerOverrideReportedHeaders(ctx, acc.ID))
++}
++
++func TestHeaderOverrideRequestIDIsClientControlledAndSanitized(t *testing.T) {
++	// request_id 可由客户端通过 X-Request-ID 自带：不得借分隔符伪造其它字段、
++	// 不得被二次解析成变量、不得注入请求头，也不能让上报头整条消失。
++	acc := headerOverrideVarsAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
++		"x-trace": "u={{user_id}};r={{request_id}}",
++	})
++	for name, tc := range map[string]struct{ requestID, want string }{
++		"uuid":           {"6f1c2d3e-8a4b-4c5d-9e0f-a1b2c3d4e5f6", "u=7;r=6f1c2d3e-8a4b-4c5d-9e0f-a1b2c3d4e5f6"},
++		"field forgery":  {"x;u=8", "u=7;r=x_u_8"},
++		"looks variable": {"{{user_id}}", "u=7;r=__user_id__"},
++		"crlf":           {"bad\r\nx-injected: 1", "u=7;r=bad__x-injected__1"},
++		"non ascii":      {"请求-1", "u=7;r=__-1"},
++		"oversized":      {strings.Repeat("a", 500), "u=7;r=" + strings.Repeat("a", maxHeaderOverrideRequestIDLength)},
++	} {
++		t.Run(name, func(t *testing.T) {
++			ctx := context.WithValue(context.Background(), ctxkey.RequestID, tc.requestID)
++			ctx = WithHeaderOverrideRequestScope(ctx, 7, 31, nil)
++			h := http.Header{}
++			acc.ApplyHeaderOverrides(ctx, h)
++			require.Equal(t, []string{tc.want}, h["x-trace"])
++		})
++	}
++
++	// 没有请求 ID 时仍按"取不到值"处理
++	ctx := WithHeaderOverrideRequestScope(context.Background(), 7, 31, nil)
++	h := http.Header{}
++	acc.ApplyHeaderOverrides(ctx, h)
++	require.Empty(t, h)
++}
++
++func TestNormalizeHeaderOverrideCredentialsValidatesVariables(t *testing.T) {
++	valid := map[string]any{credKeyHeaderOverrides: map[string]any{
++		"X-End-User": " {{ user_id }} ",
++		"x-meta":     `{"u":"{{user_id}}","k":"{{api_key_id}}"}`,
++	}}
++	require.NoError(t, NormalizeHeaderOverrideCredentials(valid))
++	require.Equal(t, map[string]any{
++		"x-end-user": "{{ user_id }}",
++		"x-meta":     `{"u":"{{user_id}}","k":"{{api_key_id}}"}`,
++	}, valid[credKeyHeaderOverrides])
++
++	for name, value := range map[string]string{
++		"unknown":       "{{user_email}}",
++		"typo":          "{{userid}}",
++		"empty":         "{{}}",
++		"unterminated":  "id-{{user_id",
++		"upper":         "{{USER_ID}}",
++		"nested":        "{{ {{user_id}} }}",
++		"triple braces": "{{{user_id}}}",
++	} {
++		t.Run(name, func(t *testing.T) {
++			err := NormalizeHeaderOverrideCredentials(map[string]any{
++				credKeyHeaderOverrides: map[string]any{"x-end-user": value},
++			})
++			require.Error(t, err)
++		})
++	}
++}
++
++func TestValidateHeaderOverrideVariableUsage(t *testing.T) {
++	withVars := map[string]any{credKeyHeaderOverrides: map[string]any{"x-end-user": "{{user_id}}"}}
++	static := map[string]any{credKeyHeaderOverrides: map[string]any{"x-relay": "token"}}
++
++	require.NoError(t, ValidateHeaderOverrideVariableUsage(AccountTypeAPIKey, withVars))
++	require.Error(t, ValidateHeaderOverrideVariableUsage(AccountTypeOAuth, withVars))
++	require.Error(t, ValidateHeaderOverrideVariableUsage(AccountTypeSetupToken, withVars))
++	require.NoError(t, ValidateHeaderOverrideVariableUsage(AccountTypeOAuth, static))
++	require.NoError(t, ValidateHeaderOverrideVariableUsage(AccountTypeOAuth, nil))
++}
++
++func TestHeaderOverrideValueIgnoresVariableEntries(t *testing.T) {
++	acc := headerOverrideVarsAccount(PlatformAnthropic, AccountTypeAPIKey, map[string]any{
++		"anthropic-beta": "beta-{{user_id}}",
++		"x-static":       "plain",
++	})
++	_, ok := acc.HeaderOverrideValue("anthropic-beta")
++	require.False(t, ok)
++	value, ok := acc.HeaderOverrideValue("x-static")
++	require.True(t, ok)
++	require.Equal(t, "plain", value)
++}
++
++func TestOpenAIWSHandshakeCompatibilitySeparatesReportedIdentity(t *testing.T) {
++	acc := headerOverrideVarsAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
++		"x-end-user": "{{user_id}}",
++		"x-static":   "plain",
++	})
++	build := func(ctx context.Context) openAIWSHandshakeCompatibilityKey {
++		h := http.Header{}
++		acc.ApplyHeaderOverrides(withHeaderOverrideConnectionScope(ctx), h)
++		return normalizeOpenAIWSHandshakeCompatibility(acc, h)
++	}
++	userA := build(WithHeaderOverrideRequestScope(context.Background(), 7, 31, nil))
++	userAOtherKey := build(WithHeaderOverrideRequestScope(context.Background(), 7, 32, nil))
++	userB := build(WithHeaderOverrideRequestScope(context.Background(), 8, 40, nil))
++	prewarm := build(context.Background())
++
++	require.Equal(t, userA, userAOtherKey, "same reported identity may share a connection")
++	require.NotEqual(t, userA, userB, "different users must never share a handshake")
++	require.NotEqual(t, userA, prewarm, "identity-less connections are not reusable for a user")
++
++	// 没有变量覆写的账号不受影响
++	plain := headerOverrideVarsAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{"x-static": "plain"})
++	require.Empty(t, plain.headerOverrideReportedIdentity(http.Header{"x-static": []string{"plain"}}))
++}
++
++func TestAppendOpsUpstreamErrorCapturesReportedHeaders(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	acc := headerOverrideVarsAccount(PlatformOpenAI, AccountTypeAPIKey, map[string]any{
++		"x-end-user": "{{user_id}}",
++		"x-static":   "relay-secret",
++	})
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(headerOverrideUserContext())
++
++	upstreamReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, "https://upstream.example/v1/responses", nil)
++	require.NoError(t, err)
++	acc.ApplyHeaderOverrides(upstreamReq.Context(), upstreamReq.Header)
++
++	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{AccountID: acc.ID, UpstreamStatusCode: 400, Kind: "http_error"})
++	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{AccountID: acc.ID + 1, UpstreamStatusCode: 500, Kind: "http_error"})
++
++	raw, ok := c.Get(OpsUpstreamErrorsKey)
++	require.True(t, ok)
++	events, ok := raw.([]*OpsUpstreamErrorEvent)
++	require.True(t, ok)
++	require.Len(t, events, 2)
++	require.Equal(t, map[string]string{"x-end-user": "7"}, events[0].ReportedHeaders)
++	require.Nil(t, events[1].ReportedHeaders, "another account's attempt reported nothing")
++}
++
++// 真实转发构建器：变量头随 ctx 中的入站身份写入出站请求，客户端同名头被替换。
++func TestAnthropicUpstreamBuildersReportIdentity(t *testing.T) {
++	account := newAnthropicAPIKeyAccountForTest()
++	account.Credentials["base_url"] = "https://anthropic.example.com"
++	account.Credentials[credKeyHeaderOverrideEnabled] = true
++	account.Credentials[credKeyHeaderOverrides] = map[string]any{
++		"x-gateway-user-id":    "{{user_id}}",
++		"x-gateway-request-id": "{{request_id}}",
++	}
++	body := []byte(`{"model":"claude-haiku-4-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`)
++	svc := &GatewayService{cfg: &config.Config{}}
++
++	build := map[string]func(ctx context.Context, c *gin.Context) (*http.Request, error){
++		"forward": func(ctx context.Context, c *gin.Context) (*http.Request, error) {
++			req, _, err := svc.buildUpstreamRequest(ctx, c, account, body, "upstream-anthropic-key", "apikey", "claude-haiku-4-5", false, false)
++			return req, err
++		},
++		"passthrough": func(ctx context.Context, c *gin.Context) (*http.Request, error) {
++			req, _, err := svc.buildUpstreamRequestAnthropicAPIKeyPassthrough(ctx, c, account, body, "upstream-anthropic-key")
++			return req, err
++		},
++	}
++	for name, fn := range build {
++		t.Run(name, func(t *testing.T) {
++			c := gatewayAnthropicBaseURLContext(t)
++			c.Request.Header.Set("X-Gateway-User-Id", "spoofed-by-client")
++
++			req, err := fn(headerOverrideUserContext(), c)
++			require.NoError(t, err)
++			require.Equal(t, []string{"7"}, headerValuesFold(req.Header, "x-gateway-user-id"))
++			require.Equal(t, []string{"req-abc"}, headerValuesFold(req.Header, "x-gateway-request-id"))
++
++			// 无用户上下文：不上报，也不放行客户端伪造的同名头
++			req, err = fn(context.Background(), c)
++			require.NoError(t, err)
++			require.Empty(t, headerValuesFold(req.Header, "x-gateway-user-id"))
++			require.Empty(t, headerValuesFold(req.Header, "x-gateway-request-id"))
++		})
++	}
++}
++
++func TestAdminUpdateAccountRejectsVariablesOnNonAPIKeyAccounts(t *testing.T) {
++	newRepo := func(accountType string) *upstreamBillingProbeAccountRepo {
++		return &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{
++			301: {
++				ID:       301,
++				Name:     "grok",
++				Platform: PlatformGrok,
++				Type:     accountType,
++				Status:   StatusActive,
++				Credentials: map[string]any{
++					"api_key":                    "xai-key",
++					credKeyHeaderOverrideEnabled: true,
++					credKeyHeaderOverrides:       map[string]any{"x-end-user": "{{user_id}}"},
++				},
++			},
++		}}
++	}
++
++	// 只改类型、不带 credentials：也必须拦住
++	_, err := (&adminServiceImpl{accountRepo: newRepo(AccountTypeAPIKey)}).UpdateAccount(
++		context.Background(), 301, &UpdateAccountInput{Type: AccountTypeOAuth})
++	require.Error(t, err)
++
++	// OAuth 账号提交带变量的覆写
++	_, err = (&adminServiceImpl{accountRepo: newRepo(AccountTypeOAuth)}).UpdateAccount(
++		context.Background(), 301, &UpdateAccountInput{Credentials: map[string]any{
++			credKeyHeaderOverrideEnabled: true,
++			credKeyHeaderOverrides:       map[string]any{"x-end-user": "{{user_id}}"},
++		}})
++	require.Error(t, err)
++
++	// api_key 账号的无关编辑不受影响
++	updated, err := (&adminServiceImpl{accountRepo: newRepo(AccountTypeAPIKey)}).UpdateAccount(
++		context.Background(), 301, &UpdateAccountInput{Name: "renamed"})
++	require.NoError(t, err)
++	require.Equal(t, "renamed", updated.Name)
++}
+diff --git a/backend/internal/service/account_test_service.go b/backend/internal/service/account_test_service.go
+index 61e12e258..0a0926a9e 100644
+--- a/backend/internal/service/account_test_service.go
++++ b/backend/internal/service/account_test_service.go
+@@ -598,7 +598,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
+ 	}
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	// Get proxy URL
+ 	proxyURL := ""
+@@ -952,7 +952,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
+ 	}
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	credentialAccount.ApplyHeaderOverrides(req.Header)
++	credentialAccount.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	// Get proxy URL
+ 	proxyURL := ""
+@@ -1159,7 +1159,7 @@ func (s *AccountTestService) applyGrokTestRequestHeaders(req *http.Request, acco
+ 	if account.IsGrokOAuth() && req.URL != nil && isGrokCLIProxyTarget(req.URL.String()) {
+ 		applyGrokCLIHeaders(req.Header)
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ }
+ 
+ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, account *Account, resp *http.Response) {
+@@ -1796,7 +1796,7 @@ func (s *AccountTestService) testGrokSTT(c *gin.Context, ctx context.Context, ac
+ 	if account.IsGrokOAuth() {
+ 		applyGrokCLIHeaders(req.Header)
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	resp, err := s.httpUpstream.Do(req, s.grokTestProxyURL(account), account.ID, account.Concurrency)
+ 	if err != nil {
+@@ -1869,7 +1869,7 @@ func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Contex
+ 	if account.IsGrokOAuth() {
+ 		applyGrokCLIHeaders(headers)
+ 	}
+-	account.ApplyHeaderOverrides(headers)
++	account.ApplyHeaderOverrides(ctx, headers)
+ 
+ 	dialer := s.grokWSDialer
+ 	if dialer == nil {
+@@ -2160,7 +2160,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
+ 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
+ 
+ 	proxyURL := ""
+@@ -2294,7 +2294,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
+ 	}
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+@@ -3083,7 +3083,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+ 	req.Header.Set("Authorization", "Bearer "+authToken)
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+diff --git a/backend/internal/service/account_test_service_cn_adaptive.go b/backend/internal/service/account_test_service_cn_adaptive.go
+index 1ac31befc..92c63da8c 100644
+--- a/backend/internal/service/account_test_service_cn_adaptive.go
++++ b/backend/internal/service/account_test_service_cn_adaptive.go
+@@ -92,7 +92,7 @@ func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Co
+ 	// base_url 强制 Bearer，其余保持 extra/default 行为。
+ 	setAnthropicAPIKeyAuthHeader(req.Header, account, authToken, account.GetCNProtocolBaseURL(APIProtocolAnthropic))
+ 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
+ 
+ 	resp, err := s.doCNProviderAdaptiveRequest(req, account)
+@@ -187,7 +187,7 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
+ 	req.Header.Set("Authorization", "Bearer "+authToken)
+ 	applyOpenAICodexProbeHeaders(req.Header)
+ 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
+ 
+ 	resp, err := s.doCNProviderAdaptiveRequest(req, account)
+@@ -277,7 +277,7 @@ func (s *AccountTestService) testCNProviderAnthropicConnection(c *gin.Context, a
+ 	// extra/default 行为。
+ 	setAnthropicAPIKeyAuthHeader(req.Header, account, authToken, account.GetAnthropicProtocolBaseURL())
+ 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
+ 
+ 	resp, err := s.doCNProviderAdaptiveRequest(req, account)
+diff --git a/backend/internal/service/admin_account.go b/backend/internal/service/admin_account.go
+index 3649f5e11..8eae972e8 100644
+--- a/backend/internal/service/admin_account.go
++++ b/backend/internal/service/admin_account.go
+@@ -325,6 +325,9 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
+ 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
+ 		return nil, err
+ 	}
++	if err := ValidateHeaderOverrideVariableUsage(input.Type, input.Credentials); err != nil {
++		return nil, err
++	}
+ 	if err := NormalizeProtocolRulesCredentials(input.Credentials); err != nil {
+ 		return nil, err
+ 	}
+@@ -532,6 +535,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
+ 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
+ 		return nil, err
+ 	}
++	if err := ValidateHeaderOverrideVariableUsage(input.Type, input.Credentials); err != nil {
++		return nil, err
++	}
+ 	if err := NormalizeProtocolRulesCredentials(input.Credentials); err != nil {
+ 		return nil, err
+ 	}
+@@ -673,6 +679,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+ 		// Strip SSO/password residue that must never sit next to OAuth tokens.
+ 		account.Credentials = SanitizeStoredCredentials(account.Platform, account.Credentials)
+ 	}
++	// 放在 credentials 分支之外：只改账号类型（不带 credentials）的更新同样要拦，
++	// 否则 api_key 账号改成 OAuth 后会把带变量的覆写值留在 OAuth 账号上。
++	if err := ValidateHeaderOverrideVariableUsage(account.Type, account.Credentials); err != nil {
++		return nil, err
++	}
+ 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
+ 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
+ 	requestedProbeEnabledUpdate := input.ProbeEnabled
+@@ -1138,6 +1149,14 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
+ 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
+ 		return nil, err
+ 	}
++	for _, account := range cachedTargets {
++		if account == nil {
++			continue
++		}
++		if err := ValidateHeaderOverrideVariableUsage(account.Type, input.Credentials); err != nil {
++			return nil, err
++		}
++	}
+ 	if err := NormalizeProtocolRulesCredentials(input.Credentials); err != nil {
+ 		return nil, err
+ 	}
+diff --git a/backend/internal/service/cline_usage.go b/backend/internal/service/cline_usage.go
+index dd796994b..85c543769 100644
+--- a/backend/internal/service/cline_usage.go
++++ b/backend/internal/service/cline_usage.go
+@@ -79,7 +79,7 @@ func (c *clineAccountClient) get(ctx context.Context, path string) (gjson.Result
+ 	}
+ 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+ 	req.Header.Set("Accept", "application/json")
+-	c.account.ApplyHeaderOverrides(req.Header)
++	c.account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	resp, err := c.httpUpstream.Do(req, c.proxyURL, c.account.ID, maxInt(c.account.Concurrency, 1))
+ 	if err != nil {
+diff --git a/backend/internal/service/cn_provider_balance_service.go b/backend/internal/service/cn_provider_balance_service.go
+index 87e8a24ce..3dc47f3fc 100644
+--- a/backend/internal/service/cn_provider_balance_service.go
++++ b/backend/internal/service/cn_provider_balance_service.go
+@@ -156,7 +156,7 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
+ 	}
+ 	req.Header.Set("Authorization", "Bearer "+apiKey)
+ 	req.Header.Set("Accept", "application/json")
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
+ 	if err != nil {
+diff --git a/backend/internal/service/cn_provider_quota_service.go b/backend/internal/service/cn_provider_quota_service.go
+index 1257cf40e..54a47a62c 100644
+--- a/backend/internal/service/cn_provider_quota_service.go
++++ b/backend/internal/service/cn_provider_quota_service.go
+@@ -207,7 +207,7 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
+ 		}
+ 	}
+ 	// 探测与真实转发保持同一套账号级请求头覆写，避免探测通过但转发失败。
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
+ 	if err != nil {
+diff --git a/backend/internal/service/command_code_usage.go b/backend/internal/service/command_code_usage.go
+index 4781b4c90..635506f10 100644
+--- a/backend/internal/service/command_code_usage.go
++++ b/backend/internal/service/command_code_usage.go
+@@ -182,7 +182,7 @@ func (c *commandCodeUsageClient) get(ctx context.Context, path string, query url
+ 	}
+ 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+ 	req.Header.Set("Accept", "application/json")
+-	c.account.ApplyHeaderOverrides(req.Header)
++	c.account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	resp, err := c.httpUpstream.Do(req, c.proxyURL, c.account.ID, maxInt(c.account.Concurrency, 1))
+ 	if err != nil {
+diff --git a/backend/internal/service/gateway_anthropic_passthrough.go b/backend/internal/service/gateway_anthropic_passthrough.go
+index 5bf8fbb49..23db54eb3 100644
+--- a/backend/internal/service/gateway_anthropic_passthrough.go
++++ b/backend/internal/service/gateway_anthropic_passthrough.go
+@@ -364,7 +364,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
+ 	}
+ 
+ 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	filterSonnet55ToolsetBetaHeader(req.Header, body, gjson.GetBytes(body, "model").String())
+ 
+ 	return req, body, nil
+diff --git a/backend/internal/service/gateway_count_tokens.go b/backend/internal/service/gateway_count_tokens.go
+index 4e1c843a9..cf4e756ca 100644
+--- a/backend/internal/service/gateway_count_tokens.go
++++ b/backend/internal/service/gateway_count_tokens.go
+@@ -456,7 +456,7 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
+ 	}
+ 
+ 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	filterSonnet55ToolsetBetaHeader(req.Header, body, gjson.GetBytes(body, "model").String())
+ 
+ 	return req, nil
+@@ -610,7 +610,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
+ 	}
+ 
+ 	// 账号级请求头覆写（仅 anthropic/openai api_key 账号启用时生效；OAuth 路径 no-op）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	filterSonnet55ToolsetBetaHeader(req.Header, body, modelID)
+ 
+ 	if c != nil && tokenType == "oauth" {
+diff --git a/backend/internal/service/gateway_service.go b/backend/internal/service/gateway_service.go
+index 7ed33d147..0b14ba962 100644
+--- a/backend/internal/service/gateway_service.go
++++ b/backend/internal/service/gateway_service.go
+@@ -1433,7 +1433,7 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account
+ 	upstreamReq.Header.Set("Accept", "application/json")
+ 	upstreamReq.Header.Set("User-Agent", defaultGrokUpstreamUserAgent())
+ 	applyGrokCLIHeaders(upstreamReq.Header)
+-	account.ApplyHeaderOverrides(upstreamReq.Header)
++	account.ApplyHeaderOverrides(upstreamReq.Context(), upstreamReq.Header)
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+ 		proxyURL = account.Proxy.URL()
+diff --git a/backend/internal/service/gateway_upstream_request.go b/backend/internal/service/gateway_upstream_request.go
+index a159c867b..09426a2ab 100644
+--- a/backend/internal/service/gateway_upstream_request.go
++++ b/backend/internal/service/gateway_upstream_request.go
+@@ -232,7 +232,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
+ 
+ 	// 账号级请求头覆写（仅 anthropic/openai api_key 账号启用时生效；OAuth 路径 no-op）。
+ 	// 放在所有 header 逻辑之后，确保配置值对同名头拥有最终决定权。
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	filterSonnet55ToolsetBetaHeader(req.Header, body, modelID)
+ 
+ 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
+diff --git a/backend/internal/service/grok_audio.go b/backend/internal/service/grok_audio.go
+index c726b339d..fa4951b99 100644
+--- a/backend/internal/service/grok_audio.go
++++ b/backend/internal/service/grok_audio.go
+@@ -86,7 +86,7 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
+ 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(targetURL) {
+ 		applyGrokCLIHeaders(req.Header)
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+@@ -177,7 +177,7 @@ func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Ac
+ 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(u.String()) {
+ 		applyGrokCLIHeaders(headers)
+ 	}
+-	account.ApplyHeaderOverrides(headers)
++	account.ApplyHeaderOverrides(ctx, headers)
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+ 		proxyURL = account.Proxy.URL()
+@@ -282,7 +282,7 @@ func (s *OpenAIGatewayService) ProbeGrokRealtime(ctx context.Context, account *A
+ 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(u.String()) {
+ 		applyGrokCLIHeaders(headers)
+ 	}
+-	account.ApplyHeaderOverrides(headers)
++	account.ApplyHeaderOverrides(ctx, headers)
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+ 		proxyURL = account.Proxy.URL()
+diff --git a/backend/internal/service/grok_media.go b/backend/internal/service/grok_media.go
+index 7267b769f..15ad5342b 100644
+--- a/backend/internal/service/grok_media.go
++++ b/backend/internal/service/grok_media.go
+@@ -731,7 +731,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
+ 		upstreamReq.Header.Set("Content-Type", contentType)
+ 	}
+ 	// 账号级请求头覆写最后应用，配置值优先于内置默认头。
+-	account.ApplyHeaderOverrides(upstreamReq.Header)
++	account.ApplyHeaderOverrides(upstreamReq.Context(), upstreamReq.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+@@ -835,7 +835,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
+ 	if account.IsGrokOAuth() && isGrokCLIProxyTarget(statusURL) {
+ 		applyGrokCLIHeaders(statusReq.Header)
+ 	}
+-	account.ApplyHeaderOverrides(statusReq.Header)
++	account.ApplyHeaderOverrides(statusReq.Context(), statusReq.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+@@ -898,7 +898,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
+ 		if account.IsGrokOAuth() && isGrokCLIProxyTarget(contentURL) {
+ 			applyGrokCLIHeaders(contentReq.Header)
+ 		}
+-		account.ApplyHeaderOverrides(contentReq.Header)
++		account.ApplyHeaderOverrides(contentReq.Context(), contentReq.Header)
+ 	}
+ 
+ 	contentResp, err := s.httpUpstream.Do(contentReq, proxyURL, account.ID, account.Concurrency)
+diff --git a/backend/internal/service/grok_observed_models.go b/backend/internal/service/grok_observed_models.go
+index 23700bdd1..a77662df1 100644
+--- a/backend/internal/service/grok_observed_models.go
++++ b/backend/internal/service/grok_observed_models.go
+@@ -152,7 +152,7 @@ func (s *GrokQuotaService) prepareGrokObservedModelsRequest(ctx context.Context,
+ 			}
+ 		}
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	proxyURL := ""
+ 	if s.proxyRepo != nil && account.ProxyID != nil {
+diff --git a/backend/internal/service/grok_quota_service.go b/backend/internal/service/grok_quota_service.go
+index 410bdd4f4..ca640dc79 100644
+--- a/backend/internal/service/grok_quota_service.go
++++ b/backend/internal/service/grok_quota_service.go
+@@ -172,7 +172,7 @@ func (s *GrokQuotaService) probeUsage(ctx context.Context, accountID int64) (*Gr
+ 		applyGrokCLIHeaders(req.Header)
+ 	}
+ 	// 探测请求与真实转发保持同一套账号级请求头覆写，避免探测通过但转发失败。
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
+ 	if err != nil {
+@@ -397,7 +397,7 @@ func (s *GrokQuotaService) fetchBilling(
+ 		}
+ 		xai.ApplyCLIBillingHeaders(req, token)
+ 		// billing 探测与真实转发保持同一套账号级请求头覆写。
+-		account.ApplyHeaderOverrides(req.Header)
++		account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 		resp, requestErr := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 2))
+ 
+ 		statusCode := 0
+diff --git a/backend/internal/service/model_protocol_catalog.go b/backend/internal/service/model_protocol_catalog.go
+index 3a7d0c75c..903575493 100644
+--- a/backend/internal/service/model_protocol_catalog.go
++++ b/backend/internal/service/model_protocol_catalog.go
+@@ -224,7 +224,8 @@ func modelProtocolCatalogHeaders(account *Account, url string) http.Header {
+ 		headers.Set("Authorization", "Bearer "+apiKey)
+ 	}
+ 	applyOpenCodeUpstreamUserAgent(account, url, headers)
+-	account.ApplyHeaderOverrides(headers)
++	// 目录是账号级共享缓存，由后台刷新：不携带任何用户身份，含变量的覆写头不发送。
++	account.ApplyHeaderOverrides(context.Background(), headers)
+ 	return headers
+ }
+ 
+diff --git a/backend/internal/service/openai_alpha_search.go b/backend/internal/service/openai_alpha_search.go
+index 42ba67761..e52183ab2 100644
+--- a/backend/internal/service/openai_alpha_search.go
++++ b/backend/internal/service/openai_alpha_search.go
+@@ -283,7 +283,7 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
+ 	}
+ 	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), apiKeyID)
+ 	enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	return req, nil
+ }
+ 
+@@ -424,7 +424,7 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
+ 		enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+ 	}
+ 
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	stripOpenAIAlphaSearchResponsesHeaders(req.Header)
+ 	return req, nil
+ }
+diff --git a/backend/internal/service/openai_apikey_responses_probe.go b/backend/internal/service/openai_apikey_responses_probe.go
+index 33b2fe9e3..dea85d2d6 100644
+--- a/backend/internal/service/openai_apikey_responses_probe.go
++++ b/backend/internal/service/openai_apikey_responses_probe.go
+@@ -192,7 +192,7 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
+ 	applyOpenAICodexProbeHeaders(req.Header)
+ 
+ 	// 账号级请求头覆写：能力探测与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+diff --git a/backend/internal/service/openai_codex_models_service.go b/backend/internal/service/openai_codex_models_service.go
+index 1d60d2c8c..59ee8d459 100644
+--- a/backend/internal/service/openai_codex_models_service.go
++++ b/backend/internal/service/openai_codex_models_service.go
+@@ -1783,7 +1783,8 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
+ 	headers := make(http.Header)
+ 	if useAPIKeyUpstream {
+ 		headers.Set("Authorization", "Bearer "+authToken)
+-		credAccount.ApplyHeaderOverrides(headers)
++		// 清单按请求头分桶缓存并跨用户共享：不携带用户身份。
++		credAccount.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(ctx), headers)
+ 	} else {
+ 		authHeaders, authErr := s.buildOpenAIAuthenticationHeaders(ctx, credAccount, authToken)
+ 		if authErr != nil {
+diff --git a/backend/internal/service/openai_embeddings.go b/backend/internal/service/openai_embeddings.go
+index c4b8f79bd..9771d770d 100644
+--- a/backend/internal/service/openai_embeddings.go
++++ b/backend/internal/service/openai_embeddings.go
+@@ -86,7 +86,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
+ 	}
+ 
+ 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效）
+-	account.ApplyHeaderOverrides(upstreamReq.Header)
++	account.ApplyHeaderOverrides(upstreamReq.Context(), upstreamReq.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+diff --git a/backend/internal/service/openai_gateway_cc_pipeline.go b/backend/internal/service/openai_gateway_cc_pipeline.go
+index baf13e1cf..dcebc37ee 100644
+--- a/backend/internal/service/openai_gateway_cc_pipeline.go
++++ b/backend/internal/service/openai_gateway_cc_pipeline.go
+@@ -261,7 +261,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
+ 
+ 	// 账号级请求头覆写：放在所有内置默认头（含 Grok CLI 身份头）之后应用，
+ 	// 使配置值获得除共享传输层强制头之外的最高优先级。
+-	account.ApplyHeaderOverrides(upstreamReq.Header)
++	account.ApplyHeaderOverrides(upstreamReq.Context(), upstreamReq.Header)
+ 	applyOpenCodeSessionHeader(c, account, targetURL, upstreamReq.Header, body)
+ 
+ 	proxyURL := ""
+diff --git a/backend/internal/service/openai_gateway_count_tokens.go b/backend/internal/service/openai_gateway_count_tokens.go
+index 94361a456..af2adc17e 100644
+--- a/backend/internal/service/openai_gateway_count_tokens.go
++++ b/backend/internal/service/openai_gateway_count_tokens.go
+@@ -476,7 +476,7 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
+ 	}
+ 
+ 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	return req, nil
+ }
+diff --git a/backend/internal/service/openai_gateway_forward.go b/backend/internal/service/openai_gateway_forward.go
+index d1dd2c2d7..c0e6d1375 100644
+--- a/backend/internal/service/openai_gateway_forward.go
++++ b/backend/internal/service/openai_gateway_forward.go
+@@ -1545,7 +1545,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
+ 	applyOpenCodeUpstreamUserAgent(account, targetURL, req.Header)
+ 
+ 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	applyOpenCodeSessionHeader(c, account, targetURL, req.Header, body, openCodeSessionHintBody(promptCacheKey))
+ 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
+ 	// 保证不被覆盖丢失）。
+diff --git a/backend/internal/service/openai_gateway_grok.go b/backend/internal/service/openai_gateway_grok.go
+index ad40eac7d..5a7e078f6 100644
+--- a/backend/internal/service/openai_gateway_grok.go
++++ b/backend/internal/service/openai_gateway_grok.go
+@@ -1598,7 +1598,7 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
+ 	}
+ 	// 账号级请求头覆写最后应用，使配置值优先于上面的内置默认头；
+ 	// 打到官方 CLI 网关时身份头仍由共享传输层最终强制。
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	return req, nil
+ }
+ 
+diff --git a/backend/internal/service/openai_gateway_messages_anthropic_native.go b/backend/internal/service/openai_gateway_messages_anthropic_native.go
+index e3cab739b..322e8d100 100644
+--- a/backend/internal/service/openai_gateway_messages_anthropic_native.go
++++ b/backend/internal/service/openai_gateway_messages_anthropic_native.go
+@@ -227,7 +227,7 @@ func (s *OpenAIGatewayService) buildNativeAnthropicUpstreamRequest(
+ 	applyOpenCodeUpstreamUserAgent(account, targetURL, req.Header)
+ 
+ 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	filterSonnet55ToolsetBetaHeader(req.Header, body, gjson.GetBytes(body, "model").String())
+ 	payloads := append([][]byte{body}, sessionBodies...)
+ 	applyOpenCodeSessionHeader(c, account, targetURL, req.Header, payloads...)
+diff --git a/backend/internal/service/openai_gateway_passthrough.go b/backend/internal/service/openai_gateway_passthrough.go
+index 577136693..649441e6d 100644
+--- a/backend/internal/service/openai_gateway_passthrough.go
++++ b/backend/internal/service/openai_gateway_passthrough.go
+@@ -693,7 +693,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
+ 	applyOpenCodeUpstreamUserAgent(account, targetURL, req.Header)
+ 
+ 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	applyOpenCodeSessionHeader(c, account, targetURL, req.Header, body)
+ 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
+ 	// 保证不被覆盖丢失）。
+diff --git a/backend/internal/service/openai_images.go b/backend/internal/service/openai_images.go
+index cc15aedfb..327aed6e5 100644
+--- a/backend/internal/service/openai_images.go
++++ b/backend/internal/service/openai_images.go
+@@ -947,7 +947,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
+ 		req.Header.Set("Content-Type", contentType)
+ 	}
+ 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	return req, nil
+ }
+ 
+diff --git a/backend/internal/service/openai_ws_forwarder_payload.go b/backend/internal/service/openai_ws_forwarder_payload.go
+index 16ca9c8a6..fc50bc551 100644
+--- a/backend/internal/service/openai_ws_forwarder_payload.go
++++ b/backend/internal/service/openai_ws_forwarder_payload.go
+@@ -182,7 +182,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
+ 
+ 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。
+ 	// 覆盖所有 WS 模式（ctx_pool/dedicated/passthrough）的握手头。
+-	account.ApplyHeaderOverrides(headers)
++	// 握手头是连接级的：按连接作用域解析变量（不含 request_id），连接池再按
++	// 上报身份分桶（见 normalizeOpenAIWSHandshakeCompatibility）。
++	account.ApplyHeaderOverrides(withHeaderOverrideConnectionScope(ctx), headers)
+ 	setOpenAICodexRoutingHint(headers, account, routingModel, routingServiceTier)
+ 	logOpenAIRoutingDiagnostics(
+ 		ctx,
+diff --git a/backend/internal/service/openai_ws_pool.go b/backend/internal/service/openai_ws_pool.go
+index ae4e3fe2c..f46b09f53 100644
+--- a/backend/internal/service/openai_ws_pool.go
++++ b/backend/internal/service/openai_ws_pool.go
+@@ -91,6 +91,9 @@ type openAIWSHandshakeCompatibilityKey struct {
+ 	threadID            string
+ 	clientRequestID     string
+ 	codexWindowID       string
++	// reportedIdentity 是握手头中由请求头覆写变量（{{user_id}} 等）生成的部分。
++	// 握手头建连后不可变，上报身份不同的请求绝不能共用连接，否则用户会被张冠李戴。
++	reportedIdentity string
+ }
+ 
+ type openAIWSConnLease struct {
+@@ -2369,7 +2372,8 @@ func normalizeOpenAIWSBetaFeatures(headers http.Header) string {
+ 
+ func normalizeOpenAIWSHandshakeCompatibility(account *Account, headers http.Header) openAIWSHandshakeCompatibilityKey {
+ 	key := openAIWSHandshakeCompatibilityKey{
+-		betaFeatures: normalizeOpenAIWSBetaFeatures(headers),
++		betaFeatures:     normalizeOpenAIWSBetaFeatures(headers),
++		reportedIdentity: account.headerOverrideReportedIdentity(headers),
+ 	}
+ 	mode := activeCodexFingerprintMode(account)
+ 	if mode == codexFingerprintOff {
+diff --git a/backend/internal/service/ops_upstream_context.go b/backend/internal/service/ops_upstream_context.go
+index a8d0625fd..058386bda 100644
+--- a/backend/internal/service/ops_upstream_context.go
++++ b/backend/internal/service/ops_upstream_context.go
+@@ -466,6 +466,12 @@ type OpsUpstreamErrorEvent struct {
+ 	Message string `json:"message,omitempty"`
+ 	Detail  string `json:"detail,omitempty"`
+ 
++	// ReportedHeaders are the request headers this attempt sent upstream that
++	// were produced by header-override variables ({{user_id}} etc.), keyed by
++	// lowercase header name. Only variable-driven headers are captured: static
++	// override values may hold relay secrets and must never be logged here.
++	ReportedHeaders map[string]string `json:"reported_headers,omitempty"`
++
+ 	// SkipMonitoring is request-local rule state. It is intentionally excluded
+ 	// from persisted attempt JSON. The logger consults it only when this event is
+ 	// the final client-visible failure; recovered attempts remain provider-health
+@@ -502,6 +508,9 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
+ 	if ev.Message != "" {
+ 		ev.Message = sanitizeUpstreamErrorMessage(ev.Message)
+ 	}
++	if ev.ReportedHeaders == nil && c.Request != nil {
++		ev.ReportedHeaders = headerOverrideReportedHeaders(c.Request.Context(), ev.AccountID)
++	}
+ 
+ 	var existing []*OpsUpstreamErrorEvent
+ 	if v, ok := c.Get(OpsUpstreamErrorsKey); ok {
+diff --git a/backend/internal/service/seedance.go b/backend/internal/service/seedance.go
+index 36d9b0ca0..0a6063bc1 100644
+--- a/backend/internal/service/seedance.go
++++ b/backend/internal/service/seedance.go
+@@ -114,7 +114,7 @@ func (s *OpenAIGatewayService) ForwardSeedance(ctx context.Context, c *gin.Conte
+ 	req.Header.Set("Authorization", "Bearer "+token)
+ 	req.Header.Set("Content-Type", "application/json")
+ 	req.Header.Set("Accept", "application/json")
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	proxy := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+ 		proxy = account.Proxy.URL()
+diff --git a/backend/internal/service/upstream_billing_probe.go b/backend/internal/service/upstream_billing_probe.go
+index c31d65bc3..55c07c178 100644
+--- a/backend/internal/service/upstream_billing_probe.go
++++ b/backend/internal/service/upstream_billing_probe.go
+@@ -690,7 +690,7 @@ func (s *UpstreamBillingProbeService) fetchBilling(ctx context.Context, account
+ 	req = req.WithContext(WithHTTPUpstreamRedirectsDisabled(reqCtx))
+ 	req.Header.Set("Accept", "application/json")
+ 	req.Header.Set("Authorization", "Bearer "+apiKey)
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	var tlsProfile *tlsfingerprint.Profile
+ 	if s.accountTestService.tlsFPProfileService != nil {
+ 		tlsProfile = s.accountTestService.tlsFPProfileService.ResolveTLSProfile(account)
+diff --git a/backend/internal/service/upstream_models.go b/backend/internal/service/upstream_models.go
+index b110c940b..04a3cb968 100644
+--- a/backend/internal/service/upstream_models.go
++++ b/backend/internal/service/upstream_models.go
+@@ -1091,7 +1091,7 @@ func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context,
+ 			}
+ 		}
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	return req, nil
+ }
+ 
+@@ -1162,7 +1162,7 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
+ 		setAnthropicAPIKeyAuthHeader(req.Header, account, apiKeyAuthToken, normalizedBaseURL)
+ 	}
+ 	// 账号级请求头覆写：模型列表探测与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	return req, nil
+ }
+ 
+@@ -1244,7 +1244,7 @@ func buildOpenAIAPIKeyModelsRequest(ctx context.Context, account *Account, valid
+ 	req.Header.Set("Accept", "application/json")
+ 	req.Header.Set("Authorization", "Bearer "+apiKey)
+ 	// 账号级请求头覆写：模型列表探测与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	return req, nil
+ }
+ 
+@@ -1305,7 +1305,7 @@ func (s *AccountTestService) buildOpenAIOAuthUpstreamModelsRequest(ctx context.C
+ 	req.Header.Set("User-Agent", identity.userAgent)
+ 	req.Header.Set("Version", identity.version)
+ 	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
+-	credentialAccount.ApplyHeaderOverrides(req.Header)
++	credentialAccount.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	enforceCodexIdentityHeadersWithUA(req.Header, credentialAccount.GetOpenAIUserAgent())
+ 	return req, nil
+ }
+diff --git a/frontend/src/api/admin/ops.ts b/frontend/src/api/admin/ops.ts
+index f4c1b3740..92701d615 100644
+--- a/frontend/src/api/admin/ops.ts
++++ b/frontend/src/api/admin/ops.ts
+@@ -23,6 +23,8 @@ export type OpsUpstreamErrorEvent = {
+   kind?: string
+   message?: string
+   detail?: string
++  /** 本次尝试实际发给上游的身份上报请求头（请求头覆写变量生成），键为小写头名 */
++  reported_headers?: Record<string, string>
+ }
+ 
+ export interface OpsDashboardOverview {
+diff --git a/frontend/src/components/account/BulkEditAccountModal.vue b/frontend/src/components/account/BulkEditAccountModal.vue
+index 48235d55e..05118068d 100644
+--- a/frontend/src/components/account/BulkEditAccountModal.vue
++++ b/frontend/src/components/account/BulkEditAccountModal.vue
+@@ -739,6 +739,7 @@
+ 
+             <HeaderOverrideEditor
+               :rows="headerOverrideRows"
++              :allow-variables="headerOverrideAllowVariables"
+               @update:rows="headerOverrideRows = $event"
+             />
+           </div>
+@@ -1739,6 +1740,12 @@ const enableBaseUrl = ref(false)
+ const enableModelRestriction = ref(false)
+ const enableCustomErrorCodes = ref(false)
+ const enableInterceptWarmup = ref(false)
++// 身份上报变量仅 api_key 账号可用：所选账号里只要混有其它类型就不开放
++const headerOverrideAllowVariables = computed(
++  () =>
++    targetSelectedTypes.value.length > 0 &&
++    targetSelectedTypes.value.every((type) => type === 'apikey')
++)
+ const enableHeaderOverride = ref(false)
+ const enableProxy = ref(false)
+ const enableConcurrency = ref(false)
+@@ -2359,7 +2366,9 @@ const handleSubmit = async () => {
+       appStore.showError(t('admin.accounts.headerOverride.bulkEmptyRows'))
+       return
+     }
+-    const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
++    const headerError = validateHeaderOverrideRows(headerOverrideRows.value, {
++      allowVariables: headerOverrideAllowVariables.value
++    })
+     if (headerError) {
+       appStore.showError(t(`admin.accounts.headerOverride.${headerError}`))
+       return
+diff --git a/frontend/src/components/account/CreateAccountModal.vue b/frontend/src/components/account/CreateAccountModal.vue
+index 297bb0a4e..24ba7aed1 100644
+--- a/frontend/src/components/account/CreateAccountModal.vue
++++ b/frontend/src/components/account/CreateAccountModal.vue
+@@ -2493,6 +2493,7 @@
+ 
+           <HeaderOverrideEditor
+             :rows="headerOverrideRows"
++            :allow-variables="false"
+             @update:rows="headerOverrideRows = $event"
+           />
+         </div>
+@@ -4746,7 +4747,9 @@ const validateGrokOAuthUpstreamConfig = (): boolean => {
+     }
+   }
+   if (headerOverrideEnabled.value) {
+-    const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
++    const headerError = validateHeaderOverrideRows(headerOverrideRows.value, {
++      allowVariables: false
++    })
+     if (headerError) {
+       appStore.showError(t(`admin.accounts.headerOverride.${headerError}`))
+       return false
+diff --git a/frontend/src/components/account/EditAccountModal.vue b/frontend/src/components/account/EditAccountModal.vue
+index 7585061d0..e1e50ec52 100644
+--- a/frontend/src/components/account/EditAccountModal.vue
++++ b/frontend/src/components/account/EditAccountModal.vue
+@@ -883,6 +883,7 @@
+ 
+           <HeaderOverrideEditor
+             :rows="headerOverrideRows"
++            :allow-variables="headerOverrideAllowVariables"
+             @update:rows="headerOverrideRows = $event"
+           />
+         </div>
+@@ -3919,6 +3920,8 @@ const customErrorCodeInput = ref<number | null>(null)
+ const headerOverrideEnabled = ref(false)
+ const headerOverrideRows = ref<HeaderOverrideRow[]>([])
+ 
++// 身份上报变量仅 api_key 账号可用：OAuth 订阅上游不能收到网关用户身份
++const headerOverrideAllowVariables = computed(() => props.account?.type === 'apikey')
+ const headerOverrideCapable = computed(
+   () => !!props.account && isHeaderOverrideCapable(props.account.platform, props.account.type)
+ )
+@@ -5858,7 +5861,9 @@ const handleSubmit = async () => {
+       // Add header override if enabled for this API-key platform
+       if (isHeaderOverrideCapable(props.account.platform, 'apikey')) {
+         if (headerOverrideEnabled.value) {
+-          const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
++          const headerError = validateHeaderOverrideRows(headerOverrideRows.value, {
++            allowVariables: headerOverrideAllowVariables.value
++          })
+           if (headerError) {
+             appStore.showError(t(`admin.accounts.headerOverride.${headerError}`))
+             return
+@@ -6086,7 +6091,9 @@ const handleSubmit = async () => {
+       }
+ 
+       if (headerOverrideEnabled.value) {
+-        const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
++        const headerError = validateHeaderOverrideRows(headerOverrideRows.value, {
++            allowVariables: headerOverrideAllowVariables.value
++          })
+         if (headerError) {
+           appStore.showError(t(`admin.accounts.headerOverride.${headerError}`))
+           return
+diff --git a/frontend/src/components/account/HeaderOverrideEditor.vue b/frontend/src/components/account/HeaderOverrideEditor.vue
+index d84bbf619..4e061e530 100644
+--- a/frontend/src/components/account/HeaderOverrideEditor.vue
++++ b/frontend/src/components/account/HeaderOverrideEditor.vue
+@@ -1,36 +1,78 @@
+ <template>
+   <div v-if="rows.length > 0" class="space-y-2">
+-    <div
+-      v-for="(row, index) in rows"
+-      :key="getHeaderOverrideRowKey(row)"
+-      class="flex items-center gap-2"
+-    >
+-      <input
+-        v-model="row.name"
+-        type="text"
+-        class="input flex-1"
+-        :placeholder="t('admin.accounts.headerOverride.namePlaceholder')"
+-      />
+-      <input
+-        v-model="row.value"
+-        type="text"
+-        class="input flex-1"
+-        :placeholder="t('admin.accounts.headerOverride.valuePlaceholder')"
+-      />
+-      <button
+-        type="button"
+-        class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+-        @click="removeRow(index)"
++    <div v-for="(row, index) in rows" :key="getHeaderOverrideRowKey(row)">
++      <div class="flex items-center gap-2">
++        <input
++          v-model="row.name"
++          type="text"
++          class="input flex-1"
++          :class="isNameError(rowErrors[index]) ? errorInputClass : ''"
++          :placeholder="t('admin.accounts.headerOverride.namePlaceholder')"
++          :aria-invalid="isNameError(rowErrors[index])"
++          spellcheck="false"
++          autocomplete="off"
++        />
++        <input
++          v-model="row.value"
++          type="text"
++          class="input flex-1"
++          :class="[
++            isValueError(rowErrors[index]) ? errorInputClass : '',
++            hasVariable(row) ? 'font-mono text-[13px]' : ''
++          ]"
++          :placeholder="t('admin.accounts.headerOverride.valuePlaceholder')"
++          :aria-invalid="isValueError(rowErrors[index])"
++          spellcheck="false"
++          autocomplete="off"
++          data-testid="header-override-value"
++          @focus="rememberValueInput(row, $event)"
++        />
++        <button
++          type="button"
++          class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
++          :aria-label="t('admin.accounts.headerOverride.removeRow')"
++          :title="t('admin.accounts.headerOverride.removeRow')"
++          @click="removeRow(index)"
++        >
++          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
++            <path
++              stroke-linecap="round"
++              stroke-linejoin="round"
++              stroke-width="2"
++              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
++            />
++          </svg>
++        </button>
++      </div>
++
++      <p
++        v-if="rowErrors[index]"
++        class="mt-1 flex items-start gap-1 text-xs text-red-600 dark:text-red-400"
++        data-testid="header-override-row-error"
+       >
+-        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+-          <path
+-            stroke-linecap="round"
+-            stroke-linejoin="round"
+-            stroke-width="2"
+-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+-          />
++        <svg class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
++          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+         </svg>
+-      </button>
++        <span>{{ t(`admin.accounts.headerOverride.${rowErrors[index]}`) }}</span>
++      </p>
++      <p
++        v-else-if="rowPreviews[index]"
++        class="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"
++        data-testid="header-override-row-preview"
++      >
++        <span class="flex-shrink-0">{{ t('admin.accounts.headerOverride.previewLabel') }}</span>
++        <code class="truncate rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-700 dark:bg-dark-700 dark:text-gray-200">
++          <span class="text-gray-500 dark:text-gray-400">{{ row.name.trim().toLowerCase() }}:</span>
++          <template v-for="(part, partIndex) in rowPreviews[index]" :key="partIndex">
++            <span
++              v-if="part.variable"
++              class="font-semibold text-primary-600 dark:text-primary-400"
++              :title="t(`admin.accounts.headerOverride.variables.${part.variable}.label`)"
++            >{{ part.text }}</span>
++            <span v-else>{{ part.text }}</span>
++          </template>
++        </code>
++      </p>
+     </div>
+   </div>
+ 
+@@ -45,6 +87,69 @@
+     {{ t('admin.accounts.headerOverride.addRow') }}
+   </button>
+ 
++  <!-- 身份上报变量 -->
++  <div
++    v-if="allowVariables"
++    class="rounded-lg border border-gray-200 bg-gray-50/70 p-3 dark:border-dark-600 dark:bg-dark-700/40"
++    data-testid="header-override-variables"
++  >
++    <div class="flex items-center gap-1.5">
++      <svg class="h-4 w-4 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
++        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
++      </svg>
++      <span class="text-sm font-medium text-gray-800 dark:text-gray-100">
++        {{ t('admin.accounts.headerOverride.variablesTitle') }}
++      </span>
++    </div>
++    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
++      {{ t('admin.accounts.headerOverride.variablesHint') }}
++    </p>
++
++    <div class="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
++      <button
++        v-for="variable in HEADER_OVERRIDE_VARIABLES"
++        :key="variable"
++        type="button"
++        class="group flex items-start gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-left transition-colors hover:border-primary-400 hover:bg-primary-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:border-dark-500 dark:bg-dark-800 dark:hover:border-primary-500 dark:hover:bg-primary-900/20"
++        :data-testid="`header-override-variable-${variable}`"
++        @mousedown.prevent
++        @click="insertVariable(variable)"
++      >
++        <span class="min-w-0 flex-1">
++          <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
++            <code class="rounded bg-primary-50 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">{{ headerOverrideVariableToken(variable) }}</code>
++            <span class="text-xs font-medium text-gray-800 dark:text-gray-100">
++              {{ t(`admin.accounts.headerOverride.variables.${variable}.label`) }}
++            </span>
++          </span>
++          <span class="mt-0.5 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">
++            {{ t(`admin.accounts.headerOverride.variables.${variable}.desc`) }}
++          </span>
++        </span>
++        <svg class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-300 transition-colors group-hover:text-primary-500 dark:text-dark-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
++          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
++        </svg>
++      </button>
++    </div>
++
++    <ul class="mt-2.5 space-y-1 text-[11px] leading-4 text-gray-500 dark:text-gray-400">
++      <li v-for="note in VARIABLE_NOTES" :key="note" class="flex gap-1.5">
++        <span class="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-gray-400 dark:bg-dark-300"></span>
++        <span>{{ t(`admin.accounts.headerOverride.variableNotes.${note}`) }}</span>
++      </li>
++    </ul>
++  </div>
++  <p
++    v-else
++    class="flex items-start gap-1.5 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-dark-700/40 dark:text-gray-400"
++    data-testid="header-override-variables-unavailable"
++  >
++    <svg class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
++      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
++    </svg>
++    <span>{{ t('admin.accounts.headerOverride.variablesUnavailable') }}</span>
++  </p>
++
+   <div class="flex flex-wrap gap-2">
+     <HeaderOverrideJsonTools :rows="rows" @update:rows="emit('update:rows', $event)" />
+   </div>
+@@ -55,14 +160,30 @@
+ </template>
+ 
+ <script setup lang="ts">
++import { computed, nextTick } from 'vue'
+ import { useI18n } from 'vue-i18n'
+ import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+ import HeaderOverrideJsonTools from './HeaderOverrideJsonTools.vue'
+-import type { HeaderOverrideRow } from './credentialsBuilder'
++import {
++  HEADER_OVERRIDE_VARIABLES,
++  HEADER_OVERRIDE_VARIABLE_SUGGESTED_NAMES,
++  getHeaderOverrideRowErrors,
++  headerOverrideHasVariable,
++  headerOverrideVariableToken,
++  parseHeaderOverrideTemplate,
++  type HeaderOverrideRow,
++  type HeaderOverrideRowError,
++  type HeaderOverrideVariable
++} from './credentialsBuilder'
+ 
+-const props = defineProps<{
+-  rows: HeaderOverrideRow[]
+-}>()
++const props = withDefaults(
++  defineProps<{
++    rows: HeaderOverrideRow[]
++    /** 账号是否允许使用身份上报变量（仅 api_key 账号） */
++    allowVariables?: boolean
++  }>(),
++  { allowVariables: true }
++)
+ 
+ const emit = defineEmits<{
+   (e: 'update:rows', rows: HeaderOverrideRow[]): void
+@@ -70,10 +191,101 @@ const emit = defineEmits<{
+ 
+ const { t } = useI18n()
+ 
++const errorInputClass =
++  'border-red-400 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500/70'
++
++const VARIABLE_NOTES = ['unresolved', 'apiKeyOnly', 'websocket'] as const
++
++/** 预览用的示例值：只为让管理员看清最终形态，不代表真实数据 */
++const VARIABLE_SAMPLES: Record<HeaderOverrideVariable, string> = {
++  user_id: '10086',
++  api_key_id: '2048',
++  group_id: '3',
++  request_id: '6f1c2d3e-8a4b-4c5d-9e0f-a1b2c3d4e5f6'
++}
++
+ const getHeaderOverrideRowKey = createStableObjectKeyResolver<HeaderOverrideRow>(
+   'header-override-row'
+ )
+ 
++// 行内只提示已填写名称的行：先填值后填名是正常的输入顺序，不该中途报错
++// （保存时的整体校验仍会拦截"有值无名"）。
++const rowErrors = computed(() =>
++  getHeaderOverrideRowErrors(props.rows, { allowVariables: props.allowVariables }).map(
++    (error, index) => (props.rows[index].name.trim() ? error : null)
++  )
++)
++
++const NAME_ERRORS: ReadonlySet<HeaderOverrideRowError> = new Set([
++  'invalidName',
++  'blockedName',
++  'duplicateName'
++])
++
++const isNameError = (error: HeaderOverrideRowError | null): boolean =>
++  error !== null && NAME_ERRORS.has(error)
++const isValueError = (error: HeaderOverrideRowError | null): boolean =>
++  error !== null && !NAME_ERRORS.has(error)
++
++const hasVariable = (row: HeaderOverrideRow): boolean => headerOverrideHasVariable(row.value)
++
++interface PreviewPart {
++  text: string
++  variable?: HeaderOverrideVariable
++}
++
++/** 含变量的行给出"发送示例"，让替换结果一目了然 */
++const rowPreviews = computed<Array<PreviewPart[] | null>>(() =>
++  props.rows.map((row) => {
++    const value = row.value.trim()
++    if (!row.name.trim() || !headerOverrideHasVariable(value)) return null
++    const parts = parseHeaderOverrideTemplate(value)
++    if (!parts) return null
++    const preview: PreviewPart[] = [{ text: ' ' }]
++    for (const part of parts) {
++      preview.push(
++        part.kind === 'variable'
++          ? { text: VARIABLE_SAMPLES[part.name], variable: part.name }
++          : { text: part.text }
++      )
++    }
++    return preview
++  })
++)
++
++// 当前聚焦的值输入框。变量按钮用 mousedown.prevent 保住焦点，
++// 因此"点击时焦点仍在某个值输入框"就等价于"用户想插到这里"。
++let focusedValueRow: HeaderOverrideRow | null = null
++let focusedValueInput: HTMLInputElement | null = null
++
++const rememberValueInput = (row: HeaderOverrideRow, event: FocusEvent) => {
++  focusedValueRow = row
++  focusedValueInput = event.target as HTMLInputElement
++}
++
++const insertVariable = async (variable: HeaderOverrideVariable) => {
++  const token = headerOverrideVariableToken(variable)
++  const row = focusedValueRow
++  const input = focusedValueInput
++  if (!row || !input || document.activeElement !== input || !props.rows.includes(row)) {
++    // 没有正在编辑的值输入框：新增一行，带上建议的请求头名。
++    // 建议名已被占用时：同值视为已添加（连点不产生重名行），否则留空名称由管理员自行命名。
++    const suggested = HEADER_OVERRIDE_VARIABLE_SUGGESTED_NAMES[variable]
++    const existing = props.rows.find((item) => item.name.trim().toLowerCase() === suggested)
++    if (existing?.value.trim() === token) return
++    emit('update:rows', [...props.rows, { name: existing ? '' : suggested, value: token }])
++    return
++  }
++  const current = row.value
++  const start = Math.min(input.selectionStart ?? current.length, current.length)
++  const end = Math.min(input.selectionEnd ?? current.length, current.length)
++  row.value = current.slice(0, start) + token + current.slice(end)
++  if (!row.name.trim()) row.name = HEADER_OVERRIDE_VARIABLE_SUGGESTED_NAMES[variable]
++  const caret = start + token.length
++  await nextTick()
++  if (input.isConnected) input.setSelectionRange(caret, caret)
++}
++
+ const addRow = () => {
+   emit('update:rows', [...props.rows, { name: '', value: '' }])
+ }
+diff --git a/frontend/src/components/account/__tests__/HeaderOverrideEditor.spec.ts b/frontend/src/components/account/__tests__/HeaderOverrideEditor.spec.ts
+new file mode 100644
+index 000000000..755baa344
+--- /dev/null
++++ b/frontend/src/components/account/__tests__/HeaderOverrideEditor.spec.ts
+@@ -0,0 +1,78 @@
++import { describe, expect, it } from 'vitest'
++import { mount } from '@vue/test-utils'
++import { createI18n } from 'vue-i18n'
++import { createPinia } from 'pinia'
++import { defineComponent, h, ref } from 'vue'
++import HeaderOverrideEditor from '../HeaderOverrideEditor.vue'
++import type { HeaderOverrideRow } from '../credentialsBuilder'
++
++const i18n = createI18n({ legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false, messages: { en: {} } })
++
++function mountEditor(initial: HeaderOverrideRow[], allowVariables = true) {
++  const rows = ref<HeaderOverrideRow[]>(initial)
++  const Host = defineComponent({
++    setup: () => () =>
++      h(HeaderOverrideEditor, {
++        rows: rows.value,
++        allowVariables,
++        'onUpdate:rows': (next: HeaderOverrideRow[]) => {
++          rows.value = next
++        }
++      })
++  })
++  const wrapper = mount(Host, { attachTo: document.body, global: { plugins: [i18n, createPinia()] } })
++  return { wrapper, rows }
++}
++
++describe('HeaderOverrideEditor', () => {
++  it('adds a suggested row when no value input is being edited', async () => {
++    const { wrapper, rows } = mountEditor([])
++    await wrapper.get('[data-testid="header-override-variable-user_id"]').trigger('click')
++    expect(rows.value).toEqual([{ name: 'x-gateway-user-id', value: '{{user_id}}' }])
++
++    // 连点同一个变量不产生重名行
++    await wrapper.get('[data-testid="header-override-variable-user_id"]').trigger('click')
++    expect(rows.value).toHaveLength(1)
++    wrapper.unmount()
++  })
++
++  it('leaves the name empty when the suggested name is taken by another value', async () => {
++    const { wrapper, rows } = mountEditor([{ name: 'X-Gateway-User-Id', value: 'fixed' }])
++    await wrapper.get('[data-testid="header-override-variable-user_id"]').trigger('click')
++    expect(rows.value).toEqual([
++      { name: 'X-Gateway-User-Id', value: 'fixed' },
++      { name: '', value: '{{user_id}}' }
++    ])
++    wrapper.unmount()
++  })
++
++  it('inserts at the caret of the value input being edited', async () => {
++    const { wrapper, rows } = mountEditor([{ name: 'x-trace', value: 'u=;end' }])
++    const input = wrapper.get('[data-testid="header-override-value"]').element as HTMLInputElement
++    input.focus()
++    input.setSelectionRange(2, 2)
++    await wrapper.get('[data-testid="header-override-variable-request_id"]').trigger('click')
++    expect(rows.value).toEqual([{ name: 'x-trace', value: 'u={{request_id}};end' }])
++    wrapper.unmount()
++  })
++
++  it('shows a preview for valid variables and an inline error for unknown ones', async () => {
++    const { wrapper } = mountEditor([
++      { name: 'x-user', value: 'id-{{user_id}}' },
++      { name: 'x-bad', value: '{{nope}}' }
++    ])
++    const previews = wrapper.findAll('[data-testid="header-override-row-preview"]')
++    expect(previews).toHaveLength(1)
++    expect(previews[0].text()).toContain('x-user: id-10086')
++    expect(wrapper.findAll('[data-testid="header-override-row-error"]')).toHaveLength(1)
++    wrapper.unmount()
++  })
++
++  it('hides the variable picker and flags variables when the account cannot report identity', () => {
++    const { wrapper } = mountEditor([{ name: 'x-user', value: '{{user_id}}' }], false)
++    expect(wrapper.find('[data-testid="header-override-variables"]').exists()).toBe(false)
++    expect(wrapper.find('[data-testid="header-override-variables-unavailable"]').exists()).toBe(true)
++    expect(wrapper.findAll('[data-testid="header-override-row-error"]')).toHaveLength(1)
++    wrapper.unmount()
++  })
++})
+diff --git a/frontend/src/components/account/__tests__/credentialsBuilder.spec.ts b/frontend/src/components/account/__tests__/credentialsBuilder.spec.ts
+index b33db3a16..d0d2c3fb3 100644
+--- a/frontend/src/components/account/__tests__/credentialsBuilder.spec.ts
++++ b/frontend/src/components/account/__tests__/credentialsBuilder.spec.ts
+@@ -11,6 +11,9 @@ import {
+   applyOpenCodeGoProtocolRules,
+   applyPlanType,
+   buildHeaderOverridesObject,
++  getHeaderOverrideRowErrors,
++  headerOverrideVariableToken,
++  parseHeaderOverrideTemplate,
+   buildPlanTypeOptions,
+   cloneOpenCodeGoProtocolRules,
+   cnQuotaCellVisible,
+@@ -577,3 +580,59 @@ describe('Codex subscription analytics labels', () => {
+     expect(openAIPlanTypeLabel(sku, 'analytics')).toBe(label)
+   })
+ })
++
++describe('header override variables', () => {
++  it('builds the placeholder token in code', () => {
++    expect(headerOverrideVariableToken('user_id')).toBe('{{user_id}}')
++  })
++
++  it('parses known variables mixed with literals', () => {
++    expect(parseHeaderOverrideTemplate('u={{ user_id }};k={{api_key_id}}')).toEqual([
++      { kind: 'literal', text: 'u=' },
++      { kind: 'variable', name: 'user_id' },
++      { kind: 'literal', text: ';k=' },
++      { kind: 'variable', name: 'api_key_id' }
++    ])
++    expect(parseHeaderOverrideTemplate('{"team":"a"}')).toEqual([
++      { kind: 'literal', text: '{"team":"a"}' }
++    ])
++  })
++
++  it('rejects unknown, mistyped and malformed placeholders like the backend', () => {
++    for (const value of [
++      '{{user_email}}',
++      '{{userid}}',
++      '{{}}',
++      'id-{{user_id',
++      '{{USER_ID}}',
++      '{{ {{user_id}} }}',
++      '{{{user_id}}}'
++    ]) {
++      expect(parseHeaderOverrideTemplate(value), value).toBeNull()
++    }
++  })
++
++  it('reports per-row errors', () => {
++    expect(
++      getHeaderOverrideRowErrors([
++        { name: 'x-user', value: '{{user_id}}' },
++        { name: 'x-bad', value: '{{nope}}' },
++        { name: 'X-USER', value: 'dup' },
++        { name: 'authorization', value: 'x' },
++        { name: '', value: '' },
++        { name: '', value: 'orphan' }
++      ])
++    ).toEqual([null, 'invalidVariable', 'duplicateName', 'blockedName', null, 'invalidName'])
++  })
++
++  it('rejects variables on accounts that cannot report identity', () => {
++    const rows = [
++      { name: 'x-relay', value: 'fixed' },
++      { name: 'x-user', value: '{{user_id}}' }
++    ]
++    expect(validateHeaderOverrideRows(rows)).toBeNull()
++    expect(validateHeaderOverrideRows(rows, { allowVariables: true })).toBeNull()
++    expect(validateHeaderOverrideRows(rows, { allowVariables: false })).toBe('variableNotAllowed')
++    expect(validateHeaderOverrideRows([{ name: 'x-user', value: '{{nope}}' }])).toBe('invalidVariable')
++  })
++})
+diff --git a/frontend/src/components/account/credentialsBuilder.ts b/frontend/src/components/account/credentialsBuilder.ts
+index 71fa7d98a..0931db6fb 100644
+--- a/frontend/src/components/account/credentialsBuilder.ts
++++ b/frontend/src/components/account/credentialsBuilder.ts
+@@ -110,38 +110,120 @@ function utf8ByteLength(value: string): number {
+   return HEADER_TEXT_ENCODER.encode(value).length
+ }
+ 
++// ---------- 请求头覆写变量（与后端 account_header_override_vars.go 保持一致） ----------
++
++/** 可用变量名：转发时替换为本次请求的网关身份，仅 api_key 账号解析 */
++export const HEADER_OVERRIDE_VARIABLES = ['user_id', 'api_key_id', 'group_id', 'request_id'] as const
++export type HeaderOverrideVariable = (typeof HEADER_OVERRIDE_VARIABLES)[number]
++
++const HEADER_OVERRIDE_VARIABLE_OPEN = '{{'
++const HEADER_OVERRIDE_VARIABLE_CLOSE = '}}'
++const HEADER_OVERRIDE_VARIABLE_SET: ReadonlySet<string> = new Set(HEADER_OVERRIDE_VARIABLES)
++
++/** 变量在覆写值中的写法。花括号会被 vue-i18n 当作插值解析，因此只在代码里拼接。 */
++export function headerOverrideVariableToken(name: HeaderOverrideVariable): string {
++  return `${HEADER_OVERRIDE_VARIABLE_OPEN}${name}${HEADER_OVERRIDE_VARIABLE_CLOSE}`
++}
++
++/** 插入变量时建议的请求头名（值留给管理员按上游约定修改） */
++export const HEADER_OVERRIDE_VARIABLE_SUGGESTED_NAMES: Record<HeaderOverrideVariable, string> = {
++  user_id: 'x-gateway-user-id',
++  api_key_id: 'x-gateway-api-key-id',
++  group_id: 'x-gateway-group-id',
++  request_id: 'x-gateway-request-id'
++}
++
++export function headerOverrideHasVariable(value: string): boolean {
++  return value.includes(HEADER_OVERRIDE_VARIABLE_OPEN)
++}
++
++export type HeaderOverrideTemplatePart =
++  | { kind: 'literal'; text: string }
++  | { kind: 'variable'; name: HeaderOverrideVariable }
++
+ /**
+- * 校验请求头覆写行，返回首个错误的 i18n key（无错误返回 null）。
+- * 名称为空但值非空 → invalidName；名称非法 → invalidName；
+- * 禁止覆写 → blockedName；大小写不敏感重名 → duplicateName；
+- * 值含控制字符或超长 → invalidValue；条目过多 → tooManyEntries。
++ * 解析覆写值模板。任何 "{{" 都必须构成完整且已知的变量（名称两侧允许空白），
++ * 否则返回 null —— 与后端保存校验同一规则，拼错的变量名不会被静默当成字面量。
+  */
+-export function validateHeaderOverrideRows(
+-  rows: HeaderOverrideRow[]
+-): 'invalidName' | 'blockedName' | 'duplicateName' | 'invalidValue' | 'tooManyEntries' | null {
++export function parseHeaderOverrideTemplate(value: string): HeaderOverrideTemplatePart[] | null {
++  const parts: HeaderOverrideTemplatePart[] = []
++  let rest = value
++  for (;;) {
++    const open = rest.indexOf(HEADER_OVERRIDE_VARIABLE_OPEN)
++    if (open < 0) {
++      if (rest) parts.push({ kind: 'literal', text: rest })
++      return parts
++    }
++    if (open > 0) parts.push({ kind: 'literal', text: rest.slice(0, open) })
++    rest = rest.slice(open + HEADER_OVERRIDE_VARIABLE_OPEN.length)
++    const close = rest.indexOf(HEADER_OVERRIDE_VARIABLE_CLOSE)
++    if (close < 0) return null
++    const name = rest.slice(0, close).trim()
++    if (!HEADER_OVERRIDE_VARIABLE_SET.has(name)) return null
++    parts.push({ kind: 'variable', name: name as HeaderOverrideVariable })
++    rest = rest.slice(close + HEADER_OVERRIDE_VARIABLE_CLOSE.length)
++  }
++}
++
++export type HeaderOverrideRowError =
++  | 'invalidName'
++  | 'blockedName'
++  | 'duplicateName'
++  | 'invalidValue'
++  | 'invalidVariable'
++  | 'variableNotAllowed'
++
++export interface HeaderOverrideValidationOptions {
++  /** 账号是否允许使用变量（仅 api_key 账号；OAuth 账号不会把网关身份发给上游） */
++  allowVariables?: boolean
++}
++
++/**
++ * 逐行校验，返回与 rows 等长的错误数组（无错误为 null）。
++ * 名称为空但值非空 / 名称非法 → invalidName；禁止覆写 → blockedName；
++ * 大小写不敏感重名 → duplicateName（后出现的行）；值含控制字符或超长 → invalidValue；
++ * 变量写法或变量名不对 → invalidVariable；账号类型不支持变量 → variableNotAllowed。
++ */
++export function getHeaderOverrideRowErrors(
++  rows: HeaderOverrideRow[],
++  options: HeaderOverrideValidationOptions = {}
++): Array<HeaderOverrideRowError | null> {
++  const allowVariables = options.allowVariables ?? true
+   const seen = new Set<string>()
+-  for (const row of rows) {
++  return rows.map((row) => {
+     const name = row.name.trim()
+     const value = row.value.trim()
+-    if (!name) {
+-      if (value) return 'invalidName'
+-      continue
+-    }
++    if (!name) return value ? 'invalidName' : null
+     if (!isValidHeaderOverrideName(name) || name.length > HEADER_OVERRIDE_MAX_NAME_LENGTH) {
+       return 'invalidName'
+     }
+     const lower = name.toLowerCase()
+     if (HEADER_OVERRIDE_BLOCKED_NAMES.has(lower)) return 'blockedName'
+     if (seen.has(lower)) return 'duplicateName'
++    seen.add(lower)
+     if (
+       HEADER_VALUE_INVALID_PATTERN.test(value) ||
+       utf8ByteLength(value) > HEADER_OVERRIDE_MAX_VALUE_LENGTH
+     ) {
+       return 'invalidValue'
+     }
+-    seen.add(lower)
+-  }
+-  if (seen.size > HEADER_OVERRIDE_MAX_ENTRIES) return 'tooManyEntries'
++    if (headerOverrideHasVariable(value)) {
++      if (!allowVariables) return 'variableNotAllowed'
++      if (parseHeaderOverrideTemplate(value) === null) return 'invalidVariable'
++    }
++    return null
++  })
++}
++
++/** 校验请求头覆写行，返回首个错误的 i18n key（无错误返回 null）。 */
++export function validateHeaderOverrideRows(
++  rows: HeaderOverrideRow[],
++  options: HeaderOverrideValidationOptions = {}
++): HeaderOverrideRowError | 'tooManyEntries' | null {
++  const firstError = getHeaderOverrideRowErrors(rows, options).find((error) => error !== null)
++  if (firstError) return firstError
++  const named = rows.filter((row) => row.name.trim()).length
++  if (named > HEADER_OVERRIDE_MAX_ENTRIES) return 'tooManyEntries'
+   return null
+ }
+ 
+diff --git a/frontend/src/i18n/locales/en/admin/accounts.ts b/frontend/src/i18n/locales/en/admin/accounts.ts
+index d30557b54..469e60210 100644
+--- a/frontend/src/i18n/locales/en/admin/accounts.ts
++++ b/frontend/src/i18n/locales/en/admin/accounts.ts
+@@ -926,7 +926,25 @@ export default {
+         blockedName: 'This header cannot be overridden (auth and connection-control headers are managed by the system)',
+         duplicateName: 'Duplicate header name (matching is case-insensitive)',
+         invalidValue: 'Invalid header value (control characters are not allowed; max length 8192)',
+-        tooManyEntries: 'Too many header override entries (max 64)'
++        tooManyEntries: 'Too many header override entries (max 64)',
++        invalidVariable: 'Invalid variable: pick one from "Identity variables" below; other variable names are not supported',
++        variableNotAllowed: 'OAuth accounts do not support identity variables. Remove this row or use a fixed value',
++        removeRow: 'Remove this header',
++        previewLabel: 'Sent as',
++        variablesTitle: 'Identity variables',
++        variablesHint: 'Report the gateway user behind each request to the upstream, so a request can be traced back layer by layer. Click a variable while editing a value to insert it at the cursor; otherwise a new row is added.',
++        variablesUnavailable: 'OAuth accounts do not support identity variables: subscription upstreams never receive gateway user identity. Only fixed values can be used here.',
++        variables: {
++          user_id: { label: 'User ID', desc: 'The gateway user who sent the request' },
++          api_key_id: { label: 'API Key ID', desc: 'The key used for this request; tells apart multiple keys of one user' },
++          group_id: { label: 'Group ID', desc: 'The group bound to the key; the header is not sent when no group is bound' },
++          request_id: { label: 'Request ID', desc: 'Same as the "Request ID" in error records, for direct cross-checking; characters other than letters, digits and . _ - become underscores' }
++        },
++        variableNotes: {
++          unresolved: 'When a value is unavailable (connection tests, model sync and other background requests without a user), the whole header is not sent, and a same-named header from the client is not passed through either.',
++          apiKeyOnly: 'Only applies to API key accounts. OAuth accounts never report identity.',
++          websocket: 'In OpenAI WebSocket mode handshake headers are per connection: headers containing the request ID are not sent, and requests with different reported identities never share an upstream connection.'
++        }
+       },
+       grokModelDiagnostics: {
+         title: 'Model catalog diagnostics',
+diff --git a/frontend/src/i18n/locales/en/admin/ops.ts b/frontend/src/i18n/locales/en/admin/ops.ts
+index acfdcb207..0f9e4555e 100644
+--- a/frontend/src/i18n/locales/en/admin/ops.ts
++++ b/frontend/src/i18n/locales/en/admin/ops.ts
+@@ -362,6 +362,12 @@ export default {
+           upstream_detail: 'Upstream Detail',
+           upstream_events: 'Upstream Events'
+         },
++        reportedHeaders: {
++          title: 'Reported identity headers',
++          hint: 'Identity headers actually sent upstream for this request (generated by variables in the account\'s header override). Use them to cross-check with the upstream layer by layer. When an override value mixes in fixed text, the fixed text is shown as … and variables as name=value, so secrets never reach the logs.',
++          copy: 'Copy',
++          copied: 'Copied'
++        },
+         basicInfo: 'Basic Info',
+         platform: 'Platform',
+         model: 'Model',
+diff --git a/frontend/src/i18n/locales/zh/admin/accounts.ts b/frontend/src/i18n/locales/zh/admin/accounts.ts
+index d4bda0a9f..1af0ea364 100644
+--- a/frontend/src/i18n/locales/zh/admin/accounts.ts
++++ b/frontend/src/i18n/locales/zh/admin/accounts.ts
+@@ -1038,7 +1038,25 @@ export default {
+         blockedName: '该请求头不允许覆写（认证头与连接控制头由系统管理）',
+         duplicateName: '存在重复的请求头名称（匹配不区分大小写）',
+         invalidValue: '请求头值不合法（不允许控制字符，长度不超过 8192）',
+-        tooManyEntries: '请求头覆写条目过多（最多 64 条）'
++        tooManyEntries: '请求头覆写条目过多（最多 64 条）',
++        invalidVariable: '变量写法不正确：请从下方「身份上报变量」中选择，不支持其它变量名',
++        variableNotAllowed: 'OAuth 账号不支持身份上报变量，请删除该行或改为固定值',
++        removeRow: '删除该请求头',
++        previewLabel: '发送示例',
++        variablesTitle: '身份上报变量',
++        variablesHint: '把网关内的用户身份随请求头报给上游，方便逐层定位到具体用户。光标在某个值输入框内时点击变量会插入到光标处，否则新增一行。',
++        variablesUnavailable: 'OAuth 账号不支持身份上报变量：订阅上游不会收到网关内的用户身份，这里只能填写固定值。',
++        variables: {
++          user_id: { label: '用户 ID', desc: '发起请求的网关用户' },
++          api_key_id: { label: 'API Key ID', desc: '本次请求使用的 Key，同一用户多把 Key 时可区分' },
++          group_id: { label: '分组 ID', desc: 'Key 绑定的分组；未绑定分组时该请求头不发送' },
++          request_id: { label: '请求 ID', desc: '与错误记录里的「请求 ID」一致，可直接对账；字母数字和 . _ - 以外的字符会替换为下划线' }
++        },
++        variableNotes: {
++          unresolved: '取不到值时（测试连接、模型同步等没有用户的后台请求）整条请求头不发送，也不会沿用客户端自带的同名头。',
++          apiKeyOnly: '仅对 API Key 账号生效，OAuth 账号永远不会上报。',
++          websocket: 'OpenAI WebSocket 模式下握手头按连接发送：含请求 ID 的请求头不发送，不同上报身份的请求不会共用上游连接。'
++        }
+       },
+       grokModelDiagnostics: {
+         title: '模型目录诊断',
+diff --git a/frontend/src/i18n/locales/zh/admin/ops.ts b/frontend/src/i18n/locales/zh/admin/ops.ts
+index e3c14b598..55a423bb4 100644
+--- a/frontend/src/i18n/locales/zh/admin/ops.ts
++++ b/frontend/src/i18n/locales/zh/admin/ops.ts
+@@ -362,6 +362,12 @@ export default {
+           upstream_detail: '上游详情',
+           upstream_events: '上游事件'
+         },
++        reportedHeaders: {
++          title: '身份上报请求头',
++          hint: '本次请求转发时实际发给上游的身份请求头（由账号「请求头覆写」中的变量生成），可拿去与上游逐层对账。覆写值里混有固定文本时，固定文本以 … 代替、变量以「名称=值」显示，避免密钥进入日志。',
++          copy: '复制',
++          copied: '已复制'
++        },
+         basicInfo: '基本信息',
+         platform: '平台',
+         model: '模型',
+diff --git a/frontend/src/views/admin/ops/components/OpsErrorDetailModal.vue b/frontend/src/views/admin/ops/components/OpsErrorDetailModal.vue
+index 8b0dc388f..95d4bda5a 100644
+--- a/frontend/src/views/admin/ops/components/OpsErrorDetailModal.vue
++++ b/frontend/src/views/admin/ops/components/OpsErrorDetailModal.vue
+@@ -130,6 +130,49 @@
+         <div class="mt-3 break-words text-sm font-medium text-amber-900 dark:text-amber-100">{{ rootCauseMessage }}</div>
+       </div>
+ 
++      <!-- 身份上报请求头：账号请求头覆写变量实际发给上游的值 -->
++      <div
++        v-if="reportedHeaderGroups.length"
++        class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900"
++        data-testid="error-detail-reported-headers"
++      >
++        <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.reportedHeaders.title') }}</h3>
++        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.errorDetail.reportedHeaders.hint') }}</p>
++        <div class="mt-4 space-y-3">
++          <div
++            v-for="group in reportedHeaderGroups"
++            :key="group.key"
++            class="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800"
++          >
++            <div
++              v-if="group.accountName || group.accountId != null"
++              class="flex items-center gap-2 border-b border-gray-100 px-4 py-2 text-xs dark:border-dark-700"
++            >
++              <span class="text-gray-400">{{ t('admin.ops.errorDetail.account') }}</span>
++              <span class="font-medium text-gray-900 dark:text-white">{{ group.accountName || '—' }}</span>
++              <span v-if="group.accountId != null" class="font-mono text-gray-400">#{{ group.accountId }}</span>
++            </div>
++            <div class="divide-y divide-gray-100 dark:divide-dark-700">
++              <div
++                v-for="header in group.headers"
++                :key="header.name"
++                class="flex items-center gap-3 px-4 py-2"
++              >
++                <span class="w-2/5 min-w-0 flex-shrink-0 break-all font-mono text-xs text-gray-500 dark:text-gray-400 sm:w-1/3">{{ header.name }}</span>
++                <span class="min-w-0 flex-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">{{ header.value }}</span>
++                <button
++                  type="button"
++                  class="flex-shrink-0 rounded-md px-2 py-1 text-[10px] font-bold text-primary-700 transition-colors hover:bg-primary-50 dark:text-primary-200 dark:hover:bg-dark-700"
++                  @click="copyReportedHeader(header.name, header.value)"
++                >
++                  {{ t('admin.ops.errorDetail.reportedHeaders.copy') }}
++                </button>
++              </div>
++            </div>
++          </div>
++        </div>
++      </div>
++
+       <div class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
+         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.diagnosticPayloads') }}</h3>
+         <div v-if="!diagnosticPayloadSections.length" class="mt-4 text-sm text-gray-500 dark:text-gray-400">{{ t('common.noData') }}</div>
+@@ -232,7 +275,8 @@ import Icon from '@/components/icons/Icon.vue'
+ import { useAppStore } from '@/stores'
+ import { opsAPI, type OpsErrorDetail } from '@/api/admin/ops'
+ import { formatDateTime } from '@/utils/format'
+-import { resolveUpstreamPayload } from '../utils/errorDetailResponse'
++import { useClipboard } from '@/composables/useClipboard'
++import { extractReportedHeaderGroups, resolveUpstreamPayload } from '../utils/errorDetailResponse'
+ 
+ interface Props {
+   show: boolean
+@@ -285,6 +329,14 @@ const diagnosticPayloadSections = computed(() => {
+   })
+ })
+ 
++const { copyToClipboard } = useClipboard()
++
++const reportedHeaderGroups = computed(() => extractReportedHeaderGroups(detail.value?.upstream_errors))
++
++function copyReportedHeader(name: string, value: string) {
++  void copyToClipboard(`${name}: ${value}`, t('admin.ops.errorDetail.reportedHeaders.copied'))
++}
++
+ function meaningfulPayload(candidate: unknown): string {
+   const value = String(candidate || '').trim()
+   if (!value || value === '[]' || value === '{}' || value.toLowerCase() === 'null') return ''
+diff --git a/frontend/src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts b/frontend/src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts
+index 188c150e0..48a5da38f 100644
+--- a/frontend/src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts
++++ b/frontend/src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts
+@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
+ import OpsErrorDetailModal from '../OpsErrorDetailModal.vue'
+ 
+ const mocks = vi.hoisted(() => ({
++  copyToClipboard: vi.fn(),
+   getRequestErrorDetail: vi.fn(),
+   listRequestErrorUpstreamErrors: vi.fn()
+ }))
+@@ -19,6 +20,10 @@ vi.mock('@/stores', () => ({
+   useAppStore: () => ({ showError: vi.fn() })
+ }))
+ 
++vi.mock('@/composables/useClipboard', () => ({
++  useClipboard: () => ({ copyToClipboard: mocks.copyToClipboard })
++}))
++
+ vi.mock('vue-i18n', async (importOriginal) => {
+   const actual = await importOriginal<typeof import('vue-i18n')>()
+   return {
+@@ -75,5 +80,41 @@ describe('OpsErrorDetailModal', () => {
+     expect(wrapper.text()).toContain('429')
+     expect(wrapper.findAll('pre')).toHaveLength(2)
+     expect(wrapper.text()).not.toContain('admin.ops.errorDetail.payloads.upstream_detail')
++    expect(wrapper.find('[data-testid="error-detail-reported-headers"]').exists()).toBe(false)
++  })
++
++  it('shows the identity headers that were reported upstream and copies them', async () => {
++    mocks.getRequestErrorDetail.mockResolvedValue({
++      id: 2,
++      created_at: '2026-11-24T00:00:00Z',
++      phase: 'upstream',
++      error_owner: 'provider',
++      status_code: 502,
++      platform: 'openai',
++      request_id: 'rid-2',
++      upstream_errors: JSON.stringify([
++        {
++          account_id: 5,
++          account_name: 'relay-a',
++          upstream_status_code: 400,
++          reported_headers: { 'x-gateway-user-id': '7' }
++        }
++      ])
++    })
++
++    const wrapper = shallowMount(OpsErrorDetailModal, {
++      props: { show: true, errorId: 2, errorType: 'request' },
++      global: { stubs: { BaseDialog: { template: '<div><slot /></div>' }, Icon: true } }
++    })
++    await flushPromises()
++
++    const section = wrapper.get('[data-testid="error-detail-reported-headers"]')
++    expect(section.text()).toContain('relay-a')
++    expect(section.text()).toContain('x-gateway-user-id')
++    await section.get('button').trigger('click')
++    expect(mocks.copyToClipboard).toHaveBeenCalledWith(
++      'x-gateway-user-id: 7',
++      'admin.ops.errorDetail.reportedHeaders.copied'
++    )
+   })
+ })
+diff --git a/frontend/src/views/admin/ops/utils/__tests__/errorDetailResponse.spec.ts b/frontend/src/views/admin/ops/utils/__tests__/errorDetailResponse.spec.ts
+index 3b809d0fa..fc69bf487 100644
+--- a/frontend/src/views/admin/ops/utils/__tests__/errorDetailResponse.spec.ts
++++ b/frontend/src/views/admin/ops/utils/__tests__/errorDetailResponse.spec.ts
+@@ -132,3 +132,34 @@ describe('errorDetailResponse', () => {
+     }))).toBe('fallback message')
+   })
+ })
++
++describe('extractReportedHeaderGroups', () => {
++  it('collects variable-driven headers per account and merges identical attempts', async () => {
++    const { extractReportedHeaderGroups } = await import('../errorDetailResponse')
++    const events = JSON.stringify([
++      { account_id: 5, account_name: 'relay-a', reported_headers: { 'x-user': '7', 'x-key': '31' } },
++      { account_id: 5, account_name: 'relay-a', reported_headers: { 'x-key': '31', 'x-user': '7' } },
++      { account_id: 6, account_name: 'relay-b' },
++      { account_id: 8, account_name: 'relay-c', reported_headers: { 'x-user': '7' } }
++    ])
++    expect(extractReportedHeaderGroups(events).map(({ accountId, accountName, headers }) => ({ accountId, accountName, headers }))).toEqual([
++      {
++        accountId: 5,
++        accountName: 'relay-a',
++        headers: [
++          { name: 'x-key', value: '31' },
++          { name: 'x-user', value: '7' }
++        ]
++      },
++      { accountId: 8, accountName: 'relay-c', headers: [{ name: 'x-user', value: '7' }] }
++    ])
++  })
++
++  it('returns nothing for empty, malformed or legacy payloads', async () => {
++    const { extractReportedHeaderGroups } = await import('../errorDetailResponse')
++    expect(extractReportedHeaderGroups('')).toEqual([])
++    expect(extractReportedHeaderGroups('not json')).toEqual([])
++    expect(extractReportedHeaderGroups('{"a":1}')).toEqual([])
++    expect(extractReportedHeaderGroups('[{"account_id":1,"reported_headers":[]},null]')).toEqual([])
++  })
++})
+diff --git a/frontend/src/views/admin/ops/utils/errorDetailResponse.ts b/frontend/src/views/admin/ops/utils/errorDetailResponse.ts
+index 8fd9aed9c..e004dd6cb 100644
+--- a/frontend/src/views/admin/ops/utils/errorDetailResponse.ts
++++ b/frontend/src/views/admin/ops/utils/errorDetailResponse.ts
+@@ -1,4 +1,4 @@
+-import type { OpsErrorDetail } from '@/api/admin/ops'
++import type { OpsErrorDetail, OpsUpstreamErrorEvent } from '@/api/admin/ops'
+ 
+ const GENERIC_UPSTREAM_MESSAGES = new Set([
+   'upstream request failed',
+@@ -89,3 +89,47 @@ export function resolvePrimaryResponseBody(
+ 
+   return errorBody
+ }
++
++export interface ReportedHeaderGroup {
++  /** 稳定 key：账号 + 请求头内容 */
++  key: string
++  accountId: number | null
++  accountName: string
++  headers: Array<{ name: string; value: string }>
++}
++
++/**
++ * 从错误记录的上游事件里提取"身份上报请求头"（账号请求头覆写变量实际发出的值）。
++ * 同一账号、内容相同的多次尝试合并为一组；没有上报时返回空数组。
++ */
++export function extractReportedHeaderGroups(
++  upstreamErrors: string | null | undefined
++): ReportedHeaderGroup[] {
++  const text = String(upstreamErrors || '').trim()
++  if (!text) return []
++  let events: unknown
++  try {
++    events = JSON.parse(text)
++  } catch {
++    return []
++  }
++  if (!Array.isArray(events)) return []
++
++  const groups: ReportedHeaderGroup[] = []
++  const seen = new Set<string>()
++  for (const raw of events as Array<OpsUpstreamErrorEvent | null>) {
++    const reported = raw?.reported_headers
++    if (!raw || !reported || typeof reported !== 'object' || Array.isArray(reported)) continue
++    const headers = Object.entries(reported)
++      .filter(([name, value]) => !!name && typeof value === 'string' && value !== '')
++      .map(([name, value]) => ({ name, value }))
++      .sort((a, b) => a.name.localeCompare(b.name))
++    if (!headers.length) continue
++    const accountId = typeof raw.account_id === 'number' && raw.account_id > 0 ? raw.account_id : null
++    const key = JSON.stringify([accountId, headers])
++    if (seen.has(key)) continue
++    seen.add(key)
++    groups.push({ key, accountId, accountName: String(raw.account_name || '').trim(), headers })
++  }
++  return groups
++}

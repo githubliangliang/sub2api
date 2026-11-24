@@ -1,0 +1,750 @@
+diff --git a/backend/internal/server/middleware/api_key_auth.go b/backend/internal/server/middleware/api_key_auth.go
+index c2dd7bf8f..c28cd41cc 100644
+--- a/backend/internal/server/middleware/api_key_auth.go
++++ b/backend/internal/server/middleware/api_key_auth.go
+@@ -172,6 +172,8 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
+ 			return
+ 		}
+ 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
++		// 请求头覆写变量（{{user_id}} 等）的取值来源：只在此处由已认证的 Key 建立。
++		ctx = service.WithHeaderOverrideRequestScope(ctx, apiKey.User.ID, apiKey.ID, apiKey.GroupID)
+ 		c.Request = c.Request.WithContext(ctx)
+ 		billingInfoRequest := c.Request.URL.Path == "/v1/sub2api/billing"
+ 		// Async image task polling only reads data that already belongs to the
+diff --git a/backend/internal/server/middleware/api_key_auth_google.go b/backend/internal/server/middleware/api_key_auth_google.go
+index ec0c34411..1a340e513 100644
+--- a/backend/internal/server/middleware/api_key_auth_google.go
++++ b/backend/internal/server/middleware/api_key_auth_google.go
+@@ -116,6 +116,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
+ 			abortWithGoogleError(c, 401, "User account is not active")
+ 			return
+ 		}
++		// 请求头覆写变量（{{user_id}} 等）的取值来源，与 APIKeyAuth 保持一致。
++		c.Request = c.Request.WithContext(service.WithHeaderOverrideRequestScope(
++			c.Request.Context(), apiKey.User.ID, apiKey.ID, apiKey.GroupID))
+ 		if code, message, ok := validateAPIKeyGroupAvailable(apiKey); !ok {
+ 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
+ 			if code == "GROUP_DELETED" {
+diff --git a/backend/internal/service/account_header_override.go b/backend/internal/service/account_header_override.go
+index e807cac15..66574836f 100644
+--- a/backend/internal/service/account_header_override.go
++++ b/backend/internal/service/account_header_override.go
+@@ -1,6 +1,7 @@
+ package service
+ 
+ import (
++	"context"
+ 	"net/http"
+ 	"strings"
+ 
+@@ -164,16 +165,24 @@ func resolveHeaderOverrides(raw map[string]string) map[string]string {
+ 
+ // HeaderOverrideValue 返回指定 header（小写名）的生效覆写值。
+ // 供转发链路在 header 写入前感知覆写结果（如 anthropic-beta 需要参与 body 净化）。
++// 含变量的覆写值在此视为未覆写：它的最终值逐请求变化，不能当静态值参与 body 净化。
+ func (a *Account) HeaderOverrideValue(lowerName string) (string, bool) {
+ 	value, ok := a.GetHeaderOverrides()[lowerName]
+-	return value, ok
++	if !ok || headerOverrideHasVariable(value) {
++		return "", false
++	}
++	return value, true
+ }
+ 
+ // ApplyHeaderOverrides 将账号配置的请求头覆写应用到出站请求头。
+ // 对每个覆写条目：先删除所有大小写变体（转发链路会以 wire casing 直接写入 map，
+ // 可能存在非 canonical key），再按已知 wire casing 写入，避免产生重复头。
+ // 账号未启用或不符合条件时为 no-op，可安全地在 OAuth/api_key 共用的构建器中调用。
+-func (a *Account) ApplyHeaderOverrides(h http.Header) {
++//
++// 覆写值含变量（{{user_id}} 等）时用 ctx 中的入站请求身份替换；规则见
++// account_header_override_vars.go：非 api_key 账号、或变量取不到值时，该请求头
++// 整条不发送（既有同名头照样删除，客户端无法伪造上报头）。
++func (a *Account) ApplyHeaderOverrides(ctx context.Context, h http.Header) {
+ 	if h == nil {
+ 		return
+ 	}
+@@ -190,6 +199,17 @@ func (a *Account) ApplyHeaderOverrides(h http.Header) {
+ 				delete(h, existing)
+ 			}
+ 		}
++		if headerOverrideHasVariable(value) {
++			if !a.supportsHeaderOverrideVariables() {
++				continue
++			}
++			expanded, loggable, ok := expandHeaderOverrideTemplate(ctx, value)
++			if !ok {
++				continue
++			}
++			value = expanded
++			headerOverrideScopeFromContext(ctx).record(a.ID, name, loggable)
++		}
+ 		h[resolveWireCasing(name)] = []string{value}
+ 	}
+ }
+@@ -245,6 +265,11 @@ func NormalizeHeaderOverrideCredentials(credentials map[string]any) error {
+ 		if lowerName == "" {
+ 			continue // 丢弃完全为空的占位行
+ 		}
++		// 变量语法只在保存路径校验：应用路径必须保留模板不合法的存量条目，
++		// 由 ApplyHeaderOverrides 按"解析失败"处理（删除同名头且不发送）。
++		if err := validateHeaderOverrideTemplate(lowerName, value); err != nil {
++			return err
++		}
+ 		if _, dup := normalized[lowerName]; dup {
+ 			return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
+ 				"duplicate header name %q (matching is case-insensitive)", lowerName)
+diff --git a/backend/internal/service/account_header_override_vars.go b/backend/internal/service/account_header_override_vars.go
+new file mode 100644
+index 000000000..b7cc1611f
+--- /dev/null
++++ b/backend/internal/service/account_header_override_vars.go
+@@ -0,0 +1,334 @@
++package service
++
++import (
++	"context"
++	"net/http"
++	"sort"
++	"strconv"
++	"strings"
++	"sync"
++
++	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
++	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
++
++	"golang.org/x/net/http/httpguts"
++)
++
++// 请求头覆写变量（magic variables）：覆写值中的 {{name}} 在转发时替换为本次请求的
++// 网关身份，用于把"是哪个用户发的请求"逐层上报给上游，便于排错与违规溯源。
++//
++// 不变式（改动前必读）：
++//   - 仅 api_key 账号解析变量。其它类型（含 Grok OAuth）即使配置了带变量的覆写值，
++//     该请求头也整条不发送：官方订阅上游绝不能收到网关内部身份。
++//   - 变量取不到值（无用户上下文的后台请求、未知变量名）时整条请求头不发送，并且
++//     同名的既有请求头仍会被删除——客户端不能借此伪造上报头。
++//   - 只对管理员配置的模板做替换，替换结果不再二次解析；客户端请求内容永远不参与插值。
++const (
++	headerOverrideVarOpen  = "{{"
++	headerOverrideVarClose = "}}"
++
++	HeaderOverrideVarUserID    = "user_id"
++	HeaderOverrideVarAPIKeyID  = "api_key_id"
++	HeaderOverrideVarGroupID   = "group_id"
++	HeaderOverrideVarRequestID = "request_id"
++)
++
++var headerOverrideVariableNames = map[string]struct{}{
++	HeaderOverrideVarUserID:    {},
++	HeaderOverrideVarAPIKeyID:  {},
++	HeaderOverrideVarGroupID:   {},
++	HeaderOverrideVarRequestID: {},
++}
++
++// HeaderOverrideRequestScope 是一次入站请求的上报身份，以及本次请求实际上报给各账号的
++// 请求头记录（供错误记录展示）。由 API Key 认证中间件创建并挂到请求 context。
++type HeaderOverrideRequestScope struct {
++	userID   int64
++	apiKeyID int64
++	groupID  int64
++
++	mu       sync.Mutex
++	reported map[int64]map[string]string // accountID -> 请求头名(小写) -> 实际发送的值
++}
++
++type headerOverrideScopeKey struct{}
++
++type headerOverrideConnectionScopeKey struct{}
++
++// withHeaderOverrideConnectionScope 标记 ctx 用于构造"连接级"请求头（OpenAI WS 握手）。
++// 一条上游连接会承载多次请求，{{request_id}} 在握手头里无法如实表达，因此不解析，
++// 含它的请求头整条不发送；user_id 等在连接生命周期内稳定的变量照常解析。
++func withHeaderOverrideConnectionScope(ctx context.Context) context.Context {
++	return context.WithValue(ctx, headerOverrideConnectionScopeKey{}, true)
++}
++
++// WithHeaderOverrideRequestScope 把本次请求的网关身份挂到 context。
++// 非正数的 ID 视为"无该身份"，对应变量解析失败。
++func WithHeaderOverrideRequestScope(ctx context.Context, userID, apiKeyID int64, groupID *int64) context.Context {
++	scope := &HeaderOverrideRequestScope{userID: userID, apiKeyID: apiKeyID}
++	if groupID != nil {
++		scope.groupID = *groupID
++	}
++	return context.WithValue(ctx, headerOverrideScopeKey{}, scope)
++}
++
++// withoutHeaderOverrideRequestScope 去掉 ctx 中的入站用户身份。
++// 用于结果会被跨用户缓存/共享的上游请求（模型列表等）：这类请求不代表某个用户的
++// 推理流量，不上报身份；同时避免逐用户/逐请求的头把按请求头分桶的缓存打散。
++func withoutHeaderOverrideRequestScope(ctx context.Context) context.Context {
++	if headerOverrideScopeFromContext(ctx) == nil {
++		return ctx
++	}
++	return context.WithValue(ctx, headerOverrideScopeKey{}, (*HeaderOverrideRequestScope)(nil))
++}
++
++func headerOverrideScopeFromContext(ctx context.Context) *HeaderOverrideRequestScope {
++	if ctx == nil {
++		return nil
++	}
++	scope, _ := ctx.Value(headerOverrideScopeKey{}).(*HeaderOverrideRequestScope)
++	return scope
++}
++
++func (s *HeaderOverrideRequestScope) record(accountID int64, lowerName, value string) {
++	if s == nil || accountID <= 0 {
++		return
++	}
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.reported == nil {
++		s.reported = make(map[int64]map[string]string)
++	}
++	headers := s.reported[accountID]
++	if headers == nil {
++		headers = make(map[string]string)
++		s.reported[accountID] = headers
++	}
++	headers[lowerName] = value
++}
++
++// reportedHeaders 返回本次请求上报给指定账号的请求头副本；没有上报时返回 nil。
++func (s *HeaderOverrideRequestScope) reportedHeaders(accountID int64) map[string]string {
++	if s == nil || accountID <= 0 {
++		return nil
++	}
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	headers := s.reported[accountID]
++	if len(headers) == 0 {
++		return nil
++	}
++	out := make(map[string]string, len(headers))
++	for name, value := range headers {
++		out[name] = value
++	}
++	return out
++}
++
++// headerOverrideReportedHeaders 返回 ctx 所属请求上报给指定账号的请求头。
++func headerOverrideReportedHeaders(ctx context.Context, accountID int64) map[string]string {
++	return headerOverrideScopeFromContext(ctx).reportedHeaders(accountID)
++}
++
++func headerOverrideHasVariable(value string) bool {
++	return strings.Contains(value, headerOverrideVarOpen)
++}
++
++// walkHeaderOverrideTemplate 逐段扫描模板：字面量交给 literal，变量名交给 variable。
++// 任何 "{{" 都必须构成一个完整的 {{name}}（name 两侧允许空白）；否则返回 false。
++// variable 返回 false 时中止并整体返回 false。
++func walkHeaderOverrideTemplate(value string, literal func(string), variable func(string) bool) bool {
++	rest := value
++	for {
++		open := strings.Index(rest, headerOverrideVarOpen)
++		if open < 0 {
++			literal(rest)
++			return true
++		}
++		literal(rest[:open])
++		rest = rest[open+len(headerOverrideVarOpen):]
++		end := strings.Index(rest, headerOverrideVarClose)
++		if end < 0 {
++			return false
++		}
++		if !variable(strings.TrimSpace(rest[:end])) {
++			return false
++		}
++		rest = rest[end+len(headerOverrideVarClose):]
++	}
++}
++
++// validateHeaderOverrideTemplate 校验覆写值中的变量语法与变量名（保存路径）。
++func validateHeaderOverrideTemplate(lowerName, value string) error {
++	if !headerOverrideHasVariable(value) {
++		return nil
++	}
++	unknown := ""
++	ok := walkHeaderOverrideTemplate(value, func(string) {}, func(name string) bool {
++		if _, known := headerOverrideVariableNames[name]; !known {
++			unknown = name
++			return false
++		}
++		return true
++	})
++	if ok {
++		return nil
++	}
++	if unknown != "" {
++		return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
++			"header %q uses unknown variable %q", lowerName, unknown)
++	}
++	return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
++		"header %q has a malformed variable placeholder", lowerName)
++}
++
++// headerOverrideRedactedLiteral 在可记录形态中代替模板的固定文本。
++const headerOverrideRedactedLiteral = "…"
++
++// expandHeaderOverrideTemplate 用本次请求的身份替换模板中的变量。
++// 任一变量无法解析、或结果不是合法的请求头值时 ok 为 false，调用方必须整条不发送。
++//
++// loggable 是可写入错误记录的形态，固定文本可能是中转密钥（如 "sk-xxx-{{user_id}}"），
++// 不得进入日志：
++//   - 模板只有变量时，loggable 就是实际发送的值；
++//   - 混有固定文本时，固定文本替换为 "…"，变量写成 name=value 以便辨认。
++func expandHeaderOverrideTemplate(ctx context.Context, value string) (expanded, loggable string, ok bool) {
++	scope := headerOverrideScopeFromContext(ctx)
++	var sent, tagged strings.Builder
++	hasLiteral := false
++	ok = walkHeaderOverrideTemplate(value, func(literal string) {
++		_, _ = sent.WriteString(literal)
++		if strings.TrimSpace(literal) != "" {
++			hasLiteral = true
++			_, _ = tagged.WriteString(headerOverrideRedactedLiteral)
++		}
++	}, func(name string) bool {
++		resolved := resolveHeaderOverrideVariable(ctx, scope, name)
++		if resolved == "" {
++			return false
++		}
++		_, _ = sent.WriteString(resolved)
++		_, _ = tagged.WriteString(name + "=" + resolved)
++		return true
++	})
++	if !ok {
++		return "", "", false
++	}
++	expanded = strings.TrimSpace(sent.String())
++	if expanded == "" || len(expanded) > maxHeaderOverrideValueLength || !httpguts.ValidHeaderFieldValue(expanded) {
++		return "", "", false
++	}
++	if !hasLiteral {
++		return expanded, expanded, true
++	}
++	return expanded, tagged.String(), true
++}
++
++func resolveHeaderOverrideVariable(ctx context.Context, scope *HeaderOverrideRequestScope, name string) string {
++	// 没有入站用户身份（账号测试、模型同步、探针等后台请求）时一律不解析，
++	// 避免把管理端操作的 request_id 当成用户请求上报。
++	if scope == nil || scope.userID <= 0 {
++		return ""
++	}
++	positive := func(id int64) string {
++		if id <= 0 {
++			return ""
++		}
++		return strconv.FormatInt(id, 10)
++	}
++	switch name {
++	case HeaderOverrideVarUserID:
++		return positive(scope.userID)
++	case HeaderOverrideVarAPIKeyID:
++		return positive(scope.apiKeyID)
++	case HeaderOverrideVarGroupID:
++		return positive(scope.groupID)
++	case HeaderOverrideVarRequestID:
++		if connectionScoped, _ := ctx.Value(headerOverrideConnectionScopeKey{}).(bool); connectionScoped {
++			return ""
++		}
++		requestID, _ := ctx.Value(ctxkey.RequestID).(string)
++		return sanitizeHeaderOverrideRequestID(requestID)
++	default:
++		return ""
++	}
++}
++
++const maxHeaderOverrideRequestIDLength = 128
++
++// sanitizeHeaderOverrideRequestID 约束代入模板的请求 ID。
++// 请求 ID 可由客户端通过 X-Request-ID 自带，是变量里唯一受客户端控制的内容：
++// 原样代入组合模板（如 "u={{user_id}};r={{request_id}}"）会让客户端借分隔符伪造
++// 其它身份字段。因此只保留 [A-Za-z0-9._-]，其余字符替换为 "_" 并限长；
++// 不直接丢弃整条请求头，否则客户端可借此让上报头消失。
++func sanitizeHeaderOverrideRequestID(requestID string) string {
++	requestID = strings.TrimSpace(requestID)
++	if len(requestID) > maxHeaderOverrideRequestIDLength {
++		requestID = requestID[:maxHeaderOverrideRequestIDLength]
++	}
++	return strings.Map(func(r rune) rune {
++		switch {
++		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
++			return r
++		default:
++			return '_'
++		}
++	}, requestID)
++}
++
++// supportsHeaderOverrideVariables 报告账号是否允许解析覆写变量：仅 api_key 账号。
++func (a *Account) supportsHeaderOverrideVariables() bool {
++	return a != nil && a.Type == AccountTypeAPIKey
++}
++
++// ValidateHeaderOverrideVariableUsage 在保存路径拒绝非 api_key 账号使用覆写变量。
++// 运行时 ApplyHeaderOverrides 仍会独立拦截，这里只是让管理员尽早看到明确的错误。
++func ValidateHeaderOverrideVariableUsage(accountType string, credentials map[string]any) error {
++	if accountType == AccountTypeAPIKey || credentials == nil {
++		return nil
++	}
++	for name, value := range stringMappingFromRaw(credentials[credKeyHeaderOverrides]) {
++		if headerOverrideHasVariable(value) {
++			return infraerrors.Newf(http.StatusBadRequest, "INVALID_HEADER_OVERRIDE",
++				"header %q uses variables, which are only available on API key accounts", name)
++		}
++	}
++	return nil
++}
++
++// headerOverrideReportedIdentity 返回出站请求头中由覆写变量生成的部分的规范串
++// （按名排序的 name=value）。用于会跨请求复用的上游连接（OpenAI WS 连接池）：
++// 握手头在建连时固定，上报身份不同的请求不得共用同一条连接。
++func (a *Account) headerOverrideReportedIdentity(h http.Header) string {
++	if !a.supportsHeaderOverrideVariables() {
++		return ""
++	}
++	var names []string
++	for name, value := range a.GetHeaderOverrides() {
++		if headerOverrideHasVariable(value) {
++			names = append(names, name)
++		}
++	}
++	if len(names) == 0 {
++		return ""
++	}
++	sort.Strings(names)
++	var b strings.Builder
++	for _, name := range names {
++		_, _ = b.WriteString(name)
++		_ = b.WriteByte('=')
++		_, _ = b.WriteString(strings.Join(headerValuesFold(h, name), ","))
++		_ = b.WriteByte('\n')
++	}
++	return b.String()
++}
++
++func headerValuesFold(h http.Header, lowerName string) []string {
++	var values []string
++	for existing, vals := range h {
++		if strings.EqualFold(existing, lowerName) {
++			values = append(values, vals...)
++		}
++	}
++	return values
++}
+diff --git a/backend/internal/service/account_test_service.go b/backend/internal/service/account_test_service.go
+index 61e12e258..0a0926a9e 100644
+--- a/backend/internal/service/account_test_service.go
++++ b/backend/internal/service/account_test_service.go
+@@ -598,7 +598,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
+ 	}
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	// Get proxy URL
+ 	proxyURL := ""
+@@ -952,7 +952,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
+ 	}
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	credentialAccount.ApplyHeaderOverrides(req.Header)
++	credentialAccount.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	// Get proxy URL
+ 	proxyURL := ""
+@@ -1159,7 +1159,7 @@ func (s *AccountTestService) applyGrokTestRequestHeaders(req *http.Request, acco
+ 	if account.IsGrokOAuth() && req.URL != nil && isGrokCLIProxyTarget(req.URL.String()) {
+ 		applyGrokCLIHeaders(req.Header)
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ }
+ 
+ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, account *Account, resp *http.Response) {
+@@ -1796,7 +1796,7 @@ func (s *AccountTestService) testGrokSTT(c *gin.Context, ctx context.Context, ac
+ 	if account.IsGrokOAuth() {
+ 		applyGrokCLIHeaders(req.Header)
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	resp, err := s.httpUpstream.Do(req, s.grokTestProxyURL(account), account.ID, account.Concurrency)
+ 	if err != nil {
+@@ -1869,7 +1869,7 @@ func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Contex
+ 	if account.IsGrokOAuth() {
+ 		applyGrokCLIHeaders(headers)
+ 	}
+-	account.ApplyHeaderOverrides(headers)
++	account.ApplyHeaderOverrides(ctx, headers)
+ 
+ 	dialer := s.grokWSDialer
+ 	if dialer == nil {
+@@ -2160,7 +2160,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
+ 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 	applyOpenCodeSessionHeader(c, account, apiURL, req.Header, payloadBytes)
+ 
+ 	proxyURL := ""
+@@ -2294,7 +2294,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
+ 	}
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+@@ -3083,7 +3083,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+ 	req.Header.Set("Authorization", "Bearer "+authToken)
+ 
+ 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(req.Context(), req.Header)
+ 
+ 	proxyURL := ""
+ 	if account.ProxyID != nil && account.Proxy != nil {
+diff --git a/backend/internal/service/upstream_models.go b/backend/internal/service/upstream_models.go
+index b110c940b..04a3cb968 100644
+--- a/backend/internal/service/upstream_models.go
++++ b/backend/internal/service/upstream_models.go
+@@ -1091,7 +1091,7 @@ func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context,
+ 			}
+ 		}
+ 	}
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	return req, nil
+ }
+ 
+@@ -1162,7 +1162,7 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
+ 		setAnthropicAPIKeyAuthHeader(req.Header, account, apiKeyAuthToken, normalizedBaseURL)
+ 	}
+ 	// 账号级请求头覆写：模型列表探测与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	return req, nil
+ }
+ 
+@@ -1244,7 +1244,7 @@ func buildOpenAIAPIKeyModelsRequest(ctx context.Context, account *Account, valid
+ 	req.Header.Set("Accept", "application/json")
+ 	req.Header.Set("Authorization", "Bearer "+apiKey)
+ 	// 账号级请求头覆写：模型列表探测与真实转发保持一致的最终头
+-	account.ApplyHeaderOverrides(req.Header)
++	account.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	return req, nil
+ }
+ 
+@@ -1305,7 +1305,7 @@ func (s *AccountTestService) buildOpenAIOAuthUpstreamModelsRequest(ctx context.C
+ 	req.Header.Set("User-Agent", identity.userAgent)
+ 	req.Header.Set("Version", identity.version)
+ 	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
+-	credentialAccount.ApplyHeaderOverrides(req.Header)
++	credentialAccount.ApplyHeaderOverrides(withoutHeaderOverrideRequestScope(req.Context()), req.Header)
+ 	enforceCodexIdentityHeadersWithUA(req.Header, credentialAccount.GetOpenAIUserAgent())
+ 	return req, nil
+ }
+diff --git a/frontend/src/components/account/credentialsBuilder.ts b/frontend/src/components/account/credentialsBuilder.ts
+index 71fa7d98a..0931db6fb 100644
+--- a/frontend/src/components/account/credentialsBuilder.ts
++++ b/frontend/src/components/account/credentialsBuilder.ts
+@@ -110,38 +110,120 @@ function utf8ByteLength(value: string): number {
+   return HEADER_TEXT_ENCODER.encode(value).length
+ }
+ 
++// ---------- 请求头覆写变量（与后端 account_header_override_vars.go 保持一致） ----------
++
++/** 可用变量名：转发时替换为本次请求的网关身份，仅 api_key 账号解析 */
++export const HEADER_OVERRIDE_VARIABLES = ['user_id', 'api_key_id', 'group_id', 'request_id'] as const
++export type HeaderOverrideVariable = (typeof HEADER_OVERRIDE_VARIABLES)[number]
++
++const HEADER_OVERRIDE_VARIABLE_OPEN = '{{'
++const HEADER_OVERRIDE_VARIABLE_CLOSE = '}}'
++const HEADER_OVERRIDE_VARIABLE_SET: ReadonlySet<string> = new Set(HEADER_OVERRIDE_VARIABLES)
++
++/** 变量在覆写值中的写法。花括号会被 vue-i18n 当作插值解析，因此只在代码里拼接。 */
++export function headerOverrideVariableToken(name: HeaderOverrideVariable): string {
++  return `${HEADER_OVERRIDE_VARIABLE_OPEN}${name}${HEADER_OVERRIDE_VARIABLE_CLOSE}`
++}
++
++/** 插入变量时建议的请求头名（值留给管理员按上游约定修改） */
++export const HEADER_OVERRIDE_VARIABLE_SUGGESTED_NAMES: Record<HeaderOverrideVariable, string> = {
++  user_id: 'x-gateway-user-id',
++  api_key_id: 'x-gateway-api-key-id',
++  group_id: 'x-gateway-group-id',
++  request_id: 'x-gateway-request-id'
++}
++
++export function headerOverrideHasVariable(value: string): boolean {
++  return value.includes(HEADER_OVERRIDE_VARIABLE_OPEN)
++}
++
++export type HeaderOverrideTemplatePart =
++  | { kind: 'literal'; text: string }
++  | { kind: 'variable'; name: HeaderOverrideVariable }
++
+ /**
+- * 校验请求头覆写行，返回首个错误的 i18n key（无错误返回 null）。
+- * 名称为空但值非空 → invalidName；名称非法 → invalidName；
+- * 禁止覆写 → blockedName；大小写不敏感重名 → duplicateName；
+- * 值含控制字符或超长 → invalidValue；条目过多 → tooManyEntries。
++ * 解析覆写值模板。任何 "{{" 都必须构成完整且已知的变量（名称两侧允许空白），
++ * 否则返回 null —— 与后端保存校验同一规则，拼错的变量名不会被静默当成字面量。
+  */
+-export function validateHeaderOverrideRows(
+-  rows: HeaderOverrideRow[]
+-): 'invalidName' | 'blockedName' | 'duplicateName' | 'invalidValue' | 'tooManyEntries' | null {
++export function parseHeaderOverrideTemplate(value: string): HeaderOverrideTemplatePart[] | null {
++  const parts: HeaderOverrideTemplatePart[] = []
++  let rest = value
++  for (;;) {
++    const open = rest.indexOf(HEADER_OVERRIDE_VARIABLE_OPEN)
++    if (open < 0) {
++      if (rest) parts.push({ kind: 'literal', text: rest })
++      return parts
++    }
++    if (open > 0) parts.push({ kind: 'literal', text: rest.slice(0, open) })
++    rest = rest.slice(open + HEADER_OVERRIDE_VARIABLE_OPEN.length)
++    const close = rest.indexOf(HEADER_OVERRIDE_VARIABLE_CLOSE)
++    if (close < 0) return null
++    const name = rest.slice(0, close).trim()
++    if (!HEADER_OVERRIDE_VARIABLE_SET.has(name)) return null
++    parts.push({ kind: 'variable', name: name as HeaderOverrideVariable })
++    rest = rest.slice(close + HEADER_OVERRIDE_VARIABLE_CLOSE.length)
++  }
++}
++
++export type HeaderOverrideRowError =
++  | 'invalidName'
++  | 'blockedName'
++  | 'duplicateName'
++  | 'invalidValue'
++  | 'invalidVariable'
++  | 'variableNotAllowed'
++
++export interface HeaderOverrideValidationOptions {
++  /** 账号是否允许使用变量（仅 api_key 账号；OAuth 账号不会把网关身份发给上游） */
++  allowVariables?: boolean
++}
++
++/**
++ * 逐行校验，返回与 rows 等长的错误数组（无错误为 null）。
++ * 名称为空但值非空 / 名称非法 → invalidName；禁止覆写 → blockedName；
++ * 大小写不敏感重名 → duplicateName（后出现的行）；值含控制字符或超长 → invalidValue；
++ * 变量写法或变量名不对 → invalidVariable；账号类型不支持变量 → variableNotAllowed。
++ */
++export function getHeaderOverrideRowErrors(
++  rows: HeaderOverrideRow[],
++  options: HeaderOverrideValidationOptions = {}
++): Array<HeaderOverrideRowError | null> {
++  const allowVariables = options.allowVariables ?? true
+   const seen = new Set<string>()
+-  for (const row of rows) {
++  return rows.map((row) => {
+     const name = row.name.trim()
+     const value = row.value.trim()
+-    if (!name) {
+-      if (value) return 'invalidName'
+-      continue
+-    }
++    if (!name) return value ? 'invalidName' : null
+     if (!isValidHeaderOverrideName(name) || name.length > HEADER_OVERRIDE_MAX_NAME_LENGTH) {
+       return 'invalidName'
+     }
+     const lower = name.toLowerCase()
+     if (HEADER_OVERRIDE_BLOCKED_NAMES.has(lower)) return 'blockedName'
+     if (seen.has(lower)) return 'duplicateName'
++    seen.add(lower)
+     if (
+       HEADER_VALUE_INVALID_PATTERN.test(value) ||
+       utf8ByteLength(value) > HEADER_OVERRIDE_MAX_VALUE_LENGTH
+     ) {
+       return 'invalidValue'
+     }
+-    seen.add(lower)
+-  }
+-  if (seen.size > HEADER_OVERRIDE_MAX_ENTRIES) return 'tooManyEntries'
++    if (headerOverrideHasVariable(value)) {
++      if (!allowVariables) return 'variableNotAllowed'
++      if (parseHeaderOverrideTemplate(value) === null) return 'invalidVariable'
++    }
++    return null
++  })
++}
++
++/** 校验请求头覆写行，返回首个错误的 i18n key（无错误返回 null）。 */
++export function validateHeaderOverrideRows(
++  rows: HeaderOverrideRow[],
++  options: HeaderOverrideValidationOptions = {}
++): HeaderOverrideRowError | 'tooManyEntries' | null {
++  const firstError = getHeaderOverrideRowErrors(rows, options).find((error) => error !== null)
++  if (firstError) return firstError
++  const named = rows.filter((row) => row.name.trim()).length
++  if (named > HEADER_OVERRIDE_MAX_ENTRIES) return 'tooManyEntries'
+   return null
+ }
+ 
+diff --git a/frontend/src/views/admin/ops/utils/errorDetailResponse.ts b/frontend/src/views/admin/ops/utils/errorDetailResponse.ts
+index 8fd9aed9c..e004dd6cb 100644
+--- a/frontend/src/views/admin/ops/utils/errorDetailResponse.ts
++++ b/frontend/src/views/admin/ops/utils/errorDetailResponse.ts
+@@ -1,4 +1,4 @@
+-import type { OpsErrorDetail } from '@/api/admin/ops'
++import type { OpsErrorDetail, OpsUpstreamErrorEvent } from '@/api/admin/ops'
+ 
+ const GENERIC_UPSTREAM_MESSAGES = new Set([
+   'upstream request failed',
+@@ -89,3 +89,47 @@ export function resolvePrimaryResponseBody(
+ 
+   return errorBody
+ }
++
++export interface ReportedHeaderGroup {
++  /** 稳定 key：账号 + 请求头内容 */
++  key: string
++  accountId: number | null
++  accountName: string
++  headers: Array<{ name: string; value: string }>
++}
++
++/**
++ * 从错误记录的上游事件里提取"身份上报请求头"（账号请求头覆写变量实际发出的值）。
++ * 同一账号、内容相同的多次尝试合并为一组；没有上报时返回空数组。
++ */
++export function extractReportedHeaderGroups(
++  upstreamErrors: string | null | undefined
++): ReportedHeaderGroup[] {
++  const text = String(upstreamErrors || '').trim()
++  if (!text) return []
++  let events: unknown
++  try {
++    events = JSON.parse(text)
++  } catch {
++    return []
++  }
++  if (!Array.isArray(events)) return []
++
++  const groups: ReportedHeaderGroup[] = []
++  const seen = new Set<string>()
++  for (const raw of events as Array<OpsUpstreamErrorEvent | null>) {
++    const reported = raw?.reported_headers
++    if (!raw || !reported || typeof reported !== 'object' || Array.isArray(reported)) continue
++    const headers = Object.entries(reported)
++      .filter(([name, value]) => !!name && typeof value === 'string' && value !== '')
++      .map(([name, value]) => ({ name, value }))
++      .sort((a, b) => a.name.localeCompare(b.name))
++    if (!headers.length) continue
++    const accountId = typeof raw.account_id === 'number' && raw.account_id > 0 ? raw.account_id : null
++    const key = JSON.stringify([accountId, headers])
++    if (seen.has(key)) continue
++    seen.add(key)
++    groups.push({ key, accountId, accountName: String(raw.account_name || '').trim(), headers })
++  }
++  return groups
++}

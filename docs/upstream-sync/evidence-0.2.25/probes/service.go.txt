@@ -1,0 +1,205 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/model"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
+)
+
+// All credentials, hosts and upstream responses below are synthetic. Only tests
+// are added through a Go overlay; no product implementation is replaced.
+func intake025Forward(t *testing.T, c *gin.Context, status int, body string) {
+	t.Helper()
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: status,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"Server": []string{"synthetic-private-server"},
+				"Set-Cookie": []string{"synthetic-cookie"},
+			},
+			Body: io.NopCloser(strings.NewReader(body)),
+		}},
+	}
+	account := &Account{
+		ID: 925, Name: "intake-synthetic", Platform: PlatformOpenAI,
+		Type: AccountTypeAPIKey, Concurrency: 1, Status: StatusActive, Schedulable: true,
+		Credentials: map[string]any{
+			"api_key": "sk-intake-synthetic-only",
+			"base_url": "https://relay.intake.example/v1",
+		},
+		Extra: map[string]any{"openai_passthrough": true},
+	}
+	_, err := svc.Forward(context.Background(), c, account, []byte(`{"model":"gpt-6-astra","input":"hi"}`))
+	require.Error(t, err)
+}
+
+func intake025Context() (*httptest.ResponseRecorder, *gin.Context) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	return rec, c
+}
+
+func TestIntake025ContextWindowRedactsConfiguredIdentity(t *testing.T) {
+	for _, prefix := range []string{"plain ", "Ⱥ ", "K "} {
+		t.Run(prefix, func(t *testing.T) {
+			rec, c := intake025Context()
+			body, err := json.Marshal(gin.H{"error": gin.H{
+				"type": "invalid_request_error", "code": "context_length_exceeded", "param": "input",
+				"message": prefix + "Your input exceeds the context window of this model at RELAY.INTAKE.EXAMPLE for sk-intake-synthetic-only?key=query-synthetic-only",
+			}})
+			require.NoError(t, err)
+			intake025Forward(t, c, 400, string(body))
+			require.Equal(t, 400, rec.Code)
+			got := rec.Body.String()
+			if strings.Contains(strings.ToLower(got), "relay.intake.example") { t.Error("configured upstream host exposed") }
+			if strings.Contains(got, "sk-intake-synthetic-only") { t.Error("configured account secret exposed") }
+			require.NotContains(t, got, "query-synthetic-only", "existing query-param redaction remains a control")
+		})
+	}
+}
+
+func TestIntake025Deterministic400PreservesFields(t *testing.T) {
+	for _, code := range []string{"invalid_encrypted_content", "context_length_exceeded"} {
+		t.Run(code, func(t *testing.T) {
+			rec, c := intake025Context()
+			message := "Encrypted content could not be verified."
+			if code == "context_length_exceeded" { message = "Your input exceeds the context window of this model." }
+			body, _ := json.Marshal(gin.H{"error": gin.H{
+				"type": "invalid_request_error", "code": code, "param": "input",
+				"message": message,
+				"private": "synthetic-private-field",
+			}, "debug": "synthetic-private-debug"})
+			intake025Forward(t, c, 400, string(body))
+			require.Equal(t, 400, rec.Code)
+			got := rec.Body.String()
+			for key, want := range map[string]string{"type":"invalid_request_error", "code":code, "param":"input"} {
+				if actual := gjson.Get(got, "error."+key).String(); actual != want { t.Errorf("error.%s = %q, want %q", key, actual, want) }
+			}
+			require.NotContains(t, got, "synthetic-private")
+			require.Empty(t, rec.Header().Get("Server"))
+			require.Empty(t, rec.Header().Get("Set-Cookie"))
+		})
+	}
+}
+
+func TestIntake025PassthroughRuleAppliesAllDecisions(t *testing.T) {
+	for _, passthrough := range []bool{false, true} {
+		t.Run(map[bool]string{false:"custom-status-message",true:"structured-and-skip-monitoring"}[passthrough], func(t *testing.T) {
+			rec, c := intake025Context()
+			status, message := 422, "synthetic administrator message"
+			rules := &ErrorPassthroughService{}
+			rules.setLocalCache([]*model.ErrorPassthroughRule{{
+				ID: 925, Name: "intake", Enabled: true, Priority: 1,
+				ErrorCodes: []int{400}, Keywords: []string{"previous_response_not_found"},
+				MatchMode: model.MatchModeAny, Platforms: []string{PlatformOpenAI},
+				PassthroughCode: passthrough, ResponseCode: &status,
+				PassthroughBody: passthrough, CustomMessage: &message, SkipMonitoring: true,
+			}})
+			BindErrorPassthroughService(c, rules)
+			intake025Forward(t, c, 400, `{"error":{"type":"invalid_request_error","code":"previous_response_not_found","param":"previous_response_id","message":"Previous response not found."}}`)
+			if passthrough {
+				if got := gjson.Get(rec.Body.String(), "error.code").String(); got != "previous_response_not_found" { t.Errorf("structured code lost: %q",got) }
+			} else {
+				if rec.Code != status { t.Errorf("status = %d, want %d",rec.Code,status) }
+				if got := gjson.Get(rec.Body.String(), "error.message").String(); got != message { t.Errorf("custom message ignored: %q",got) }
+			}
+			if got, _ := c.Get(OpsSkipPassthroughKey); got != true { t.Errorf("skip_monitoring ignored: %v",got) }
+		})
+	}
+}
+
+func TestIntake025CompactPreservesDeterministicCode(t *testing.T) {
+	rec, c := intake025Context()
+	MarkOpenAICompactClientStream(c)
+	stop := StartOpenAICompactSSEKeepalive(c, keepaliveTestInterval)
+	defer stop()
+	waitForKeepaliveBeats()
+	intake025Forward(t, c, 400, `{"error":{"type":"invalid_request_error","code":"invalid_encrypted_content","message":"Encrypted content could not be verified."}}`)
+	require.Equal(t, 200, rec.Code)
+	events := parseCompactBridgeSSE(t, stripKeepaliveComments(rec.Body.String()))
+	require.Len(t, events, 1)
+	require.Equal(t, "response.failed", events[0][0])
+	require.Equal(t, "invalid_encrypted_content", gjson.Get(events[0][1], "response.error.code").String())
+}
+
+func TestIntake025Non400RemainsSanitizedControl(t *testing.T) {
+	rec, c := intake025Context()
+	intake025Forward(t, c, 403, `{"error":{"code":"invalid_encrypted_content","message":"relay.intake.example secret should stay hidden"}}`)
+	require.Equal(t, 502, rec.Code)
+	require.Equal(t, "Upstream access denied", gjson.Get(rec.Body.String(), "error.message").String())
+	require.False(t, gjson.Get(rec.Body.String(), "error.code").Exists())
+	require.NotContains(t, rec.Body.String(), "relay.intake.example")
+}
+
+func TestIntake025CompactCapacityCurrentlyGenericControl(t *testing.T) {
+	rec, c := intake025Context()
+	MarkOpenAICompactClientStream(c)
+	stop := StartOpenAICompactSSEKeepalive(c, keepaliveTestInterval)
+	defer stop()
+	waitForKeepaliveBeats()
+	intake025Forward(t, c, 400, `{"error":{"code":"server_is_overloaded","message":"server is overloaded"}}`)
+	events := parseCompactBridgeSSE(t, stripKeepaliveComments(rec.Body.String()))
+	require.Len(t, events, 1)
+	require.Equal(t, "upstream_error", gjson.Get(events[0][1], "response.error.code").String())
+	// This code is already outside Codex's fatal capacity-code set. The source
+	// capacity rewrite becomes necessary when structured-code forwarding is added.
+}
+
+func TestIntake025CurrentProbeIgnoresRemoteGroupTextControl(t *testing.T) {
+	raw, err := io.ReadAll(upstreamBillingProbeValidBody())
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	payload["group_name"] = "synthetic\x00group"
+	payload["group_description"] = strings.Repeat("a", 1000)
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+	account := &Account{ID: 926, Name: "local name", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Concurrency: 1, Credentials: map[string]any{"api_key":"synthetic-key", "base_url":"https://relay.intake.example/v1"}}
+	repo := &upstreamBillingProbeAccountRepo{accounts:map[int64]*Account{account.ID:account}}
+	upstream := &httpUpstreamRecorder{resp:&http.Response{StatusCode:200,Header:http.Header{},Body:io.NopCloser(strings.NewReader(string(body)))}}
+	svc := newUpstreamBillingProbeTestService(repo,upstream,&upstreamBillingProbeSettingRepo{})
+	snapshot, err := svc.ProbeAccount(context.Background(),account.ID)
+	require.NoError(t, err)
+	require.Equal(t, UpstreamBillingProbeStatusOK,snapshot.Status)
+	require.Equal(t, "local name",account.Name)
+	require.NotContains(t,snapshot.Data,"group_name")
+	require.NotContains(t,snapshot.Data,"group_description")
+}
+
+func TestIntake025StatusRuleSkipAlreadyWorksControl(t *testing.T) {
+	_, c := intake025Context()
+	rules := &ErrorPassthroughService{}
+	rules.setLocalCache([]*model.ErrorPassthroughRule{{ID:925, Name:"status-only",Enabled:true,
+		ErrorCodes:[]int{400},MatchMode:model.MatchModeAny,Platforms:[]string{PlatformOpenAI},SkipMonitoring:true}})
+	BindErrorPassthroughService(c,rules)
+	intake025Forward(t,c,400,`{"error":{"message":"synthetic error"}}`)
+	got,_ := c.Get(OpsSkipPassthroughKey)
+	require.Equal(t,true,got,"appendOpsUpstreamError already matches status rules")
+}
+
+func TestIntake025BodyOnlyRuleSkipMonitoring(t *testing.T) {
+	_, c := intake025Context()
+	rules := &ErrorPassthroughService{}
+	rules.setLocalCache([]*model.ErrorPassthroughRule{{ID:925, Name:"raw-code-only",Enabled:true,
+		Keywords:[]string{"previous_response_not_found"},MatchMode:model.MatchModeAny,
+		Platforms:[]string{PlatformOpenAI},SkipMonitoring:true}})
+	BindErrorPassthroughService(c,rules)
+	intake025Forward(t,c,400,`{"error":{"code":"previous_response_not_found","message":"Previous response not found."}}`)
+	got,_ := c.Get(OpsSkipPassthroughKey)
+	require.Equal(t,true,got,"body-only rule needs the original error code when detail logging is disabled")
+}

@@ -1,0 +1,270 @@
+candidate	path	hunk
+328db26f4	backend/cmd/server/VERSION	@@ -1 +1 @@
+PR9008	backend/go.mod	@@ -26,7 +26,7 @@ require (
+PR9008	backend/go.sum	@@ -265,6 +265,8 @@ github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORR
+PR9008	backend/internal/handler/admin/account_handler.go	@@ -136,6 +136,7 @@ type CreateAccountRequest struct {
+PR9008	backend/internal/handler/admin/account_handler.go	@@ -157,6 +158,7 @@ type UpdateAccountRequest struct {
+PR9008	backend/internal/handler/admin/account_handler.go	@@ -1062,6 +1064,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
+PR9008	backend/internal/handler/admin/account_handler.go	@@ -1194,6 +1197,7 @@ func (h *AccountHandler) Update(c *gin.Context) {
+PR9008	backend/internal/handler/admin/account_upstream_billing_probe.go	@@ -2,6 +2,7 @@ package admin
+PR9008	backend/internal/handler/admin/account_upstream_billing_probe.go	@@ -91,6 +92,63 @@ func (h *AccountHandler) ProbeUpstreamBilling(c *gin.Context) {
+PR9008	backend/internal/handler/admin/account_upstream_billing_probe_test.go	@@ -20,10 +20,25 @@ func setupUpstreamBillingProbeRouter() *gin.Engine {
+PR9008	backend/internal/handler/gateway_key_billing.go	@@ -1,7 +1,9 @@
+PR9008	backend/internal/handler/gateway_key_billing.go	@@ -14,6 +16,7 @@ import (
+PR9008	backend/internal/handler/gateway_key_billing.go	@@ -31,7 +34,7 @@ type keyBillingInfoResponse struct {
+PR9008	backend/internal/handler/gateway_key_billing.go	@@ -57,8 +60,33 @@ func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
+PR9008	backend/internal/repository/account_repo.go	@@ -61,6 +61,7 @@ var schedulerNeutralExtraKeyPrefixes = []string{
+PR9008	backend/internal/repository/account_repo.go	@@ -449,7 +450,7 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
+PR9008	backend/internal/repository/account_repo.go	@@ -458,19 +459,15 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
+PR9008	backend/internal/repository/account_repo.go	@@ -499,9 +496,7 @@ func (r *accountRepository) updateAccount(
+PR9008	backend/internal/repository/account_repo.go	@@ -528,11 +523,9 @@ func (r *accountRepository) updateLockedAccount(
+PR9008	backend/internal/repository/account_repo.go	@@ -544,8 +537,6 @@ func (r *accountRepository) updateLockedAccount(
+PR9008	backend/internal/repository/account_repo.go	@@ -557,8 +548,18 @@ func (r *accountRepository) updateLockedAccount(
+PR9008	backend/internal/repository/account_repo.go	@@ -611,10 +612,6 @@ func (r *accountRepository) updateLockedAccount(
+PR9008	backend/internal/repository/account_repo.go	@@ -625,8 +622,7 @@ func lockAndMergeAccountProbeExtra(
+PR9008	backend/internal/repository/account_repo.go	@@ -682,7 +678,8 @@ func lockAndMergeAccountProbeExtra(
+PR9008	backend/internal/repository/account_repo.go	@@ -705,6 +702,7 @@ func lockAndMergeAccountProbeExtra(
+PR9008	backend/internal/repository/account_repo.go	@@ -729,6 +727,7 @@ func lockAndMergeAccountProbeExtra(
+PR9008	backend/internal/repository/account_repo.go	@@ -740,6 +739,7 @@ func lockAndMergeAccountProbeExtra(
+PR9008	backend/internal/repository/account_repo.go	@@ -759,40 +759,32 @@ func lockAndMergeAccountProbeExtra(
+PR9008	backend/internal/repository/account_repo.go	@@ -2973,24 +2965,26 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
+PR9008	backend/internal/repository/account_repo.go	@@ -3001,7 +2995,7 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
+PR9008	backend/internal/repository/account_repo.go	@@ -3009,6 +3003,7 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+PR9008	backend/internal/repository/account_repo.go	@@ -3065,6 +3060,10 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+PR9008	backend/internal/repository/account_repo.go	@@ -3075,7 +3074,7 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+PR9008	backend/internal/repository/account_repo_grok_managed_extra_test.go	@@ -142,8 +142,8 @@ func TestLockAndMergeAccountProbeExtraKeepsLatestGrokManagedKeys(t *testing.T) {
+PR9008	backend/internal/repository/account_repo_grok_managed_extra_test.go	@@ -152,7 +152,7 @@ func TestLockAndMergeAccountProbeExtraKeepsLatestGrokManagedKeys(t *testing.T) {
+PR9008	backend/internal/repository/account_repo_ollama_cloud_usage_integration_test.go	@@ -229,7 +229,7 @@ func TestLockAndMergeAccountProbeExtraCoalescesNullableOllamaGroupIdentity(t *te
+PR9008	backend/internal/repository/account_repo_ollama_cloud_usage_integration_test.go	@@ -421,7 +421,7 @@ func TestOllamaCloudUsageEligibilityExtendsToCNOpenAICompatPlatforms(t *testing.
+PR9008	backend/internal/repository/account_repo_opencode_go_usage_test.go	@@ -76,7 +76,7 @@ func openCodeGoMergeMockColumns() []string {
+PR9008	backend/internal/repository/account_repo_opencode_go_usage_test.go	@@ -189,9 +189,9 @@ func TestLockAndMergeAccountProbeExtraPreservesOpenCodeGoManagedState(t *testing
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_cas_test.go	@@ -42,7 +42,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRequiresSameIdentityAndSnapshot(t *te
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_cas_test.go	@@ -75,7 +75,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRequiresSameIdentityAndSnapshot(t *te
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_cas_test.go	@@ -99,7 +99,7 @@ func TestUpdateUpstreamBillingProbeSnapshotCommitsSnapshotAndOutboxAtomically(t
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_cas_test.go	@@ -124,6 +124,7 @@ func TestUpdateUpstreamBillingProbeSnapshotCommitsSnapshotAndOutboxAtomically(t
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_cas_test.go	@@ -158,7 +159,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRejectsChangedProxyIdentity(t *testin
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_cas_test.go	@@ -176,7 +177,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRollsBackWhenOutboxFails(t *testing.T
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_cas_test.go	@@ -199,6 +200,7 @@ func TestUpdateUpstreamBillingProbeSnapshotRollsBackWhenOutboxFails(t *testing.T
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -81,8 +81,8 @@ func TestLockAndMergeAccountProbeExtraUsesCurrentDatabaseSnapshot(t *testing.T)
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -91,7 +91,7 @@ func TestLockAndMergeAccountProbeExtraUsesCurrentDatabaseSnapshot(t *testing.T)
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -172,8 +172,8 @@ func TestLockAndMergeAccountProbeExtraNeverInfersProbeFromRateSync(t *testing.T)
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -182,7 +182,7 @@ func TestLockAndMergeAccountProbeExtraNeverInfersProbeFromRateSync(t *testing.T)
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -211,8 +211,8 @@ func TestLockAndMergeAccountProbeExtraProtectsOllamaManagedFields(t *testing.T)
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -223,7 +223,7 @@ func TestLockAndMergeAccountProbeExtraProtectsOllamaManagedFields(t *testing.T)
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -371,8 +371,8 @@ func TestUpdateWithAccountBillingSettingsRollsBackWhenOutboxFails(t *testing.T)
+PR9008	backend/internal/repository/account_repo_upstream_billing_probe_update_test.go	@@ -398,7 +398,7 @@ func TestUpdateWithAccountBillingSettingsRollsBackWhenOutboxFails(t *testing.T)
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -30,7 +30,7 @@ func TestAccountUpdatePreservesConcurrentProbeSnapshot(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -72,10 +72,10 @@ func TestAdminAccountEditPreservesRateSynchronizedAfterLoad(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -107,7 +107,7 @@ func TestProbeSnapshotSyncsRateOnlyForSuccessfulEnabledAccount(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -118,7 +118,7 @@ func TestProbeSnapshotSyncsRateOnlyForSuccessfulEnabledAccount(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -133,7 +133,7 @@ func TestProbeSnapshotSyncsRateOnlyForSuccessfulEnabledAccount(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -148,7 +148,7 @@ func TestProbeSnapshotSyncsRateOnlyForSuccessfulEnabledAccount(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -275,7 +275,7 @@ func TestProbeSnapshotCASIncludesLoadedEnabledState(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -315,13 +315,13 @@ func TestProbeSnapshotCASProtectsManualRateAfterSyncDisabled(t *testing.T) {
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -398,7 +398,7 @@ func TestProxyIdentityUpdateInvalidatesProbeAndRejectsInFlightSnapshot(t *testin
+PR9008	backend/internal/repository/upstream_billing_probe_persistence_integration_test.go	@@ -542,3 +542,36 @@ func latestBulkAccountOutboxPayload(t *testing.T, ctx context.Context, tx sqlQue
+PR9008	backend/internal/server/api_contract_test.go	@@ -1908,9 +1908,7 @@ func (s *stubAccountRepo) Update(ctx context.Context, account *service.Account)
+PR9008	backend/internal/server/routes/admin.go	@@ -367,6 +367,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
+PR9008	backend/internal/server/routes/gateway_key_billing_test.go	@@ -35,6 +35,18 @@ type keyBillingRouteRateRepo struct {
+PR9008	backend/internal/server/routes/gateway_key_billing_test.go	@@ -44,10 +56,13 @@ func (r *keyBillingRouteRateRepo) GetRPMOverrideByUserAndGroup(context.Context,
+PR9008	backend/internal/server/routes/gateway_key_billing_test.go	@@ -72,8 +87,11 @@ func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRoute
+PR9008	backend/internal/server/routes/gateway_key_billing_test.go	@@ -120,7 +138,7 @@ func TestGatewayRoutesKeyBillingInfoPathIsRegistered(t *testing.T) {
+PR9008	backend/internal/server/routes/gateway_key_billing_test.go	@@ -132,7 +150,7 @@ func TestGatewayRoutesKeyBillingInfoEndToEnd(t *testing.T) {
+PR9008	backend/internal/server/routes/gateway_key_billing_test.go	@@ -146,12 +164,74 @@ func TestGatewayRoutesKeyBillingInfoEndToEnd(t *testing.T) {
+PR9008	backend/internal/service/account_service.go	@@ -136,17 +136,16 @@ type AccountDuplicateRepository interface {
+PR9008	backend/internal/service/admin_account.go	@@ -100,6 +100,8 @@ func cloneAccountJSONMap(value map[string]any) (map[string]any, error) {
+PR9008	backend/internal/service/admin_account.go	@@ -414,9 +416,10 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
+PR9008	backend/internal/service/admin_account.go	@@ -437,7 +440,11 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
+PR9008	backend/internal/service/admin_account.go	@@ -445,6 +452,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
+PR9008	backend/internal/service/admin_account.go	@@ -667,6 +677,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -681,6 +692,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -702,6 +714,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -737,6 +750,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -750,6 +769,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -757,7 +777,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -766,6 +786,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -782,6 +805,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -878,11 +902,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -892,15 +916,18 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9008	backend/internal/service/admin_account.go	@@ -937,6 +964,7 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
+PR9008	backend/internal/service/admin_account.go	@@ -966,6 +994,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
+PR9008	backend/internal/service/admin_account.go	@@ -1132,6 +1161,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
+PR9008	backend/internal/service/admin_account_upstream_billing_probe_test.go	@@ -28,9 +28,7 @@ type accountBillingSettingsAdminRepo struct {
+PR9008	backend/internal/service/admin_account_upstream_billing_probe_test.go	@@ -45,15 +43,15 @@ func (r *accountBillingSettingsAdminRepo) UpdateWithAccountBillingSettings(
+PR9008	backend/internal/service/admin_account_upstream_billing_probe_test.go	@@ -913,3 +911,23 @@ func TestCreateAccountDropsOpenCodeGoManagedKeys(t *testing.T) {
+PR9008	backend/internal/service/admin_service.go	@@ -420,6 +420,7 @@ type CreateAccountInput struct {
+PR9008	backend/internal/service/admin_service.go	@@ -453,6 +454,7 @@ type UpdateAccountInput struct {
+PR9008	backend/internal/service/api_key_service.go	@@ -1043,6 +1043,22 @@ func (s *APIKeyService) IncrementUsage(ctx context.Context, keyID int64) error {
+PR9008	backend/internal/service/crs_sync_service.go	@@ -1163,6 +1163,7 @@ func reconcileCRSUpstreamBillingProbeExtra(
+PR9008	backend/internal/service/crs_sync_service.go	@@ -1180,8 +1181,10 @@ func reconcileCRSUpstreamBillingProbeExtra(
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -1,7 +1,6 @@
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -18,21 +17,25 @@ import (
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -71,7 +74,8 @@ const UpstreamBillingProbeMaxBatchSize = upstreamBillingProbeMaxPerCycle
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -259,7 +263,7 @@ type UpstreamBillingProbeService struct {
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -611,20 +615,29 @@ func (s *UpstreamBillingProbeService) SetAccountEnabled(ctx context.Context, acc
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -640,28 +653,33 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -679,28 +697,105 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -709,7 +804,7 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -731,7 +826,11 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -783,7 +882,7 @@ func (s *UpstreamBillingProbeService) persistProbeFailure(
+PR9008	backend/internal/service/upstream_billing_probe.go	@@ -794,12 +893,13 @@ func (s *UpstreamBillingProbeService) updateSnapshot(
+PR9008	backend/internal/service/upstream_billing_probe_multiplatform_test.go	@@ -118,6 +118,42 @@ func TestUpstreamBillingProbeGrokAccountPersistsSnapshot(t *testing.T) {
+PR9008	backend/internal/service/upstream_billing_probe_test.go	@@ -115,6 +115,7 @@ func (r *upstreamBillingProbeAccountRepo) UpdateUpstreamBillingProbeSnapshot(
+PR9008	backend/internal/service/upstream_billing_probe_test.go	@@ -126,6 +127,12 @@ func (r *upstreamBillingProbeAccountRepo) UpdateUpstreamBillingProbeSnapshot(
+PR9008	backend/internal/service/upstream_billing_probe_test.go	@@ -1302,3 +1309,68 @@ func TestUpstreamBillingProbeLeaderLockCoversStaggeredInstancesInCadenceWindow(t
+PR9008	frontend/src/api/__tests__/admin.accounts.upstreamBillingProbe.spec.ts	@@ -12,6 +12,7 @@ vi.mock('@/api/client', () => ({
+PR9008	frontend/src/api/__tests__/admin.accounts.upstreamBillingProbe.spec.ts	@@ -50,4 +51,13 @@ describe('admin account upstream billing probe API', () => {
+PR9008	frontend/src/api/admin/accounts.ts	@@ -1050,6 +1050,23 @@ export async function probeUpstreamBilling(id: number): Promise<UpstreamBillingP
+PR9008	frontend/src/api/admin/accounts.ts	@@ -1190,6 +1207,7 @@ export const accountsAPI = {
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -46,7 +46,18 @@
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -55,6 +66,9 @@
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -4177,6 +4191,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -4424,7 +4439,15 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -4628,11 +4651,23 @@ function onCnPresetSelect(preset: { mode: CnAccountMode; protocol: CnApiProtocol
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -4641,7 +4676,7 @@ const syncPreviewCredentials = computed(() => {
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -5666,6 +5701,7 @@ const resetForm = () => {
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -6264,6 +6300,7 @@ const handleSubmit = async () => {
+PR9008	frontend/src/components/account/CreateAccountModal.vue	@@ -6395,6 +6432,7 @@ const createAccountAndFinish = async (
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -12,8 +12,22 @@
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -3430,6 +3444,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -4110,6 +4125,11 @@ const autoPause7dDisabled = ref(false)
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -4537,10 +4557,30 @@ const handleUpstreamBillingRateSyncChange = (enabled: boolean) => {
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -4673,6 +4713,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -5057,6 +5099,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -5691,6 +5734,9 @@ const handleSubmit = async () => {
+PR9008	frontend/src/components/account/EditAccountModal.vue	@@ -6368,6 +6414,7 @@ const handleSubmit = async () => {
+PR9008	frontend/src/components/account/UpstreamGroupSyncButton.vue	@@ -0,0 +1,65 @@
+PR9008	frontend/src/components/account/__tests__/CreateAccountModal.spec.ts	@@ -10,6 +10,7 @@ import {
+PR9008	frontend/src/components/account/__tests__/CreateAccountModal.spec.ts	@@ -18,6 +19,7 @@ const {
+PR9008	frontend/src/components/account/__tests__/CreateAccountModal.spec.ts	@@ -46,6 +48,7 @@ vi.mock('@/api/admin', () => ({
+PR9008	frontend/src/components/account/__tests__/CreateAccountModal.spec.ts	@@ -219,6 +222,45 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
+PR9008	frontend/src/components/account/__tests__/EditAccountModal.spec.ts	@@ -1,14 +1,15 @@
+PR9008	frontend/src/components/account/__tests__/EditAccountModal.spec.ts	@@ -33,6 +34,7 @@ vi.mock('@/api/admin', () => ({
+PR9008	frontend/src/components/account/__tests__/EditAccountModal.spec.ts	@@ -336,6 +338,28 @@ describe('EditAccountModal', () => {
+PR9008	frontend/src/components/account/__tests__/EditAccountModal.spec.ts	@@ -1337,6 +1361,26 @@ describe('EditAccountModal', () => {
+PR9008	frontend/src/i18n/locales/en/admin/accounts.ts	@@ -336,6 +336,14 @@ export default {
+PR9008	frontend/src/i18n/locales/zh/admin/accounts.ts	@@ -182,6 +182,14 @@ export default {
+PR9008	frontend/src/types/index.ts	@@ -1284,6 +1284,7 @@ export interface Account {
+PR9008	frontend/src/types/index.ts	@@ -1620,6 +1621,7 @@ export interface CreateAccountRequest {
+PR9008	frontend/src/types/index.ts	@@ -1640,6 +1642,7 @@ export interface UpdateAccountRequest {
+PR9008	frontend/src/views/admin/AccountsView.vue	@@ -224,24 +224,37 @@
+PR9008	frontend/src/views/admin/AccountsView.vue	@@ -623,6 +636,7 @@ const togglingSchedulable = ref<number | null>(null)
+PR9008	frontend/src/views/admin/AccountsView.vue	@@ -2295,6 +2309,27 @@ const handleAccountUpdated = (updatedAccount: Account) => {
+PR9008	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -15,6 +15,8 @@ const {
+PR9008	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -27,6 +29,8 @@ const {
+PR9008	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -44,7 +48,9 @@ vi.mock('@/api/admin', () => ({
+PR9008	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -69,6 +75,7 @@ const DataTableStub = defineComponent({
+PR9008	frontend/src/views/admin/__tests__/AccountsView.lite.spec.ts	@@ -181,6 +188,25 @@ describe('admin AccountsView lite account list', () => {
+PR9045	backend/internal/service/error_passthrough_runtime.go	@@ -1,6 +1,9 @@
+PR9045	backend/internal/service/error_passthrough_runtime.go	@@ -42,6 +45,22 @@ func applyErrorPassthroughRule(
+PR9045	backend/internal/service/error_passthrough_runtime.go	@@ -54,18 +73,34 @@ func applyErrorPassthroughRuleWithMessage(
+PR9045	backend/internal/service/error_passthrough_runtime.go	@@ -85,5 +120,5 @@ func applyErrorPassthroughRuleWithMessage(
+PR9045	backend/internal/service/openai_compact_stream_bridge.go	@@ -109,10 +109,33 @@ func writeOpenAICompactSSEFailure(c *gin.Context, statusCode int, errorBody []by
+PR9045	backend/internal/service/openai_compact_stream_bridge.go	@@ -125,7 +148,7 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
+PR9045	backend/internal/service/openai_gateway_passthrough.go	@@ -11,6 +11,8 @@ import (
+PR9045	backend/internal/service/openai_gateway_passthrough.go	@@ -844,6 +846,168 @@ func writeOpenAIPassthroughErrorEnvelope(c *gin.Context, downstreamStatus int, u
+PR9045	backend/internal/service/openai_gateway_passthrough.go	@@ -951,11 +1115,66 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
+PR9045	backend/internal/service/openai_passthrough_error_forwarding_test.go	@@ -0,0 +1,584 @@
+PR9052	backend/internal/server/middleware/api_key_auth.go	@@ -172,6 +172,8 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
+PR9052	backend/internal/server/middleware/api_key_auth_google.go	@@ -116,6 +116,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
+PR9052	backend/internal/server/middleware/api_key_auth_test.go	@@ -386,6 +386,24 @@ func TestAPIKeyAuthSetsGroupContext(t *testing.T) {
+PR9052	backend/internal/server/middleware/api_key_auth_test.go	@@ -394,7 +412,7 @@ func TestAPIKeyAuthSetsGroupContext(t *testing.T) {
+PR9052	backend/internal/service/account_header_override.go	@@ -1,6 +1,7 @@
+PR9052	backend/internal/service/account_header_override.go	@@ -164,16 +165,24 @@ func resolveHeaderOverrides(raw map[string]string) map[string]string {
+PR9052	backend/internal/service/account_header_override.go	@@ -190,6 +199,17 @@ func (a *Account) ApplyHeaderOverrides(h http.Header) {
+PR9052	backend/internal/service/account_header_override.go	@@ -245,6 +265,11 @@ func NormalizeHeaderOverrideCredentials(credentials map[string]any) error {
+PR9052	backend/internal/service/account_header_override_test.go	@@ -3,6 +3,7 @@
+PR9052	backend/internal/service/account_header_override_test.go	@@ -143,7 +144,7 @@ func TestApplyHeaderOverrides(t *testing.T) {
+PR9052	backend/internal/service/account_header_override_test.go	@@ -179,7 +180,7 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
+PR9052	backend/internal/service/account_header_override_test.go	@@ -187,7 +188,7 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
+PR9052	backend/internal/service/account_header_override_test.go	@@ -202,13 +203,13 @@ func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
+PR9052	backend/internal/service/account_header_override_vars.go	@@ -0,0 +1,334 @@
+PR9052	backend/internal/service/account_header_override_vars_test.go	@@ -0,0 +1,379 @@
+PR9052	backend/internal/service/account_test_service.go	@@ -598,7 +598,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
+PR9052	backend/internal/service/account_test_service.go	@@ -952,7 +952,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
+PR9052	backend/internal/service/account_test_service.go	@@ -1159,7 +1159,7 @@ func (s *AccountTestService) applyGrokTestRequestHeaders(req *http.Request, acco
+PR9052	backend/internal/service/account_test_service.go	@@ -1796,7 +1796,7 @@ func (s *AccountTestService) testGrokSTT(c *gin.Context, ctx context.Context, ac
+PR9052	backend/internal/service/account_test_service.go	@@ -1869,7 +1869,7 @@ func (s *AccountTestService) testGrokRealtime(c *gin.Context, ctx context.Contex
+PR9052	backend/internal/service/account_test_service.go	@@ -2160,7 +2160,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
+PR9052	backend/internal/service/account_test_service.go	@@ -2294,7 +2294,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
+PR9052	backend/internal/service/account_test_service.go	@@ -3083,7 +3083,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
+PR9052	backend/internal/service/account_test_service_cn_adaptive.go	@@ -92,7 +92,7 @@ func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Co
+PR9052	backend/internal/service/account_test_service_cn_adaptive.go	@@ -187,7 +187,7 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
+PR9052	backend/internal/service/account_test_service_cn_adaptive.go	@@ -277,7 +277,7 @@ func (s *AccountTestService) testCNProviderAnthropicConnection(c *gin.Context, a
+PR9052	backend/internal/service/admin_account.go	@@ -325,6 +325,9 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
+PR9052	backend/internal/service/admin_account.go	@@ -532,6 +535,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
+PR9052	backend/internal/service/admin_account.go	@@ -673,6 +679,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
+PR9052	backend/internal/service/admin_account.go	@@ -1138,6 +1149,14 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
+PR9052	backend/internal/service/cline_usage.go	@@ -79,7 +79,7 @@ func (c *clineAccountClient) get(ctx context.Context, path string) (gjson.Result
+PR9052	backend/internal/service/cn_provider_balance_service.go	@@ -156,7 +156,7 @@ func (s *CNProviderBalanceService) queryBalanceForAccount(ctx context.Context, a
+PR9052	backend/internal/service/cn_provider_quota_service.go	@@ -207,7 +207,7 @@ func (s *CNProviderQuotaService) queryUsageForAccount(ctx context.Context, accou
+PR9052	backend/internal/service/command_code_usage.go	@@ -182,7 +182,7 @@ func (c *commandCodeUsageClient) get(ctx context.Context, path string, query url
+PR9052	backend/internal/service/gateway_anthropic_passthrough.go	@@ -364,7 +364,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
+PR9052	backend/internal/service/gateway_count_tokens.go	@@ -456,7 +456,7 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
+PR9052	backend/internal/service/gateway_count_tokens.go	@@ -610,7 +610,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
+PR9052	backend/internal/service/gateway_service.go	@@ -1433,7 +1433,7 @@ func (s *GatewayService) DoGrokNativeResponsesJSON(ctx context.Context, account
+PR9052	backend/internal/service/gateway_upstream_request.go	@@ -232,7 +232,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
+PR9052	backend/internal/service/grok_audio.go	@@ -86,7 +86,7 @@ func (s *OpenAIGatewayService) ForwardGrokVoice(ctx context.Context, c *gin.Cont
+PR9052	backend/internal/service/grok_audio.go	@@ -177,7 +177,7 @@ func (s *OpenAIGatewayService) OpenGrokRealtime(ctx context.Context, account *Ac
+PR9052	backend/internal/service/grok_audio.go	@@ -282,7 +282,7 @@ func (s *OpenAIGatewayService) ProbeGrokRealtime(ctx context.Context, account *A
+PR9052	backend/internal/service/grok_media.go	@@ -731,7 +731,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
+PR9052	backend/internal/service/grok_media.go	@@ -835,7 +835,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
+PR9052	backend/internal/service/grok_media.go	@@ -898,7 +898,7 @@ func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(
+PR9052	backend/internal/service/grok_observed_models.go	@@ -152,7 +152,7 @@ func (s *GrokQuotaService) prepareGrokObservedModelsRequest(ctx context.Context,
+PR9052	backend/internal/service/grok_quota_service.go	@@ -172,7 +172,7 @@ func (s *GrokQuotaService) probeUsage(ctx context.Context, accountID int64) (*Gr
+PR9052	backend/internal/service/grok_quota_service.go	@@ -397,7 +397,7 @@ func (s *GrokQuotaService) fetchBilling(
+PR9052	backend/internal/service/model_protocol_catalog.go	@@ -224,7 +224,8 @@ func modelProtocolCatalogHeaders(account *Account, url string) http.Header {
+PR9052	backend/internal/service/openai_alpha_search.go	@@ -283,7 +283,7 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
+PR9052	backend/internal/service/openai_alpha_search.go	@@ -424,7 +424,7 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
+PR9052	backend/internal/service/openai_apikey_responses_probe.go	@@ -192,7 +192,7 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
+PR9052	backend/internal/service/openai_codex_models_service.go	@@ -1783,7 +1783,8 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
+PR9052	backend/internal/service/openai_embeddings.go	@@ -86,7 +86,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
+PR9052	backend/internal/service/openai_gateway_cc_pipeline.go	@@ -261,7 +261,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
+PR9052	backend/internal/service/openai_gateway_count_tokens.go	@@ -476,7 +476,7 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
+PR9052	backend/internal/service/openai_gateway_forward.go	@@ -1545,7 +1545,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
+PR9052	backend/internal/service/openai_gateway_grok.go	@@ -1598,7 +1598,7 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
+PR9052	backend/internal/service/openai_gateway_messages_anthropic_native.go	@@ -227,7 +227,7 @@ func (s *OpenAIGatewayService) buildNativeAnthropicUpstreamRequest(
+PR9052	backend/internal/service/openai_gateway_passthrough.go	@@ -693,7 +693,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
+PR9052	backend/internal/service/openai_images.go	@@ -947,7 +947,7 @@ func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
+PR9052	backend/internal/service/openai_ws_forwarder_payload.go	@@ -182,7 +182,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
+PR9052	backend/internal/service/openai_ws_pool.go	@@ -91,6 +91,9 @@ type openAIWSHandshakeCompatibilityKey struct {
+PR9052	backend/internal/service/openai_ws_pool.go	@@ -2369,7 +2372,8 @@ func normalizeOpenAIWSBetaFeatures(headers http.Header) string {
+PR9052	backend/internal/service/ops_upstream_context.go	@@ -466,6 +466,12 @@ type OpsUpstreamErrorEvent struct {
+PR9052	backend/internal/service/ops_upstream_context.go	@@ -502,6 +508,9 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
+PR9052	backend/internal/service/seedance.go	@@ -114,7 +114,7 @@ func (s *OpenAIGatewayService) ForwardSeedance(ctx context.Context, c *gin.Conte
+PR9052	backend/internal/service/upstream_billing_probe.go	@@ -690,7 +690,7 @@ func (s *UpstreamBillingProbeService) fetchBilling(ctx context.Context, account
+PR9052	backend/internal/service/upstream_models.go	@@ -1091,7 +1091,7 @@ func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context,
+PR9052	backend/internal/service/upstream_models.go	@@ -1162,7 +1162,7 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
+PR9052	backend/internal/service/upstream_models.go	@@ -1244,7 +1244,7 @@ func buildOpenAIAPIKeyModelsRequest(ctx context.Context, account *Account, valid
+PR9052	backend/internal/service/upstream_models.go	@@ -1305,7 +1305,7 @@ func (s *AccountTestService) buildOpenAIOAuthUpstreamModelsRequest(ctx context.C
+PR9052	frontend/src/api/admin/ops.ts	@@ -23,6 +23,8 @@ export type OpsUpstreamErrorEvent = {
+PR9052	frontend/src/components/account/BulkEditAccountModal.vue	@@ -739,6 +739,7 @@
+PR9052	frontend/src/components/account/BulkEditAccountModal.vue	@@ -1739,6 +1740,12 @@ const enableBaseUrl = ref(false)
+PR9052	frontend/src/components/account/BulkEditAccountModal.vue	@@ -2359,7 +2366,9 @@ const handleSubmit = async () => {
+PR9052	frontend/src/components/account/CreateAccountModal.vue	@@ -2493,6 +2493,7 @@
+PR9052	frontend/src/components/account/CreateAccountModal.vue	@@ -4746,7 +4747,9 @@ const validateGrokOAuthUpstreamConfig = (): boolean => {
+PR9052	frontend/src/components/account/EditAccountModal.vue	@@ -883,6 +883,7 @@
+PR9052	frontend/src/components/account/EditAccountModal.vue	@@ -3919,6 +3920,8 @@ const customErrorCodeInput = ref<number | null>(null)
+PR9052	frontend/src/components/account/EditAccountModal.vue	@@ -5858,7 +5861,9 @@ const handleSubmit = async () => {
+PR9052	frontend/src/components/account/EditAccountModal.vue	@@ -6086,7 +6091,9 @@ const handleSubmit = async () => {
+PR9052	frontend/src/components/account/HeaderOverrideEditor.vue	@@ -1,36 +1,78 @@
+PR9052	frontend/src/components/account/HeaderOverrideEditor.vue	@@ -45,6 +87,69 @@
+PR9052	frontend/src/components/account/HeaderOverrideEditor.vue	@@ -55,14 +160,30 @@
+PR9052	frontend/src/components/account/HeaderOverrideEditor.vue	@@ -70,10 +191,101 @@ const emit = defineEmits<{
+PR9052	frontend/src/components/account/__tests__/HeaderOverrideEditor.spec.ts	@@ -0,0 +1,78 @@
+PR9052	frontend/src/components/account/__tests__/credentialsBuilder.spec.ts	@@ -11,6 +11,9 @@ import {
+PR9052	frontend/src/components/account/__tests__/credentialsBuilder.spec.ts	@@ -577,3 +580,59 @@ describe('Codex subscription analytics labels', () => {
+PR9052	frontend/src/components/account/credentialsBuilder.ts	@@ -110,38 +110,120 @@ function utf8ByteLength(value: string): number {
+PR9052	frontend/src/i18n/locales/en/admin/accounts.ts	@@ -926,7 +926,25 @@ export default {
+PR9052	frontend/src/i18n/locales/en/admin/ops.ts	@@ -362,6 +362,12 @@ export default {
+PR9052	frontend/src/i18n/locales/zh/admin/accounts.ts	@@ -1038,7 +1038,25 @@ export default {
+PR9052	frontend/src/i18n/locales/zh/admin/ops.ts	@@ -362,6 +362,12 @@ export default {
+PR9052	frontend/src/views/admin/ops/components/OpsErrorDetailModal.vue	@@ -130,6 +130,49 @@
+PR9052	frontend/src/views/admin/ops/components/OpsErrorDetailModal.vue	@@ -232,7 +275,8 @@ import Icon from '@/components/icons/Icon.vue'
+PR9052	frontend/src/views/admin/ops/components/OpsErrorDetailModal.vue	@@ -285,6 +329,14 @@ const diagnosticPayloadSections = computed(() => {
+PR9052	frontend/src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts	@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
+PR9052	frontend/src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts	@@ -19,6 +20,10 @@ vi.mock('@/stores', () => ({
+PR9052	frontend/src/views/admin/ops/components/__tests__/OpsErrorDetailModal.spec.ts	@@ -75,5 +80,41 @@ describe('OpsErrorDetailModal', () => {
+PR9052	frontend/src/views/admin/ops/utils/__tests__/errorDetailResponse.spec.ts	@@ -132,3 +132,34 @@ describe('errorDetailResponse', () => {
+PR9052	frontend/src/views/admin/ops/utils/errorDetailResponse.ts	@@ -1,4 +1,4 @@
+PR9052	frontend/src/views/admin/ops/utils/errorDetailResponse.ts	@@ -89,3 +89,47 @@ export function resolvePrimaryResponseBody(

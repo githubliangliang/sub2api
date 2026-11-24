@@ -1,0 +1,12 @@
+package sourceprobe
+import ("regexp")
+func replaceCaseInsensitive(input, target, replacement string) string {
+	if input == "" || target == "" {
+		return input
+	}
+	pattern, err := regexp.Compile("(?i)" + regexp.QuoteMeta(target))
+	if err != nil {
+		return ""
+	}
+	return pattern.ReplaceAllLiteralString(input, replacement)
+}

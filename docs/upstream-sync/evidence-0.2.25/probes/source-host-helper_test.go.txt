@@ -1,0 +1,38 @@
+package sourceprobe
+import ("strings";"testing";"github.com/stretchr/testify/require")
+func TestReplaceCaseInsensitive_ByteLengthChangingCaseFolding(t *testing.T) {
+	const host = "h.example"
+	kelvin := "\u212a"
+	cases := map[string]string{
+		"ascii":                      "upstream h.example rejected",
+		"mixed case host":            "upstream H.Example rejected",
+		"grows when lowered":         "\u023a h.example",
+		"grows, host in the middle":  strings.Repeat("\u023a", 10) + " h.example tail-padding-text-xxxxxxxx",
+		"shrinks when lowered":       kelvin + " h.example",
+		"shrinks, repeated":          strings.Repeat(kelvin, 5) + " h.example",
+		"invalid utf8":               "\xff h.example",
+		"invalid utf8, host in tail": strings.Repeat("\xff", 10) + " h.example tail-padding-text-xxxxxxxx",
+		"multiple occurrences":       "\u023a h.example and " + kelvin + " H.EXAMPLE again h.example",
+	}
+	for name, input := range cases {
+		t.Run(name, func(t *testing.T) {
+			var out string
+			require.NotPanics(t, func() { out = replaceCaseInsensitive(input, host, "[upstream]") })
+			require.NotContains(t, strings.ToLower(out), host)
+			require.Contains(t, out, "[upstream]")
+			// 主机名以外的字节必须原样保留。
+			require.Equal(t,
+				strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(input, "h.example", "[upstream]"), "H.Example", "[upstream]"), "H.EXAMPLE", "[upstream]"),
+				out,
+			)
+		})
+	}
+
+	require.Equal(t, "no match here", replaceCaseInsensitive("no match here", host, "[upstream]"))
+	require.Equal(t, "", replaceCaseInsensitive("", host, "[upstream]"))
+	require.Equal(t, "text", replaceCaseInsensitive("text", "", "[upstream]"))
+	// 正则元字符按字面量匹配，"." 不得匹配任意字符。
+	require.Equal(t, "hxexample", replaceCaseInsensitive("hxexample", host, "[upstream]"))
+	// target 无法编译时宁可丢弃整段文本。
+	require.Equal(t, "", replaceCaseInsensitive("text \xff here", "\xff", "[upstream]"))
+}

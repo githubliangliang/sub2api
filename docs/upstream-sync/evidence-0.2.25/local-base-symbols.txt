@@ -1,0 +1,67 @@
+COMMAND ['rtk', 'proxy', 'rg', '-n', '^func .*?(handleErrorResponsePassthrough|writeOpenAIPassthroughError|writeOpenAICompactSSE|sanitizeUpstreamErrorMessage|extractUpstreamErrorCode|applyErrorPassthroughRule|checkSkipMonitoringForUpstreamEvent|NextOpenAIResponsesSequence|parseUpstreamBillingProbeResponse|UpdateUpstreamBillingProbeSnapshot|ApplyHeaderOverrides|GetHeaderOverrides)', 'backend/internal/service', 'backend/internal/repository']
+EXIT 0
+backend/internal/repository/account_repo.go:2554:func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
+backend/internal/service/gemini_messages_compat_service.go:1777:func sanitizeUpstreamErrorMessage(msg string) string {
+backend/internal/service/gateway_upstream_response.go:310:func extractUpstreamErrorCode(body []byte) string {
+backend/internal/service/account_header_override_test.go:75:func TestGetHeaderOverrides(t *testing.T) {
+backend/internal/service/account_header_override_test.go:122:func TestApplyHeaderOverrides(t *testing.T) {
+backend/internal/service/account_header_override_test.go:161:func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {
+backend/internal/service/upstream_billing_probe.go:806:func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {
+backend/internal/service/upstream_billing_probe_test.go:113:func (r *upstreamBillingProbeAccountRepo) UpdateUpstreamBillingProbeSnapshot(
+backend/internal/service/account_header_override.go:103:func (a *Account) GetHeaderOverrides() map[string]string {
+backend/internal/service/account_header_override.go:175:func (a *Account) ApplyHeaderOverrides(h http.Header) {
+backend/internal/service/openai_compact_stream_bridge.go:57:func writeOpenAICompactSSEBridge(c *gin.Context, statusCode int, finalResponse []byte) bool {
+backend/internal/service/openai_compact_stream_bridge.go:97:func writeOpenAICompactSSEFailure(c *gin.Context, statusCode int, errorBody []byte) {
+backend/internal/service/openai_compact_stream_bridge.go:112:func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType, message string) {
+backend/internal/service/openai_gateway_passthrough.go:563:func writeOpenAIPassthroughErrorHeaders(dst, src http.Header) {
+backend/internal/service/openai_gateway_passthrough.go:619:func writeOpenAIPassthroughErrorEnvelope(c *gin.Context, downstreamStatus int, upstreamHeaders http.Header, message string) {
+backend/internal/service/openai_gateway_passthrough.go:683:func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
+backend/internal/service/openai_responses_sequence.go:75:func NextOpenAIResponsesSequence(c *gin.Context) int64 {
+backend/internal/service/error_passthrough_runtime.go:31:func applyErrorPassthroughRule(
+backend/internal/service/error_passthrough_runtime.go:44:func applyErrorPassthroughRuleWithMessage(
+backend/internal/service/ops_upstream_context.go:287:func checkSkipMonitoringForUpstreamEvent(c *gin.Context, ev *OpsUpstreamErrorEvent) {
+
+COMMAND ['rtk', 'proxy', 'rg', '-n', 'group_sync|group_name|group_description|HeaderOverrideRequestScope|replaceCaseInsensitive|writeOpenAICompactSSEFailureWithCode', 'backend/internal/service', 'backend/internal/handler/gateway_key_billing.go']
+EXIT 0
+backend/internal/service/ops_user_error.go:9:// client_ip / user_agent / group_name / request_type / stream 均为该用户
+backend/internal/service/ops_user_error.go:25:	GroupName       string    `json:"group_name,omitempty"`
+backend/internal/service/content_moderation.go:396:	GroupName         string             `json:"group_name"`
+backend/internal/service/content_moderation.go:863:		"group_name", input.GroupName,
+backend/internal/service/content_moderation.go:903:			"group_name", input.GroupName,
+backend/internal/service/content_moderation.go:915:			"group_name", input.GroupName,
+backend/internal/service/content_moderation.go:1108:		"group_name", input.GroupName,
+backend/internal/service/content_moderation.go:2055:		"group_name":          "-",
+backend/internal/service/content_moderation.go:2066:			variables["group_name"] = strings.TrimSpace(log.GroupName)
+backend/internal/service/content_moderation.go:3095:			"group_name":       defaultContentModerationString(log.GroupName, "-"),
+backend/internal/service/notification_email_service.go:926:			"group_name":          "默认分组",
+backend/internal/service/notification_email_service.go:974:		"group_name":          "Default group",
+backend/internal/service/notification_email_service.go:1112:			"triggered_at", "group_name", "moderation_category", "moderation_score", "violation_count", "ban_threshold"),
+backend/internal/service/notification_email_service.go:1121:			"triggered_at", "group_name", "moderation_category", "moderation_score", "violation_count", "ban_threshold"),
+backend/internal/service/notification_email_service.go:1130:			"triggered_at", "model", "group_name", "upstream_message"),
+backend/internal/service/notification_email_service.go:1331:  <tr><td>Group</td><td>{{group_name}}</td></tr>
+backend/internal/service/notification_email_service.go:1344:  <tr><td>所属分组</td><td>{{group_name}}</td></tr>
+backend/internal/service/notification_email_service.go:1359:  <tr><td>Group</td><td>{{group_name}}</td></tr>
+backend/internal/service/notification_email_service.go:1372:  <tr><td>所属分组</td><td>{{group_name}}</td></tr>
+backend/internal/service/notification_email_service.go:1388:  <tr><td style="width:128px;vertical-align:top;">Group</td><td style="overflow-wrap:anywhere;word-break:break-word;">{{group_name}}</td></tr>
+backend/internal/service/notification_email_service.go:1401:  <tr><td style="width:128px;vertical-align:top;">所属分组</td><td style="overflow-wrap:anywhere;word-break:break-word;">{{group_name}}</td></tr>
+backend/internal/service/ops_user_error_test.go:153:	// client_ip / user_agent / group_name / stream 经产品决策开放（与用量明细口径对齐）
+backend/internal/service/ops_user_error_test.go:161:		t.Errorf("want group_name=grp-a, got %q", out.GroupName)
+backend/internal/service/subscription_service.go:1083:	GroupName     string               `json:"group_name"`
+backend/internal/service/channel_monitor_v2.go:249:	GroupName string                       `json:"group_name,omitempty"`
+backend/internal/service/ops_models.go:61:	GroupName   string `json:"group_name"`
+backend/internal/service/admin_service.go:486:	GroupName string `json:"group_name"`
+backend/internal/service/ops_trend_models.go:22:	GroupName     string `json:"group_name"`
+backend/internal/service/profit_preview.go:64:	GroupName      string `json:"group_name"`
+backend/internal/service/ops_realtime_models.go:19:	GroupName      string  `json:"group_name"`
+backend/internal/service/ops_realtime_models.go:33:	GroupName      string  `json:"group_name"`
+backend/internal/service/ops_realtime_models.go:63:	GroupName      string `json:"group_name"`
+backend/internal/service/ops_realtime_models.go:77:	GroupName   string `json:"group_name"`
+
+COMMAND ['rtk', 'proxy', 'rg', '-n', 'github.com/gorilla/websocket|newMaskKey|maskRand|rand.Uint32', 'backend/go.mod', 'backend/internal/handler/admin/ops_ws_handler.go', '/home/liang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go']
+EXIT 0
+/home/liang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:184:func newMaskKey() [4]byte {
+/home/liang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:185:	n := rand.Uint32()
+/home/liang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:433:		key := newMaskKey()
+/home/liang/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:604:		key := newMaskKey()
+backend/internal/handler/admin/ops_ws_handler.go:22:	"github.com/gorilla/websocket"
+backend/go.mod:26:	github.com/gorilla/websocket v1.5.3

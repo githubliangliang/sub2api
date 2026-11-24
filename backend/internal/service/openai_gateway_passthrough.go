@@ -620,15 +620,16 @@ func writeOpenAIPassthroughErrorEnvelope(c *gin.Context, downstreamStatus int, u
 	if c == nil {
 		return
 	}
+	if openAICompactClientWantsStream(c) && StopOpenAICompactSSEKeepaliveCommitted(c) {
+		writeOpenAICompactSSEFailureMessage(c, downstreamStatus, "upstream_error", message)
+		return
+	}
 	body, _ := json.Marshal(gin.H{
 		"error": gin.H{
 			"type":    "upstream_error",
 			"message": message,
 		},
 	})
-	if writeOpenAICompactSSEBridge(c, downstreamStatus, body) {
-		return
-	}
 	writeOpenAIPassthroughErrorHeaders(c.Writer.Header(), upstreamHeaders)
 	c.Data(downstreamStatus, "application/json; charset=utf-8", body)
 }
@@ -734,12 +735,48 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 		Message:              upstreamMsg,
 		Detail:               upstreamDetail,
 		UpstreamResponseBody: upstreamDetail,
-	})
-	// context-window 超限是确定性请求失败（shouldFailoverOpenAIPassthroughResponse
-	// 已保证不切号），其文案对客户端可操作（如触发自动压缩）；在净化信封内保留
-	// 脱敏后的上游消息，而不是抹成通用文案。
-	if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
-		writeOpenAIPassthroughErrorEnvelope(c, resp.StatusCode, resp.Header, upstreamMsg)
+	}, responseBody)
+	// Match against the original upstream response, including codes that are not
+	// present in the extracted message when detailed logging is disabled.
+	rulePlatform := PlatformOpenAI
+	if account != nil && strings.TrimSpace(account.Platform) != "" {
+		rulePlatform = account.Platform
+	}
+	if status, errType, errMsg, rule, matched := applyErrorPassthroughRuleWithRule(
+		c, rulePlatform, resp.StatusCode, responseBody, resp.StatusCode, "upstream_error", "Upstream request failed",
+	); matched {
+		if rule.PassthroughBody || rule.CustomMessage == nil {
+			errMsg = ExtractUpstreamErrorMessage(body)
+		}
+		if rule.PassthroughBody {
+			writeOpenAIPassthroughStructuredErrorEnvelope(c, status, resp.Header, body, account, errType, errMsg, "Upstream request failed")
+		} else {
+			// Explicit administrator text is intentional; inherited upstream text must be redacted.
+			if rule.CustomMessage == nil {
+				errMsg = sanitizeUpstreamErrorMessageForAccount(errMsg, account)
+				if errMsg == "" {
+					errMsg = "Upstream request failed"
+				}
+			}
+			writeOpenAIPassthroughErrorEnvelope(c, status, resp.Header, errMsg)
+		}
+		return fmt.Errorf("upstream error: %d (passthrough rule matched)", resp.StatusCode)
+	}
+
+	if isOpenAIInvalidEncryptedContentError(resp.StatusCode, upstreamMsg, body) {
+		writeOpenAIPassthroughStructuredErrorEnvelope(c, resp.StatusCode, resp.Header, body, account,
+			openAIUpstreamClientErrorFallbackType, upstreamMsg, openAIUpstreamClientErrorFallbackMessage)
+	} else if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
+		if resp.StatusCode == http.StatusBadRequest {
+			writeOpenAIPassthroughStructuredErrorEnvelope(c, resp.StatusCode, resp.Header, body, account,
+				"upstream_error", upstreamMsg, "Upstream request failed")
+		} else {
+			message := sanitizeUpstreamErrorMessageForAccount(upstreamMsg, account)
+			if message == "" {
+				message = "Upstream request failed"
+			}
+			writeOpenAIPassthroughErrorEnvelope(c, resp.StatusCode, resp.Header, message)
+		}
 	} else {
 		writeSanitizedOpenAIPassthroughError(c, resp.StatusCode, resp.Header)
 	}
