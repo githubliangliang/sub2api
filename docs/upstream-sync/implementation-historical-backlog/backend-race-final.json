@@ -1,0 +1,42 @@
+{
+  "command": [
+    "rtk",
+    "proxy",
+    "go",
+    "test",
+    "-json",
+    "-race",
+    "-tags=unit",
+    "./internal/service",
+    "./internal/handler",
+    "-run",
+    "^Test(GeminiResponseSignalRetainsOnlyMatcherPrefix|GeminiNativeSignalsHTTPAndSQLite|GeminiNativeSignalsRespectStreamReadOwnership|GeminiNativeSignalsKeepBoundedReader|DetectGeminiResponseSignal.*|GeminiForwardNative_.*|CollectGeminiSSEObserved_.*)$",
+    "-count=1",
+    "-timeout=10m"
+  ],
+  "cwd": "/home/liang/myself/work_space/idea/github/sub2api/backend",
+  "environment": {
+    "TZ": "UTC",
+    "CI": "true",
+    "GOMAXPROCS": "2"
+  },
+  "started_at_utc": "2026-11-25T15:47:23.152009+00:00",
+  "exit_code": 1,
+  "seconds": 110.447,
+  "top_level": {
+    "pass": 38,
+    "fail": 1
+  },
+  "including_subtests": {
+    "pass": 113,
+    "fail": 3
+  },
+  "packages": {
+    "pass": 1,
+    "fail": 1
+  },
+  "stdout_log": "backend-race-final.stdout.log.gz",
+  "stdout_sha256": "ddd191c6d6f5691d5794e4e1fca92b9b83bf506db312f197a01a441e4ba0d862",
+  "stderr_log": "backend-race-final.stderr.log",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

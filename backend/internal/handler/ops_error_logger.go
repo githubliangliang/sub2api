@@ -121,7 +121,9 @@ func startOpsErrorLogWorkers() {
 	}
 
 	workerCount, queueSize := opsErrorLogConfig()
-	opsErrorLogQueue = make(chan opsErrorLogJob, queueSize)
+	// Shutdown clears the enqueue handle while workers drain this channel.
+	queue := make(chan opsErrorLogJob, queueSize)
+	opsErrorLogQueue = queue
 	opsErrorLogQueueLen.Store(0)
 	opsErrorLogQueueBytes.Store(0)
 
@@ -130,7 +132,7 @@ func startOpsErrorLogWorkers() {
 		go func() {
 			defer opsErrorLogWorkersWg.Done()
 			for {
-				job, ok := <-opsErrorLogQueue
+				job, ok := <-queue
 				if !ok {
 					return
 				}
@@ -143,7 +145,7 @@ func startOpsErrorLogWorkers() {
 			batchLoop:
 				for len(batch) < opsErrorLogBatchSize {
 					select {
-					case nextJob, ok := <-opsErrorLogQueue:
+					case nextJob, ok := <-queue:
 						if !ok {
 							if !timer.Stop() {
 								select {
@@ -752,6 +754,10 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 				return
 			}
 			streamErr, hasStreamErr := service.GetOpsStreamError(c)
+			if hasStreamErr && streamErr.RequestScoped {
+				// Keep the request outcome separate from recovered earlier attempts.
+				logOpsStreamError(c, ops, status)
+			}
 			terminalStreamFailure := hasStreamErr && streamErr.CountTowardsSLA && streamErr.IntendedStatus >= 400
 
 			apiKey := getOpsAPIKey(c)
@@ -1134,8 +1140,8 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 // handleStreamingAwareError 通过 service.MarkOpsStreamError 标记这类错误，
 // 此函数据此补记一条错误日志，让并发限流/流内失败在错误看板里可见。
 //
-// 仅在 status<400 且不存在上游错误上下文时调用：上游透传错误已由中间件的
-// upstream-context 分支落库，无需在此重复记录。
+// 请求级结果独立于之前尝试的上游错误；其它标记在无上游上下文时补记，
+// 已有上游归因由中间件的 upstream-context 分支落库。
 func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) {
 	streamErr, ok := service.GetOpsStreamError(c)
 	if !ok {
@@ -1143,7 +1149,7 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 	}
 
 	// 命中 skip_monitoring=true 透传规则的请求跳过落库，与其它分支一致。
-	if v, ok := c.Get(service.OpsSkipPassthroughKey); ok {
+	if v, ok := c.Get(service.OpsSkipPassthroughKey); ok && !streamErr.RequestScoped {
 		if skip, _ := v.(bool); skip {
 			return
 		}
@@ -1160,9 +1166,18 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 		classifyStatus = wireStatus
 	}
 	normalizedType := normalizeOpsErrorType(streamErr.ErrType, streamErr.Code)
-	phase, isBusinessLimited, errorOwner, errorSource := classifyOpsErrorLog(c, normalizedType, streamErr.Message, streamErr.Code, classifyStatus)
+	var phase, errorOwner, errorSource string
+	var isBusinessLimited bool
+	if streamErr.RequestScoped {
+		phase = classifyOpsPhase(normalizedType, streamErr.Message, streamErr.Code)
+		isBusinessLimited = true
+		errorOwner = classifyOpsErrorOwner(phase, streamErr.Message)
+		errorSource = classifyOpsErrorSource(phase, streamErr.Message)
+	} else {
+		phase, isBusinessLimited, errorOwner, errorSource = classifyOpsErrorLog(c, normalizedType, streamErr.Message, streamErr.Code, classifyStatus)
+	}
 	recordedStatus := wireStatus
-	if streamErr.CountTowardsSLA && streamErr.IntendedStatus >= 400 {
+	if streamErr.IntendedStatus >= 400 && (streamErr.CountTowardsSLA || streamErr.RequestScoped) {
 		recordedStatus = streamErr.IntendedStatus
 	}
 	errorBody := ""
@@ -1209,8 +1224,7 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 			}
 			return ""
 		}(),
-		// 就地 SSE 错误只出现在流式请求上。
-		Stream:           true,
+		Stream:           !streamErr.NonStream,
 		InboundEndpoint:  GetInboundEndpoint(c),
 		UpstreamEndpoint: GetUpstreamEndpoint(c, platform),
 		RequestedModel:   modelName,

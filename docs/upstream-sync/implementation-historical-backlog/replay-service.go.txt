@@ -1,0 +1,80 @@
+package service
+
+import (
+ "bytes"
+ "context"
+ "encoding/json"
+ "fmt"
+ "io"
+ "net/http"
+ "net/http/httptest"
+ "strings"
+ "testing"
+ "time"
+
+ "github.com/gin-gonic/gin"
+ "github.com/stretchr/testify/require"
+ "github.com/tidwall/gjson"
+)
+
+func backlogGeminiContext(body string) (*gin.Context,*httptest.ResponseRecorder,*http.Response) {
+ rec:=httptest.NewRecorder();c,_:=gin.CreateTestContext(rec)
+ c.Request=httptest.NewRequest(http.MethodPost,"/v1beta/models/test:generateContent",nil)
+ return c,rec,&http.Response{StatusCode:http.StatusOK,Header:http.Header{"Content-Type":[]string{"application/json"}},Body:io.NopCloser(strings.NewReader(body))}
+}
+
+// Desired behavior is not implemented by this overlay. Failure confirms missing Ops attribution.
+func TestBacklogDesiredGeminiInBandAttribution(t *testing.T) {
+ payload:=`{"error":{"code":503,"status":"UNAVAILABLE","message":"fixture unavailable"}}`
+ for _,stream:=range []bool{false,true} {t.Run(fmt.Sprintf("stream=%v",stream),func(t *testing.T){
+  body:=payload;if stream {body="data: "+payload+"\n\n"}
+  c,rec,resp:=backlogGeminiContext(body);svc:=&GeminiMessagesCompatService{}
+  if stream {resp.Header.Set("Content-Type","text/event-stream");_,err:=svc.handleNativeStreamingResponse(c,resp,time.Now(),false,nil,"");require.NoError(t,err)} else {_,err:=svc.handleNativeNonStreamingResponse(c,resp,false,nil,"");require.NoError(t,err)}
+  require.Equal(t,200,rec.Code);require.Equal(t,body,rec.Body.String())
+  _,marked:=GetOpsStreamError(c);_,upstream:=c.Get(OpsUpstreamStatusCodeKey)
+  require.True(t,marked||upstream,"Google 503 envelope remains invisible to existing Ops capture; raw HTTP200 bytes are preserved")
+ })}
+}
+
+func TestBacklogControlGeminiOrdinaryResults(t *testing.T) {
+ for _,body:=range []string{`{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2}}`,`{"candidates":[{"finishReason":"MAX_TOKENS"}],"usageMetadata":{"promptTokenCount":3}}`} {
+  c,rec,resp:=backlogGeminiContext(body);usage,err:=(&GeminiMessagesCompatService{}).handleNativeNonStreamingResponse(c,resp,false,nil,"")
+  require.NoError(t,err);require.NotNil(t,usage);require.Equal(t,body,rec.Body.String());_,marked:=GetOpsStreamError(c);require.False(t,marked)
+ }
+}
+
+func TestBacklogDesiredMonitorPrefix(t *testing.T) {
+ for _,base:=range []string{"https://8.8.8.8/proxy/v1","https://8.8.8.8/anthropic"} {t.Run(base,func(t *testing.T){
+  require.NoError(t,validateEndpoint(base),"Source #6917 expands origin-only configuration; this is an optional capability probe")
+ })}
+}
+
+func TestBacklogControlMonitorOrigin(t *testing.T) {require.NoError(t,validateEndpoint("https://8.8.8.8"));require.Error(t,validateEndpoint("https://8.8.8.8/?key=x"))}
+
+func TestBacklogDesiredSeparateMaxContextMetadata(t *testing.T) {
+ _,metadata,err:=extractUpstreamModelCatalog([]byte(`{"data":[{"id":"private-model","context_window":500000,"max_context_window":1000000,"max_output_tokens":64000}]}`),false)
+ require.NoError(t,err);encoded,err:=json.Marshal(metadata["private-model"]);require.NoError(t,err)
+ require.EqualValues(t,500000,gjson.GetBytes(encoded,"context_window").Int())
+ require.EqualValues(t,1000000,gjson.GetBytes(encoded,"max_context_window").Int(),"Optional #7057 stores the separate maximum; current catalog drops it")
+}
+
+func TestBacklogObserveOAuthMetadataBoundary(t *testing.T) {
+ for _,oauth:=range []bool{false,true} {for _,passthrough:=range []bool{false,true} {t.Run(fmt.Sprintf("oauth=%v/passthrough=%v",oauth,passthrough),func(t *testing.T){
+  account:=newOpenAIRejectedFieldTestAccount();if oauth {account=newOpenAIOAuthNamespaceTestAccount()};if account.Extra==nil {account.Extra=map[string]any{}};account.Extra["openai_passthrough"]=passthrough
+  body:=[]byte(`{"model":"gpt-5.5","stream":false,"instructions":"fixture","input":[{"role":"user","content":"hello","internal_chat_message_metadata_passthrough":{"content_item_kinds":["text"],"keep":9007199254740993}}]}`)
+  response:=newOpenAIRejectedFieldTestResponse(http.StatusOK,`{"id":"resp_fixture","output":[],"usage":{"input_tokens":1,"output_tokens":1}}`)
+  if oauth&&passthrough {response=newOpenAIRejectedFieldTestResponse(http.StatusOK,"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_fixture\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n");response.Header.Set("Content-Type","text/event-stream")}
+  upstream:=&httpUpstreamRecorder{responses:[]*http.Response{response}};c:=newOpenAIRejectedFieldTestContext(body)
+  result,err:=newOpenAIRejectedFieldTestService(upstream).Forward(context.Background(),c,account,body);require.NoError(t,err);require.NotNil(t,result);require.Len(t,upstream.bodies,1)
+  actual:=upstream.bodies[0];require.False(t,gjson.GetBytes(actual,"input.0.internal_chat_message_metadata_passthrough.content_item_kinds").Exists())
+  require.Equal(t,"9007199254740993",gjson.GetBytes(actual,"input.0.internal_chat_message_metadata_passthrough.keep").Raw)
+  require.True(t,bytes.Contains(body,[]byte("content_item_kinds")))
+  t.Log("Observed current explicit contract: strip content_item_kinds, preserve the rest of the parent metadata; #7085 removes the whole parent for OAuth.")
+ })}}
+}
+
+func TestBacklogDesiredCompaction5mPolicy(t *testing.T) {
+ body:=[]byte("{\"messages\":[{\"role\":\"user\",\"content\":\"CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.\\n\\nSummarize\"}],\"system\":[{\"type\":\"text\",\"text\":\"fixture\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}")
+ out:=injectAnthropicCacheControlTTL1h(body)
+ require.Equal(t,"5m",gjson.GetBytes(out,"system.0.cache_control.ttl").String(),"Optional #8794 changes the enabled 1h rewrite policy for compaction")
+}

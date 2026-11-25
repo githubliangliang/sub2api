@@ -133,6 +133,11 @@ type OpsStreamError struct {
 	// CountTowardsSLA 表示虽然 wire 状态已固化为 200，请求在应用语义上仍然失败，
 	// Ops 应使用 IntendedStatus 计入错误率/SLA。
 	CountTowardsSLA bool
+	// RequestScoped outcomes describe the request's content policy, independently
+	// of upstream errors retained from earlier attempts.
+	RequestScoped bool
+	// NonStream identifies an in-band result in a regular JSON response.
+	NonStream bool
 }
 
 // MarkOpsStreamError 记录一次就地 SSE 错误，供 ops 日志采集。

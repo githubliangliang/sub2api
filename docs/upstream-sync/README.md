@@ -1,5 +1,25 @@
 # 上游合并指南
 
+**2026-11-26 本地 / 2026-11-25 UTC：用户选择的历史第一/第二档已实施并完成验收：** [F01 5/5](../../openspec/changes/port-upstream-historical-backlog-tier1/verification.md) 修正 Token 统计非gpt/全平台范围；[S01 6/6](../../openspec/changes/port-upstream-historical-backlog-tier2/verification.md) 补 native Gemini JSON/SSE/聚合的 Ops/SLA/请求级策略归因。真实起点 `b9d9524c6cce8488edb2eaf899d771176f3b2414`；[实施证据](./implementation-historical-backlog/README.md) 保留原失败、真实HTTP/SQLite/miniredis/独立成本/dedup/固定quota、55包unit、最终handler/四包race、前端108测试及build/lint/strict和扩展查询成本。必要Ops worker通道关停修正、1MiB非data观察与8KiB matcher前缀分别验证。用户授权本地commit；不push/发布/归档/操作业务实例。VERSION1.1.28、Go1.27.4、SQLite230/auth21、依赖、Ent/Wire、资源默认和旧证据不变；先前15变更/456任务保留，本批2变更11任务完成后活动总数17/467。下方复评/复核仍是冻结的评估时状态。
+
+旧项专项复评（2026-11-25）：[历史未合内容报告](./UNMERGED-REVIEW-2026-11-25.md) / [134 PR、44类库存](./unmerged-review-2026-11-25/inventory.md) / [实际证据](./unmerged-review-2026-11-25/README.md)。以v1.1.28 / `b9d9524c6`重查1,843条文件状态A17/C1026/X654/N146。真实SQLite证明现有Token统计遗漏非gpt/已选平台，明确由旧第三档调整为[第一档F01，5项未实施任务](../../openspec/changes/port-upstream-historical-backlog-tier1/README.md)；native JSON/SSE证明Gemini200带内错误缺Ops标记，明确调整为[第二档S01，6项未实施任务](../../openspec/changes/port-upstream-historical-backlog-tier2/README.md)。其它第三档按Claude Code ToolSearch、搜索来源、可选5m策略、最大上下文/监控前缀等使用收益排序，支付与缺平台/PG边界保持。#7129既有序号合同核销，Fast/TPS/Grok诊断等后续完成项不重开。
+
+- [x] 冻结整PR来源并先反后正，仅私有index检查；重测当前消费者、旧状态和初始工作区保护。
+- [x] 当前四包98顶层/214含子例、前端4文件66测试通过；隔离探针6目标失败/5观察或控制通过，初始DNS夹具失败原文保留。
+- [x] 实际SQLite/miniredis单P性能量测与当前生产依赖audit单列，不将合成可行性当实施或生产收益。
+- [x] 两份完整未实施OpenSpec，5/6任务全未勾选、实施验收槽为空；严格校验与链接/范围复核。
+- [ ] 按后续选定范围实施；其它按需能力保持原档位，发布/归档/业务实例操作另行处理。
+
+本次教训：基于既有合同实证调整档位；可选能力失败不直接当缺陷；父metadata与子字段不能互称等价；SQLite少分配也可能变慢，fixed锚点语义不可省略；应关闭已经满足的旧标签。见[报告§9](./UNMERGED-REVIEW-2026-11-25.md#9-新的通用教训)。下方新增合并复核和历史快照保留原文。
+
+最新复核（2026-11-25）：[新增合并复核](./RECHECK-2026-11-25.md) / [来源与范围证据](./recheck-2026-11-25/MANIFEST.md)。截至22:16上海时间，官方API与Git确认最新正式版仍为v0.2.25，main仍为`0f6671457`，自上轮观察后新增产品提交/合并均为0；fetch只更新CLA签名分支。当前本地v1.1.28 / `b9d9524c6`已包含F01/S01/S02三簇17任务，15份最终实现源码/测试/模块哈希匹配。未新增提案或实施；头身份变量、名称备注同步及历史按需项保持原档位。下方发布前快照保留原文。
+
+- [x] 刷新上游refs，交叉核对最新Release、main与完整新合并搜索，区分CLA更新和产品合并。
+- [x] 核实v1.1.28已落地状态、15份实现哈希、15份活动OpenSpec/456完成任务及历史遗留。
+- [x] 保存独立复核证据与文档入口；保护产品、冻结历史及初始Fast诊断，无新增测试通过声明。
+
+本次复核教训：比较上次观察main而非只比较tag；CLA签署不等于PR合并；历史intake的未实施措辞需由实际实现/发布状态解释；空增量不重复制造提案或验收。见[复核§9](./RECHECK-2026-11-25.md#9-本轮通用教训)。
+
 2026-11-24 用户后续已授权将v0.2.25两档实现提交并推送origin/main；本次提交包含实现、两档OpenSpec、评估来源和实际验收证据。原先未跟踪的Fast诊断留在工作区。产品/模块与通过验收的最终哈希一致；VERSION1.1.27及现有tag保持，不发布、不归档、不操作业务实例。下方实施与intake段落保留完成时的快照措辞。
 
 2026-11-24 两档已实现并验收：[第一档F01，6/6任务](../../openspec/changes/port-upstream-0.2.25-tier1/verification.md)、[第二档S01/S02，11/11任务](../../openspec/changes/port-upstream-0.2.25-tier2/verification.md)。[实施证据](./implementation-0.2.25/README.md)记录账号凭据/主机脱敏、有限结构化错误/原body规则/compact单次有序终态及Gorilla精确安全维护。55包unit、10,793顶层/22,386含子例通过，16既有跳过；三包错误/SQLite race332/669、五包WS race693/1,351、embed、lint0与实际HTTP/compact/管理员WS/CONNECT/SQLite/miniredis/计费配额控制通过。原库两项代理EOF由Go1.27.4非Hijack CONNECT夹具关闭定因；失败保留，临时真隧道夹具双版本通过。MVS仅Gorilla变化；版本/schema/其它依赖/前端/生成代码/资源默认与旧13活动change、439任务、冻结历史和初始Fast诊断保持。改动留在工作区，未提交/推送/发布/归档或操作业务实例。下方同日intake保留实施前措辞。

@@ -35,7 +35,7 @@ INSERT INTO api_keys (id,user_id,key,name) VALUES (9001,9001,'local-rate-fixture
 		output   int
 		duration any
 	}{
-		{"gpt-weighted", 100, 1000}, {"gpt-weighted", 100, 10000}, {"gpt-weighted", 0, 9000}, {"gpt-weighted", 10, 0}, {"gpt-weighted", 7, nil}, {"gpt-empty", 0, 1000},
+		{"o3-weighted", 100, 1000}, {"o3-weighted", 100, 10000}, {"o3-weighted", 0, 9000}, {"o3-weighted", 10, 0}, {"o3-weighted", 7, nil}, {"o3-empty", 0, 1000},
 	} {
 		_, err = db.Exec(`INSERT INTO usage_logs(user_id,api_key_id,account_id,group_id,model,output_tokens,duration_ms,created_at) VALUES(9001,9001,9001,9001,$1,$2,$3,$4)`, row.model, row.output, row.duration, now)
 		require.NoError(t, err)
@@ -58,7 +58,7 @@ INSERT INTO api_keys (id,user_id,key,name) VALUES (9001,9001,'local-rate-fixture
 		require.Equal(t, 200, resp.StatusCode)
 		require.Len(t, envelope.Data.Items, 2)
 		weighted := envelope.Data.Items[0]
-		require.Equal(t, "gpt-weighted", weighted.Model)
+		require.Equal(t, "o3-weighted", weighted.Model)
 		require.InDelta(t, 18.18, *weighted.AvgTokensPerSec, 0.01)
 		require.EqualValues(t, 5, weighted.RequestCount)
 		require.EqualValues(t, 217, weighted.TotalOutputTokens)

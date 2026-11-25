@@ -1,0 +1,66 @@
+package repository
+
+import (
+ "context"
+ "database/sql"
+ "encoding/json"
+ "fmt"
+ "strings"
+ "testing"
+ "github.com/Wei-Shaw/sub2api/internal/service"
+ "github.com/alicebob/miniredis/v2"
+ "github.com/redis/go-redis/v9"
+ "github.com/stretchr/testify/require"
+ _ "modernc.org/sqlite"
+)
+
+// This is a test-only, total-only SQLite feasibility prototype, not the PG patch
+// and not a production-complete replacement. Fixed/rolling limits must fall back.
+const backlogTotalOnlySQL = `UPDATE accounts SET extra=json_set(extra,'$.quota_used',COALESCE(json_extract(extra,'$.quota_used'),0)+$1), updated_at=CURRENT_TIMESTAMP
+ WHERE id=$2 AND deleted_at IS NULL AND json_type(extra)='object'
+ AND json_type(extra,'$.quota_daily_limit') IS NULL AND json_type(extra,'$.quota_weekly_limit') IS NULL
+ AND json_type(extra,'$.quota_daily_reset_mode') IS NULL AND json_type(extra,'$.quota_weekly_reset_mode') IS NULL
+ RETURNING COALESCE(json_extract(extra,'$.quota_used'),0)`
+
+func backlogQuotaDB(tb testing.TB, padding int) *sql.DB {
+ db,err:=sql.Open("sqlite",":memory:");require.NoError(tb,err);tb.Cleanup(func(){_ = db.Close()});db.SetMaxOpenConns(1)
+ _,err=db.Exec(`CREATE TABLE accounts(id INTEGER PRIMARY KEY,extra TEXT,updated_at DATETIME,deleted_at DATETIME)`);require.NoError(tb,err)
+ raw,err:=json.Marshal(map[string]any{"quota_used":3.0,"memo":strings.Repeat("x",padding)});require.NoError(tb,err)
+ _,err=db.Exec(`INSERT INTO accounts(id,extra) VALUES(1,$1)`,string(raw));require.NoError(tb,err)
+ return db
+}
+
+func TestBacklogControlQuotaSQLitePrototype(t *testing.T) {
+ ctx:=context.Background();current:=backlogQuotaDB(t,4096);prototype:=backlogQuotaDB(t,4096)
+ for i:=0;i<3;i++ {
+  a,err:=current.BeginTx(ctx,nil);require.NoError(t,err);_,err=incrementUsageBillingAccountQuota(ctx,a,1,0.25);require.NoError(t,err);require.NoError(t,a.Commit())
+  b,err:=prototype.BeginTx(ctx,nil);require.NoError(t,err);var got float64;require.NoError(t,b.QueryRowContext(ctx,backlogTotalOnlySQL,0.25,1).Scan(&got));require.NoError(t,b.Commit())
+ }
+ var a,b string;require.NoError(t,current.QueryRow(`SELECT extra FROM accounts`).Scan(&a));require.NoError(t,prototype.QueryRow(`SELECT extra FROM accounts`).Scan(&b));require.JSONEq(t,a,b)
+ _,err:=prototype.Exec(`UPDATE accounts SET extra=json_set(extra,'$.quota_daily_limit',1)`);require.NoError(t,err)
+ tx,err:=prototype.BeginTx(ctx,nil);require.NoError(t,err);defer func(){_ = tx.Rollback()}();var got float64
+ require.ErrorIs(t,tx.QueryRowContext(ctx,backlogTotalOnlySQL,0.25,1).Scan(&got),sql.ErrNoRows,"DB guard rejects newly enabled limits; caller must use the full correct path")
+}
+
+func BenchmarkBacklogQuotaTotalOnly(b *testing.B) {
+ ctx:=context.Background()
+ for _,padding:=range []int{0,4096,32768} {for _,prototype:=range []bool{false,true} {b.Run(fmt.Sprintf("padding=%d/prototype=%v",padding,prototype),func(b *testing.B){
+  db:=backlogQuotaDB(b,padding);b.ReportAllocs();b.ResetTimer()
+  for i:=0;i<b.N;i++ {tx,err:=db.BeginTx(ctx,nil);if err!=nil {b.Fatal(err)}
+   if prototype {var got float64;err=tx.QueryRowContext(ctx,backlogTotalOnlySQL,0.25,1).Scan(&got)} else {_,err=incrementUsageBillingAccountQuota(ctx,tx,1,0.25)}
+   if err!=nil {b.Fatal(err)};if err=tx.Commit();err!=nil {b.Fatal(err)}
+  }
+ })}}
+}
+
+func BenchmarkBacklogSchedulerSnapshotRead(b *testing.B) {
+ for _,size:=range []int{1,10,100,500} {b.Run(fmt.Sprintf("accounts=%d",size),func(b *testing.B){
+  ctx:=context.Background();mr:=miniredis.RunT(b);rdb:=redis.NewClient(&redis.Options{Addr:mr.Addr()});b.Cleanup(func(){_ = rdb.Close()})
+  cache:=newSchedulerCacheWithChunkSizes(rdb,defaultSchedulerSnapshotMGetChunkSize,defaultSchedulerSnapshotWriteChunkSize).(*schedulerCache)
+  bucket:=service.SchedulerBucket{Platform:service.PlatformOpenAI};accounts:=make([]service.Account,size)
+  for i:=range accounts {accounts[i]=service.Account{ID:int64(i+1),Name:"fixture",Platform:service.PlatformOpenAI,Type:service.AccountTypeAPIKey,Status:service.StatusActive,Schedulable:true,Credentials:map[string]any{"api_key":"fixture-token","base_url":"https://example.test","model_mapping":map[string]any{"gpt-6.1-sol":"gpt-6.1-sol"}},Extra:map[string]any{"quota_used":1.0}}}
+  token,err:=cache.CaptureBucketWriteToken(ctx,bucket);require.NoError(b,err);require.NoError(b,cache.SetSnapshot(ctx,bucket,token,accounts))
+  b.ReportAllocs();b.ResetTimer()
+  for i:=0;i<b.N;i++ {got,hit,err:=cache.GetSnapshot(ctx,bucket);if err!=nil||!hit||len(got)!=size {b.Fatalf("snapshot len=%d hit=%v err=%v",len(got),hit,err)}}
+ })}
+}

@@ -1,0 +1,25 @@
+package repository
+
+import (
+ "context"
+ "database/sql"
+ "fmt"
+ "testing"
+ "time"
+ "github.com/Wei-Shaw/sub2api/internal/service"
+ "github.com/stretchr/testify/require"
+ _ "modernc.org/sqlite"
+)
+
+func TestBacklogDesiredTokenStatsPlatformScopeSQLite(t *testing.T) {
+ db,err:=sql.Open("sqlite",":memory:");require.NoError(t,err);t.Cleanup(func(){_ = db.Close()});db.SetMaxOpenConns(1)
+ for _,q:=range []string{`CREATE TABLE usage_logs(model TEXT,created_at DATETIME,group_id INTEGER,account_id INTEGER,duration_ms INTEGER,output_tokens INTEGER,first_token_ms INTEGER)`,`CREATE TABLE groups(id INTEGER,platform TEXT)`,`CREATE TABLE accounts(id INTEGER,platform TEXT)`,`INSERT INTO groups VALUES(1,'openai'),(2,'anthropic'),(3,'grok')`,`INSERT INTO accounts VALUES(1,'openai'),(2,'anthropic'),(3,'grok')`} {_,err=db.Exec(q);require.NoError(t,err)}
+ start:=time.Date(2026,11,25,1,0,0,0,time.UTC);at:=start.Add(time.Minute)
+ for _,row:=range []struct{model string;id int}{{"gpt-6.1-sol",1},{"o3",1},{"claude-sonnet-5.5",2},{"grok-4",3}} {_,err=db.Exec(`INSERT INTO usage_logs VALUES($1,$2,$3,$3,1000,10,100)`,row.model,at,row.id);require.NoError(t,err)}
+ repo:=&opsRepository{db:db}
+ for _,tc:=range []struct{platform string;want int64}{{"openai",2},{"anthropic",1},{"grok",1},{"",4}} {t.Run(fmt.Sprintf("platform=%s",tc.platform),func(t *testing.T){
+  result,err:=repo.GetOpenAITokenStats(context.Background(),&service.OpsOpenAITokenStatsFilter{TimeRange:"1h",StartTime:start,EndTime:start.Add(time.Hour),Platform:tc.platform,TopN:20})
+  require.NoError(t,err);t.Logf("actual models=%+v total=%d",result.Items,result.Total)
+  require.Equal(t,tc.want,result.Total,"The existing platform/group filters are narrowed by the hardcoded gpt-prefix clause; #7001 removes it")
+ })}
+}

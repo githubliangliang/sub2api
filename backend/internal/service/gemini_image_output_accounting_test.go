@@ -122,7 +122,7 @@ func TestHandleNativeNonStreamingResponse_FileDataImageBilling(t *testing.T) {
 	beginGeminiImageOutputObservation(c)
 	body := geminiImageResponse(`{"file_data":{"mime_type":"image/jpeg","file_uri":"https://example.test/one.jpg"}},{"fileData":{"mimeType":"image/png","fileUri":"https://example.test/two.png"}}`)
 	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}
-	_, err := (&GeminiMessagesCompatService{}).handleNativeNonStreamingResponse(c, resp, false)
+	_, err := (&GeminiMessagesCompatService{}).handleNativeNonStreamingResponse(c, resp, false, nil, "")
 	require.NoError(t, err)
 	const model = "private-image-alias"
 	count := resolveGeminiImageCount(c, model, model)
@@ -147,7 +147,7 @@ func TestHandleNativeStreamingResponse_FileDataCumulativeChunks(t *testing.T) {
 	two := geminiImageResponse(`{"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/one.png"}},{"file_data":{"mime_type":"image/jpeg","file_uri":"gs://bucket/two.jpg"}}`)
 	stream := "data: " + one + "\n\ndata: " + two + "\n\ndata: " + two + "\n\ndata: {\"usageMetadata\":{\"promptTokenCount\":9}}\n\n"
 	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream))}
-	_, err := (&GeminiMessagesCompatService{}).handleNativeStreamingResponse(c, resp, time.Now(), false)
+	_, err := (&GeminiMessagesCompatService{}).handleNativeStreamingResponse(c, resp, time.Now(), false, nil, "")
 	require.NoError(t, err)
 	require.Equal(t, 2, resolveGeminiImageCount(c, "private-image-alias", "private-image-alias"))
 	require.Equal(t, 2, observedGeminiStreamImages(c), "completed and interrupted streams share the same part predicate")
@@ -261,7 +261,7 @@ func TestHandleNativeNonStreamingResponse_FeedsImageCounter(t *testing.T) {
 	}
 
 	svc := &GeminiMessagesCompatService{}
-	usage, err := svc.handleNativeNonStreamingResponse(c, resp, false)
+	usage, err := svc.handleNativeNonStreamingResponse(c, resp, false, nil, "")
 	require.NoError(t, err)
 	require.NotNil(t, usage)
 

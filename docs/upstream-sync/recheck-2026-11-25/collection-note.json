@@ -1,0 +1,14 @@
+{
+  "initial_collection_exit_code": 1,
+  "exception": "invalid literal for int() with base 10: '154a'",
+  "cause": "Collection code parsed the whole prefix before underscore as an integer; existing migration names include 154a,175a,042b. This is a collector error, not a repository migration or product defect.",
+  "minimal_reproduction": "int('154a') raises ValueError",
+  "correction": "Parse the leading numeric migration prefix using ^([0-9]+).",
+  "controls": {
+    "154a": 154,
+    "230_usage_log_requested_reasoning_effort.sql": 230,
+    "actual_max": 230
+  },
+  "initial_partial_artifacts": "API/git/active-change records had completed before the collector failed; facts.json was not produced until this correction.",
+  "product_files_changed": []
+}

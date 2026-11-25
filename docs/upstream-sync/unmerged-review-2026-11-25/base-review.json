@@ -1,0 +1,317 @@
+{
+  "caveat": "Symbol/path evidence is an index; missing names alone do not establish absent behavior or a defect. Deep behavior evidence is in probes-final and baseline.",
+  "queries": [
+    {
+      "topic": "statistics_filter",
+      "pattern": "GetOpenAITokenStats|ul\\.model LIKE 'gpt%'",
+      "exit_code": 0,
+      "match_count": 6,
+      "matches": [
+        "backend/internal/repository/ops_repo_openai_token_stats.go:12:func (r *opsRepository) GetOpenAITokenStats(ctx context.Context, filter *service.OpsOpenAITokenStatsFilter) (*service.OpsOpenAITokenStatsResponse, error) {",
+        "backend/internal/repository/ops_repo_openai_token_stats.go:35:\twhere += \" AND ul.model LIKE 'gpt%'\"",
+        "backend/internal/service/ops_port.go:32:\tGetOpenAITokenStats(ctx context.Context, filter *OpsOpenAITokenStatsFilter) (*OpsOpenAITokenStatsResponse, error)",
+        "backend/internal/handler/admin/ops_dashboard_handler.go:241:\tdata, err := h.opsService.GetOpenAITokenStats(c.Request.Context(), filter)",
+        "backend/internal/service/ops_openai_token_stats.go:9:func (s *OpsService) GetOpenAITokenStats(ctx context.Context, filter *OpsOpenAITokenStatsFilter) (*OpsOpenAITokenStatsResponse, error) {",
+        "backend/internal/service/ops_openai_token_stats.go:54:\treturn s.opsRepo.GetOpenAITokenStats(ctx, filter)"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "native_signal_consumer",
+      "pattern": "handleNativeNonStreamingResponse|handleNativeStreamingResponse|geminiResponseSignal|detectGeminiResponseSignal",
+      "exit_code": 0,
+      "match_count": 4,
+      "matches": [
+        "backend/internal/service/gemini_messages_compat_service.go:1603:\t\tstreamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth)",
+        "backend/internal/service/gemini_messages_compat_service.go:1625:\t\t\tusageResp, err := s.handleNativeNonStreamingResponse(c, resp, isOAuth)",
+        "backend/internal/service/gemini_messages_compat_service.go:2622:func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Context, resp *http.Response, isOAuth bool) (*ClaudeUsage, error) {",
+        "backend/internal/service/gemini_messages_compat_service.go:2665:func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time, isOAuth bool) (*geminiNativeStreamResult, error) {"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "ops_existing_base",
+      "pattern": "func (MarkOpsStreamFailure|MarkOpsRequestScopedError|GetOpsStreamError)|type OpsStreamError",
+      "exit_code": 0,
+      "match_count": 4,
+      "matches": [
+        "backend/internal/service/ops_upstream_context.go:122:type OpsStreamError struct {",
+        "backend/internal/service/ops_upstream_context.go:152:func MarkOpsStreamFailure(c *gin.Context, errType, code, message string, intendedStatus int) {",
+        "backend/internal/service/ops_upstream_context.go:176:func GetOpsStreamError(c *gin.Context) (OpsStreamError, bool) {",
+        "backend/internal/service/ops_upstream_context.go:376:func MarkOpsRequestScopedError(c *gin.Context, errType string) {"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "metadata_boundary",
+      "pattern": "stripOpenAIResponsesInputContentItemKinds|internal_chat_message_metadata_passthrough",
+      "exit_code": 0,
+      "match_count": 4,
+      "matches": [
+        "backend/internal/service/openai_responses_input_metadata.go:14:func stripOpenAIResponsesInputContentItemKinds(body []byte) ([]byte, error) {",
+        "backend/internal/service/openai_responses_input_metadata.go:23:\tconst metadataPath = \"internal_chat_message_metadata_passthrough.content_item_kinds\"",
+        "backend/internal/service/openai_ws_http_bridge.go:205:\t\tpayload, err = stripOpenAIResponsesInputContentItemKinds(payload)",
+        "backend/internal/service/openai_gateway_forward.go:140:\t\tbody, err = stripOpenAIResponsesInputContentItemKinds(body)"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "max_context",
+      "pattern": "type UpstreamModelMetadata|MaxContextWindow|func extractUpstreamModelCatalog",
+      "exit_code": 0,
+      "match_count": 14,
+      "matches": [
+        "backend/internal/service/upstream_models.go:30:type UpstreamModelMetadata struct {",
+        "backend/internal/service/upstream_models.go:43:type UpstreamModelMetadataSnapshot struct {",
+        "backend/internal/service/upstream_models.go:1312:\tMaxContextWindow         int64                      `json:\"max_context_window\"`",
+        "backend/internal/service/upstream_models.go:1325:func extractUpstreamModelCatalog(body []byte, grok bool) ([]string, map[string]UpstreamModelMetadata, error) {",
+        "backend/internal/service/upstream_models.go:1394:\t\tcontextWindow = entry.MaxContextWindow",
+        "backend/internal/service/openai_codex_model_metadata.go:422:\t\tdescriptor.MaxContextWindow = metadata.ContextWindow",
+        "backend/internal/service/openai_codex_models_service.go:417:\tMaxContextWindow                  int64                           `json:\"max_context_window\"`",
+        "backend/internal/service/openai_codex_models_service.go:463:\t\tMaxContextWindow:                  configuredCodexFallbackContext,",
+        "backend/internal/service/openai_codex_models_service.go:481:\t\tdescriptor.MaxContextWindow = configuredCodexDeepSeekV4Context",
+        "backend/internal/service/openai_codex_models_service.go:489:\t\tdescriptor.MaxContextWindow = descriptor.ContextWindow",
+        "backend/internal/service/openai_codex_models_service.go:500:\t\t\tdescriptor.MaxContextWindow = 1_000_000",
+        "backend/internal/service/openai_codex_models_service.go:532:\t\t\t\tdescriptor.MaxContextWindow = configuredCodexGPT56MaxContext",
+        "backend/internal/service/openai_codex_models_service.go:541:\t\t\t\tdescriptor.MaxContextWindow = configuredCodexGPT6AstraContext",
+        "backend/internal/service/openai_codex_models_service.go:546:\t\t\t\tdescriptor.MaxContextWindow = 1_050_000"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "monitor_endpoint",
+      "pattern": "func validateEndpoint|func joinURL|origin-only|CHANNEL_MONITOR_ENDPOINT_PATH",
+      "exit_code": 0,
+      "match_count": 3,
+      "matches": [
+        "backend/internal/service/channel_monitor_validate.go:63:func validateEndpoint(ep string) error {",
+        "backend/internal/service/channel_monitor_checker.go:533:func joinURL(base, path string) string {",
+        "backend/internal/service/channel_monitor_const.go:142:\t\t\"CHANNEL_MONITOR_ENDPOINT_PATH\", \"endpoint must be base origin only (no path/query/fragment)\","
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "toolsearch",
+      "pattern": "ApplyNativeToolSearch|ToolSearchToolName|tool_search_call|web_search_tool_result",
+      "exit_code": 0,
+      "match_count": 41,
+      "matches": [
+        "backend/internal/service/openai_codex_transform.go:1617:\t\t\"tool_search_call\",",
+        "backend/internal/service/openai_codex_transform.go:1637:\t\t\"tool_search_call\",",
+        "backend/internal/service/openai_gateway_responses_chat_fallback.go:45:\t// tool_search_call 项；namespace 子工具（如 MCP 工具）摊平转发，回程按映射还原",
+        "backend/internal/pkg/apicompat/responses_stream_event_wire.go:198:\tcase \"tool_search_call\":",
+        "backend/internal/pkg/apicompat/responses_to_anthropic.go:80:\t\t\t\tType:      \"web_search_tool_result\",",
+        "backend/internal/pkg/apicompat/responses_to_anthropic.go:658:\t// Handle web_search_call → synthesize server_tool_use + web_search_tool_result blocks.",
+        "backend/internal/pkg/apicompat/responses_to_anthropic.go:677:// into Anthropic server_tool_use + web_search_tool_result content block pairs.",
+        "backend/internal/pkg/apicompat/responses_to_anthropic.go:708:\t// Emit web_search_tool_result block (start + stop).",
+        "backend/internal/pkg/apicompat/responses_to_anthropic.go:717:\t\t\tType:      \"web_search_tool_result\",",
+        "backend/internal/service/gateway_websearch_emulation.go:327:\t\t\t\"type\": \"web_search_tool_result\", \"tool_use_id\": toolUseID,",
+        "backend/internal/service/gateway_websearch_emulation.go:402:\t\t\t\t\"type\": \"web_search_tool_result\", \"tool_use_id\": toolUseID,",
+        "backend/internal/service/openai_tool_continuation.go:32:\t\t\"tool_search_call\",",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:206:\t\t\tcase \"tool_search_call\":",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:274:\tcase \"tool_search_call\":",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:460:\t\t\t\ttyped[\"type\"] = \"tool_search_call\"",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:461:\t\t\t\tretypeResponsesToolCallItemID(typed, \"tool_search_call\")",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:530:\t\t\t\tevent.Item.Type = \"tool_search_call\"",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:570:\t\t\t\tevent.Item.Type = \"tool_search_call\"",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:714:\treturn \"tool_search_call\"",
+        "backend/internal/pkg/apicompat/responses_client_tools.go:803:\t\t\toutput.Type = \"tool_search_call\"",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:283:// 回程时需据此把模型对代理工具的调用还原为 tool_search_call 项：codex 只在该项类型",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:501:\t\tcase \"tool_search_call\":",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:1134:\t\t\t// 声明的同名工具无法区分——回程会把普通工具的调用劫持成 tool_search_call，",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:1331:// 的调用会还原为 tool_search_call 项；namespaceTools 是 namespace 子工具的摊平名",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:1431:\t\t\t\tType:      \"tool_search_call\",",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:1468:// tool_search_call 线上要求的 JSON 对象；模型未按 schema 输出（非法 JSON）时按",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:1593:\t// HasToolSearchTool）。命中的代理调用按 tool_search_call 项还原，codex 只按",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:2007:\t\titemType = \"tool_search_call\"",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:2102:\t\t\t// tool_search 调用按 tool_search_call 项收尾：codex 从 output_item.done",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:2107:\t\t\t\t\tType:      \"tool_search_call\",",
+        "backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:2192:\t\t\t\tType:      \"tool_search_call\",",
+        "backend/internal/service/gateway_websearch_block_filter.go:15:\tblockTypeWebSearchToolResult = \"web_search_tool_result\"",
+        "backend/internal/service/gateway_websearch_block_filter.go:23:\tpatternWebSearchToolResult = []byte(`\"web_search_tool_result\"`)",
+        "backend/internal/service/gateway_websearch_block_filter.go:29://  1. Emulation-synthesized blocks — server_tool_use / web_search_tool_result",
+        "backend/internal/service/gateway_websearch_block_filter.go:36://     ResolveThinkingProtocol) all server_tool_use / web_search_tool_result",
+        "backend/internal/pkg/apicompat/types.go:529:// MarshalJSON keeps message and tool_search_call items consistent with their",
+        "backend/internal/pkg/apicompat/types.go:535:\tif o.Type == \"message\" || o.Type == \"tool_search_call\" {",
+        "backend/internal/pkg/apicompat/types.go:543:// tool_search_call object form for arguments. The bridge stores arguments as a",
+        "backend/internal/pkg/apicompat/types.go:554:\tif kind.Type != \"tool_search_call\" && kind.Type != \"function_call\" {",
+        "backend/internal/service/grok_search_count.go:282:\tcase \"web_search_call\", \"x_search_call\", \"tool_search_call\":"
+      ],
+      "truncated": true
+    },
+    {
+      "topic": "compaction_policy",
+      "pattern": "func injectAnthropicCacheControlTTL1h|isClaudeCodeCompactionRequest|cacheTTLTarget1h",
+      "exit_code": 0,
+      "match_count": 6,
+      "matches": [
+        "backend/internal/service/gateway_claude_oauth_body.go:1187:\t\tif gjson.GetBytes(body, path+\".ttl\").String() == cacheTTLTarget1h {",
+        "backend/internal/service/gateway_claude_oauth_body.go:1195:\t\tif cc.Get(\"type\").String() != \"ephemeral\" || cc.Get(\"ttl\").String() == cacheTTLTarget1h {",
+        "backend/internal/service/gateway_claude_oauth_body.go:1198:\t\tif next, err := sjson.SetBytes(out, path+\".ttl\", cacheTTLTarget1h); err == nil {",
+        "backend/internal/service/gateway_claude_oauth_body.go:1207:func injectAnthropicCacheControlTTL1h(body []byte) []byte {",
+        "backend/internal/service/gateway_claude_oauth_body.go:1208:\treturn forceEphemeralCacheControlTTL(body, cacheTTLTarget1h)",
+        "backend/internal/service/gateway_service.go:76:\tcacheTTLTarget1h                   = \"1h\""
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "identity_variables",
+      "pattern": "HeaderOverrideRequestScope|account_header_override_vars|reported_identity_headers",
+      "exit_code": 1,
+      "match_count": 0,
+      "matches": [],
+      "truncated": false
+    },
+    {
+      "topic": "upstream_name_sync",
+      "pattern": "UpstreamBillingGroupSync|BillingGroupInfo|GetByIDLite",
+      "exit_code": 0,
+      "match_count": 21,
+      "matches": [
+        "backend/internal/service/content_moderation.go:1689:\t\t\tif _, err := s.groupRepo.GetByIDLite(ctx, groupID); err != nil {",
+        "backend/internal/repository/group_repo.go:220:\tout, err := r.GetByIDLite(ctx, id)",
+        "backend/internal/repository/group_repo.go:234:func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.Group, error) {",
+        "backend/internal/service/admin_group.go:54:\t\tgroup, err := s.groupRepo.GetByIDLite(ctx, id)",
+        "backend/internal/service/admin_group.go:184:\tgroup, err := s.groupRepo.GetByIDLite(ctx, groupID)",
+        "backend/internal/service/admin_group.go:443:\t\t\tsrcGroup, err := s.groupRepo.GetByIDLite(ctx, srcGroupID)",
+        "backend/internal/service/admin_group.go:623:\t\tfallbackGroup, err := s.groupRepo.GetByIDLite(ctx, nextID)",
+        "backend/internal/service/admin_group.go:655:\tfallbackGroup, err := s.groupRepo.GetByIDLite(ctx, fallbackGroupID)",
+        "backend/internal/service/admin_group.go:984:\t\t\tsrcGroup, err := s.groupRepo.GetByIDLite(ctx, srcGroupID)",
+        "backend/internal/service/gateway_scheduling.go:929:\tgroup, err := s.groupRepo.GetByIDLite(ctx, groupID)",
+        "backend/internal/service/gateway_scheduling.go:2026:\t\tschedGroup, _ = s.groupRepo.GetByIDLite(ctx, *groupID)",
+        "backend/internal/service/gateway_scheduling.go:2292:\t\tschedGroup, _ = s.groupRepo.GetByIDLite(ctx, *groupID)",
+        "backend/internal/service/gemini_messages_compat_service.go:175:\t\t\tgroup, err = s.groupRepo.GetByIDLite(ctx, *groupID)",
+        "backend/internal/service/batch_image_public.go:43:\tGetByIDLite(ctx context.Context, id int64) (*Group, error)",
+        "backend/internal/service/batch_image_public.go:987:\tgroup, err := s.GroupRepo.GetByIDLite(ctx, *groupID)",
+        "backend/internal/service/batch_image_public.go:1009:\t\tgroup, err := s.GroupRepo.GetByIDLite(ctx, *owner.GroupID)",
+        "backend/internal/service/group_service.go:19:\tGetByIDLite(ctx context.Context, id int64) (*Group, error)",
+        "backend/internal/service/scheduler_snapshot_service.go:325:\treturn s.groupRepo.GetByIDLite(ctx, groupID)",
+        "backend/internal/service/scheduler_snapshot_service.go:771:\tgroup, err := s.groupRepo.GetByIDLite(lifecycleCtx, groupID)",
+        "backend/internal/service/openai_gateway_usage.go:782:\tgroup, err := s.channelService.groupRepo.GetByIDLite(ctx, *apiKey.GroupID)",
+        "backend/internal/service/admin_user.go:666:\t\t\tif group, groupErr := s.groupRepo.GetByIDLite(ctx, groupID); groupErr == nil && group != nil {"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "scheduler_ownership",
+      "pattern": "func decodeCachedAccount|func .*GetSnapshot|PrepareSharedSnapshot|CloneForRequest|schedulerSnapshotEntry|schedulerSharedLoad",
+      "exit_code": 0,
+      "match_count": 4,
+      "matches": [
+        "backend/internal/repository/channel_monitor_v2_repo.go:295:func (r *channelMonitorV2Repository) GetSnapshot(ctx context.Context, filter service.ChannelMonitorV2Filter, cfg service.ChannelMonitorV2Config, admin bool) (*service.ChannelMonitorV2Snapshot, error) {",
+        "backend/internal/repository/scheduler_cache.go:246:func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket service.SchedulerBucket) ([]*service.Account, bool, error) {",
+        "backend/internal/repository/scheduler_cache.go:772:func decodeCachedAccount(val any) (*service.Account, error) {",
+        "backend/internal/handler/admin/dashboard_snapshot_v2_handler.go:72:func (h *DashboardHandler) GetSnapshotV2(c *gin.Context) {"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "quota_and_billing",
+      "pattern": "func incrementUsageBillingAccountQuota|func updateFixedQuotaResetAt|usageBillingLane|usageBillingBatch",
+      "exit_code": 0,
+      "match_count": 2,
+      "matches": [
+        "backend/internal/repository/usage_billing_repo.go:471:func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountID int64, amount float64) (*service.AccountQuotaState, error) {",
+        "backend/internal/repository/account_repo.go:3507:func updateFixedQuotaResetAt(extra map[string]any, name string, now time.Time) {"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "new_schema",
+      "pattern": "CacheCreation12h|CacheCreation30m|ForceOpenAIUltraFast|actual_image_count|ImageBillingByCount|cache_creation_12h|cache_creation_30m",
+      "exit_code": 1,
+      "match_count": 0,
+      "matches": [],
+      "truncated": false
+    },
+    {
+      "topic": "reset_grants",
+      "pattern": "ClaudeResetCredits|claude_reset_credits|claude_reset_redeem|Grant.*Reset",
+      "exit_code": 1,
+      "match_count": 0,
+      "matches": [],
+      "truncated": false
+    },
+    {
+      "topic": "admin_mcp_key",
+      "pattern": "AdminAPIKeyScope|RestrictedAdminKey|AdminMCP|MCPAuth|registration_email_blacklist",
+      "exit_code": 1,
+      "match_count": 0,
+      "matches": [],
+      "truncated": false
+    },
+    {
+      "topic": "missing_platforms",
+      "pattern": "PlatformTypeSafe|PlatformOpenCode|PlatformCommandCode|typeSafe|typesafe|SystemOne",
+      "exit_code": 1,
+      "match_count": 0,
+      "matches": [],
+      "truncated": false
+    },
+    {
+      "topic": "transcript_policy",
+      "pattern": "CyberSessionBlockKey|transcript.*[Bb]lock|transcriptHash",
+      "exit_code": 0,
+      "match_count": 7,
+      "matches": [
+        "backend/internal/handler/openai_gateway_handler.go:660:\t\t\tcyberBlockKeyHTTP = service.CyberSessionBlockKey(apiKey.ID, c, sessionHashBody)",
+        "backend/internal/handler/openai_gateway_handler.go:1244:\t\t\tcyberBlockKeyMsg = service.CyberSessionBlockKey(apiKey.ID, c, body)",
+        "backend/internal/handler/openai_gateway_handler.go:2425:\tcyberBlockKey := service.CyberSessionBlockKey(apiKey.ID, c, nil)",
+        "backend/internal/handler/openai_gateway_handler.go:3907:\tkey := service.CyberSessionBlockKey(apiKey.ID, c, body)",
+        "backend/internal/service/openai_cyber_session_block.go:21:// CyberSessionBlockKey 派生会话屏蔽 key：仅用显式会话标识（header",
+        "backend/internal/service/openai_cyber_session_block.go:25:func CyberSessionBlockKey(apiKeyID int64, c *gin.Context, body []byte) string {",
+        "backend/internal/handler/openai_chat_completions.go:256:\t\t\tcyberBlockKeyChat = service.CyberSessionBlockKey(apiKey.ID, c, body)"
+      ],
+      "truncated": false
+    },
+    {
+      "topic": "later_completed",
+      "pattern": "NextOpenAIResponsesSequence|func.*Grok.*Diagnos|P5|P10|RequestedReasoningEffort|apiKeyAuthSnapshotVersion",
+      "exit_code": 0,
+      "match_count": 133,
+      "matches": [
+        "frontend/src/views/user/ChannelStatusV2View.vue:210:          :label=\"t('channelMonitorV2.metrics.ttftP50')\"",
+        "frontend/src/views/user/ChannelStatusV2View.vue:296:                  <th>{{ t('channelMonitorV2.metrics.ttftP50') }}</th>",
+        "frontend/src/views/user/ChannelStatusV2View.vue:394:                  <th>{{ t('channelMonitorV2.metrics.ttftP50') }}</th>",
+        "frontend/src/views/user/ChannelStatusV2View.vue:846:/** KPI secondary: AVG · P90 under the P50 primary value. */",
+        "frontend/src/i18n/locales/en/admin/ops.ts:796:        outputTps: 'Window percentiles and mean of each valid request’s output tokens / total duration, including first-token wait, within the selected time, platform and group. Output may include reasoning tokens; they are not added again. P50 is the median; P5/P10 show slower requests. Higher is faster. Excludes images, Live and records without positive output or duration. Samples come from retained usage logs; — means no samples or temporarily unavailable statistics.',",
+        "frontend/src/i18n/locales/en/channelMonitorV2.ts:45:      ttftP50: 'First token P50',",
+        "frontend/src/i18n/locales/en/channelMonitorV2.ts:46:      durationP50: 'Duration P50',",
+        "frontend/src/i18n/locales/en/channelMonitorV2.ts:66:      title: 'Availability trend', description: 'Smoothed trend: error rate · first token P50 · cache rate', emptyTitle: 'No trend data for the selected window', errorLegend: 'Error rate (left axis %)', cacheLegend: 'Cache rate (left axis %)', ttftLegend: 'First token P50 (right axis)', errorDataset: 'Error rate trend %', cacheDataset: 'Cache rate trend %', ttftDataset: 'First token trend P50 (ms)', percentAxis: 'Rate %', resetZoom: 'Reset zoom'",
+        "frontend/src/i18n/locales/en/channelMonitorV2.ts:132:        health: 'Health color weights: error rate 60% + first-token P50 20% + cache rate 20% (thresholds configurable above)',",
+        "frontend/src/i18n/locales/en/channelMonitorV2.ts:134:        latency: 'Latency shows AVG · P50 · P90; absolute request / error counts are not shown',",
+        "frontend/src/features/channel-monitor-v2/MonitorTrendChart.vue:127:  const ttftP50 = smoothTrend(points.map((p) => p.metrics.ttft?.p50_ms ?? null))",
+        "frontend/src/features/channel-monitor-v2/MonitorTrendChart.vue:161:        data: ttftP50,",
+        "frontend/src/features/channel-monitor-v2/MonitorTrendChart.vue:268:        title: { display: true, text: t('channelMonitorV2.metrics.ttftP50'), color: '#0ea5e9', font: { size: 11 } },",
+        "frontend/src/features/channel-monitor-v2/monitorFormat.ts:146:  if (p50 != null) parts.push(`P50 ${formatMonitorMs(p50)}`)",
+        "frontend/src/features/channel-monitor-v2/monitorFormat.ts:154: * KPI secondary line for latency: AVG + P90 only (P50 is the primary value).",
+        "frontend/src/i18n/locales/zh/channelMonitorV2.ts:45:      ttftP50: '首 Token P50',",
+        "frontend/src/i18n/locales/zh/channelMonitorV2.ts:46:      durationP50: '请求时长 P50',",
+        "frontend/src/i18n/locales/zh/channelMonitorV2.ts:66:      title: '可用性趋势', description: '平滑趋势：错误率 · 首 Token P50 · 缓存率', emptyTitle: '当前筛选窗口没有趋势数据', errorLegend: '错误率（左轴 %）', cacheLegend: '缓存率（左轴 %）', ttftLegend: '首 Token P50（右轴）', errorDataset: '错误率趋势 %', cacheDataset: '缓存率趋势 %', ttftDataset: '首 Token 趋势 P50 (ms)', percentAxis: '比率 %', resetZoom: '重置缩放'",
+        "frontend/src/i18n/locales/zh/channelMonitorV2.ts:129:        health: '健康色三指标：错误率 60% + 首 Token P50 20% + 缓存率 20%（阈值可在上方配置）',",
+        "frontend/src/i18n/locales/zh/channelMonitorV2.ts:131:        latency: '延迟展示 AVG · P50 · P90；不展示绝对请求数 / 错误数',",
+        "frontend/src/i18n/locales/zh/admin/ops.ts:797:        outputTps: '当前时间、平台和分组内，每条有效请求的输出 Token ÷ 总耗时（含首字等待），再计算整窗口分位数和平均值。输出可含推理 Token，不重复相加。P50 为中位数，P5/P10 反映较慢请求，数值越高越快。排除图片、Live、无有效输出或耗时的记录。样本来自仍保留的使用明细；无样本或统计暂不可用时显示 —。',",
+        "backend/internal/securityaudit/prompt_types.go:223:\tLatencyP50MS int64 `json:\"latency_p50_ms\"`",
+        "backend/internal/securityaudit/prompt_metrics.go:52:\t\tsnapshot.LatencyP50MS = percentile(samples, 0.50)",
+        "backend/internal/repository/channel_monitor_v2_repo.go:1455:\tresult.P50Ms = histPercentile(hist, 0.50)",
+        "backend/internal/repository/usage_log_repo_query.go:662:\t\tlog.RequestedReasoningEffort = &requestedReasoningEffort.String",
+        "backend/internal/handler/auth_oidc_oauth.go:1135:\t\t\tcurve = elliptic.P521()",
+        "backend/internal/handler/gateway_handler_chat_completions.go:84:\trequestedEffort := service.CanonicalRequestedReasoningEffort(body, reqModel)",
+        "backend/internal/handler/gateway_handler_chat_completions.go:327:\t\t\tresult.RequestedReasoningEffort = requestedEffort",
+        "backend/internal/handler/stream_error_event.go:64:\t\tSequenceNumber: service.NextOpenAIResponsesSequence(c),",
+        "backend/internal/handler/gateway_handler_responses.go:84:\trequestedEffort := service.CanonicalRequestedReasoningEffort(body, reqModel)",
+        "backend/internal/handler/gateway_handler_responses.go:307:\t\t\tresult.RequestedReasoningEffort = requestedEffort",
+        "backend/internal/repository/ops_repo_metrics.go:117:\t\topsNullMetricInt(input.DurationP50Ms),",
+        "backend/internal/repository/ops_repo_metrics.go:124:\t\topsNullMetricInt(input.TTFTP50Ms),",
+        "frontend/src/views/admin/ops/components/OpsDashboardHeader.vue:415:const durationP50Ms = computed(() => overview.value?.duration?.p50_ms ?? null)",
+        "frontend/src/views/admin/ops/components/OpsDashboardHeader.vue:422:const ttftP50Ms = computed(() => overview.value?.ttft?.p50_ms ?? null)",
+        "frontend/src/views/admin/ops/components/OpsDashboardHeader.vue:1314:              <span class=\"text-gray-500\">P50:</span>",
+        "frontend/src/views/admin/ops/components/OpsDashboardHeader.vue:1315:              <span class=\"font-bold text-gray-900 dark:text-white\">{{ durationP50Ms ?? '-' }}</span>",
+        "frontend/src/views/admin/ops/components/OpsDashboardHeader.vue:1365:              <span class=\"text-gray-500\">P50:</span>",
+        "frontend/src/views/admin/ops/components/OpsDashboardHeader.vue:1366:              <span class=\"font-bold\" :class=\"getThresholdColorClass(getTTFTThresholdLevel(ttftP50Ms))\">{{ ttftP50Ms ?? '-' }}</span>",
+        "frontend/src/views/admin/ops/components/OpsDashboardHeader.vue:1442:              <span class=\"text-xs font-bold text-gray-400\">tok/s (P50)</span>"
+      ],
+      "truncated": true
+    }
+  ]
+}

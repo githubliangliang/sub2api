@@ -1,0 +1,47 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"testing"
+	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/service"
+)
+
+// A single-connection, single-P synthetic SQLite fixture; not production capacity.
+func BenchmarkHistoricalTokenStatsScope(b *testing.B) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil { b.Fatal(err) }
+	b.Cleanup(func() { _ = db.Close() })
+	db.SetMaxOpenConns(1)
+	for _, query := range []string{
+		`CREATE TABLE usage_logs(model TEXT, created_at DATETIME, group_id INTEGER, account_id INTEGER, output_tokens INTEGER, duration_ms INTEGER, first_token_ms INTEGER)`,
+		`CREATE TABLE groups(id INTEGER PRIMARY KEY, platform TEXT)`,
+		`CREATE TABLE accounts(id INTEGER PRIMARY KEY, platform TEXT)`,
+		`INSERT INTO groups VALUES(1,'openai'),(2,'anthropic'),(3,'grok'),(4,'gemini'),(5,'antigravity')`,
+		`INSERT INTO accounts SELECT * FROM groups`,
+		`CREATE INDEX fixture_usage_time ON usage_logs(created_at)`,
+		`WITH RECURSIVE seq(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM seq WHERE n<19999)
+INSERT INTO usage_logs SELECT (CASE WHEN n%2=0 THEN 'gpt-' ELSE 'model-' END)||CAST(n%200 AS TEXT),'2026-11-25 01:00:00',n%5+1,n%5+1,10,1000,100 FROM seq`,
+	} {
+		if _, err := db.Exec(query); err != nil { b.Fatal(err) }
+	}
+	start := time.Date(2026,11,25,0,0,0,0,time.UTC)
+	for _, platform := range []string{"", "openai", "anthropic", "grok"} {
+		name := platform
+		if name == "" { name = "all" }
+		b.Run(name, func(b *testing.B) {
+			filter := &service.OpsOpenAITokenStatsFilter{StartTime:start,EndTime:start.Add(24*time.Hour),Platform:platform,TopN:20}
+			repo := &opsRepository{db:db}
+			result, err := repo.GetOpenAITokenStats(context.Background(),filter)
+			if err != nil { b.Fatal(err) }
+			b.Logf("models=%d returned=%d",result.Total,len(result.Items))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i:=0;i<b.N;i++ {
+				if _, err := repo.GetOpenAITokenStats(context.Background(),filter); err != nil { b.Fatal(err) }
+			}
+		})
+	}
+}

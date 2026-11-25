@@ -1,0 +1,22 @@
+package apicompat
+
+import (
+ "encoding/json"
+ "testing"
+ "github.com/stretchr/testify/require"
+)
+
+func TestBacklogDesiredWebSearchSources(t *testing.T) {
+ var resp ResponsesResponse
+ require.NoError(t,json.Unmarshal([]byte(`{"id":"r","status":"completed","output":[{"type":"web_search_call","id":"ws","status":"completed","action":{"type":"search","query":"fixture","sources":[{"type":"url","url":"https://example.test/source"}]}}]}`),&resp))
+ out:=ResponsesToAnthropic(&resp,"fixture");wire,err:=json.Marshal(out);require.NoError(t,err)
+ require.Contains(t,string(wire),"https://example.test/source","Optional #8803 adds source result blocks; existing bridge emits an empty result")
+}
+
+func TestBacklogObserveToolSearchGenericFallback(t *testing.T) {
+ var req AnthropicRequest
+ require.NoError(t,json.Unmarshal([]byte(`{"model":"gpt-6-astra","max_tokens":64,"messages":[{"role":"user","content":"hello"}],"tools":[{"name":"ToolSearch","description":"find tools","input_schema":{"type":"object","properties":{"query":{"type":"string"}}}}]}`),&req))
+ out,err:=AnthropicToResponses(&req);require.NoError(t,err);require.NotEmpty(t,out.Tools)
+ wire,err:=json.Marshal(out);require.NoError(t,err);require.Contains(t,string(wire),`"name":"ToolSearch"`)
+ t.Log("Current fallback declares ordinary function ToolSearch; #8804 adds an independent native call/output and deferred reveal contract.")
+}
