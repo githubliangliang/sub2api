@@ -56,7 +56,7 @@
           v-if="modelValue"
           type="button"
           class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
-          @click="$emit('update:modelValue', '')"
+          @click="removeImage"
         >
           <Icon name="trash" size="sm" class="mr-1.5" :stroke-width="2" />
           {{ resolvedRemoveLabel }}
@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
@@ -98,6 +98,21 @@ const emit = defineEmits<{
 }>()
 
 const error = ref('')
+let activeReader: FileReader | null = null
+
+function cancelRead() {
+  const reader = activeReader
+  activeReader = null
+  reader?.abort()
+}
+
+function removeImage() {
+  cancelRead()
+  error.value = ''
+  emit('update:modelValue', '')
+}
+
+onBeforeUnmount(cancelRead)
 
 const resolvedUploadLabel = computed(() => props.uploadLabel || t('common.upload'))
 const resolvedRemoveLabel = computed(() => props.removeLabel || t('common.remove'))
@@ -118,6 +133,7 @@ function handleUpload(event: Event) {
   error.value = ''
 
   if (!file) return
+  cancelRead()
 
   if (props.maxSize && file.size > props.maxSize) {
     error.value = t('common.fileTooLargeKb', {
@@ -128,28 +144,32 @@ function handleUpload(event: Event) {
     return
   }
 
-  const reader = new FileReader()
-  if (props.mode === 'svg') {
-    reader.onload = (e) => {
-      const text = e.target?.result as string
-      if (text) emit('update:modelValue', text.trim())
-    }
-    reader.readAsText(file)
-  } else {
-    if (!file.type.startsWith('image/')) {
-      error.value = t('common.selectImageFile')
-      input.value = ''
-      return
-    }
-    reader.onload = (e) => {
-      emit('update:modelValue', e.target?.result as string)
-    }
-    reader.readAsDataURL(file)
+  if (props.mode !== 'svg' && !file.type.startsWith('image/')) {
+    error.value = t('common.selectImageFile')
+    input.value = ''
+    return
   }
 
+  const reader = new FileReader()
+  activeReader = reader
+  const mode = props.mode
+  reader.onload = (e) => {
+    if (activeReader !== reader) return
+    activeReader = null
+    const value = e.target?.result as string
+    if (mode === 'svg') {
+      if (value) emit('update:modelValue', value.trim())
+    } else {
+      emit('update:modelValue', value)
+    }
+  }
   reader.onerror = () => {
+    if (activeReader !== reader) return
+    activeReader = null
     error.value = t('common.fileReadFailed')
   }
+  if (mode === 'svg') reader.readAsText(file)
+  else reader.readAsDataURL(file)
   input.value = ''
 }
 </script>

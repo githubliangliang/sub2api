@@ -1,0 +1,28 @@
+package service
+
+import (
+ "context"
+ "regexp"
+ "testing"
+ "github.com/stretchr/testify/require"
+ "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+)
+
+// Existing routed manifest, not the absent pinned/live discovery service.
+func TestBacklogNextDesiredCodexNonGPTIdentity(t *testing.T) {
+ for _,model:=range []string{"grok-4.5","deepseek-v4-pro","claude-sonnet-5.5","gemini-2.5-pro"} {t.Run(model,func(t *testing.T){
+  const groupID int64=707
+  svc:=&GatewayService{accountRepo:codexModelsVisibilityAccountRepo{byGroup:map[int64][]Account{groupID:{{ID:1,Platform:PlatformOpenAI,Type:AccountTypeAPIKey,Credentials:map[string]any{"api_key":"fixture","model_mapping":map[string]any{model:model}}}}}}}
+  body,err:=svc.BuildCodexModelsManifestForGroup(context.Background(),&Group{ID:groupID,Platform:PlatformComposite},"",[]string{model})
+  require.NoError(t,err);models:=decodeCodexManifestModels(t,body);require.Len(t,models,1)
+  messages,ok:=models[0]["model_messages"].(map[string]any);require.True(t,ok);prompt,ok:=messages["instructions_template"].(string);require.True(t,ok);require.NotEmpty(t,prompt)
+  require.False(t,regexp.MustCompile(`(?i)(based on GPT-[0-9]|You are GPT-[0-9])`).MatchString(prompt),"Existing non-GPT manifest advertises a false GPT identity. No external provider refusal is asserted.")
+ })}
+}
+
+func TestBacklogNextControlCodexGPTPrompt(t *testing.T) {
+ for _,model:=range []string{"gpt-5.5","gpt-6.1-sol","gpt-6.2-astra"} {
+  descriptor:=newConfiguredCodexModelDescriptor(model)
+  require.Equal(t,openai.CodexBaseInstructionsForModel(model),descriptor.ModelMessages.InstructionsTemplate)
+ }
+}

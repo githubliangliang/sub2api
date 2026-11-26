@@ -12,6 +12,7 @@
         v-model="localValues[attr.id]"
         :type="attr.type === 'text' ? 'text' : attr.type"
         :required="attr.required"
+        :disabled="!valuesReady"
         :placeholder="attr.placeholder"
         class="input"
         @input="emitChange"
@@ -20,14 +21,15 @@
       <!-- Number Input -->
       <input
         v-else-if="attr.type === 'number'"
-        v-model.number="localValues[attr.id]"
+        :value="localValues[attr.id]"
         type="number"
         :required="attr.required"
+        :disabled="!valuesReady"
         :placeholder="attr.placeholder"
         :min="attr.validation?.min"
         :max="attr.validation?.max"
         class="input"
-        @input="emitChange"
+        @input="localValues[attr.id] = ($event.target as HTMLInputElement).value; emitChange()"
       />
 
       <!-- Date Input -->
@@ -36,6 +38,7 @@
         v-model="localValues[attr.id]"
         type="date"
         :required="attr.required"
+        :disabled="!valuesReady"
         class="input"
         @input="emitChange"
       />
@@ -45,6 +48,7 @@
         v-else-if="attr.type === 'textarea'"
         v-model="localValues[attr.id]"
         :required="attr.required"
+        :disabled="!valuesReady"
         :placeholder="attr.placeholder"
         rows="3"
         class="input"
@@ -56,6 +60,7 @@
         v-else-if="attr.type === 'select'"
         v-model="localValues[attr.id]"
         :options="attr.options || []"
+        :disabled="!valuesReady"
         @change="emitChange"
       />
 
@@ -70,6 +75,7 @@
             type="checkbox"
             :value="opt.value"
             :checked="isOptionSelected(attr.id, opt.value)"
+            :disabled="!valuesReady"
             @change="toggleMultiSelectOption(attr.id, opt.value)"
             class="h-4 w-4 rounded border-gray-300 text-primary-600"
           />
@@ -92,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { adminAPI } from '@/api/admin'
 import type { UserAttributeDefinition, UserAttributeValuesMap } from '@/types'
 import Select from '@/components/common/Select.vue'
@@ -112,35 +118,41 @@ const emit = defineEmits<Emits>()
 const loading = ref(false)
 const attributes = ref<UserAttributeDefinition[]>([])
 const localValues = ref<UserAttributeValuesMap>({})
+const valuesReady = ref(!props.userId)
+let requestVersion = 0
+let active = true
 
 const loadAttributes = async () => {
   loading.value = true
   try {
-    attributes.value = await adminAPI.userAttributes.listEnabledDefinitions()
+    const definitions = await adminAPI.userAttributes.listEnabledDefinitions()
+    if (active) attributes.value = definitions
   } catch (error) {
-    console.error('Failed to load attributes:', error)
+    if (active) console.error('Failed to load attributes:', error)
   } finally {
-    loading.value = false
+    if (active) loading.value = false
   }
 }
 
-const loadUserValues = async () => {
-  if (!props.userId) return
-
+const loadUserValues = async (userId: number, version: number) => {
+  const isCurrent = () => active && version === requestVersion && props.userId === userId
   try {
-    const values = await adminAPI.userAttributes.getUserAttributeValues(props.userId)
+    const values = await adminAPI.userAttributes.getUserAttributeValues(userId)
+    if (!isCurrent()) return
     const valuesMap: UserAttributeValuesMap = {}
     values.forEach(v => {
       valuesMap[v.attribute_id] = v.value
     })
     localValues.value = { ...valuesMap }
-    emit('update:modelValue', localValues.value)
+    valuesReady.value = true
+    emit('update:modelValue', { ...valuesMap })
   } catch (error) {
-    console.error('Failed to load user attribute values:', error)
+    if (isCurrent()) console.error('Failed to load user attribute values:', error)
   }
 }
 
 const emitChange = () => {
+  if (!valuesReady.value) return
   emit('update:modelValue', { ...localValues.value })
 }
 
@@ -179,19 +191,25 @@ const toggleMultiSelectOption = (attrId: number, optionValue: string) => {
 }
 
 watch(() => props.modelValue, (newVal) => {
-  if (newVal && Object.keys(newVal).length > 0) {
+  if (valuesReady.value) {
     localValues.value = { ...newVal }
   }
 }, { immediate: true })
 
-watch(() => props.userId, (newUserId) => {
+watch(() => props.userId, (newUserId, oldUserId, onCleanup) => {
+  const version = ++requestVersion
+  onCleanup(() => { requestVersion++ })
+  valuesReady.value = !newUserId
+  localValues.value = !newUserId && !oldUserId ? { ...props.modelValue } : {}
   if (newUserId) {
-    loadUserValues()
-  } else {
-    // Reset for new user
-    localValues.value = {}
+    loadUserValues(newUserId, version)
   }
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
+
+onBeforeUnmount(() => {
+  active = false
+  requestVersion++
+})
 
 onMounted(() => {
   loadAttributes()

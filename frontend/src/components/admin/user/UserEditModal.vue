@@ -3,9 +3,9 @@
     :show="show"
     :title="t('admin.users.editUser')"
     width="normal"
-    @close="$emit('close')"
+    @close="closeDialog"
   >
-    <form v-if="user" id="edit-user-form" @submit.prevent="handleUpdateUser" class="space-y-5">
+    <form v-if="user && sessionActive" id="edit-user-form" @submit.prevent="handleUpdateUser" class="space-y-5">
       <div>
         <label class="input-label">{{ t('admin.users.email') }}</label>
         <input v-model="form.email" type="email" class="input" />
@@ -65,12 +65,12 @@
         />
         <p class="input-hint">{{ t('admin.users.form.rpmLimitHint') }}</p>
       </div>
-      <UserAttributeForm v-model="form.customAttributes" :user-id="user?.id" />
+      <UserAttributeForm :key="sessionVersion" v-model="form.customAttributes" :user-id="user?.id" />
     </form>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <button @click="$emit('close')" type="button" class="btn btn-secondary">{{ t('common.cancel') }}</button>
-        <button type="submit" form="edit-user-form" :disabled="submitting" class="btn btn-primary">
+        <button @click="closeDialog" type="button" class="btn btn-secondary">{{ t('common.cancel') }}</button>
+        <button type="submit" form="edit-user-form" :disabled="submitting || !sessionActive" class="btn btn-primary">
           {{ submitting ? t('admin.users.updating') : t('common.update') }}
         </button>
       </div>
@@ -78,11 +78,11 @@
   </BaseDialog>
 
   <!-- 角色提升为管理员时后端要求 step-up 2FA，弹出 TOTP 验证后自动重试 -->
-  <TotpStepUpDialog :controller="stepUp" />
+  <TotpStepUpDialog v-if="sessionActive" :key="sessionVersion" :controller="stepUp" />
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
@@ -91,7 +91,7 @@ import type { AdminUser, UserAttributeValuesMap } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import UserAttributeForm from '@/components/user/UserAttributeForm.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
+import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason, StepUpCancelledError } from '@/composables/useStepUp'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 
 const props = defineProps<{ show: boolean, user: AdminUser | null }>()
@@ -100,13 +100,33 @@ const { t } = useI18n(); const appStore = useAppStore(); const { copyToClipboard
 
 const submitting = ref(false); const passwordCopied = ref(false)
 const form = reactive({ email: '', password: '', username: '', notes: '', role: 'user', concurrency: 1, rpm_limit: 0, customAttributes: {} as UserAttributeValuesMap })
+const sessionVersion = ref(0)
+const sessionActive = ref(false)
+const stepUp = useStepUp()
 
-watch(() => props.user, (u) => {
-  if (u) {
+const resetSession = () => {
+  sessionVersion.value++
+  sessionActive.value = false
+  submitting.value = false
+  form.customAttributes = {}
+  stepUp.onCancel()
+}
+
+const closeDialog = () => {
+  resetSession()
+  emit('close')
+}
+
+watch(() => [props.show, props.user] as const, ([show, u]) => {
+  resetSession()
+  if (show && u) {
+    sessionActive.value = true
     Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', role: u.role || 'user', concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, customAttributes: {} })
     passwordCopied.value = false
   }
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
+
+onBeforeUnmount(resetSession)
 
 const generatePassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*'
@@ -118,10 +138,8 @@ const copyPassword = async () => {
     passwordCopied.value = true; setTimeout(() => passwordCopied.value = false, 2000)
   }
 }
-const stepUp = useStepUp()
-
 const handleUpdateUser = async () => {
-  if (!props.user) return
+  if (!props.show || !props.user || !sessionActive.value || submitting.value) return
   if (!form.email.trim()) {
     appStore.showError(t('admin.users.emailRequired'))
     return
@@ -132,16 +150,29 @@ const handleUpdateUser = async () => {
     return
   }
   const userId = props.user.id
+  const version = sessionVersion.value
+  const customAttributes = { ...form.customAttributes }
+  const isCurrent = () => version === sessionVersion.value && sessionActive.value && props.show && props.user?.id === userId
   submitting.value = true
   try {
     const data: any = { email: form.email, username: form.username, notes: form.notes, role: form.role, concurrency: form.concurrency, rpm_limit: form.rpm_limit }
     if (form.password.trim()) data.password = form.password.trim()
     // 提升为管理员属敏感操作：后端返回 STEP_UP_REQUIRED 时弹 TOTP 验证并重试
-    await stepUp.run(() => adminAPI.users.update(userId, data))
-    if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(userId, form.customAttributes)
+    await stepUp.run(async () => {
+      if (!isCurrent()) throw new StepUpCancelledError()
+      try {
+        return await adminAPI.users.update(userId, data)
+      } catch (error) {
+        if (!isCurrent()) throw new StepUpCancelledError()
+        throw error
+      }
+    })
+    if (Object.keys(customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(userId, customAttributes)
+    if (!isCurrent()) return
     appStore.showSuccess(t('admin.users.userUpdated'))
     emit('success'); emit('close')
   } catch (e: any) {
+    if (!isCurrent()) return
     if (isStepUpCancelled(e)) {
       // 用户主动取消二次验证：静默返回，表单保持打开。
     } else if (isStepUpBlocked(e)) {
@@ -153,6 +184,6 @@ const handleUpdateUser = async () => {
     } else {
       appStore.showError(e?.message || t('admin.users.failedToUpdate'))
     }
-  } finally { submitting.value = false }
+  } finally { if (isCurrent()) submitting.value = false }
 }
 </script>

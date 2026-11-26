@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -146,6 +147,7 @@ func (s *OpenAIGatewayService) BuildGroupConfiguredCodexModelsManifest(
 		nil,
 		group.ModelsListConfig.Models,
 		group.CustomModelsListEnabled(),
+		nil,
 	)
 	if err != nil {
 		return nil, false, fmt.Errorf("build group configured Codex models: %w", err)
@@ -213,6 +215,7 @@ func (s *OpenAIGatewayService) MergeGroupConfiguredCodexModels(
 		configuredModels,
 		group.ModelsListConfig.Models,
 		group.CustomModelsListEnabled(),
+		codexCatalogMetadataModels(PlatformOpenAI, configuredModels, catalog, nil, true),
 	)
 	if err != nil {
 		return fmt.Errorf("merge group configured Codex models: %w", err)
@@ -454,7 +457,7 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		Priority:                          configuredCodexModelPriority,
 		AdditionalSpeedTiers:              []string{},
 		ServiceTiers:                      []configuredCodexServiceTier{},
-		ModelMessages:                     configuredCodexModelMessages{InstructionsTemplate: openai.CodexBaseInstructionsForModel(modelID)},
+		ModelMessages:                     configuredCodexModelMessages{InstructionsTemplate: codexInstructionsTemplateForModel(modelID)},
 		SupportsReasoningSummaryParameter: true,
 		DefaultReasoningSummary:           "auto",
 		WebSearchToolType:                 "text",
@@ -666,6 +669,27 @@ func configuredCodexGPTReasoningLevels(modelID string) []configuredCodexReasonin
 		})
 	}
 	return levels
+}
+
+// Only generated opening identities are rewritten. Other GPT references and
+// explicit upstream or operator instructions do not pass through this helper.
+var codexGPTIdentityPatterns = []struct {
+	re   *regexp.Regexp
+	repl string
+}{
+	{regexp.MustCompile(`^(You are Codex(?:, (?:a coding|an) agent)?),? based on GPT-\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)*`), "${1}"},
+	{regexp.MustCompile(`^You are GPT-\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)*`), "You are Codex"},
+}
+
+func codexInstructionsTemplateForModel(modelID string) string {
+	base := openai.CodexBaseInstructionsForModel(modelID)
+	if isOpenAICodexGPTModel(modelID) && !strings.HasPrefix(canonicalizeOpenAIModelAliasSpelling(modelID), "gpt-oss") {
+		return base
+	}
+	for _, pattern := range codexGPTIdentityPatterns {
+		base = pattern.re.ReplaceAllString(base, pattern.repl)
+	}
+	return base
 }
 
 func isOpenAICodexGPTModel(modelID string) bool {
@@ -1292,6 +1316,7 @@ func mergeConfiguredCodexModelsManifest(
 	configuredModels []string,
 	selectedModels []string,
 	filterBySelection bool,
+	metadataModels map[string]string,
 ) ([]byte, bool, error) {
 	var envelope map[string]json.RawMessage
 	if err := json.Unmarshal(body, &envelope); err != nil {
@@ -1370,7 +1395,11 @@ func mergeConfiguredCodexModelsManifest(
 		if _, exists := seen[modelID]; exists {
 			continue
 		}
-		rawModel, err := json.Marshal(newConfiguredCodexModelDescriptor(modelID))
+		descriptor := newConfiguredCodexModelDescriptor(modelID)
+		if target := metadataModels[modelID]; target != "" {
+			descriptor.ModelMessages.InstructionsTemplate = codexInstructionsTemplateForModel(target)
+		}
+		rawModel, err := json.Marshal(descriptor)
 		if err != nil {
 			return nil, false, err
 		}
@@ -2335,6 +2364,9 @@ func completeAPIKeyCodexModelsManifestMetadata(body []byte, completeAll bool, ac
 
 		descriptor := newConfiguredCodexModelDescriptor(slug)
 		descriptor.InputModalities = codexAudioInputModalities(descriptor.InputModalities, false)
+		if account != nil {
+			descriptor.ModelMessages.InstructionsTemplate = codexInstructionsTemplateForModel(account.GetMappedModel(slug))
+		}
 		if accountCodexModelSupportsImageInput(account, slug) {
 			descriptor.InputModalities = []string{"text", "image"}
 		}

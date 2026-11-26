@@ -1,0 +1,359 @@
+{
+  "scope": "24 selected prior third-tier PRs, not a repeat of all 134; 8 PRs/6 confirmed repair clusters proposed, no implementation.",
+  "decisions": [
+    {
+      "cluster": "F01",
+      "tier": 1,
+      "pr": 7308,
+      "name": "Codex非GPT模型的身份提示",
+      "reason": "现有BuildCodexModelsManifestForGroup输出4种非GPT模型均带GPT自我身份；已具备实际消费者，无须pinned/live系统。普通GPT模板逐字对照通过。原T25子集明确升第一档。",
+      "merge": "60b9bf75589e71a26f08bbc06ec9e1e64a5ffe7f",
+      "parent": "d6e8b44bcb1247bc4f9730ce93e9ed7558cdb7f8",
+      "states": {
+        "CLEAN": 1,
+        "CONFLICT": 1
+      },
+      "full_source_size": "2 files changed, 99 insertions(+), 1 deletion(-)",
+      "sha256": "2d4b0d1d7f67324633302a97830b6854513a8d104e96f6f4591c7691a1f9268d"
+    },
+    {
+      "cluster": "F02",
+      "tier": 1,
+      "pr": 4867,
+      "name": "S3配置留空密钥再保存的加密",
+      "reason": "真实Ent设置仓库/modernc SQLite/AES-GCM验证首次密文、二次留空保存变为明文；既有管理员step-up配置API可达，显式换密钥对照通过。不新增备份/S3入口。原T34子集升第一档。",
+      "merge": "6b71d75bdee26edf44d8fe8f1e934260c7b8c068",
+      "parent": "f53252e292423982e06a6f6ecc8bcf455f0b199b",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 56 insertions(+), 3 deletions(-)",
+      "sha256": "f6735858e0d2c2fc1fe1e9a4b28afd7032311de734c6fac88d5b1ec24dde8201"
+    },
+    {
+      "cluster": "F03",
+      "tier": 1,
+      "pr": 7363,
+      "name": "属性字段类型与显式清空",
+      "reason": "真实Vue组件数字输入产生number，现有HTTP只接受string且number400/string200；清空说明/占位被undefined省略，而后端指针更新支持空串。原T22两个微修升第一档。",
+      "merge": "322cc5e5f1a0049215b73ed12736bfb585bea383",
+      "parent": "23dc073e65cd27656b98c673e19db1413139008e",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 37 insertions(+), 2 deletions(-)",
+      "sha256": "841f9b05d377890da63e529276ac800b2928c67774816dc6dff700f6459f3e5c"
+    },
+    {
+      "cluster": "F03",
+      "tier": 1,
+      "pr": 7366,
+      "name": "属性字段类型与显式清空",
+      "reason": "真实Vue组件数字输入产生number，现有HTTP只接受string且number400/string200；清空说明/占位被undefined省略，而后端指针更新支持空串。原T22两个微修升第一档。",
+      "merge": "e4f97a53ec24a29820d59e53c6c02117e14c6342",
+      "parent": "9e175bd49161d486b3dd5d87f43724d98a45b07a",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 59 insertions(+), 2 deletions(-)",
+      "sha256": "6f5399456a98d816ea421c8dd31de06b7bc52d28b34041809cd1b2521f0c2949"
+    },
+    {
+      "cluster": "S01",
+      "tier": 2,
+      "pr": 7500,
+      "name": "用户属性请求和分组保存归属",
+      "reason": "旧用户请求完成后覆盖当前值；分组加载失败仍发allowed_groups=[]请求。需请求/弹窗/保存生命周期完整适配，保留现有公开/专属分组语义，不导入restrict-public新策略。原T22子集升第二档。",
+      "merge": "5e4968492f2eb31b672618f0028a30ca699f63e5",
+      "parent": "a81547f244dca300625b818caf4facbde60e5e17",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 48 insertions(+), 4 deletions(-)",
+      "sha256": "18e337a8dcc0ae3f8b1d73a5ee26af8d98da4c28ec6999f67294169ab3da2505"
+    },
+    {
+      "cluster": "S01",
+      "tier": 2,
+      "pr": 7373,
+      "name": "用户属性请求和分组保存归属",
+      "reason": "旧用户请求完成后覆盖当前值；分组加载失败仍发allowed_groups=[]请求。需请求/弹窗/保存生命周期完整适配，保留现有公开/专属分组语义，不导入restrict-public新策略。原T22子集升第二档。",
+      "merge": "023b38354feb5c1b2371dda51a6973d8bb084033",
+      "parent": "a765b3c1765f50a18e3b845170916d91c21a12cc",
+      "states": {
+        "CONFLICT": 1,
+        "CLEAN": 1
+      },
+      "full_source_size": "2 files changed, 76 insertions(+), 2 deletions(-)",
+      "sha256": "6731b255fd2a259efabb2ae8e4794aa9486870e982bd25df0a6faae7b76e20fc"
+    },
+    {
+      "cluster": "S02",
+      "tier": 2,
+      "pr": 7320,
+      "name": "共享图片上传读任务所有权",
+      "reason": "第二次选图后第一读完成覆盖新图；删除后晚读又恢复图。SettingsView三个现有消费者可达，纯FileReader夹具重现。旧图片扩展标签明确拆出共享组件现存缺陷。",
+      "merge": "7865051fdf93823cb55c099424345ca74ba3a1f1",
+      "parent": "4b0adb68636c4d8bef479e2c1ed541950a031c27",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 88 insertions(+), 3 deletions(-)",
+      "sha256": "e513288323a6b6ab5817951dbd615ae135c26860a528aed96e9d615a805250a9"
+    },
+    {
+      "cluster": "S03",
+      "tier": 2,
+      "pr": 7365,
+      "name": "监控模板关联列表请求归属",
+      "reason": "真实现有管理员模板对话框切换id后旧关联列表覆盖新列表及默认选中ID；来源只有读取防护，需保持本地提交/关闭所有权与错误/loading规则。原T32子集升第二档。",
+      "merge": "62a8919a1c82b902a93818eaf2a15ff972d0e610",
+      "parent": "1ea00258d0aa8323c8d67dfc428a4cf03b7cdae2",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 89 insertions(+), 4 deletions(-)",
+      "sha256": "ffdff3f8ebe3de0cf95432762c2755c165ad24fa9df3fc183a30807840eaa927"
+    },
+    {
+      "cluster": "T01",
+      "tier": 3,
+      "pr": 7313,
+      "name": "供应商限定的reasoning/role/error适配",
+      "reason": "可复用现有通用API Key出口，但字段占位、developer降system和Baseten重试改变供应商协议；未调用供应商确认。缺原生枚举可独立适配，不视为通用所有账号修复。",
+      "merge": "4275047d164591118be946e964e921e9672347c6",
+      "parent": "4dbcdce43c63814c93e215cbf06044b57660341b",
+      "states": {
+        "CLEAN": 2,
+        "CONFLICT": 1
+      },
+      "full_source_size": "3 files changed, 266 insertions(+)",
+      "sha256": "57d00bdcf97e94d2173eb551069a3d8c5efb7706a6645669ac9f6d8895cf4cfc"
+    },
+    {
+      "cluster": "T01",
+      "tier": 3,
+      "pr": 7224,
+      "name": "供应商限定的reasoning/role/error适配",
+      "reason": "可复用现有通用API Key出口，但字段占位、developer降system和Baseten重试改变供应商协议；未调用供应商确认。缺原生枚举可独立适配，不视为通用所有账号修复。",
+      "merge": "48a86ec926e2ef8065f1b886de8f3205a3f2029d",
+      "parent": "b4e560824a14e9e9093bf974410ecc3825b9e557",
+      "states": {
+        "CLEAN": 3
+      },
+      "full_source_size": "3 files changed, 272 insertions(+)",
+      "sha256": "c095e73a41f88ac6447eed8261e899422f2b7d8a4e5f433ca50400cd5261b419"
+    },
+    {
+      "cluster": "T01",
+      "tier": 3,
+      "pr": 7394,
+      "name": "供应商限定的reasoning/role/error适配",
+      "reason": "可复用现有通用API Key出口，但字段占位、developer降system和Baseten重试改变供应商协议；未调用供应商确认。缺原生枚举可独立适配，不视为通用所有账号修复。",
+      "merge": "55108ee877469ef89493e0adc5866b7cecf9c117",
+      "parent": "231e72fdde89bd2c4cc172dd1f51ff90e5d0b0a9",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 81 insertions(+), 1 deletion(-)",
+      "sha256": "7695441e4dbe23adb6dd7bbb60f341f4f5781408de3e93d0eb10262a48318f80"
+    },
+    {
+      "cluster": "T02",
+      "tier": 3,
+      "pr": 7057,
+      "name": "最大上下文和完整metadata策略",
+      "reason": "保持上轮测得的独立metadata缺口与只删子字段合同；未将新值/整父字段删除视为本轮授权。",
+      "merge": "9383e0b154348b224f64e66985f907f336b00c2e",
+      "parent": "c7ed614240e9f2b2ac14f0bc4a2f48dfa1a86e98",
+      "states": {
+        "CLEAN": 4
+      },
+      "full_source_size": "4 files changed, 216 insertions(+)",
+      "sha256": "caf9142e01bc32c4f045bbf0cb61e9e5b6e5e2679b6e8a27f3206d9eaa9bdbbe"
+    },
+    {
+      "cluster": "T02",
+      "tier": 3,
+      "pr": 7085,
+      "name": "最大上下文和完整metadata策略",
+      "reason": "保持上轮测得的独立metadata缺口与只删子字段合同；未将新值/整父字段删除视为本轮授权。",
+      "merge": "008391f699bdd3b63e93550aefb5c9e1ab631011",
+      "parent": "a4c517917beb4c18bd36b584d7fbcdfa757804d1",
+      "states": {
+        "CONFLICT": 1,
+        "CLEAN": 1
+      },
+      "full_source_size": "2 files changed, 113 insertions(+)",
+      "sha256": "79bad703a5dbe18c0a78f61f620173bbfb7544d627856bfc8071242dd1201443"
+    },
+    {
+      "cluster": "T03",
+      "tier": 3,
+      "pr": 7215,
+      "name": "目录性能与安装配置清理",
+      "reason": "manifest少一次解析与setup无消费者rate_limit默认值为优化/清理，现存生成配置不构成限流故障。当前无新收益证据，不放大为大架构前置。",
+      "merge": "c84a3d50a3f845fbb826dec00230ade69a59442f",
+      "parent": "cd1834e0a948b52b035b7325e6a9efc9e27c967b",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 5 insertions(+), 4 deletions(-)",
+      "sha256": "5bda4b53dddfb96ca6cf6803e9f22e93e46a9e6b412a68771991f465afba833e"
+    },
+    {
+      "cluster": "T03",
+      "tier": 3,
+      "pr": 7636,
+      "name": "目录性能与安装配置清理",
+      "reason": "manifest少一次解析与setup无消费者rate_limit默认值为优化/清理，现存生成配置不构成限流故障。当前无新收益证据，不放大为大架构前置。",
+      "merge": "35d2ef0cbdd10ce6f493a934a5418548f83d0378",
+      "parent": "f45126c8ec29914a9c266bbe7d0525f50f3cd7f2",
+      "states": {
+        "CLEAN": 1,
+        "CONFLICT": 1
+      },
+      "full_source_size": "2 files changed, 43 insertions(+), 11 deletions(-)",
+      "sha256": "bce6c72fac4c1e4c45f239205623f7acdc8a5a1bc60f58151cd980331b5585d5"
+    },
+    {
+      "cluster": "T04",
+      "tier": 3,
+      "pr": 7442,
+      "name": "图片余额信号/模型兼容新策略",
+      "reason": "余额code/402保留与5分钟模型冷却、Gemini通过OpenAI图片端点均新增协议/路由/处罚语义；与共享ImageUpload旧读竞态分开。无新增冷却或新模型能力授权。",
+      "merge": "738ef1c73c090c412f7097daa2d36b992b399547",
+      "parent": "5af29a3b93122179568195d92c8f02afe45231fb",
+      "states": {
+        "CONFLICT": 2,
+        "CLEAN": 3
+      },
+      "full_source_size": "5 files changed, 268 insertions(+), 1 deletion(-)",
+      "sha256": "8a38f7bc21778b4833f7eab36676774c6ac1afa8885e3afe21b248daf364aee0"
+    },
+    {
+      "cluster": "T04",
+      "tier": 3,
+      "pr": 7060,
+      "name": "图片余额信号/模型兼容新策略",
+      "reason": "余额code/402保留与5分钟模型冷却、Gemini通过OpenAI图片端点均新增协议/路由/处罚语义；与共享ImageUpload旧读竞态分开。无新增冷却或新模型能力授权。",
+      "merge": "0dd71286f26395dd766519ddcfede57972a43a2b",
+      "parent": "b350e079f868bf8ecba7917d48106a5d5c6c3df6",
+      "states": {
+        "CLEAN": 3,
+        "CONFLICT": 2
+      },
+      "full_source_size": "5 files changed, 358 insertions(+), 4 deletions(-)",
+      "sha256": "4c3ff79c5cd2faf0466b0bc5c23d20684ca6d3f9a55b2c714ae8bb8d4e7158cc"
+    },
+    {
+      "cluster": "T05",
+      "tier": 3,
+      "pr": 7494,
+      "name": "管理员余额调整错误展示",
+      "reason": "现有通用调整错误提取按实际使用选择；不延伸充值/购买/退款界面，本轮未重放该错误行为。",
+      "merge": "d7e4bba0e7b02579b909e7e1120a4a1d777d9dc0",
+      "parent": "d3d0f653e516877bff2c4d2c28490cb5fff74b01",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 29 insertions(+), 1 deletion(-)",
+      "sha256": "27deb31778f9109cce6cc308487b2c264da83c66cd9a37f75d4ff0b4d853de35"
+    },
+    {
+      "cluster": "X01",
+      "tier": 4,
+      "pr": 7491,
+      "name": "来源模型测试picker不适用",
+      "reason": "来源FetchOpenAIAccountModels/projectAccountModelsBody均缺失；现有GetAvailableModels直接返回账号public mapping键，相关OAuth/APIKey/透传HTTP控制通过。不为修此方法引入整个discovery。",
+      "merge": "31a6e747709b6bf4547a90df63f39795e52e5857",
+      "parent": "7c0a2a556c440836c54b3f3135f033755f15ecb7",
+      "states": {
+        "NOBASE": 1,
+        "CONFLICT": 1
+      },
+      "full_source_size": "2 files changed, 212 insertions(+), 5 deletions(-)",
+      "sha256": "3ba6d1af4278d3f26089213e9d94fa8141938db03b789712073c448552b91f52"
+    },
+    {
+      "cluster": "X02",
+      "tier": 4,
+      "pr": 7419,
+      "name": "未注册用户监控页面的微修",
+      "reason": "ChannelStatusV1View和MonitorDetailDialog未进入现有router；管理员监控是另一条消费者。文件存在不证明用户页面可达，不恢复已裁剪入口。",
+      "merge": "23dc073e65cd27656b98c673e19db1413139008e",
+      "parent": "1716e991517096eec6ec92d025b62b24f70b63f0",
+      "states": {
+        "CLEAN": 2,
+        "CONFLICT": 1
+      },
+      "full_source_size": "3 files changed, 23 insertions(+), 2 deletions(-)",
+      "sha256": "8323e130df17496d4ff815027783a443588fdb78bff90eeaf5e4fa2aacd83338"
+    },
+    {
+      "cluster": "X02",
+      "tier": 4,
+      "pr": 7492,
+      "name": "未注册用户监控页面的微修",
+      "reason": "ChannelStatusV1View和MonitorDetailDialog未进入现有router；管理员监控是另一条消费者。文件存在不证明用户页面可达，不恢复已裁剪入口。",
+      "merge": "7d5615998c0ac2ed8ae91dce43cabe63434bc5c0",
+      "parent": "d7e4bba0e7b02579b909e7e1120a4a1d777d9dc0",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 51 insertions(+), 3 deletions(-)",
+      "sha256": "bdca16eeadc1095c2729f0c7b04ec0cfeeb4ae5ddd85b3d8374c60b1c2d08ec1"
+    },
+    {
+      "cluster": "X03",
+      "tier": 4,
+      "pr": 7246,
+      "name": "缺失原生Responses适配消费者",
+      "reason": "两PR目标normalizeDeepSeekResponsesRequestBody不存在；添加Lift helper不代表交付。未来用户选独立供应商适配需重新定义泛用端点合同，不按当前native故障移植。",
+      "merge": "efe9aab1e4ec89a42ba45e8dac20e882c5409a6a",
+      "parent": "aeab57b9b21a726d8e55bcc0909bc49523c1b30b",
+      "states": {
+        "CLEAN": 2,
+        "NOBASE": 1,
+        "CONFLICT": 1
+      },
+      "full_source_size": "4 files changed, 313 insertions(+), 1 deletion(-)",
+      "sha256": "563b607e5b49a5e4aece30aa8e26de9a4f1dd72f90c233059c462c81941902bd"
+    },
+    {
+      "cluster": "X03",
+      "tier": 4,
+      "pr": 7354,
+      "name": "缺失原生Responses适配消费者",
+      "reason": "两PR目标normalizeDeepSeekResponsesRequestBody不存在；添加Lift helper不代表交付。未来用户选独立供应商适配需重新定义泛用端点合同，不按当前native故障移植。",
+      "merge": "a5015e1fc4fdab939c150630cda81529be3b75bc",
+      "parent": "738ef1c73c090c412f7097daa2d36b992b399547",
+      "states": {
+        "CLEAN": 1,
+        "CONFLICT": 1
+      },
+      "full_source_size": "2 files changed, 360 insertions(+), 8 deletions(-)",
+      "sha256": "fb5aca66f0931c31f56b0b90942ea83a3b09a36b75dfb6e8ed45b539c903022e"
+    },
+    {
+      "cluster": "X04",
+      "tier": 4,
+      "pr": 7375,
+      "name": "商业余额历史混合界面",
+      "reason": "来源包含total_recharged及充值/取款历史界面；旧第三档按个人不扩展支付/充值相关UI边界明确排除。已有usage/个人额度/实际成本维护继续保留，不删除旧界面。",
+      "merge": "1ea00258d0aa8323c8d67dfc428a4cf03b7cdae2",
+      "parent": "023b38354feb5c1b2371dda51a6973d8bb084033",
+      "states": {
+        "CLEAN": 2
+      },
+      "full_source_size": "2 files changed, 91 insertions(+), 2 deletions(-)",
+      "sha256": "da37245c99065d0340ef3ba94a9a442fd788fb4a39e86fe25c63d0444754e555"
+    }
+  ],
+  "counts": {
+    "1": 4,
+    "2": 4,
+    "3": 10,
+    "4": 6
+  }
+}

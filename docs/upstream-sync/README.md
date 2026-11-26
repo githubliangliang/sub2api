@@ -1,5 +1,16 @@
 # 上游合并指南
 
+**2026-11-26 用户选择的第二轮历史第一/第二档已实施并完成验收：** [F01–F03 13/13](../../openspec/changes/port-upstream-historical-followup-tier1/verification.md) 修正有效映射目标的Codex生成身份、S3沿用secret加密及属性string/显式清空；[S01–S03 14/14](../../openspec/changes/port-upstream-historical-followup-tier2/verification.md) 隔离用户/分组读取保存及step-up、共享FileReader、管理员模板picker读取/apply会话。真实起点`89060f532`，[实施证据](./implementation-historical-followup/README.md)保存原失败/完整SQLite/Ent/AES/本地HTTP、固定quota/dedup/独立成本/miniredis、backend55包10829/22536（16既有skip）、最终admin445/620、五包race126/253及保护race16/53、前端2329通过/2既有skip、build/lint/typecheck/strict与桌面/移动Chrome。9源/12新增测试最终哈希及历史范围保护独立记录。用户授权本地commit；无push/发布/归档/业务实例操作。版本/依赖/schema/Ent/Wire和资源默认保持；旧17活动变更467任务及18旧实现哈希保留，新27任务完成后总数19/494。下方复评及其未勾选状态保留评估当时的历史原文。
+
+旧项第二轮复评（2026-11-26）：[报告](./UNMERGED-REVIEW-2026-11-26.md) / [24整PR判断](./unmerged-review-2026-11-26/decisions.md) / [证据](./unmerged-review-2026-11-26/README.md)。上一批Token统计/Gemini信号已在`89060f532`完成11任务；18份最终实现文件哈希匹配。以该提交重查上轮未逐项重放的24个旧第三档PR，61文件A0/C46/X13/N2，整PR来源哈希保持。建议[第一档F01–F03，13项未实施任务](../../openspec/changes/port-upstream-historical-followup-tier1/README.md)：非GPT Codex生成身份、S3沿用secret仍加密、属性string/显式清空；[第二档S01–S03，14项未实施任务](../../openspec/changes/port-upstream-historical-followup-tier2/README.md)：用户/分组保存归属、共享FileReader、管理员模板关联列表。均有当前消费者及失败证据，明确从旧第三档子集调整；未开发新按需功能。
+
+- [x] 确认旧17变更/467任务完成及上一实现哈希，保护原Fast诊断与全部历史来源。
+- [x] 当前三包75顶层/121含子例、既有前端15项通过；后端2目标失败/2控制通过、前端7目标失败/4控制或观察通过，属性HTTP number400/string200控制通过。
+- [x] 新两份规格完整、13/14任务全未勾选、实施验收槽为空；原始夹具失败/更正及最终范围核验独立保存。
+- [ ] 后续按选定批次实施；其它ToolSearch/搜索/缓存策略等仍按需，不提交/推送/发布/归档或操作实例。
+
+本轮教训：现有清单生成不需要完整pinned框架；同名文件不证明路由；沿用密钥必须跨解密/保存边界保持加密；string/undefined与后端JSON合同需实测；异步归属按对象/会话分别验证。见[报告§9](./UNMERGED-REVIEW-2026-11-26.md#9-本轮通用教训)。下方旧报告快照保持原意。
+
 **2026-11-26 本地 / 2026-11-25 UTC：用户选择的历史第一/第二档已实施并完成验收：** [F01 5/5](../../openspec/changes/port-upstream-historical-backlog-tier1/verification.md) 修正 Token 统计非gpt/全平台范围；[S01 6/6](../../openspec/changes/port-upstream-historical-backlog-tier2/verification.md) 补 native Gemini JSON/SSE/聚合的 Ops/SLA/请求级策略归因。真实起点 `b9d9524c6cce8488edb2eaf899d771176f3b2414`；[实施证据](./implementation-historical-backlog/README.md) 保留原失败、真实HTTP/SQLite/miniredis/独立成本/dedup/固定quota、55包unit、最终handler/四包race、前端108测试及build/lint/strict和扩展查询成本。必要Ops worker通道关停修正、1MiB非data观察与8KiB matcher前缀分别验证。用户授权本地commit；不push/发布/归档/操作业务实例。VERSION1.1.28、Go1.27.4、SQLite230/auth21、依赖、Ent/Wire、资源默认和旧证据不变；先前15变更/456任务保留，本批2变更11任务完成后活动总数17/467。下方复评/复核仍是冻结的评估时状态。
 
 旧项专项复评（2026-11-25）：[历史未合内容报告](./UNMERGED-REVIEW-2026-11-25.md) / [134 PR、44类库存](./unmerged-review-2026-11-25/inventory.md) / [实际证据](./unmerged-review-2026-11-25/README.md)。以v1.1.28 / `b9d9524c6`重查1,843条文件状态A17/C1026/X654/N146。真实SQLite证明现有Token统计遗漏非gpt/已选平台，明确由旧第三档调整为[第一档F01，5项未实施任务](../../openspec/changes/port-upstream-historical-backlog-tier1/README.md)；native JSON/SSE证明Gemini200带内错误缺Ops标记，明确调整为[第二档S01，6项未实施任务](../../openspec/changes/port-upstream-historical-backlog-tier2/README.md)。其它第三档按Claude Code ToolSearch、搜索来源、可选5m策略、最大上下文/监控前缀等使用收益排序，支付与缺平台/PG边界保持。#7129既有序号合同核销，Fast/TPS/Grok诊断等后续完成项不重开。

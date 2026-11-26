@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 import { totpAPI } from '@/api'
@@ -84,6 +84,9 @@ const verifying = ref(false)
 const code = ref<string[]>(['', '', '', '', '', ''])
 const inputRefs = ref<(HTMLInputElement | null)[]>([])
 const hiddenOtpInputRef = ref<HTMLInputElement | null>(null)
+let active = true
+
+onBeforeUnmount(() => { active = false })
 
 // Focus the first cell whenever the dialog opens.
 watch(
@@ -110,10 +113,12 @@ async function submit(otp: string) {
   verifying.value = true
   try {
     await totpAPI.stepUp(otp)
+    if (!active) return
     verifying.value = false
     resetInputs()
     props.controller.onVerified()
   } catch (err: any) {
+    if (!active) return
     verifying.value = false
     appStore.showError(err?.message || t('stepUp.verifyFailed'))
     resetInputs()

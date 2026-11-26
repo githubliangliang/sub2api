@@ -1,0 +1,49 @@
+package repository
+
+import (
+ "context"
+ "database/sql"
+ "encoding/json"
+ "strings"
+ "testing"
+ dbent "github.com/Wei-Shaw/sub2api/ent"
+ "github.com/Wei-Shaw/sub2api/internal/config"
+ "github.com/Wei-Shaw/sub2api/internal/service"
+ "github.com/stretchr/testify/require"
+ "entgo.io/ent/dialect"
+ entsql "entgo.io/ent/dialect/sql"
+ _ "modernc.org/sqlite"
+)
+
+func backlogNextBackupFixture(t *testing.T)(*service.BackupService,service.SettingRepository,service.SecretEncryptor) {
+ db,err:=sql.Open("sqlite",":memory:?_time_format=sqlite");require.NoError(t,err);db.SetMaxOpenConns(1);t.Cleanup(func(){_ = db.Close()})
+ _,err=db.Exec(`CREATE TABLE settings(id INTEGER PRIMARY KEY AUTOINCREMENT,key TEXT UNIQUE NOT NULL,value TEXT NOT NULL,updated_at DATETIME NOT NULL)`);require.NoError(t,err)
+ client:=dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.SQLite,db)));t.Cleanup(func(){_ = client.Close()})
+ repo:=NewSettingRepository(client);cfg:=&config.Config{Totp:config.TotpConfig{EncryptionKey:strings.Repeat("42",32),EncryptionKeyConfigured:true}}
+ enc,err:=NewAESEncryptor(cfg);require.NoError(t,err)
+ svc:=service.NewBackupService(repo,cfg,enc,nil,nil);t.Cleanup(svc.Stop)
+ return svc,repo,enc
+}
+
+func backlogNextStoredSecret(t *testing.T,repo service.SettingRepository) string {
+ raw,err:=repo.GetValue(context.Background(),"backup_s3_config");require.NoError(t,err)
+ var cfg service.BackupS3Config;require.NoError(t,json.Unmarshal([]byte(raw),&cfg));return cfg.SecretAccessKey
+}
+
+func TestBacklogNextDesiredBackupResaveCiphertextSQLite(t *testing.T) {
+ ctx:=context.Background();svc,repo,enc:=backlogNextBackupFixture(t)
+ first,err:=svc.UpdateS3Config(ctx,service.BackupS3Config{Bucket:"fixture",AccessKeyID:"test-id",SecretAccessKey:"fake-backup-secret"});require.NoError(t,err);require.Empty(t,first.SecretAccessKey)
+ before:=backlogNextStoredSecret(t,repo);require.NotEqual(t,"fake-backup-secret",before);plain,err:=enc.Decrypt(before);require.NoError(t,err);require.Equal(t,"fake-backup-secret",plain)
+ _,err=svc.UpdateS3Config(ctx,service.BackupS3Config{Bucket:"fixture-changed",AccessKeyID:"test-id"});require.NoError(t,err)
+ after:=backlogNextStoredSecret(t,repo)
+ require.NotEqual(t,"fake-backup-secret",after,"Leaving the secret blank on a normal resave decrypts then persists plaintext through the real settings repository")
+ _,err=enc.Decrypt(after);require.NoError(t,err)
+}
+
+func TestBacklogNextControlBackupExplicitReplacementSQLite(t *testing.T) {
+ ctx:=context.Background();svc,repo,enc:=backlogNextBackupFixture(t)
+ for _,secret:=range []string{"fake-first-secret","fake-second-secret"} {
+  cfg,err:=svc.UpdateS3Config(ctx,service.BackupS3Config{Bucket:"fixture",AccessKeyID:"test-id",SecretAccessKey:secret});require.NoError(t,err);require.Empty(t,cfg.SecretAccessKey)
+  raw:=backlogNextStoredSecret(t,repo);require.NotEqual(t,secret,raw);got,err:=enc.Decrypt(raw);require.NoError(t,err);require.Equal(t,secret,got)
+ }
+}

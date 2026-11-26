@@ -1,0 +1,98 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount, shallowMount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+
+const mocks=vi.hoisted(()=>({
+ enabled:vi.fn(),values:vi.fn(),definitions:vi.fn(),updateDefinition:vi.fn(),createDefinition:vi.fn(),groups:vi.fn(),updateUser:vi.fn(),monitors:vi.fn(),apply:vi.fn(),showError:vi.fn(),showSuccess:vi.fn()
+}))
+vi.mock('vue-i18n',()=>({useI18n:()=>({t:(key:string)=>key})}))
+vi.mock('@/stores/app',()=>({useAppStore:()=>({showError:mocks.showError,showSuccess:mocks.showSuccess})}))
+vi.mock('@/api/admin',()=>({adminAPI:{
+ userAttributes:{listEnabledDefinitions:mocks.enabled,getUserAttributeValues:mocks.values,listDefinitions:mocks.definitions,updateDefinition:mocks.updateDefinition,createDefinition:mocks.createDefinition},
+ groups:{list:mocks.groups},users:{update:mocks.updateUser},channelMonitorTemplate:{listAssociatedMonitors:mocks.monitors,apply:mocks.apply}
+}}))
+
+import UserAttributeForm from '@/components/user/UserAttributeForm.vue'
+import AttributeDefinitions from '@/components/user/UserAttributesConfigModal.vue'
+import AllowedGroups from '@/components/admin/user/UserAllowedGroupsModal.vue'
+import TemplatePicker from '@/components/admin/monitor/MonitorTemplateApplyPickerDialog.vue'
+import ImageUpload from '@/components/common/ImageUpload.vue'
+
+enableAutoUnmount(afterEach)
+function deferred<T>() {let resolve!:(v:T)=>void;let reject!:(e:Error)=>void;const promise=new Promise<T>((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
+const Dialog={props:['show'],template:'<div v-if="show"><slot/><slot name="footer"/></div>'}
+const attr=(type='text')=>({id:1,key:'fixture',name:'Fixture',type,required:false,enabled:true,description:'saved-description',placeholder:'saved-placeholder'})
+const global={stubs:{BaseDialog:Dialog,Icon:true,Select:true}}
+beforeEach(()=>{vi.resetAllMocks();mocks.enabled.mockResolvedValue([attr()]);mocks.definitions.mockResolvedValue([attr()]);mocks.values.mockResolvedValue([]);mocks.updateDefinition.mockResolvedValue(attr());mocks.updateUser.mockResolvedValue({});mocks.apply.mockResolvedValue({affected:1})})
+
+describe('historical backlog current frontend behavior',()=>{
+ it('desired: numeric custom attribute stays a string accepted by the existing API',async()=>{
+  mocks.enabled.mockResolvedValue([attr('number')]);const w=mount(UserAttributeForm,{props:{modelValue:{}},global});await flushPromises()
+  await w.get('input[type="number"]').setValue('12.5')
+  expect((w.emitted('update:modelValue')!.at(-1)![0] as Record<number,unknown>)[1]).toBe('12.5')
+ })
+ it('control: text values keep the string API contract',async()=>{
+  const w=mount(UserAttributeForm,{props:{modelValue:{}},global});await flushPromises();await w.get('input').setValue('text')
+  expect((w.emitted('update:modelValue')!.at(-1)![0] as Record<number,unknown>)[1]).toBe('text')
+ })
+ it('desired: an old user response cannot replace the currently selected user',async()=>{
+  const old=deferred<any[]>();mocks.values.mockReturnValueOnce(old.promise).mockResolvedValueOnce([{attribute_id:1,value:'current-user'}])
+  const w=mount(UserAttributeForm,{props:{userId:1,modelValue:{}},global});await w.setProps({userId:2});await flushPromises()
+  old.resolve([{attribute_id:1,value:'old-user'}]);await flushPromises()
+  expect((w.get('input').element as HTMLInputElement).value).toBe('current-user')
+ })
+ it('desired: a user response completing after unmount does not emit edited values',async()=>{
+  const old=deferred<any[]>();mocks.values.mockReturnValue(old.promise)
+  const w=mount(UserAttributeForm,{props:{userId:1,modelValue:{}},global});await flushPromises();w.unmount();old.resolve([{attribute_id:1,value:'late-user'}]);await flushPromises()
+  expect(w.emitted('update:modelValue')).toBeUndefined()
+ })
+ it('desired: clearing attribute description and placeholder sends explicit empty strings',async()=>{
+  const w=mount(AttributeDefinitions,{props:{show:false},global});await w.setProps({show:true});await flushPromises()
+  await w.get('button[title="common.edit"]').trigger('click')
+  const form=w.get('#attribute-form');await form.get('input[placeholder="admin.users.attributes.descriptionHint"]').setValue('')
+  const inputs=form.findAll('input[type="text"]');await inputs.at(-1)!.setValue('')
+  await form.trigger('submit');await flushPromises();expect(mocks.updateDefinition).toHaveBeenCalledTimes(1)
+  const payload=mocks.updateDefinition.mock.calls[0]![1];expect(JSON.parse(JSON.stringify(payload))).toMatchObject({description:'',placeholder:''})
+ })
+ it('desired: a failed group load cannot submit an empty allowed_groups replacement',async()=>{
+  mocks.groups.mockRejectedValue(new Error('fixture load failed'))
+  const user={id:1,email:'fixture@example.test',allowed_groups:[7],group_rates:{7:0.5}}
+  const w=mount(AllowedGroups,{props:{show:false,user},global});await w.setProps({show:true});await flushPromises()
+  const save=w.findAll('button').find(b=>b.text().includes('common.save'))!;expect(save.exists()).toBe(true);await save.trigger('click');await flushPromises()
+  expect(mocks.updateUser).not.toHaveBeenCalled()
+ })
+ it('control: loaded group configuration can save its selected group',async()=>{
+  mocks.groups.mockResolvedValue({items:[{id:7,name:'fixture-group',platform:'openai',is_exclusive:true,subscription_type:'standard',status:'active',rate_multiplier:1}]})
+  const w=mount(AllowedGroups,{props:{show:false,user:{id:1,email:'fixture@example.test',allowed_groups:[7],group_rates:{}}},global});await w.setProps({show:true});await flushPromises()
+  await w.findAll('button').find(b=>b.text().includes('common.save'))!.trigger('click');await flushPromises();expect(mocks.updateUser).toHaveBeenCalledWith(1,expect.objectContaining({allowed_groups:[7]}))
+ })
+ it('desired: switching template ignores old monitor rows and applies only current IDs',async()=>{
+  const old=deferred<any>();mocks.monitors.mockReturnValueOnce(old.promise).mockResolvedValueOnce({items:[{id:2,name:'current-monitor',provider:'openai'}]})
+  const w=mount(TemplatePicker,{props:{show:true,templateId:1,templateName:'fixture'},global});await w.setProps({templateId:2});await flushPromises();old.resolve({items:[{id:1,name:'old-monitor',provider:'openai'}]});await flushPromises()
+  expect(w.text()).toContain('current-monitor');expect(w.text()).not.toContain('old-monitor')
+ })
+})
+
+describe('shared image upload read ownership',()=>{
+ class ControlledReader {
+  static readers:ControlledReader[]=[];onload:((e:any)=>void)|null=null;onerror:((e:any)=>void)|null=null;aborted=false
+  constructor(){ControlledReader.readers.push(this)} readAsDataURL(){} readAsText(){} abort(){this.aborted=true}
+  finish(value:string){if(!this.aborted)this.onload?.({target:{result:value}})}
+ }
+ beforeEach(()=>{ControlledReader.readers=[];vi.stubGlobal('FileReader',ControlledReader)})
+ afterEach(()=>vi.unstubAllGlobals())
+ async function choose(w:any,name:string){const input=w.get('input[type="file"]');Object.defineProperty(input.element,'files',{configurable:true,value:[new File(['fixture'],name,{type:'image/png'})]});await input.trigger('change')}
+ it('desired: choosing a second image prevents the first read from overwriting it',async()=>{
+  const w=shallowMount(ImageUpload,{props:{modelValue:''},global});await choose(w,'first.png');await choose(w,'second.png')
+  ControlledReader.readers[1]!.finish('data:image/png;base64,new');ControlledReader.readers[0]!.finish('data:image/png;base64,old');await nextTick()
+  expect(w.emitted('update:modelValue')!.at(-1)![0]).toBe('data:image/png;base64,new')
+ })
+ it('desired: removing an image cancels a pending read',async()=>{
+  const w=shallowMount(ImageUpload,{props:{modelValue:'existing'},global});await choose(w,'new.png');await w.get('button').trigger('click');ControlledReader.readers[0]!.finish('late-image');await nextTick()
+  expect(w.emitted('update:modelValue')!.at(-1)![0]).toBe('')
+ })
+ it('control: a single completed read emits the selected image',async()=>{
+  const w=shallowMount(ImageUpload,{props:{modelValue:''},global});await choose(w,'one.png');ControlledReader.readers[0]!.finish('selected-image');await nextTick()
+  expect(w.emitted('update:modelValue')!.at(-1)![0]).toBe('selected-image')
+ })
+})

@@ -1,0 +1,235 @@
+[
+  {
+    "topic": "codex_current_consumer",
+    "pattern": "newConfiguredCodexModelDescriptor|InstructionsTemplate|metadataModelID",
+    "paths": [
+      "backend/internal/service/openai_codex_models_service.go"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "371:\tInstructionsTemplate  string `json:\"instructions_template\"`",
+      "440:func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescriptor {",
+      "457:\t\tModelMessages:                     configuredCodexModelMessages{InstructionsTemplate: openai.CodexBaseInstructionsForModel(modelID)},",
+      "940:\t\tmetadataModelID := strings.TrimSpace(metadataModels[modelID])",
+      "941:\t\tif metadataModelID == \"\" {",
+      "942:\t\t\tmetadataModelID = modelID",
+      "944:\t\tif isCodexDedicatedMediaModel(modelID) || isCodexDedicatedMediaModel(metadataModelID) {",
+      "948:\t\tdescriptor := newConfiguredCodexModelDescriptor(metadataModelID)",
+      "959:\t\tif metadataModelID != modelID {",
+      "1011:\t\tmetadataModelID := resolveCodexCatalogMetadataModel(",
+      "1018:\t\tif metadataModelID != \"\" && metadataModelID != modelID {",
+      "1019:\t\t\tmetadataModels[modelID] = metadataModelID",
+      "1373:\t\trawModel, err := json.Marshal(newConfiguredCodexModelDescriptor(modelID))",
+      "2210:\t\tdescriptor := newConfiguredCodexModelDescriptor(slug)",
+      "2336:\t\tdescriptor := newConfiguredCodexModelDescriptor(slug)"
+    ],
+    "match_count": 15,
+    "truncated": false
+  },
+  {
+    "topic": "absent_picker_source",
+    "pattern": "FetchOpenAIAccountModels|projectAccountModelsBody",
+    "paths": [
+      "backend/internal/service"
+    ],
+    "exit_code": 1,
+    "matches": [],
+    "match_count": 0,
+    "truncated": false
+  },
+  {
+    "topic": "current_picker_alternative",
+    "pattern": "GetAvailableModels|Return mapped models|requestedModel|IsOpenAIPassthroughEnabled",
+    "paths": [
+      "backend/internal/handler/admin/account_handler.go"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "2633:// GetAvailableModels handles getting available models for an account",
+      "2635:func (h *AccountHandler) GetAvailableModels(c *gin.Context) {",
+      "2651:\t\tif account.IsOpenAIPassthroughEnabled() {",
+      "2662:\t\t// Return mapped models",
+      "2664:\t\tfor requestedModel := range mapping {",
+      "2667:\t\t\t\tif dm.ID == requestedModel {",
+      "2675:\t\t\t\t\tID:          requestedModel,",
+      "2678:\t\t\t\t\tDisplayName: requestedModel,",
+      "2708:\t\tfor requestedModel := range mapping {",
+      "2711:\t\t\t\tif dm.ID == requestedModel {",
+      "2719:\t\t\t\t\tID:          requestedModel,",
+      "2721:\t\t\t\t\tDisplayName: requestedModel,",
+      "2763:\t\trequestedModels := make([]string, 0, len(mapping))",
+      "2764:\t\tfor requestedModel := range mapping {",
+      "2765:\t\t\trequestedModels = append(requestedModels, requestedModel)",
+      "2767:\t\tsort.Strings(requestedModels)",
+      "2770:\t\tfor _, requestedModel := range requestedModels {",
+      "2771:\t\t\tif defaultModel, found := defaultByID[requestedModel]; found {",
+      "2776:\t\t\t\tID:          requestedModel,",
+      "2779:\t\t\t\tDisplayName: requestedModel,",
+      "2801:\t// Return mapped models (keys of the mapping are the available model IDs)",
+      "2803:\tfor requestedModel := range mapping {",
+      "2807:\t\t\tif dm.ID == requestedModel {",
+      "2816:\t\t\t\tID:          requestedModel,",
+      "2818:\t\t\t\tDisplayName: requestedModel,"
+    ],
+    "match_count": 25,
+    "truncated": false
+  },
+  {
+    "topic": "s3_plaintext_write",
+    "pattern": "func .*UpdateS3Config|func .*loadS3Config|encryptor.Encrypt|old.SecretAccessKey",
+    "paths": [
+      "backend/internal/service/backup_service.go"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "323:func (s *BackupService) UpdateS3Config(ctx context.Context, cfg BackupS3Config) (*BackupS3Config, error) {",
+      "328:\t\t\tcfg.SecretAccessKey = old.SecretAccessKey",
+      "337:\t\tencrypted, err := s.encryptor.Encrypt(cfg.SecretAccessKey)",
+      "367:\t\t\tcfg.SecretAccessKey = old.SecretAccessKey",
+      "1197:func (s *BackupService) loadS3Config(ctx context.Context) (*BackupS3Config, error) {"
+    ],
+    "match_count": 5,
+    "truncated": false
+  },
+  {
+    "topic": "s3_authenticated_route",
+    "pattern": "backup.PUT\\(\"/s3-config\"|backup.GET\\(\"/s3-config\"|func .*UpdateS3Config",
+    "paths": [
+      "backend/internal/server/routes/admin.go",
+      "backend/internal/handler/admin/backup_handler.go"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "backend/internal/handler/admin/backup_handler.go:35:func (h *BackupHandler) UpdateS3Config(c *gin.Context) {",
+      "backend/internal/server/routes/admin.go:538:\t\tbackup.GET(\"/s3-config\", h.Admin.Backup.GetS3Config)",
+      "backend/internal/server/routes/admin.go:540:\t\tbackup.PUT(\"/s3-config\", gin.HandlerFunc(stepUpAuth), h.Admin.Backup.UpdateS3Config)"
+    ],
+    "match_count": 3,
+    "truncated": false
+  },
+  {
+    "topic": "frontend_routes",
+    "pattern": "UsersView|ChannelMonitorView|ChannelStatusV1View|BackupView",
+    "paths": [
+      "frontend/src/router/index.ts"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "301:    component: () => import('@/views/admin/UsersView.vue'),",
+      "341:    component: () => import('@/views/admin/ChannelMonitorView.vue'),"
+    ],
+    "match_count": 2,
+    "truncated": false
+  },
+  {
+    "topic": "template_component_reachable",
+    "pattern": "MonitorTemplateManagerDialog|MonitorTemplateApplyPickerDialog",
+    "paths": [
+      "frontend/src/views/admin/ChannelMonitorView.vue",
+      "frontend/src/components/admin/monitor/MonitorTemplateManagerDialog.vue"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "frontend/src/components/admin/monitor/MonitorTemplateManagerDialog.vue:209:  <MonitorTemplateApplyPickerDialog",
+      "frontend/src/components/admin/monitor/MonitorTemplateManagerDialog.vue:245:import MonitorTemplateApplyPickerDialog from '@/components/admin/monitor/MonitorTemplateApplyPickerDialog.vue'",
+      "frontend/src/views/admin/ChannelMonitorView.vue:142:    <MonitorTemplateManagerDialog",
+      "frontend/src/views/admin/ChannelMonitorView.vue:191:import MonitorTemplateManagerDialog from '@/components/admin/monitor/MonitorTemplateManagerDialog.vue'"
+    ],
+    "match_count": 4,
+    "truncated": false
+  },
+  {
+    "topic": "unused_user_monitor_view",
+    "pattern": "ChannelStatusV1View|MonitorDetailDialog",
+    "paths": [
+      "frontend/src"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "frontend/src/views/user/ChannelStatusV1View.vue:22:    <MonitorDetailDialog",
+      "frontend/src/views/user/ChannelStatusV1View.vue:48:import MonitorDetailDialog from '@/components/user/MonitorDetailDialog.vue'",
+      "frontend/src/views/user/ChannelStatusView.vue:2:  <ChannelStatusV1View v-if=\"isV1\" />",
+      "frontend/src/views/user/ChannelStatusView.vue:9:import ChannelStatusV1View from './ChannelStatusV1View.vue'",
+      "frontend/src/views/user/__tests__/ChannelStatusV1View.details.spec.ts:3:import ChannelStatusV1View from '../ChannelStatusV1View.vue'",
+      "frontend/src/views/user/__tests__/ChannelStatusV1View.details.spec.ts:28:  return shallowMount(ChannelStatusV1View, {",
+      "frontend/src/views/user/__tests__/ChannelStatusV1View.refresh.spec.ts:3:import ChannelStatusV1View from '../ChannelStatusV1View.vue'",
+      "frontend/src/views/user/__tests__/ChannelStatusV1View.refresh.spec.ts:12:const mountView = () => shallowMount(ChannelStatusV1View, {",
+      "frontend/src/views/user/__tests__/ChannelStatusView.mode.spec.ts:11:vi.mock('../ChannelStatusV1View.vue', () => ({",
+      "frontend/src/views/user/__tests__/ChannelStatusView.mode.spec.ts:12:  default: defineComponent({ name: 'ChannelStatusV1View', setup: () => () => h('div', { 'data-testid': 'v1' }) }),"
+    ],
+    "match_count": 10,
+    "truncated": false
+  },
+  {
+    "topic": "attribute_wire_contract",
+    "pattern": "Values map\\[int64\\]string|Description \\*string|Placeholder \\*string|strconv.Atoi|UpdateUserAttributesRequest",
+    "paths": [
+      "backend/internal/handler/admin/user_attribute_handler.go",
+      "backend/internal/service/user_attribute_service.go"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "backend/internal/service/user_attribute_service.go:232:\t\tnum, err := strconv.Atoi(value)",
+      "backend/internal/handler/admin/user_attribute_handler.go:42:\tDescription *string                          `json:\"description\"`",
+      "backend/internal/handler/admin/user_attribute_handler.go:47:\tPlaceholder *string                          `json:\"placeholder\"`",
+      "backend/internal/handler/admin/user_attribute_handler.go:56:// UpdateUserAttributesRequest represents update user attributes request",
+      "backend/internal/handler/admin/user_attribute_handler.go:57:type UpdateUserAttributesRequest struct {",
+      "backend/internal/handler/admin/user_attribute_handler.go:58:\tValues map[int64]string `json:\"values\" binding:\"required\"`",
+      "backend/internal/handler/admin/user_attribute_handler.go:291:\tvar req UpdateUserAttributesRequest"
+    ],
+    "match_count": 7,
+    "truncated": false
+  },
+  {
+    "topic": "form_existing_call_chain",
+    "pattern": "UserAttributeForm|updateUserAttributeValues|const userId|UserAllowedGroupsModal",
+    "paths": [
+      "frontend/src/components/admin/user/UserEditModal.vue",
+      "frontend/src/views/admin/UsersView.vue"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "frontend/src/views/admin/UsersView.vue:766:    <UserAllowedGroupsModal :show=\"showAllowedGroupsModal\" :user=\"allowedGroupsUser\" @close=\"closeAllowedGroupsModal\" @success=\"loadUsers\" />",
+      "frontend/src/views/admin/UsersView.vue:809:import UserAllowedGroupsModal from '@/components/admin/user/UserAllowedGroupsModal.vue'",
+      "frontend/src/views/admin/UsersView.vue:1423:  const userIds = users.value.map((u) => u.id)",
+      "frontend/src/views/admin/UsersView.vue:1606:      const userIds = response.items.map((u) => u.id)",
+      "frontend/src/components/admin/user/UserEditModal.vue:68:      <UserAttributeForm v-model=\"form.customAttributes\" :user-id=\"user?.id\" />",
+      "frontend/src/components/admin/user/UserEditModal.vue:92:import UserAttributeForm from '@/components/user/UserAttributeForm.vue'",
+      "frontend/src/components/admin/user/UserEditModal.vue:134:  const userId = props.user.id",
+      "frontend/src/components/admin/user/UserEditModal.vue:141:    if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(userId, form.customAttributes)"
+    ],
+    "match_count": 8,
+    "truncated": false
+  },
+  {
+    "topic": "native_missing",
+    "pattern": "normalizeDeepSeekResponsesRequestBody|LiftResponsesToolOutputMedia|requiresSystemChatRole",
+    "paths": [
+      "backend/internal/service",
+      "backend/internal/pkg"
+    ],
+    "exit_code": 1,
+    "matches": [],
+    "match_count": 0,
+    "truncated": false
+  },
+  {
+    "topic": "setup_optional_cleanup",
+    "pattern": "rate_limit|RequestsPerMinute|BurstSize",
+    "paths": [
+      "backend/internal/setup/setup.go"
+    ],
+    "exit_code": 0,
+    "matches": [
+      "557:\t\t\tRequestsPerMinute int `yaml:\"requests_per_minute\"`",
+      "558:\t\t\tBurstSize         int `yaml:\"burst_size\"`",
+      "559:\t\t} `yaml:\"rate_limit\"`",
+      "584:\t\t\tRequestsPerMinute int `yaml:\"requests_per_minute\"`",
+      "585:\t\t\tBurstSize         int `yaml:\"burst_size\"`",
+      "587:\t\t\tRequestsPerMinute: 60,",
+      "588:\t\t\tBurstSize:         10,"
+    ],
+    "match_count": 7,
+    "truncated": false
+  }
+]

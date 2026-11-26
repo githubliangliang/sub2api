@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :show="show" :title="t('admin.users.groupConfig')" width="wide" @close="$emit('close')">
+  <BaseDialog :show="show" :title="t('admin.users.groupConfig')" width="wide" @close="closeDialog">
     <div v-if="user" class="space-y-6">
       <!-- 用户信息头部 -->
       <div class="flex items-center gap-4 rounded-2xl bg-gradient-to-r from-primary-50 to-primary-100 p-5 dark:from-primary-900/30 dark:to-primary-800/20">
@@ -20,7 +20,11 @@
         </svg>
       </div>
 
-      <div v-else class="space-y-6">
+      <div v-else-if="loadFailed" class="flex justify-center py-12">
+        <button @click="load" data-test="retry-groups" class="btn btn-secondary">{{ t('common.refresh') }}</button>
+      </div>
+
+      <div v-else-if="loaded" class="space-y-6">
         <!-- 专属分组区域 -->
         <div v-if="exclusiveGroups.length > 0">
           <div class="mb-3 flex items-center gap-2">
@@ -165,8 +169,8 @@
 
     <template #footer>
       <div class="flex justify-end gap-3">
-        <button @click="$emit('close')" class="btn btn-secondary px-5">{{ t('common.cancel') }}</button>
-        <button @click="handleSave" :disabled="submitting" class="btn btn-primary px-6">
+        <button @click="closeDialog" class="btn btn-secondary px-5">{{ t('common.cancel') }}</button>
+        <button @click="handleSave" :disabled="submitting || !loaded" class="btn btn-primary px-6">
           <svg v-if="submitting" class="-ml-1 mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -179,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -206,7 +210,31 @@ const groups = ref<Group[]>([])
 const groupConfigs = ref<GroupRateConfig[]>([])
 const originalGroupRates = ref<Record<number, number>>({}) // 记录原始专属倍率，用于检测删除
 const loading = ref(false)
+const loaded = ref(false)
+const loadFailed = ref(false)
 const submitting = ref(false)
+let requestVersion = 0
+let loadedUserId: number | null = null
+
+const isCurrent = (version: number, userId: number) =>
+  version === requestVersion && props.show && props.user?.id === userId
+
+const resetSession = () => {
+  requestVersion++
+  loadedUserId = null
+  loaded.value = false
+  loading.value = false
+  loadFailed.value = false
+  submitting.value = false
+  groups.value = []
+  groupConfigs.value = []
+  originalGroupRates.value = {}
+}
+
+const closeDialog = () => {
+  resetSession()
+  emit('close')
+}
 
 // 分离专属分组和公开分组
 const exclusiveGroups = computed(() => groups.value.filter((g) => g.is_exclusive))
@@ -215,26 +243,27 @@ const publicGroups = computed(() => groups.value.filter((g) => !g.is_exclusive))
 const exclusiveGroupConfigs = computed(() => groupConfigs.value.filter((c) => c.isExclusive))
 const publicGroupConfigs = computed(() => groupConfigs.value.filter((c) => !c.isExclusive))
 
-watch(
-  () => props.show,
-  (v) => {
-    if (v && props.user) {
-      load()
-    }
-  }
-)
-
 const load = async () => {
+  if (!props.show || !props.user) return
+  const version = ++requestVersion
+  const userId = props.user.id
+  const userAllowedGroups = [...(props.user.allowed_groups || [])]
+  const userGroupRates = { ...props.user.group_rates }
+  loaded.value = false
+  loadedUserId = null
+  loadFailed.value = false
   loading.value = true
+  submitting.value = false
+  groups.value = []
+  groupConfigs.value = []
+  originalGroupRates.value = {}
   try {
     const res = await adminAPI.groups.list(1, 1000)
+    if (!isCurrent(version, userId)) return
     // 只显示标准类型且活跃的分组
     groups.value = res.items.filter((g) => g.subscription_type === 'standard' && g.status === 'active')
 
     // 初始化配置
-    const userAllowedGroups = props.user?.allowed_groups || []
-    const userGroupRates = props.user?.group_rates || {}
-
     // 保存原始专属倍率，用于检测删除操作
     originalGroupRates.value = { ...userGroupRates }
 
@@ -249,12 +278,28 @@ const load = async () => {
       // 公开分组：始终选中
       isSelected: g.is_exclusive ? userAllowedGroups.includes(g.id) : true,
     }))
+    loadedUserId = userId
+    loaded.value = true
   } catch (error) {
-    console.error('Failed to load groups:', error)
+    if (isCurrent(version, userId)) {
+      loadFailed.value = true
+      console.error('Failed to load groups:', error)
+    }
   } finally {
-    loading.value = false
+    if (isCurrent(version, userId)) loading.value = false
   }
 }
+
+watch(
+  () => [props.show, props.user?.id],
+  () => {
+    resetSession()
+    if (props.show && props.user) load()
+  },
+  { immediate: true, flush: 'sync' }
+)
+
+onBeforeUnmount(resetSession)
 
 const toggleExclusiveGroup = (groupId: number) => {
   const config = groupConfigs.value.find((c) => c.groupId === groupId)
@@ -276,19 +321,23 @@ const updateCustomRate = (groupId: number, value: string) => {
 }
 
 const handleSave = async () => {
-  if (!props.user) return
+  if (!props.show || !props.user || !loaded.value || loadedUserId !== props.user.id || submitting.value) return
+  const version = requestVersion
+  const userId = loadedUserId
+  const configs = groupConfigs.value.map((config) => ({ ...config }))
+  const originalRates = { ...originalGroupRates.value }
   submitting.value = true
 
   try {
     // 构建 allowed_groups（仅包含专属分组中被勾选的）
-    const allowedGroups = groupConfigs.value.filter((c) => c.isExclusive && c.isSelected).map((c) => c.groupId)
+    const allowedGroups = configs.filter((c) => c.isExclusive && c.isSelected).map((c) => c.groupId)
 
     // 构建 group_rates
     // - 有新专属倍率: 设置为该值
     // - 原本有专属倍率但现在被清空: 设置为 null（表示删除）
     const groupRates: Record<number, number | null> = {}
-    for (const c of groupConfigs.value) {
-      const hadOriginalRate = originalGroupRates.value[c.groupId] !== undefined
+    for (const c of configs) {
+      const hadOriginalRate = originalRates[c.groupId] !== undefined
 
       if (c.customRate !== null) {
         // 有专属倍率
@@ -299,18 +348,19 @@ const handleSave = async () => {
       }
     }
 
-    await adminAPI.users.update(props.user.id, {
+    await adminAPI.users.update(userId, {
       allowed_groups: allowedGroups,
       group_rates: Object.keys(groupRates).length > 0 ? groupRates : undefined,
     })
 
+    if (!isCurrent(version, userId)) return
     appStore.showSuccess(t('admin.users.groupConfigUpdated'))
     emit('success')
     emit('close')
   } catch (error) {
-    console.error('Failed to update user group config:', error)
+    if (isCurrent(version, userId)) console.error('Failed to update user group config:', error)
   } finally {
-    submitting.value = false
+    if (isCurrent(version, userId)) submitting.value = false
   }
 }
 </script>

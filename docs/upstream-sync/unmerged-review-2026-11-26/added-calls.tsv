@@ -1,0 +1,550 @@
+candidate	path	symbol	added_by_candidate	local_declarations	line
+PR7308	backend/internal/service/openai_codex_models_service.go	codexInstructionsTemplateForModel	True		ModelMessages:                     configuredCodexModelMessages{InstructionsTemplate: codexInstructionsTemplateForModel(modelID)},
+PR7308	backend/internal/service/openai_codex_models_service.go	MustCompile	False		"{regexp.MustCompile(`,?\s*based on GPT-\d+(?:\.\d+)?(?:-[A-Za-z0-9]+)*`), """"},"
+PR7308	backend/internal/service/openai_codex_models_service.go	list	False	backend/internal/server/middleware/request_access_logger_test.go:26	// manifest can list (Gemini, Claude, DeepSeek, Grok, gpt-oss, custom aliases)
+PR7308	backend/internal/service/openai_codex_models_service.go	CodexBaseInstructionsForModel	False	backend/internal/pkg/openai/constants.go:185	base := openai.CodexBaseInstructionsForModel(modelID)
+PR7308	backend/internal/service/openai_codex_models_service.go	codexModelKeepsGPTIdentity	True		if codexModelKeepsGPTIdentity(modelID) {
+PR7308	backend/internal/service/openai_codex_models_service.go	ReplaceAllString	False		base = p.re.ReplaceAllString(base, p.repl)
+PR7308	backend/internal/service/openai_codex_models_service.go	isOpenAICodexGPTModel	False	backend/internal/service/openai_codex_models_service.go:670	return isOpenAICodexGPTModel(modelID) &&
+PR7308	backend/internal/service/openai_codex_models_service.go	HasPrefix	False		"!strings.HasPrefix(canonicalizeOpenAIModelAliasSpelling(modelID), ""gpt-oss"")"
+PR7308	backend/internal/service/openai_codex_models_service.go	canonicalizeOpenAIModelAliasSpelling	False	backend/internal/service/openai_model_alias.go:20	"!strings.HasPrefix(canonicalizeOpenAIModelAliasSpelling(modelID), ""gpt-oss"")"
+PR7308	backend/internal/service/openai_codex_models_service_test.go	Antigravity	False		// Antigravity(Google) 对「Codex 提示词 + GPT-5 身份」直接回 429 RESOURCE_EXHAUSTED。
+PR7308	backend/internal/service/openai_codex_models_service_test.go	TestBuildCodexModelsManifestStripsGPTIdentityForNonGPTModels	True		func TestBuildCodexModelsManifestStripsGPTIdentityForNonGPTModels(t *testing.T) {
+PR7308	backend/internal/service/openai_codex_models_service_test.go	Parallel	False		t.Parallel()
+PR7308	backend/internal/service/openai_codex_models_service_test.go	BuildCodexModelsManifest	False	backend/internal/service/openai_codex_models_service.go:823	body, err := BuildCodexModelsManifest(nonGPT)
+PR7308	backend/internal/service/openai_codex_models_service_test.go	NoError	False		require.NoError(t, err)
+PR7308	backend/internal/service/openai_codex_models_service_test.go	Unmarshal	False		require.NoError(t, json.Unmarshal(body, &manifest))
+PR7308	backend/internal/service/openai_codex_models_service_test.go	Len	False	backend/internal/service/gateway_request.go:76 | backend/internal/service/openai_account_scheduler.go:684	require.Len(t, manifest.Models, len(nonGPT))
+PR7308	backend/internal/service/openai_codex_models_service_test.go	len	False		require.Len(t, manifest.Models, len(nonGPT))
+PR7308	backend/internal/service/openai_codex_models_service_test.go	NotContains	False		"require.NotContains(t, tmpl, ""GPT-"", m.Slug)"
+PR7308	backend/internal/service/openai_codex_models_service_test.go	True	False		"require.True(t, strings.HasPrefix(tmpl, ""You are Codex""), ""%s: %.60q"", m.Slug, tmpl)"
+PR7308	backend/internal/service/openai_codex_models_service_test.go	HasPrefix	False		"require.True(t, strings.HasPrefix(tmpl, ""You are Codex""), ""%s: %.60q"", m.Slug, tmpl)"
+PR7308	backend/internal/service/openai_codex_models_service_test.go	CodexBaseInstructionsForModel	False	backend/internal/pkg/openai/constants.go:185	base := openai.CodexBaseInstructionsForModel(m.Slug)
+PR7308	backend/internal/service/openai_codex_models_service_test.go	Less	False	backend/internal/service/openai_account_scheduler.go:688	require.Less(t, len(base)-len(tmpl), 32, m.Slug)
+PR7308	backend/internal/service/openai_codex_models_service_test.go	TestBuildCodexModelsManifestKeepsGPTIdentityForGPTModels	True		func TestBuildCodexModelsManifestKeepsGPTIdentityForGPTModels(t *testing.T) {
+PR7308	backend/internal/service/openai_codex_models_service_test.go	Equal	False		require.Equal(t, openai.CodexBaseInstructionsForModel(model), codexInstructionsTemplateForModel(model), model)
+PR7308	backend/internal/service/openai_codex_models_service_test.go	codexInstructionsTemplateForModel	True		require.Equal(t, openai.CodexBaseInstructionsForModel(model), codexInstructionsTemplateForModel(model), model)
+PR7308	backend/internal/service/openai_codex_models_service_test.go	TestCodexGPTIdentityPatternsCoverBundledPrompts	True		func TestCodexGPTIdentityPatternsCoverBundledPrompts(t *testing.T) {
+PR7308	backend/internal/service/openai_codex_models_service_test.go	Contains	False		"require.Contains(t, tmpl, ""GPT-"", ""bundled prompt for %s changed; update this test"", model)"
+PR7308	backend/internal/service/openai_codex_models_service_test.go	ReplaceAllString	False		tmpl = p.re.ReplaceAllString(tmpl, p.repl)
+PR7491	backend/internal/service/account_test_models_test.go	TestFetchOpenAIAccountModelsAPIKeyAppliesAccountModelMapping	True		func TestFetchOpenAIAccountModelsAPIKeyAppliesAccountModelMapping(t *testing.T) {
+PR7491	backend/internal/service/account_test_models_test.go	newCodexModelsAPIKeyTestService	False	backend/internal/service/openai_codex_models_service_test.go:1515	gateway := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+PR7491	backend/internal/service/account_test_models_test.go	ordinaryModelsUpstreamResponse	False		"return ordinaryModelsUpstreamResponse(`{""data"":["
+PR7491	backend/internal/service/account_test_models_test.go	newCodexModelsAPIKeyTestAccount	False	backend/internal/service/openai_codex_models_service_test.go:1524	"account := newCodexModelsAPIKeyTestAccount(""https://models.example/v1"")"
+PR7491	backend/internal/service/account_test_models_test.go	FetchOpenAIAccountModels	False		models, err := svc.FetchOpenAIAccountModels(context.Background(), account)
+PR7491	backend/internal/service/account_test_models_test.go	Background	False		models, err := svc.FetchOpenAIAccountModels(context.Background(), account)
+PR7491	backend/internal/service/account_test_models_test.go	NoError	False		require.NoError(t, err)
+PR7491	backend/internal/service/account_test_models_test.go	Len	False	backend/internal/service/gateway_request.go:76 | backend/internal/service/openai_account_scheduler.go:684	require.Len(t, models, 2)
+PR7491	backend/internal/service/account_test_models_test.go	ElementsMatch	False		"require.ElementsMatch(t, []string{""configured-alias"", ""direct-model""}, ids)"
+PR7491	backend/internal/service/account_test_models_test.go	NotContains	False		"require.NotContains(t, ids, ""unconfigured-model"")"
+PR7491	backend/internal/service/account_test_models_test.go	Equal	False		"require.Equal(t, ""configured-alias"", alias.ID)"
+PR7491	backend/internal/service/account_test_models_test.go	EqualValues	False		require.EqualValues(t, 123, alias.Created)
+PR7491	backend/internal/service/account_test_models_test.go	absent	False		// slug is intentionally absent (see the exclusion test below).
+PR7491	backend/internal/service/account_test_models_test.go	pickerModelIDs	True		func pickerModelIDs(models []openai.Model) []string {
+PR7491	backend/internal/service/account_test_models_test.go	make	False		ids := make([]string, 0, len(models))
+PR7491	backend/internal/service/account_test_models_test.go	len	False		ids := make([]string, 0, len(models))
+PR7491	backend/internal/service/account_test_models_test.go	append	False		ids = append(ids, model.ID)
+PR7491	backend/internal/service/account_test_models_test.go	TestFetchOpenAIAccountModelsOAuthExcludesUnconfiguredTextModels	True		func TestFetchOpenAIAccountModelsOAuthExcludesUnconfiguredTextModels(t *testing.T) {
+PR7491	backend/internal/service/account_test_models_test.go	newCodexModelsOAuthCacheServer	False		"newCodexModelsOAuthCacheServer(t, `{""models"":[{""slug"":""gpt-5.6-sol""},{""slug"":""gpt-6-astra""}]}`)"
+PR7491	backend/internal/service/account_test_models_test.go	newCodexModelsTestAccount	False	backend/internal/service/openai_codex_models_service_test.go:1538	account := newCodexModelsTestAccount()
+PR7491	backend/internal/service/account_test_models_test.go	TestFetchOpenAIAccountModelsOAuthLocalImageAlias	True		func TestFetchOpenAIAccountModelsOAuthLocalImageAlias(t *testing.T) {
+PR7491	backend/internal/service/account_test_models_test.go	TestFetchOpenAIAccountModelsOAuthImageNamesMappedToText	True		func TestFetchOpenAIAccountModelsOAuthImageNamesMappedToText(t *testing.T) {
+PR7491	backend/internal/service/account_test_models_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	"t.Run(publicID+""/""+target, func(t *testing.T) {"
+PR7491	backend/internal/service/account_test_models_test.go	Empty	False		"require.Empty(t, models, ""a missing text target must not be synthesized as an image choice"")"
+PR7491	backend/internal/service/account_test_models_test.go	TestFetchOpenAIAccountModelsOAuthPassthroughIgnoresMappingTargets	True		func TestFetchOpenAIAccountModelsOAuthPassthroughIgnoresMappingTargets(t *testing.T) {
+PR7491	backend/internal/service/account_test_models_test.go	Contains	False		"require.Contains(t, ids, ""gpt-6-astra"", ""passthrough preserves the upstream catalog"")"
+PR7491	backend/internal/service/account_test_models_test.go	TestFetchOpenAIAccountModelsAPIKeyPassthroughIgnoresMapping	True		func TestFetchOpenAIAccountModelsAPIKeyPassthroughIgnoresMapping(t *testing.T) {
+PR7491	backend/internal/service/account_test_models_test.go	TestFetchOpenAIAccountModelsMappingChangesReuseRawCache	True		func TestFetchOpenAIAccountModelsMappingChangesReuseRawCache(t *testing.T) {
+PR7491	backend/internal/service/account_test_models_test.go	Add	False	backend/internal/service/grok_search_count.go:75 | backend/internal/handler/admin/account_codex_import.go:951	calls.Add(1)
+PR7491	backend/internal/service/account_test_models_test.go	FetchOpenAIModelsList	False		before, err := gateway.FetchOpenAIModelsList(ctx, account)
+PR7491	backend/internal/service/account_test_models_test.go	byte	False		original := append([]byte(nil), before.Body...)
+PR7491	backend/internal/service/account_test_models_test.go	Load	False	backend/internal/service/session_memory_cache.go:102 | backend/internal/config/config.go:1815	"require.EqualValues(t, 1, calls.Load(), ""both mappings must reuse the same discovery cache"")"
+PR7491	backend/internal/service/account_test_service.go	projectAccountModelsBody	False		projectedBody, err := projectAccountModelsBody(response.Body, account, nil, false)
+PR7491	backend/internal/service/account_test_service.go	Errorf	False	backend/internal/pkg/errors/errors.go:92	"return nil, fmt.Errorf(""project OpenAI account models: %w"", err)"
+PR7491	backend/internal/service/account_test_service.go	Unmarshal	False		if err := json.Unmarshal(projectedBody, &payload); err != nil {
+PR7491	backend/internal/service/account_test_service.go	IsOpenAIPassthroughEnabled	False	backend/internal/service/account.go:1859	passthrough := account.IsOpenAIPassthroughEnabled()
+PR7491	backend/internal/service/account_test_service.go	IsGPTImageGenerationModel	False	backend/internal/service/openai_images.go:466	if !passthrough && !IsGPTImageGenerationModel(account.GetMappedModel(model.ID)) {
+PR7491	backend/internal/service/account_test_service.go	GetMappedModel	False	backend/internal/service/account.go:948	if !passthrough && !IsGPTImageGenerationModel(account.GetMappedModel(model.ID)) {
+PR7491	backend/internal/service/account_test_service.go	GetModelMapping	False	backend/internal/service/account.go:603	for publicID := range account.GetModelMapping() {
+PR7491	backend/internal/service/account_test_service.go	Contains	False		"if strings.Contains(publicID, ""*"") || seen[publicID] {"
+PR7491	backend/internal/service/account_test_service.go	append	False		"payload.Data = append(payload.Data, openai.Model{ID: publicID, Object: ""model"", Type: ""model"", OwnedBy: ""openai"", DisplayName: openaiCodexDisplayName(publicID)})"
+PR7491	backend/internal/service/account_test_service.go	openaiCodexDisplayName	False	backend/internal/service/openai_codex_models_service.go:716	"payload.Data = append(payload.Data, openai.Model{ID: publicID, Object: ""model"", Type: ""model"", OwnedBy: ""openai"", DisplayName: openaiCodexDisplayName(publicID)})"
+PR7313	backend/internal/service/openai_gateway_cc_pipeline.go	ensureDeepSeekChatReasoningPlaceholders	True		body = ensureDeepSeekChatReasoningPlaceholders(account, body)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	import	False		import (
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	openaiPlatformDeepSeekAccount	True		func openaiPlatformDeepSeekAccount() *Account {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	string	False		openai_compat.ExtraKeyResponsesMode: string(openai_compat.ResponsesSupportModeForceChatCompletions),
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	deepSeekChatFallbackTestConfig	True		func deepSeekChatFallbackTestConfig() *config.Config {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	TestEnsureDeepSeekChatReasoningPlaceholders	True		func TestEnsureDeepSeekChatReasoningPlaceholders(t *testing.T) {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	byte	False		"missing := []byte(`{""model"":""deepseek-chat"",""messages"":[{""role"":""user"",""content"":""hi""},{""role"":""assistant"",""content"":"""",""tool_calls"":[{""id"":""call_1"",""type"":""function"",""function"":{""name"":""exec"",""arguments"":""{}""}}]},{""role"":""tool"",""tool_call_id"":""call_1"",""content"":""ok""}]}`)"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	"t.Run(""openai_platform_deepseek_fills_empty_assistant"", func(t *testing.T) {"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	ensureDeepSeekChatReasoningPlaceholders	True		got := ensureDeepSeekChatReasoningPlaceholders(deepSeekAccount, missing)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Equal	False		"require.Equal(t, deepSeekChatReasoningPlaceholderText, gjson.GetBytes(got, ""messages.1.reasoning_content"").String())"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	GetBytes	False		"require.Equal(t, deepSeekChatReasoningPlaceholderText, gjson.GetBytes(got, ""messages.1.reasoning_content"").String())"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"require.Equal(t, deepSeekChatReasoningPlaceholderText, gjson.GetBytes(got, ""messages.1.reasoning_content"").String())"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	False	False		"require.False(t, gjson.GetBytes(got, ""messages.0.reasoning_content"").Exists())"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Exists	False		"require.False(t, gjson.GetBytes(got, ""messages.0.reasoning_content"").Exists())"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	GetReasoningContent	True	backend/internal/service/openai_cyber_session_block_test.go:154 | backend/internal/service/openai_gateway_responses_chat_fallback_test.go:292 | backend/internal/service/gateway_hotpath_optimization_test.go:164 | backend/internal/service/openai_gateway_service_test.go:772	func (c *reasoningHitCache) GetReasoningContent(_ context.Context, itemID string) (string, error) {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	deepSeekChatHistoryWithEncryptedReasoning	True		func deepSeekChatHistoryWithEncryptedReasoning() []byte {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	newDeepSeekChatFallbackContext	True		func newDeepSeekChatFallbackContext(t *testing.T, body []byte) *gin.Context {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Helper	False		t.Helper()
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	SetMode	False		gin.SetMode(gin.TestMode)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	NewRecorder	False		rec := httptest.NewRecorder()
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	CreateTestContext	False		c, _ := gin.CreateTestContext(rec)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	NewRequest	False		"c.Request = httptest.NewRequest(http.MethodPost, ""/v1/responses"", bytes.NewReader(body))"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	NewReader	False		"c.Request = httptest.NewRequest(http.MethodPost, ""/v1/responses"", bytes.NewReader(body))"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Set	False	backend/internal/handler/ops_error_logger_test.go:32 | backend/internal/handler/ops_error_logger_test.go:1385 | backend/internal/handler/image_task_admin_toggle_test.go:33 | backend/internal/handler/passkey_handler_test.go:51	"c.Request.Header.Set(""Content-Type"", ""application/json"")"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	newOKChatCompletionsUpstream	True		func newOKChatCompletionsUpstream(requestID, body string) *httpUpstreamRecorder {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	NopCloser	False		Body:       io.NopCloser(strings.NewReader(body)),
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	TestForwardResponses_DeepSeekChatFallbackInjectsReasoningPlaceholderOnCacheMiss	True		func TestForwardResponses_DeepSeekChatFallbackInjectsReasoningPlaceholderOnCacheMiss(t *testing.T) {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Forward	False	backend/internal/service/gemini_messages_compat_service.go:583 | backend/internal/service/gateway_forward.go:122 | backend/internal/service/antigravity_gateway_claude.go:30 | backend/internal/service/openai_gateway_forward.go:54	result, err := svc.Forward(context.Background(), c, openaiPlatformDeepSeekAccount(), body)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Background	False		result, err := svc.Forward(context.Background(), c, openaiPlatformDeepSeekAccount(), body)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	NoError	False		require.NoError(t, err)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	NotNil	False		require.NotNil(t, result)
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	Contains	False		"require.Contains(t, upstream.lastReq.URL.String(), ""/chat/completions"")"
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	TestForwardResponses_DeepSeekChatFallbackKeepsCachedReasoningContent	True		func TestForwardResponses_DeepSeekChatFallbackKeepsCachedReasoningContent(t *testing.T) {
+PR7313	backend/internal/service/openai_gateway_deepseek_chat_reasoning_test.go	TestForwardResponses_NonDeepSeekChatFallbackDoesNotInjectReasoningPlaceholder	True		func TestForwardResponses_NonDeepSeekChatFallbackDoesNotInjectReasoningPlaceholder(t *testing.T) {
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	targetsDeepSeekAPIHost	True		func targetsDeepSeekAPIHost(account *Account) bool {
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	Parse	False	backend/internal/pkg/proxyurl/parse.go:36	u, err := url.Parse(strings.TrimSpace(account.GetOpenAIBaseURL()))
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	TrimSpace	False		u, err := url.Parse(strings.TrimSpace(account.GetOpenAIBaseURL()))
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	GetOpenAIBaseURL	False	backend/internal/service/account.go:1420	u, err := url.Parse(strings.TrimSpace(account.GetOpenAIBaseURL()))
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	EqualFold	False		return strings.EqualFold(u.Hostname(), ds.Hostname())
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	Hostname	False		return strings.EqualFold(u.Hostname(), ds.Hostname())
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	ensureDeepSeekChatReasoningPlaceholders	True		func ensureDeepSeekChatReasoningPlaceholders(account *Account, body []byte) []byte {
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	GetBytes	False		"messages := gjson.GetBytes(body, ""messages"")"
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	IsArray	False		if !messages.IsArray() {
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	Array	False		for i, msg := range messages.Array() {
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	Get	False	backend/internal/handler/model_plaza_handler.go:105 | backend/internal/handler/batch_image_handler.go:93 | backend/internal/handler/image_task_admin_toggle_test.go:26 | backend/internal/handler/image_task_handler_test.go:33	"if strings.TrimSpace(msg.Get(""role"").String()) != ""assistant"" {"
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"if strings.TrimSpace(msg.Get(""role"").String()) != ""assistant"" {"
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	SetBytes	False		"next, err := sjson.SetBytes(updated, ""messages.""+strconv.Itoa(i)+"".reasoning_content"", deepSeekChatReasoningPlaceholderText)"
+PR7313	backend/internal/service/openai_gateway_responses_chat_fallback.go	Itoa	False		"next, err := sjson.SetBytes(updated, ""messages.""+strconv.Itoa(i)+"".reasoning_content"", deepSeekChatReasoningPlaceholderText)"
+PR7224	backend/internal/service/openai_chat_roles.go	import	False		import (
+PR7224	backend/internal/service/openai_chat_roles.go	requiresSystemChatRole	True		func requiresSystemChatRole(account *Account, targetURL string) bool {
+PR7224	backend/internal/service/openai_chat_roles.go	Parse	False	backend/internal/pkg/proxyurl/parse.go:36	u, err := url.Parse(targetURL)
+PR7224	backend/internal/service/openai_chat_roles.go	ToLower	False		switch strings.ToLower(u.Hostname()) {
+PR7224	backend/internal/service/openai_chat_roles.go	Hostname	False		switch strings.ToLower(u.Hostname()) {
+PR7224	backend/internal/service/openai_chat_roles.go	normalizeStrictChatDeveloperRoles	True		func normalizeStrictChatDeveloperRoles(account *Account, targetURL string, body []byte) ([]byte, error) {
+PR7224	backend/internal/service/openai_chat_roles.go	Unmarshal	False		if json.Unmarshal(body, &root) != nil || root == nil {
+PR7224	backend/internal/service/openai_chat_roles.go	New	False	backend/internal/pkg/redissession/store.go:22 | backend/internal/pkg/servertiming/collector.go:48 | backend/internal/pkg/errors/errors.go:76	"return nil, errors.New(""chat role normalization: invalid request object"")"
+PR7224	backend/internal/service/openai_chat_roles.go	RawMessage	False		"message[""role""] = json.RawMessage(`""system""`)"
+PR7224	backend/internal/service/openai_chat_roles.go	Marshal	False		updated, err := json.Marshal(message)
+PR7224	backend/internal/service/openai_chat_roles_test.go	import	False		import (
+PR7224	backend/internal/service/openai_chat_roles_test.go	Do	True	backend/internal/handler/tier223_protocol_sqlite_test.go:79 | backend/internal/handler/openai_gateway_ws_composite_test.go:26 | backend/internal/handler/openai_images_native_route_test.go:35 | backend/internal/handler/gemini_stream_abort_sqlite_test.go:53	func (u *chatRoleContractUpstream) Do(req *http.Request, proxyURL string, accountID int64, concurrency int) (*http.Response, error) {
+PR7224	backend/internal/service/openai_chat_roles_test.go	ReadAll	False		body, err := io.ReadAll(req.Body)
+PR7224	backend/internal/service/openai_chat_roles_test.go	NopCloser	False		req.Body = io.NopCloser(bytes.NewReader(body))
+PR7224	backend/internal/service/openai_chat_roles_test.go	NewReader	False		req.Body = io.NopCloser(bytes.NewReader(body))
+PR7224	backend/internal/service/openai_chat_roles_test.go	GetBytes	False		"for _, message := range gjson.GetBytes(body, ""messages"").Array() {"
+PR7224	backend/internal/service/openai_chat_roles_test.go	Array	False		"for _, message := range gjson.GetBytes(body, ""messages"").Array() {"
+PR7224	backend/internal/service/openai_chat_roles_test.go	Get	False	backend/internal/handler/model_plaza_handler.go:105 | backend/internal/handler/batch_image_handler.go:93 | backend/internal/handler/image_task_admin_toggle_test.go:26 | backend/internal/handler/image_task_handler_test.go:33	"if message.Get(""role"").String() == ""developer"" {"
+PR7224	backend/internal/service/openai_chat_roles_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"if message.Get(""role"").String() == ""developer"" {"
+PR7224	backend/internal/service/openai_chat_roles_test.go	Bool	False		"if status == http.StatusOK && gjson.GetBytes(body, ""stream"").Bool() {"
+PR7224	backend/internal/service/openai_chat_roles_test.go	TestForwardAsChatCompletions_StrictDeveloperRole	True		func TestForwardAsChatCompletions_StrictDeveloperRole(t *testing.T) {
+PR7224	backend/internal/service/openai_chat_roles_test.go	SetMode	False		gin.SetMode(gin.TestMode)
+PR7224	backend/internal/service/openai_chat_roles_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	"t.Run(fmt.Sprintf(""%s/%s/%s/stream=%t"", target.platform, target.model, target.base, stream), func(t *testing.T) {"
+PR7224	backend/internal/service/openai_chat_roles_test.go	Sprintf	False		"t.Run(fmt.Sprintf(""%s/%s/%s/stream=%t"", target.platform, target.model, target.base, stream), func(t *testing.T) {"
+PR7224	backend/internal/service/openai_chat_roles_test.go	byte	False		"body := []byte(fmt.Sprintf(`{""model"":""example-alias"",""messages"":[{""role"":""developer"",""content"":""Keep these instructions.""},{""role"":""user"",""content"":""ping""}],""stream"":%t,""max_tokens"":10}`, stream))"
+PR7224	backend/internal/service/openai_chat_roles_test.go	Clone	False	backend/internal/securityaudit/prompt_types.go:86 | backend/internal/service/channel.go:191 | backend/internal/service/channel.go:205 | backend/internal/pkg/errors/errors.go:124	original := bytes.Clone(body)
+PR7224	backend/internal/service/openai_chat_roles_test.go	rawChatCompletionsTestConfig	False	backend/internal/service/openai_gateway_chat_completions_test_helpers_test.go:4	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+PR7224	backend/internal/service/openai_chat_roles_test.go	rawChatCompletionsTestAccount	False	backend/internal/service/openai_gateway_chat_completions_test_helpers_test.go:15	account := rawChatCompletionsTestAccount()
+PR7224	backend/internal/service/openai_chat_roles_test.go	NewRecorder	False		recorder := httptest.NewRecorder()
+PR7224	backend/internal/service/openai_chat_roles_test.go	CreateTestContext	False		c, _ := gin.CreateTestContext(recorder)
+PR7224	backend/internal/service/openai_chat_roles_test.go	NewRequest	False		"c.Request = httptest.NewRequest(http.MethodPost, ""/v1/chat/completions"", bytes.NewReader(body))"
+PR7224	backend/internal/service/openai_chat_roles_test.go	ForwardAsChatCompletions	False	backend/internal/service/gateway_forward_as_chat_completions.go:29 | backend/internal/service/gemini_chat_completions_compat_service.go:27 | backend/internal/service/openai_gateway_chat_completions.go:100 | backend/internal/service/antigravity_gateway_compat.go:57	"result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, """", """")"
+PR7224	backend/internal/service/openai_chat_roles_test.go	Background	False		"result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, """", """")"
+PR7224	backend/internal/service/openai_chat_roles_test.go	NoError	False		require.NoError(t, err)
+PR7224	backend/internal/service/openai_chat_roles_test.go	NotNil	False		require.NotNil(t, result)
+PR7224	backend/internal/service/openai_chat_roles_test.go	Equal	False		require.Equal(t, 9, result.Usage.InputTokens)
+PR7224	backend/internal/service/openai_chat_roles_test.go	Contains	False		"require.Contains(t, recorder.Body.String(), ""pong"")"
+PR7224	backend/internal/service/openai_chat_roles_test.go	TestNormalizeStrictChatDeveloperRoles_PreservesConversation	True		func TestNormalizeStrictChatDeveloperRoles_PreservesConversation(t *testing.T) {
+PR7224	backend/internal/service/openai_chat_roles_test.go	ReplaceAll	False		"want := strings.ReplaceAll(string(body), `""role"":""developer"",""content""`, `""role"":""system"",""content""`)"
+PR7224	backend/internal/service/openai_chat_roles_test.go	string	False		"want := strings.ReplaceAll(string(body), `""role"":""developer"",""content""`, `""role"":""system"",""content""`)"
+PR7224	backend/internal/service/openai_chat_roles_test.go	normalizeStrictChatDeveloperRoles	True		"got, err := normalizeStrictChatDeveloperRoles(account, ""https://relay.example.test/v1/chat/completions"", body)"
+PR7224	backend/internal/service/openai_chat_roles_test.go	JSONEq	False		require.JSONEq(t, want, string(got))
+PR7224	backend/internal/service/openai_chat_roles_test.go	TestNormalizeStrictChatDeveloperRoles_ExactOfficialHosts	True		func TestNormalizeStrictChatDeveloperRoles_ExactOfficialHosts(t *testing.T) {
+PR7224	backend/internal/service/openai_chat_roles_test.go	TestNormalizeStrictChatDeveloperRoles_OtherTargetsUntouched	True		func TestNormalizeStrictChatDeveloperRoles_OtherTargetsUntouched(t *testing.T) {
+PR7224	backend/internal/service/openai_chat_roles_test.go	TestNormalizeStrictChatDeveloperRoles_CompatibleBodyUntouched	True		func TestNormalizeStrictChatDeveloperRoles_CompatibleBodyUntouched(t *testing.T) {
+PR7224	backend/internal/service/openai_chat_roles_test.go	TestNormalizeStrictChatDeveloperRoles_MalformedBodyDoesNotLeak	True		func TestNormalizeStrictChatDeveloperRoles_MalformedBodyDoesNotLeak(t *testing.T) {
+PR7224	backend/internal/service/openai_chat_roles_test.go	Error	False	backend/internal/model/error_passthrough_rule.go:73 | backend/internal/handler/gateway_helper.go:127 | backend/internal/handler/gateway_helper.go:138 | backend/internal/handler/auth_linuxdo_oauth.go:67	require.Error(t, err)
+PR7224	backend/internal/service/openai_chat_roles_test.go	NotContains	False		"require.NotContains(t, err.Error(), ""secret"")"
+PR7224	backend/internal/service/openai_gateway_chat_completions_raw.go	normalizeStrictChatDeveloperRoles	True		upstreamBody, err = normalizeStrictChatDeveloperRoles(account, targetURL, upstreamBody)
+PR7224	backend/internal/service/openai_gateway_chat_completions_raw.go	writeChatCompletionsError	False	backend/internal/service/gemini_chat_completions_compat_service.go:904 | backend/internal/service/openai_gateway_chat_completions.go:1328	"writeChatCompletionsError(c, http.StatusBadRequest, ""invalid_request_error"", err.Error())"
+PR7224	backend/internal/service/openai_gateway_chat_completions_raw.go	Error	False	backend/internal/model/error_passthrough_rule.go:73 | backend/internal/handler/gateway_helper.go:127 | backend/internal/handler/gateway_helper.go:138 | backend/internal/handler/auth_linuxdo_oauth.go:67	"writeChatCompletionsError(c, http.StatusBadRequest, ""invalid_request_error"", err.Error())"
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	import	False		import (
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	LiftResponsesToolOutputMedia	True		func LiftResponsesToolOutputMedia(input any) (any, bool) {
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	make	False		rewritten := make([]any, 0, len(items)+1)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	len	False		rewritten := make([]any, 0, len(items)+1)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	isResponsesToolOutputItem	True		if !ok || !isResponsesToolOutputItem(item) {
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	append	False		rewritten = append(rewritten, items[index])
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	liftResponsesToolOutputMediaItem	True		rewrittenItem, media, didRewrite := liftResponsesToolOutputMediaItem(item)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	isResponsesToolBatchInstruction	True		if isResponsesToolBatchInstruction(item) {
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	buildResponsesToolOutputMediaMessage	True		rewritten = append(rewritten, buildResponsesToolOutputMediaMessage(pending))
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	Marshal	False		outputRaw, err := json.Marshal(output)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	extractToolOutputMedia	False	backend/internal/pkg/apicompat/chatcompletions_responses_bridge.go:681	outputText, media, didRewrite := extractToolOutputMedia(outputRaw)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	TrimSpace	False		"callID := strings.TrimSpace(stringValue(item[""call_id""]))"
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	stringValue	False	backend/internal/securityaudit/prompt_snapshot.go:647 | backend/internal/service/openai_gateway_grok_compact.go:229 | backend/internal/pkg/apicompat/responses_namespace.go:208	"callID := strings.TrimSpace(stringValue(item[""call_id""]))"
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media.go	Sprintf	False		text = fmt.Sprintf(toolOutputMediaAttribution, media.callID)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	import	False		import (
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	TestLiftResponsesToolOutputMedia	True		func TestLiftResponsesToolOutputMedia(t *testing.T) {
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	NoError	False		require.NoError(t, json.Unmarshal([]byte(`[
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	Unmarshal	False		require.NoError(t, json.Unmarshal([]byte(`[
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	byte	False		require.NoError(t, json.Unmarshal([]byte(`[
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	LiftResponsesToolOutputMedia	True		lifted, changed := LiftResponsesToolOutputMedia(input)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	True	False		require.True(t, changed)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	Len	False	backend/internal/service/gateway_request.go:76 | backend/internal/service/openai_account_scheduler.go:684	require.Len(t, items, 3)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	Contains	False		require.Contains(t, outputText, toolOutputMediaMarker)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	NotContains	False		"require.NotContains(t, outputText, ""data:image/png"")"
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	Equal	False		"require.Equal(t, ""message"", mediaMessage[""type""])"
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	TestLiftResponsesToolOutputMediaLeavesPlainOutputUntouched	True		func TestLiftResponsesToolOutputMediaLeavesPlainOutputUntouched(t *testing.T) {
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	False	False		require.False(t, changed)
+PR7246	backend/internal/pkg/apicompat/responses_tool_output_media_test.go	TestLiftResponsesToolOutputMediaKeepsParallelBatchContiguous	True		func TestLiftResponsesToolOutputMediaKeepsParallelBatchContiguous(t *testing.T) {
+PR7246	backend/internal/service/cn_providers_test.go	byte	False		"mediaBody := []byte(`{""model"":""deepseek-v4.1-flash"",""store"":true,""input"":[{""type"":""function_call"",""call_id"":""call_image"",""name"":""view_image"",""arguments"":""{}""},{""type"":""function_call_output"",""call_id"":""call_image"",""output"":[{""type"":""input_image"",""image_url"":""data:image/png;base64,AQID""}]}]}`)"
+PR7246	backend/internal/service/cn_providers_test.go	normalizeDeepSeekResponsesRequestBody	False		mediaNormalized := normalizeDeepSeekResponsesRequestBody(deepseekResponses, mediaBody)
+PR7246	backend/internal/service/cn_providers_test.go	False	False		"require.False(t, gjson.GetBytes(mediaNormalized, ""store"").Bool())"
+PR7246	backend/internal/service/cn_providers_test.go	GetBytes	False		"require.False(t, gjson.GetBytes(mediaNormalized, ""store"").Bool())"
+PR7246	backend/internal/service/cn_providers_test.go	Bool	False		"require.False(t, gjson.GetBytes(mediaNormalized, ""store"").Bool())"
+PR7246	backend/internal/service/cn_providers_test.go	Equal	False		"require.Equal(t, gjson.String, gjson.GetBytes(mediaNormalized, ""input.1.output"").Type)"
+PR7246	backend/internal/service/cn_providers_test.go	NotContains	False		"require.NotContains(t, gjson.GetBytes(mediaNormalized, ""input.1.output"").String(), ""data:image/png"")"
+PR7246	backend/internal/service/cn_providers_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"require.NotContains(t, gjson.GetBytes(mediaNormalized, ""input.1.output"").String(), ""data:image/png"")"
+PR7246	backend/internal/service/openai_gateway_request_body.go	decodeOpenAIJSONUseNumber	False	backend/internal/service/openai_json_decode.go:9	if err := decodeOpenAIJSONUseNumber(normalized, &requestBody); err != nil {
+PR7246	backend/internal/service/openai_gateway_request_body.go	LiftResponsesToolOutputMedia	True		liftedInput, changed := apicompat.LiftResponsesToolOutputMedia(input)
+PR7246	backend/internal/service/openai_gateway_request_body.go	marshalOpenAIUpstreamJSON	False	backend/internal/service/openai_gateway_upstream_errors.go:375	rebuilt, err := marshalOpenAIUpstreamJSON(requestBody)
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	import	False		import (
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	openaiMappedDeepSeekResponsesImageAccount	True		func openaiMappedDeepSeekResponsesImageAccount() *Account {
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	deepSeekNativeResponsesImageAccount	True		func deepSeekNativeResponsesImageAccount() *Account {
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	deepSeekUserImageBody	True		func deepSeekUserImageBody(partJSON string) []byte {
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	byte	False		"return []byte(`{""model"":""deepseek-flash"",""store"":true,""input"":[{""type"":""message"",""role"":""user"",""content"":[{""type"":""input_text"",""text"":""what is this?""},` + partJSON + `]}]}`)"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	TestNormalizeDeepSeekResponsesRequestBodyAliasesInputImageURL	True		func TestNormalizeDeepSeekResponsesRequestBodyAliasesInputImageURL(t *testing.T) {
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Parallel	False		t.Parallel()
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	"t.Run(""openai_image_url_string_gets_url"", func(t *testing.T) {"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	normalizeDeepSeekResponsesRequestBody	False		got := normalizeDeepSeekResponsesRequestBody(mapped, body)
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Equal	False		"require.Equal(t, ""input_image"", gjson.GetBytes(got, ""input.0.content.1.type"").String())"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	GetBytes	False		"require.Equal(t, ""input_image"", gjson.GetBytes(got, ""input.0.content.1.type"").String())"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"require.Equal(t, ""input_image"", gjson.GetBytes(got, ""input.0.content.1.type"").String())"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	True	False		"require.True(t, gjson.GetBytes(got, ""store"").Bool(), ""mapped openai 账号不应被无状态适配改掉 store"")"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Bool	False		"require.True(t, gjson.GetBytes(got, ""store"").Bool(), ""mapped openai 账号不应被无状态适配改掉 store"")"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	False	False		"require.False(t, gjson.GetBytes(got, ""input.0.content.1.url"").Exists())"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Exists	False		"require.False(t, gjson.GetBytes(got, ""input.0.content.1.url"").Exists())"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	string	False		require.Equal(t, string(body), string(got))
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	TestForwardResponses_OpenAIMappedDeepSeekAliasesInputImageURL	True		func TestForwardResponses_OpenAIMappedDeepSeekAliasesInputImageURL(t *testing.T) {
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	newDeepSeekChatFallbackContext	False		c := newDeepSeekChatFallbackContext(t, body)
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	NopCloser	False		Body: io.NopCloser(bytes.NewReader([]byte(
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	NewReader	False		Body: io.NopCloser(bytes.NewReader([]byte(
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	deepSeekChatFallbackTestConfig	False		cfg:          deepSeekChatFallbackTestConfig(),
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Forward	False	backend/internal/service/gemini_messages_compat_service.go:583 | backend/internal/service/gateway_forward.go:122 | backend/internal/service/antigravity_gateway_claude.go:30 | backend/internal/service/openai_gateway_forward.go:54	result, err := svc.Forward(context.Background(), c, openaiMappedDeepSeekResponsesImageAccount(), body)
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Background	False		result, err := svc.Forward(context.Background(), c, openaiMappedDeepSeekResponsesImageAccount(), body)
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	NoError	False		require.NoError(t, err)
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	NotNil	False		require.NotNil(t, result)
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	Contains	False		"require.Contains(t, upstream.lastReq.URL.String(), ""/responses"")"
+PR7354	backend/internal/service/openai_gateway_deepseek_input_image_test.go	TestForwardResponses_NativeDeepSeekAliasesInputImageURL	True		func TestForwardResponses_NativeDeepSeekAliasesInputImageURL(t *testing.T) {
+PR7354	backend/internal/service/openai_gateway_request_body.go	UsesNativeCNResponses	False		applyStateless := account.UsesNativeCNResponses()
+PR7354	backend/internal/service/openai_gateway_request_body.go	shouldAliasDeepSeekResponsesInputImages	True		applyImages := shouldAliasDeepSeekResponsesInputImages(account)
+PR7354	backend/internal/service/openai_gateway_request_body.go	SetBytes	False		"patched, err := sjson.SetBytes(normalized, ""store"", false)"
+PR7354	backend/internal/service/openai_gateway_request_body.go	DeleteBytes	False		"if stripped, err := sjson.DeleteBytes(normalized, ""previous_response_id""); err == nil {"
+PR7354	backend/internal/service/openai_gateway_request_body.go	LiftResponsesToolOutputMedia	False		if liftedInput, lifted := apicompat.LiftResponsesToolOutputMedia(input); lifted {
+PR7354	backend/internal/service/openai_gateway_request_body.go	aliasDeepSeekResponsesInputImages	True		if aliased, aliasedChanged := aliasDeepSeekResponsesInputImages(input); aliasedChanged {
+PR7354	backend/internal/service/openai_gateway_request_body.go	targetsDeepSeekAPIHost	False		return targetsDeepSeekAPIHost(account)
+PR7354	backend/internal/service/openai_gateway_request_body.go	asDeepSeekResponsesSlice	True		items, ok := asDeepSeekResponsesSlice(input)
+PR7354	backend/internal/service/openai_gateway_request_body.go	aliasDeepSeekResponsesInputItem	True		if aliasDeepSeekResponsesInputItem(item) {
+PR7354	backend/internal/service/openai_gateway_request_body.go	aliasDeepSeekResponsesImagePart	True		changed := aliasDeepSeekResponsesImagePart(item)
+PR7354	backend/internal/service/openai_gateway_request_body.go	aliasDeepSeekResponsesContent	True		if rewritten, did := aliasDeepSeekResponsesContent(content); did {
+PR7354	backend/internal/service/openai_gateway_request_body.go	TrimSpace	False		"partType := strings.TrimSpace(stringValue(part[""type""]))"
+PR7354	backend/internal/service/openai_gateway_request_body.go	stringValue	False	backend/internal/securityaudit/prompt_snapshot.go:647 | backend/internal/service/openai_gateway_grok_compact.go:229 | backend/internal/pkg/apicompat/responses_namespace.go:208	"partType := strings.TrimSpace(stringValue(part[""type""]))"
+PR7354	backend/internal/service/openai_gateway_request_body.go	extractDeepSeekResponsesImageURL	True		imageURL := extractDeepSeekResponsesImageURL(part)
+PR7354	backend/internal/service/openai_gateway_request_body.go	deepSeekResponsesURLValue	True		"if imageURL := deepSeekResponsesURLValue(part[""url""]); imageURL != """" {"
+PR7354	backend/internal/service/openai_gateway_request_body.go	HasPrefix	False		"if strings.HasPrefix(strings.ToLower(data), ""data:"") {"
+PR7354	backend/internal/service/openai_gateway_request_body.go	ToLower	False		"if strings.HasPrefix(strings.ToLower(data), ""data:"") {"
+PR7354	backend/internal/service/openai_gateway_request_body.go	make	False		out := make([]any, len(items))
+PR7354	backend/internal/service/openai_gateway_request_body.go	len	False		out := make([]any, len(items))
+PR7394	backend/internal/service/gateway_request.go	isFinalAnswerReserveError	True		if isFinalAnswerReserveError(m) {
+PR7394	backend/internal/service/gateway_request.go	ToLower	False		m := strings.ToLower(errMsg)
+PR7394	backend/internal/service/gateway_request.go	Contains	False		"return strings.Contains(m, ""must be greater than 1024 to reserve tokens for a final answer"") &&"
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	import	False		import (
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	provider	False		"const basetenBudgetError = ""Error from provider (Console Go): Upstream request failed: [invalid_request_error] must be greater than 1024 to reserve tokens for a final answer when Baseten reasoning is enabled"""
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	TestThinkingBudgetConstraintErrors	True		func TestThinkingBudgetConstraintErrors(t *testing.T) {
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	t.Run(tc.message, func(t *testing.T) {
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	Equal	False		require.Equal(t, tc.want, isThinkingBudgetConstraintError(tc.message))
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	isThinkingBudgetConstraintError	False	backend/internal/service/gateway_request.go:1875	require.Equal(t, tc.want, isThinkingBudgetConstraintError(tc.message))
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	TestRectifyThinkingBudgetFinalAnswerReserve	True		func TestRectifyThinkingBudgetFinalAnswerReserve(t *testing.T) {
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	Sprint	False		t.Run(fmt.Sprint(tc.maxTokens), func(t *testing.T) {
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	byte	False		"body := []byte(fmt.Sprintf(`{""model"":""example"",""max_tokens"":%d,""thinking"":{""type"":""enabled"",""budget_tokens"":32000},""messages"":[{""role"":""user"",""content"":""hi""}]}`, tc.maxTokens))"
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	Sprintf	False		"body := []byte(fmt.Sprintf(`{""model"":""example"",""max_tokens"":%d,""thinking"":{""type"":""enabled"",""budget_tokens"":32000},""messages"":[{""role"":""user"",""content"":""hi""}]}`, tc.maxTokens))"
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	True	False		require.True(t, isThinkingBudgetConstraintError(basetenBudgetError))
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	RectifyThinkingBudget	False	backend/internal/service/gateway_request.go:1904	got, changed := RectifyThinkingBudget(body)
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	GetBytes	False		"require.Equal(t, tc.want, gjson.GetBytes(got, ""max_tokens"").Int())"
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	Int	False		"require.Equal(t, tc.want, gjson.GetBytes(got, ""max_tokens"").Int())"
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	int64	False		"require.Equal(t, int64(32000), gjson.GetBytes(got, ""thinking.budget_tokens"").Int())"
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"require.Equal(t, ""hi"", gjson.GetBytes(got, ""messages.0.content"").String())"
+PR7394	backend/internal/service/gateway_thinking_budget_test.go	False	False		require.False(t, changed)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	import	False		import (
+PR7057	backend/internal/service/openai_codex_context_window_test.go	TestCodexContextWindowSyncRoundTrip	True		func TestCodexContextWindowSyncRoundTrip(t *testing.T) {
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	t.Run(tc.name, func(t *testing.T) {
+PR7057	backend/internal/service/openai_codex_context_window_test.go	codexContextWindowAccount	True		"account := codexContextWindowAccount(t, 1, `""context_window"":64000`)"
+PR7057	backend/internal/service/openai_codex_context_window_test.go	NopCloser	False		"Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{""models"":[{"
+PR7057	backend/internal/service/openai_codex_context_window_test.go	NewReader	False		"Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{""models"":[{"
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Sprintf	False		"Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{""models"":[{"
+PR7057	backend/internal/service/openai_codex_context_window_test.go	upstreamModelSyncTestConfig	False	backend/internal/service/upstream_models_test.go:38	syncer := &AccountTestService{accountRepo: repo, httpUpstream: upstream, cfg: upstreamModelSyncTestConfig()}
+PR7057	backend/internal/service/openai_codex_context_window_test.go	SyncUpstreamModelCatalog	False	backend/internal/service/upstream_models.go:218	catalog, err := syncer.SyncUpstreamModelCatalog(context.Background(), &account)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Background	False		catalog, err := syncer.SyncUpstreamModelCatalog(context.Background(), &account)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	NoError	False		require.NoError(t, err)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Empty	False		require.Empty(t, catalog.Warnings)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Len	False	backend/internal/service/gateway_request.go:76 | backend/internal/service/openai_account_scheduler.go:684	require.Len(t, upstream.requests, 1)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Equal	False		require.Equal(t, account.ID, repo.accountID)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Marshal	False		persisted, err := json.Marshal(repo.updates)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Unmarshal	False		require.NoError(t, json.Unmarshal(persisted, &account.Extra))
+PR7057	backend/internal/service/openai_codex_context_window_test.go	codexContextWindowManifest	True		model := codexContextWindowManifest(t, []Account{account})
+PR7057	backend/internal/service/openai_codex_context_window_test.go	EqualValues	False		"require.EqualValues(t, tc.wantWindow, model[""context_window""])"
+PR7057	backend/internal/service/openai_codex_context_window_test.go	TestCodexContextWindowAccountIntersection	True		func TestCodexContextWindowAccountIntersection(t *testing.T) {
+PR7057	backend/internal/service/openai_codex_context_window_test.go	make	False		accounts := make([]Account, len(tc.accounts))
+PR7057	backend/internal/service/openai_codex_context_window_test.go	len	False		accounts := make([]Account, len(tc.accounts))
+PR7057	backend/internal/service/openai_codex_context_window_test.go	int64	False		accounts[i] = codexContextWindowAccount(t, int64(i+1), fields)
+PR7057	backend/internal/service/openai_codex_context_window_test.go	TestCodexContextWindowRegistryEnrichment	True		func TestCodexContextWindowRegistryEnrichment(t *testing.T) {
+PR7057	backend/internal/service/openai_codex_context_window_test.go	Helper	False		t.Helper()
+PR7057	backend/internal/service/openai_codex_context_window_test.go	byte	False		"err := json.Unmarshal([]byte(fmt.Sprintf(`{""upstream_model_metadata"":{"
+PR7057	backend/internal/service/openai_codex_context_window_test.go	BuildCodexModelsManifestForGroup	False	backend/internal/service/openai_codex_models_service.go:833	body, err := svc.BuildCodexModelsManifestForGroup(
+PR7057	backend/internal/service/openai_codex_context_window_test.go	decodeCodexManifestModels	False	backend/internal/service/openai_codex_models_service_test.go:173	models := decodeCodexManifestModels(t, body)
+PR7057	backend/internal/service/openai_codex_model_metadata.go	min	False		descriptor.ContextWindow = min(descriptor.ContextWindow, metadata.MaxContextWindow)
+PR7085	backend/internal/service/openai_gateway_request_body.go	items	False		// named OpenAI. ChatGPT rejects this field on input items (#7066).
+PR7085	backend/internal/service/openai_gateway_request_body.go	delete	False		"delete(item, ""internal_chat_message_metadata_passthrough"")"
+PR7085	backend/internal/service/openai_gateway_request_body.go	GetBytes	False		"input := gjson.GetBytes(normalized, ""input"")"
+PR7085	backend/internal/service/openai_gateway_request_body.go	IsArray	False		if !input.IsArray() {
+PR7085	backend/internal/service/openai_gateway_request_body.go	Array	False		for i, item := range input.Array() {
+PR7085	backend/internal/service/openai_gateway_request_body.go	IsObject	False		"if !item.IsObject() || !item.Get(""internal_chat_message_metadata_passthrough"").Exists() {"
+PR7085	backend/internal/service/openai_gateway_request_body.go	Get	False	backend/internal/handler/model_plaza_handler.go:105 | backend/internal/handler/batch_image_handler.go:93 | backend/internal/handler/image_task_admin_toggle_test.go:26 | backend/internal/handler/image_task_handler_test.go:33	"if !item.IsObject() || !item.Get(""internal_chat_message_metadata_passthrough"").Exists() {"
+PR7085	backend/internal/service/openai_gateway_request_body.go	Exists	False		"if !item.IsObject() || !item.Get(""internal_chat_message_metadata_passthrough"").Exists() {"
+PR7085	backend/internal/service/openai_gateway_request_body.go	DeleteBytes	False		"next, err := sjson.DeleteBytes(normalized, fmt.Sprintf(""input.%d.internal_chat_message_metadata_passthrough"", i))"
+PR7085	backend/internal/service/openai_gateway_request_body.go	Sprintf	False		"next, err := sjson.DeleteBytes(normalized, fmt.Sprintf(""input.%d.internal_chat_message_metadata_passthrough"", i))"
+PR7085	backend/internal/service/openai_gateway_request_body.go	Errorf	False	backend/internal/pkg/errors/errors.go:92	"return body, false, fmt.Errorf(""normalize oauth input metadata: %w"", err)"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	import	False		import (
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	TestOAuthInputInternalMetadata	True		func TestOAuthInputInternalMetadata(t *testing.T) {
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	Unmarshal	False		if err := json.Unmarshal(b, &req); err != nil {
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	applyCodexOAuthTransform	False	backend/internal/service/openai_codex_transform.go:156	result := applyCodexOAuthTransform(req, false, false)
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	Marshal	False		out, err := json.Marshal(req)
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	normalizeOpenAIPassthroughOAuthBody	False	backend/internal/service/openai_gateway_request_body.go:818	"{""OAuth passthrough"", func(b []byte) ([]byte, bool, error) { return normalizeOpenAIPassthroughOAuthBody(b, false) }, true},"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	normalizeOpenAIResponsesWebSocketCompatibilityBody	False	backend/internal/service/openai_oauth_web_search_history.go:268	return normalizeOpenAIResponsesWebSocketCompatibilityBody(b, &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, false)
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	t.Run(tt.name, func(t *testing.T) {
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	normalize	False	backend/internal/service/content_moderation.go:2141	out, _, err := tt.normalize([]byte(body))
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	byte	False		out, _, err := tt.normalize([]byte(body))
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	NoError	False		require.NoError(t, err)
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	Equal	False		"require.Equal(t, !tt.strip, gjson.GetBytes(out, ""input.0.""+field).Exists())"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	GetBytes	False		"require.Equal(t, !tt.strip, gjson.GetBytes(out, ""input.0.""+field).Exists())"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	Exists	False		"require.Equal(t, !tt.strip, gjson.GetBytes(out, ""input.0.""+field).Exists())"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"require.Equal(t, ""hello"", gjson.GetBytes(out, ""input.0.content.0.text"").String())"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	True	False		"require.True(t, gjson.GetBytes(out, ""input.0.content.0.""+field+"".keep"").Bool())"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	Bool	False		"require.True(t, gjson.GetBytes(out, ""input.0.content.0.""+field+"".keep"").Bool())"
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	TestOAuthInputInternalMetadataCompatibility	True		func TestOAuthInputInternalMetadataCompatibility(t *testing.T) {
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	normalizeOpenAIOAuthResponsesCompatibilityBody	False		out, changed, err := normalizeOpenAIOAuthResponsesCompatibilityBody([]byte(body))
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	False	False		require.False(t, changed)
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	string	False		require.Equal(t, body, string(out))
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	normalizeOpenAIOAuthResponsesCompatibilityFields	False		require.False(t, normalizeOpenAIOAuthResponsesCompatibilityFields(req))
+PR7085	backend/internal/service/openai_oauth_input_metadata_test.go	NotContains	False		"require.NotContains(t, input[0], ""internal_chat_message_metadata_passthrough"")"
+PR7215	backend/internal/service/openai_codex_models_service_test.go	TestValidateCodexModelsManifestEnvelopeRequiresExactModelsKey	True		func TestValidateCodexModelsManifestEnvelopeRequiresExactModelsKey(t *testing.T) {
+PR7215	backend/internal/service/openai_codex_models_service_test.go	NoError	False		"require.NoError(t, validateCodexModelsManifestEnvelope([]byte(`{""models"":[]}`)))"
+PR7215	backend/internal/service/openai_codex_models_service_test.go	validateCodexModelsManifestEnvelope	False	backend/internal/service/openai_codex_models_service.go:2457	"require.NoError(t, validateCodexModelsManifestEnvelope([]byte(`{""models"":[]}`)))"
+PR7215	backend/internal/service/openai_codex_models_service_test.go	byte	False		"require.NoError(t, validateCodexModelsManifestEnvelope([]byte(`{""models"":[]}`)))"
+PR7215	backend/internal/service/openai_codex_models_service_test.go	Error	False	backend/internal/model/error_passthrough_rule.go:73 | backend/internal/handler/gateway_helper.go:127 | backend/internal/handler/gateway_helper.go:138 | backend/internal/handler/auth_linuxdo_oauth.go:67	"require.Error(t, validateCodexModelsManifestEnvelope([]byte(`{""Models"":[]}`)))"
+PR7442	backend/internal/handler/openai_gateway_handler.go	copyFailoverRetryAfter	False	backend/internal/handler/openai_gateway_handler.go:3337	copyFailoverRetryAfter(c, failoverErr.ResponseHeaders)
+PR7442	backend/internal/handler/openai_gateway_handler.go	TrimSpace	False		message := strings.TrimSpace(failoverErr.ClientMessage)
+PR7442	backend/internal/handler/openai_gateway_handler.go	SetOpsUpstreamError	False	backend/internal/service/ops_upstream_context.go:196	"service.SetOpsUpstreamError(c, failoverErr.StatusCode, message, """")"
+PR7442	backend/internal/handler/openai_gateway_handler.go	handleStreamingAwareErrorWithCode	False	backend/internal/handler/openai_gateway_handler.go:3396	"h.handleStreamingAwareErrorWithCode(c, status, ""upstream_error"", service.OpenAIImagesInsufficientBalanceCode, message, streamStarted, false)"
+PR7442	backend/internal/handler/openai_images_balance_test.go	import	False		import (
+PR7442	backend/internal/handler/openai_images_balance_test.go	TestOpenAIImagesBalanceExhaustionPreservesMachineReadableCause	True		func TestOpenAIImagesBalanceExhaustionPreservesMachineReadableCause(t *testing.T) {
+PR7442	backend/internal/handler/openai_images_balance_test.go	SetMode	False		gin.SetMode(gin.TestMode)
+PR7442	backend/internal/handler/openai_images_balance_test.go	NewRecorder	False		recorder := httptest.NewRecorder()
+PR7442	backend/internal/handler/openai_images_balance_test.go	CreateTestContext	False		c, _ := gin.CreateTestContext(recorder)
+PR7442	backend/internal/handler/openai_images_balance_test.go	NewRequest	False		"c.Request = httptest.NewRequest(http.MethodPost, ""/v1/images/edits"", nil)"
+PR7442	backend/internal/handler/openai_images_balance_test.go	handleFailoverExhausted	False	backend/internal/handler/openai_gateway_handler.go:3239 | backend/internal/handler/gateway_handler.go:1947	(&OpenAIGatewayHandler{}).handleFailoverExhausted(c, &service.UpstreamFailoverError{
+PR7442	backend/internal/handler/openai_images_balance_test.go	Equal	False		"require.Equal(t, ""23"", recorder.Header().Get(""Retry-After""))"
+PR7442	backend/internal/handler/openai_images_balance_test.go	Header	False	backend/internal/handler/ops_error_logger.go:587 | backend/internal/service/openai_ws_forwarder_client_cancel_test.go:99 | backend/internal/service/openai_compact_sse_keepalive.go:208 | backend/internal/service/openai_gateway_response_flush_test.go:41	"require.Equal(t, ""23"", recorder.Header().Get(""Retry-After""))"
+PR7442	backend/internal/handler/openai_images_balance_test.go	Get	False	backend/internal/handler/model_plaza_handler.go:105 | backend/internal/handler/batch_image_handler.go:93 | backend/internal/handler/image_task_admin_toggle_test.go:26 | backend/internal/handler/image_task_handler_test.go:33	"require.Equal(t, ""23"", recorder.Header().Get(""Retry-After""))"
+PR7442	backend/internal/handler/openai_images_balance_test.go	Contains	False		"require.Contains(t, recorder.Body.String(), `""code"":""insufficient_balance""`)"
+PR7442	backend/internal/handler/openai_images_balance_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"require.Contains(t, recorder.Body.String(), `""code"":""insufficient_balance""`)"
+PR7442	backend/internal/handler/openai_images_balance_test.go	GetBytes	False		"require.Equal(t, service.OpenAIImagesInsufficientBalanceCode, gjson.GetBytes(recorder.Body.Bytes(), ""error.code"").String())"
+PR7442	backend/internal/handler/openai_images_balance_test.go	Bytes	False	backend/internal/service/gemini_response_signal.go:301 | backend/internal/service/gateway_request.go:69 | backend/internal/pkg/httputil/body.go:57	"require.Equal(t, service.OpenAIImagesInsufficientBalanceCode, gjson.GetBytes(recorder.Body.Bytes(), ""error.code"").String())"
+PR7442	backend/internal/service/openai_images.go	isOpenAIImagesInsufficientBalance	True		if isOpenAIImagesInsufficientBalance(respBody) {
+PR7442	backend/internal/service/openai_images.go	appendOpsUpstreamError	False	backend/internal/service/ops_upstream_context.go:251	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+PR7442	backend/internal/service/openai_images.go	opsUpstreamProxyID	False		ProxyID:            opsUpstreamProxyID(account),
+PR7442	backend/internal/service/openai_images.go	opsUpstreamProxyName	False		ProxyName:          opsUpstreamProxyName(account),
+PR7442	backend/internal/service/openai_images.go	Get	False	backend/internal/handler/model_plaza_handler.go:105 | backend/internal/handler/batch_image_handler.go:93 | backend/internal/handler/image_task_admin_toggle_test.go:26 | backend/internal/handler/image_task_handler_test.go:33	"UpstreamRequestID:  resp.Header.Get(""x-request-id""),"
+PR7442	backend/internal/service/openai_images.go	safeUpstreamURL	False	backend/internal/service/ops_upstream_context.go:344	UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
+PR7442	backend/internal/service/openai_images.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
+PR7442	backend/internal/service/openai_images.go	coolOpenAIImagesInsufficientBalance	True		s.coolOpenAIImagesInsufficientBalance(upstreamCtx, account)
+PR7442	backend/internal/service/openai_images.go	newOpenAIImagesInsufficientBalanceFailoverError	True		return nil, newOpenAIImagesInsufficientBalanceFailoverError(resp.StatusCode, resp.Header, respBody)
+PR7442	backend/internal/service/openai_images_balance.go	import	False		import (
+PR7442	backend/internal/service/openai_images_balance.go	const	False		const (
+PR7442	backend/internal/service/openai_images_balance.go	isOpenAIImagesInsufficientBalance	True		func isOpenAIImagesInsufficientBalance(body []byte) bool {
+PR7442	backend/internal/service/openai_images_balance.go	len	False		if len(body) == 0 || json.Unmarshal(body, &value) != nil {
+PR7442	backend/internal/service/openai_images_balance.go	Unmarshal	False		if len(body) == 0 || json.Unmarshal(body, &value) != nil {
+PR7442	backend/internal/service/openai_images_balance.go	hasOpenAIImagesInsufficientBalance	True		return hasOpenAIImagesInsufficientBalance(value, 0)
+PR7442	backend/internal/service/openai_images_balance.go	ToLower	False		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+PR7442	backend/internal/service/openai_images_balance.go	TrimSpace	False		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+PR7442	backend/internal/service/openai_images_balance.go	Trim	False		"normalizedValue := strings.ToLower(strings.Trim(strings.TrimSpace(text), "".""))"
+PR7442	backend/internal/service/openai_images_balance.go	isOpenAIImagesErrorContainer	True		if isOpenAIImagesErrorContainer(normalizedKey) && hasOpenAIImagesInsufficientBalance(child, depth+1) {
+PR7442	backend/internal/service/openai_images_balance.go	coolOpenAIImagesInsufficientBalance	True		func (s *OpenAIGatewayService) coolOpenAIImagesInsufficientBalance(ctx context.Context, account *Account) {
+PR7442	backend/internal/service/openai_images_balance.go	Now	False	backend/internal/securityaudit/prompt_worker_test.go:17 | backend/internal/securityaudit/prompt_worker_test.go:25 | backend/internal/securityaudit/prompt_types.go:274 | backend/internal/pkg/timezone/timezone.go:64	now := time.Now()
+PR7442	backend/internal/service/openai_images_balance.go	Add	False	backend/internal/service/grok_search_count.go:75 | backend/internal/handler/admin/account_codex_import.go:951	resetAt := now.Add(openAIImagesBalanceCooldown)
+PR7442	backend/internal/service/openai_images_balance.go	setAccountModelRateLimitSnapshot	False	backend/internal/service/model_rate_limit.go:195	setAccountModelRateLimitSnapshot(account, openAIImageGenerationRateLimitKey, resetAt, openAIImagesBalanceRateLimitReason, now)
+PR7442	backend/internal/service/openai_images_balance.go	SetModelRateLimit	True	backend/internal/service/ratelimit_session_window_test.go:152 | backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:37 | backend/internal/service/openai_gateway_service_test.go:39 | backend/internal/service/ratelimit_service_scheduling_threshold_test.go:100	if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, openAIImageGenerationRateLimitKey, resetAt, openAIImagesBalanceRateLimitReason); err != nil {
+PR7442	backend/internal/service/openai_images_balance.go	Warn	False		"slog.Warn(""openai_images_balance_cooldown_failed"", ""account_id"", account.ID, ""error"", err)"
+PR7442	backend/internal/service/openai_images_balance.go	newOpenAIImagesInsufficientBalanceFailoverError	True		func newOpenAIImagesInsufficientBalanceFailoverError(statusCode int, headers http.Header, body []byte) *UpstreamFailoverError {
+PR7442	backend/internal/service/openai_images_balance.go	Clone	False	backend/internal/securityaudit/prompt_types.go:86 | backend/internal/service/channel.go:191 | backend/internal/service/channel.go:205 | backend/internal/pkg/errors/errors.go:124	ResponseHeaders:   headers.Clone(),
+PR7442	backend/internal/service/openai_images_balance_test.go	import	False		import (
+PR7442	backend/internal/service/openai_images_balance_test.go	SetModelRateLimit	True	backend/internal/service/ratelimit_session_window_test.go:152 | backend/internal/service/openai_gateway_compat_stream_account_side_effects_test.go:37 | backend/internal/service/openai_gateway_service_test.go:39 | backend/internal/service/ratelimit_service_scheduling_threshold_test.go:100	func (r *openAIImagesBalanceRepo) SetModelRateLimit(_ context.Context, _ int64, scope string, resetAt time.Time, reason ...string) error {
+PR7442	backend/internal/service/openai_images_balance_test.go	len	False		if len(reason) > 0 {
+PR7442	backend/internal/service/openai_images_balance_test.go	Do	True	backend/internal/handler/tier223_protocol_sqlite_test.go:79 | backend/internal/handler/openai_gateway_ws_composite_test.go:26 | backend/internal/handler/openai_images_native_route_test.go:35 | backend/internal/handler/gemini_stream_abort_sqlite_test.go:53	func (openAIImagesBalanceUpstream) Do(*http.Request, string, int64, int) (*http.Response, error) {
+PR7442	backend/internal/service/openai_images_balance_test.go	NopCloser	False		Body: io.NopCloser(bytes.NewBufferString(
+PR7442	backend/internal/service/openai_images_balance_test.go	NewBufferString	False		Body: io.NopCloser(bytes.NewBufferString(
+PR7442	backend/internal/service/openai_images_balance_test.go	TestForwardOpenAIImagesAPIKey_ClassifiesWrappedBalanceBeforeTransientFailover	True		func TestForwardOpenAIImagesAPIKey_ClassifiesWrappedBalanceBeforeTransientFailover(t *testing.T) {
+PR7442	backend/internal/service/openai_images_balance_test.go	SetMode	False		gin.SetMode(gin.TestMode)
+PR7442	backend/internal/service/openai_images_balance_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	t.Run(tc.name, func(t *testing.T) {
+PR7442	backend/internal/service/openai_images_balance_test.go	byte	False		"body := []byte(`{""model"":""gpt-image-1"",""prompt"":""cat""}`)"
+PR7442	backend/internal/service/openai_images_balance_test.go	NewRecorder	False		recorder := httptest.NewRecorder()
+PR7442	backend/internal/service/openai_images_balance_test.go	CreateTestContext	False		c, _ := gin.CreateTestContext(recorder)
+PR7442	backend/internal/service/openai_images_balance_test.go	NewRequest	False		"c.Request = httptest.NewRequest(http.MethodPost, ""/v1/images/""+tc.endpoint, bytes.NewReader(body))"
+PR7442	backend/internal/service/openai_images_balance_test.go	NewReader	False		"c.Request = httptest.NewRequest(http.MethodPost, ""/v1/images/""+tc.endpoint, bytes.NewReader(body))"
+PR7442	backend/internal/service/openai_images_balance_test.go	ForwardImages	False	backend/internal/service/openai_images.go:554	"_, err := svc.ForwardImages(context.Background(), c, account, body, parsed, """")"
+PR7442	backend/internal/service/openai_images_balance_test.go	Background	False		"_, err := svc.ForwardImages(context.Background(), c, account, body, parsed, """")"
+PR7442	backend/internal/service/openai_images_balance_test.go	ErrorAs	False		require.ErrorAs(t, err, &failoverErr)
+PR7442	backend/internal/service/openai_images_balance_test.go	Equal	False		"require.Equal(t, ""req-images-balance"", failoverErr.ResponseHeaders.Get(""X-Request-Id""))"
+PR7442	backend/internal/service/openai_images_balance_test.go	Get	False	backend/internal/handler/model_plaza_handler.go:105 | backend/internal/handler/batch_image_handler.go:93 | backend/internal/handler/image_task_admin_toggle_test.go:26 | backend/internal/handler/image_task_handler_test.go:33	"require.Equal(t, ""req-images-balance"", failoverErr.ResponseHeaders.Get(""X-Request-Id""))"
+PR7442	backend/internal/service/openai_images_balance_test.go	True	False		require.True(t, failoverErr.ShouldRetryNextAccount())
+PR7442	backend/internal/service/openai_images_balance_test.go	ShouldRetryNextAccount	False	backend/internal/service/gateway_service.go:723	require.True(t, failoverErr.ShouldRetryNextAccount())
+PR7442	backend/internal/service/openai_images_balance_test.go	string	False		"require.Equal(t, OpenAIImagesInsufficientBalanceCode, string(failoverErr.Reason)[len(""openai_images_""):])"
+PR7442	backend/internal/service/openai_images_balance_test.go	WithinDuration	False		require.WithinDuration(t, time.Now().Add(openAIImagesBalanceCooldown), repo.until, 2*time.Second)
+PR7442	backend/internal/service/openai_images_balance_test.go	Now	False	backend/internal/securityaudit/prompt_worker_test.go:17 | backend/internal/securityaudit/prompt_worker_test.go:25 | backend/internal/securityaudit/prompt_types.go:274 | backend/internal/pkg/timezone/timezone.go:64	require.WithinDuration(t, time.Now().Add(openAIImagesBalanceCooldown), repo.until, 2*time.Second)
+PR7442	backend/internal/service/openai_images_balance_test.go	Add	False	backend/internal/service/grok_search_count.go:75 | backend/internal/handler/admin/account_codex_import.go:951	require.WithinDuration(t, time.Now().Add(openAIImagesBalanceCooldown), repo.until, 2*time.Second)
+PR7442	backend/internal/service/openai_images_balance_test.go	isRateLimitActiveForKey	False	backend/internal/service/model_rate_limit.go:21	require.True(t, account.isRateLimitActiveForKey(openAIImageGenerationRateLimitKey))
+PR7442	backend/internal/service/openai_images_balance_test.go	False	False		"require.False(t, account.isModelRateLimitedWithContext(context.Background(), ""gpt-5.5""), ""text requests must remain schedulable"")"
+PR7442	backend/internal/service/openai_images_balance_test.go	isModelRateLimitedWithContext	False	backend/internal/service/model_rate_limit.go:38	"require.False(t, account.isModelRateLimitedWithContext(context.Background(), ""gpt-5.5""), ""text requests must remain schedulable"")"
+PR7442	backend/internal/service/openai_images_balance_test.go	TestOpenAIImagesInsufficientBalanceDetectionRejectsUnstructuredAndEchoedText	True		func TestOpenAIImagesInsufficientBalanceDetectionRejectsUnstructuredAndEchoedText(t *testing.T) {
+PR7442	backend/internal/service/openai_images_balance_test.go	isOpenAIImagesInsufficientBalance	True		"require.True(t, isOpenAIImagesInsufficientBalance([]byte(`{""errorKey"":""insufficient_balance""}`)))"
+PR7060	backend/internal/handler/openai_images.go	RequiredCapabilityForModel	True		parsed.RequiredCapabilityForModel(channelMapping.MappedModel),
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	import	False		import (
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	GetByID	True	backend/internal/handler/usage_handler.go:367 | backend/internal/handler/gateway_handler_claude_code_fallback_test.go:56 | backend/internal/handler/usage_handler_daily_test.go:53 | backend/internal/handler/grok_media_slots_test.go:164	func (r compatibleImagesAccounts) GetByID(_ context.Context, id int64) (*service.Account, error) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	ListSchedulableByPlatform	True	backend/internal/handler/openai_gateway_credential_failover_loop_test.go:41 | backend/internal/handler/openai_gateway_handler_test.go:1903 | backend/internal/handler/openai_gateway_handler_test.go:2016 | backend/internal/handler/openai_codex_models_handler_test.go:37	func (r compatibleImagesAccounts) ListSchedulableByPlatform(context.Context, string) ([]service.Account, error) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	ListSchedulableUngroupedByPlatform	True	backend/internal/handler/openai_gateway_credential_failover_loop_test.go:58 | backend/internal/handler/openai_gateway_handler_test.go:2030 | backend/internal/handler/openai_images_failover_test.go:47 | backend/internal/service/ratelimit_session_window_test.go:140	func (r compatibleImagesAccounts) ListSchedulableUngroupedByPlatform(context.Context, string) ([]service.Account, error) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	ListSchedulableByGroupIDAndPlatform	True	backend/internal/handler/openai_gateway_credential_failover_loop_test.go:54 | backend/internal/handler/openai_gateway_handler_test.go:1910 | backend/internal/handler/openai_gateway_handler_test.go:2026 | backend/internal/handler/openai_images_failover_test.go:39	func (r compatibleImagesAccounts) ListSchedulableByGroupIDAndPlatform(context.Context, int64, string) ([]service.Account, error) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	ListModelAvailabilityCandidates	True	backend/internal/handler/openai_channel_scheduling_test.go:29 | backend/internal/handler/gateway_models_test.go:84 | backend/internal/handler/openai_codex_models_handler_test.go:55 | backend/internal/service/ratelimit_session_window_test.go:146	func (r compatibleImagesAccounts) ListModelAvailabilityCandidates(context.Context, *int64, []string, bool) ([]service.Account, error) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Do	True	backend/internal/handler/tier223_protocol_sqlite_test.go:79 | backend/internal/handler/openai_gateway_ws_composite_test.go:26 | backend/internal/handler/openai_images_native_route_test.go:35 | backend/internal/handler/gemini_stream_abort_sqlite_test.go:53	func (u *compatibleImagesUpstream) Do(req *http.Request, _ string, id int64, _ int) (*http.Response, error) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	append	False		u.accountIDs = append(u.accountIDs, id)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	ReadAll	False		u.body, err = io.ReadAll(req.Body)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NopCloser	False		"return &http.Response{StatusCode: 200, Header: http.Header{""Content-Type"": {""application/json""}, ""X-Request-Id"": {""compatible-image-test""}}, Body: io.NopCloser(strings.NewReader(`{""data"":[{""b64_json"":""aW1hZ2U=""}]}`))}, nil"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewReader	False		"return &http.Response{StatusCode: 200, Header: http.Header{""Content-Type"": {""application/json""}, ""X-Request-Id"": {""compatible-image-test""}}, Body: io.NopCloser(strings.NewReader(`{""data"":[{""b64_json"":""aW1hZ2U=""}]}`))}, nil"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Create	True	backend/internal/handler/gateway_handler_warmup_intercept_unit_test.go:81 | backend/internal/handler/openai_gateway_handler_test.go:2061 | backend/internal/handler/openai_body_limit_passthrough_rule_test.go:31 | backend/internal/handler/auth_oauth_pending_flow_test.go:2694	func (r *compatibleImagesUsage) Create(_ context.Context, log *service.UsageLog) (bool, error) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	TestCompositeCompatibleImagesEndToEnd	True		func TestCompositeCompatibleImagesEndToEnd(t *testing.T) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	SetMode	False		gin.SetMode(gin.TestMode)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	t.Run(scenario, func(t *testing.T) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	int64	False		groupID := int64(101)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewBillingCacheService	False	backend/internal/service/billing_cache_service.go:132	billingCache := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Cleanup	False	backend/internal/service/batch_image_provider_vertex.go:320 | backend/internal/service/batch_image_mvp_smoke_test.go:259 | backend/internal/service/batch_image_processor_test.go:378 | backend/internal/service/batch_image_provider_gemini.go:206	t.Cleanup(billingCache.Stop)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewOpenAIGatewayService	False	backend/internal/service/openai_gateway_service.go:497	gateway := service.NewOpenAIGatewayService(repo, usage, nil, nil, nil, nil, nil, cfg, nil, nil, service.NewBillingService(cfg, nil), nil, billingCache, upstream, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewBillingService	False	backend/internal/service/billing_service.go:204	gateway := service.NewOpenAIGatewayService(repo, usage, nil, nil, nil, nil, nil, cfg, nil, nil, service.NewBillingService(cfg, nil), nil, billingCache, upstream, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewOpenAIGatewayHandler	False	backend/internal/handler/openai_gateway_handler.go:264	imagesHandler := handler.NewOpenAIGatewayHandler(gateway, service.NewConcurrencyService(nil), billingCache, service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewConcurrencyService	False	backend/internal/service/concurrency_service.go:246	imagesHandler := handler.NewOpenAIGatewayHandler(gateway, service.NewConcurrencyService(nil), billingCache, service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewAPIKeyService	False	backend/internal/service/api_key_service.go:334	imagesHandler := handler.NewOpenAIGatewayHandler(gateway, service.NewConcurrencyService(nil), billingCache, service.NewAPIKeyService(nil, nil, nil, nil, nil, nil, cfg), nil, nil, nil, nil, cfg)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewCompositeRouteResolver	False	backend/internal/service/composite_route_resolver.go:38	resolver := service.NewCompositeRouteResolver(compositeRouteRepoStub{routes: []service.CompositeModelRoute{{ID: 1, GroupID: groupID, PublicModel: publicModel, MatchType: service.CompositeRouteMatchExact, TargetPlatform: service.PlatformOpenAI, UpstreamModel: model, Endpoint: service.CompositeRouteEndpointImages, Enabled: true}}})
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	New	False	backend/internal/pkg/redissession/store.go:22 | backend/internal/pkg/servertiming/collector.go:48 | backend/internal/pkg/errors/errors.go:76	router := gin.New()
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Use	False	backend/internal/handler/auth_oauth_pending_flow_test.go:2988 | backend/internal/service/auth_oauth_email_flow_test.go:69 | backend/internal/service/admin_service_delete_test.go:460 | backend/internal/service/payment_order_lifecycle_test.go:125	router.Use(func(c *gin.Context) {
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Set	False	backend/internal/handler/ops_error_logger_test.go:32 | backend/internal/handler/ops_error_logger_test.go:1385 | backend/internal/handler/image_task_admin_toggle_test.go:33 | backend/internal/handler/passkey_handler_test.go:51	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{ID: 202, GroupID: &groupID, Group: group, User: &service.User{ID: 303}})
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	string	False		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{ID: 202, GroupID: &groupID, Group: group, User: &service.User{ID: 303}})
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Next	False	backend/internal/repository/account_repo_test.go:155 | backend/internal/repository/server_timing_sql.go:233 | backend/internal/repository/server_timing_sql_test.go:115	c.Next()
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	compositeTargetPlatformMiddleware	False	backend/internal/server/routes/gateway.go:531	router.Use(compositeTargetPlatformMiddleware(resolver))
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	POST	False		"router.POST(""/v1/images/generations"", imagesHandler.Images)"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	byte	False		"body := []byte(fmt.Sprintf(`{""model"":%q,""prompt"":""draw"",""size"":""1024x1024""}`, publicModel))"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Sprintf	False		"body := []byte(fmt.Sprintf(`{""model"":%q,""prompt"":""draw"",""size"":""1024x1024""}`, publicModel))"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewWriter	False		writer := multipart.NewWriter(&buf)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NoError	False		"require.NoError(t, writer.WriteField(""model"", publicModel))"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	WriteField	False		"require.NoError(t, writer.WriteField(""model"", publicModel))"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	CreateFormFile	False		"part, err := writer.CreateFormFile(""image"", ""input.png"")"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Write	False	backend/internal/handler/gateway_websearch_personal_test.go:83 | backend/internal/handler/ops_error_logger.go:638 | backend/internal/service/gateway_forward_compat_client_disconnect_test.go:33 | backend/internal/service/openai_first_output_timeout.go:117	"_, err = part.Write([]byte(""fixture-image""))"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Close	False	backend/internal/handler/image_upload_body_boundary_test.go:22 | backend/internal/handler/gemini_stream_abort_sqlite_test.go:45 | backend/internal/handler/gateway_sticky_writeback_test.go:81 | backend/internal/service/batch_image_provider_vertex.go:723	require.NoError(t, writer.Close())
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Bytes	False	backend/internal/service/gemini_response_signal.go:301 | backend/internal/service/gateway_request.go:69 | backend/internal/pkg/httputil/body.go:57	body, contentType = buf.Bytes(), writer.FormDataContentType()
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	FormDataContentType	False		body, contentType = buf.Bytes(), writer.FormDataContentType()
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewRequest	False		req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	NewRecorder	False		rec := httptest.NewRecorder()
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	ServeHTTP	False	backend/internal/service/channel_monitor_checker_body_test.go:33 | backend/internal/service/channel_monitor_checker_body_test.go:70	router.ServeHTTP(rec, req)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Equal	False		require.Equal(t, http.StatusForbidden, rec.Code)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	require.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Empty	False		require.Empty(t, upstream.accountIDs)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Contains	False		require.Contains(t, string(upstream.body), model)
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	Len	False	backend/internal/service/gateway_request.go:76 | backend/internal/service/openai_account_scheduler.go:684	"require.Len(t, usage.logs, 1, ""the image must reach usage recording, not just return HTTP 200"")"
+PR7060	backend/internal/server/routes/composite_images_compatible_test.go	InDelta	False		require.InDelta(t, price, usage.logs[0].ActualCost, 1e-9)
+PR7060	backend/internal/service/openai_images.go	ResolvedTargetPlatformFromContext	False	backend/internal/service/composite_platform.go:25	if platform, _ := ResolvedTargetPlatformFromContext(c.Request.Context()); platform == PlatformOpenAI {
+PR7060	backend/internal/service/openai_images.go	Context	False	backend/internal/service/concurrency_service.go:95	if platform, _ := ResolvedTargetPlatformFromContext(c.Request.Context()); platform == PlatformOpenAI {
+PR7060	backend/internal/service/openai_images.go	ResolvedUpstreamModelFromContext	False	backend/internal/service/composite_platform.go:65	if model, ok := ResolvedUpstreamModelFromContext(c.Request.Context()); ok {
+PR7060	backend/internal/service/openai_images.go	validateCompatibleImagesModel	True		if err := validateCompatibleImagesModel(req.Model); err != nil {
+PR7060	backend/internal/service/openai_images.go	isGeminiCompatibleImageModel	True		func isGeminiCompatibleImageModel(model string) bool {
+PR7060	backend/internal/service/openai_images.go	ToLower	False		model = strings.ToLower(strings.TrimSpace(model))
+PR7060	backend/internal/service/openai_images.go	TrimSpace	False		model = strings.ToLower(strings.TrimSpace(model))
+PR7060	backend/internal/service/openai_images.go	HasPrefix	False		"return strings.HasPrefix(model, ""gemini-"") &&"
+PR7060	backend/internal/service/openai_images.go	HasSuffix	False		"(strings.HasSuffix(model, ""-image"") || strings.Contains(model, ""-image-""))"
+PR7060	backend/internal/service/openai_images.go	Contains	False		"(strings.HasSuffix(model, ""-image"") || strings.Contains(model, ""-image-""))"
+PR7060	backend/internal/service/openai_images.go	validateOpenAIImagesModel	False	backend/internal/service/openai_images.go:477	return validateOpenAIImagesModel(model)
+PR7060	backend/internal/service/openai_images.go	RequiredCapabilityForModel	True		func (req *OpenAIImagesRequest) RequiredCapabilityForModel(model string) OpenAIImagesCapability {
+PR7060	backend/internal/service/openai_images_compatible_test.go	import	False		import (
+PR7060	backend/internal/service/openai_images_compatible_test.go	TestCompatibleImagesGeminiModels	True		func TestCompatibleImagesGeminiModels(t *testing.T) {
+PR7060	backend/internal/service/openai_images_compatible_test.go	SetMode	False		gin.SetMode(gin.TestMode)
+PR7060	backend/internal/service/openai_images_compatible_test.go	Run	False	backend/internal/service/batch_image_worker.go:117 | backend/internal/handler/admin/channel_monitor_handler.go:446	t.Run(model, func(t *testing.T) {
+PR7060	backend/internal/service/openai_images_compatible_test.go	byte	False		"body := []byte(fmt.Sprintf(`{""model"":%q,""prompt"":""draw""}`, model))"
+PR7060	backend/internal/service/openai_images_compatible_test.go	Sprintf	False		"body := []byte(fmt.Sprintf(`{""model"":%q,""prompt"":""draw""}`, model))"
+PR7060	backend/internal/service/openai_images_compatible_test.go	CreateTestContext	False		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+PR7060	backend/internal/service/openai_images_compatible_test.go	NewRecorder	False		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+PR7060	backend/internal/service/openai_images_compatible_test.go	NewRequest	False		c.Request = httptest.NewRequest(http.MethodPost, openAIImagesGenerationsEndpoint, bytes.NewReader(body))
+PR7060	backend/internal/service/openai_images_compatible_test.go	NewReader	False		c.Request = httptest.NewRequest(http.MethodPost, openAIImagesGenerationsEndpoint, bytes.NewReader(body))
+PR7060	backend/internal/service/openai_images_compatible_test.go	ParseOpenAIImagesRequest	False	backend/internal/service/openai_images.go:178	parsed, err := (&OpenAIGatewayService{}).ParseOpenAIImagesRequest(c, body)
+PR7060	backend/internal/service/openai_images_compatible_test.go	NoError	False		require.NoError(t, err)
+PR7060	backend/internal/service/openai_images_compatible_test.go	True	False		require.True(t, (&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}).SupportsOpenAIImageCapability(parsed.RequiredCapability))
+PR7060	backend/internal/service/openai_images_compatible_test.go	SupportsOpenAIImageCapability	False	backend/internal/service/account.go:1776	require.True(t, (&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}).SupportsOpenAIImageCapability(parsed.RequiredCapability))
+PR7060	backend/internal/service/openai_images_compatible_test.go	False	False		require.False(t, (&Account{Platform: PlatformOpenAI, Type: typ}).SupportsOpenAIImageCapability(parsed.RequiredCapability))
+PR7060	backend/internal/service/openai_images_compatible_test.go	isOpenAIImageGenerationModel	False	backend/internal/service/openai_images.go:460	"require.False(t, isOpenAIImageGenerationModel(model), ""compatible image IDs must not enter native Responses normalization"")"
+PR7060	backend/internal/service/openai_images_compatible_test.go	ErrorContains	False		"require.ErrorContains(t, err, ""images endpoint requires an image model"")"
+PR7060	backend/internal/service/openai_images_compatible_test.go	TestCompatibleImagesForwardGemini	True		func TestCompatibleImagesForwardGemini(t *testing.T) {
+PR7060	backend/internal/service/openai_images_compatible_test.go	Contains	False		"if strings.Contains(kind, ""multipart"") {"
+PR7060	backend/internal/service/openai_images_compatible_test.go	NewWriter	False		writer := multipart.NewWriter(&buf)
+PR7060	backend/internal/service/openai_images_compatible_test.go	WriteField	False		"require.NoError(t, writer.WriteField(""model"", requestModel))"
+PR7060	backend/internal/service/openai_images_compatible_test.go	CreateFormFile	False		"part, err := writer.CreateFormFile(""image"", ""input.png"")"
+PR7060	backend/internal/service/openai_images_compatible_test.go	Write	False	backend/internal/handler/gateway_websearch_personal_test.go:83 | backend/internal/handler/ops_error_logger.go:638 | backend/internal/service/gateway_forward_compat_client_disconnect_test.go:33 | backend/internal/service/openai_first_output_timeout.go:117	"_, err = part.Write([]byte(""original-image-bytes""))"
+PR7060	backend/internal/service/openai_images_compatible_test.go	Close	False	backend/internal/handler/image_upload_body_boundary_test.go:22 | backend/internal/handler/gemini_stream_abort_sqlite_test.go:45 | backend/internal/handler/gateway_sticky_writeback_test.go:81 | backend/internal/service/batch_image_provider_vertex.go:723	require.NoError(t, writer.Close())
+PR7060	backend/internal/service/openai_images_compatible_test.go	Bytes	False	backend/internal/service/gemini_response_signal.go:301 | backend/internal/service/gateway_request.go:69 | backend/internal/pkg/httputil/body.go:57	body, contentType = buf.Bytes(), writer.FormDataContentType()
+PR7060	backend/internal/service/openai_images_compatible_test.go	FormDataContentType	False		body, contentType = buf.Bytes(), writer.FormDataContentType()
+PR7060	backend/internal/service/openai_images_compatible_test.go	Set	False	backend/internal/handler/ops_error_logger_test.go:32 | backend/internal/handler/ops_error_logger_test.go:1385 | backend/internal/handler/image_task_admin_toggle_test.go:33 | backend/internal/handler/passkey_handler_test.go:51	"c.Request.Header.Set(""Content-Type"", contentType)"
+PR7060	backend/internal/service/openai_images_compatible_test.go	WithResolvedTargetPlatform	False	backend/internal/service/composite_platform.go:15	ctx := WithResolvedTargetPlatform(c.Request.Context(), PlatformOpenAI)
+PR7060	backend/internal/service/openai_images_compatible_test.go	Context	False	backend/internal/service/concurrency_service.go:95	ctx := WithResolvedTargetPlatform(c.Request.Context(), PlatformOpenAI)
+PR7060	backend/internal/service/openai_images_compatible_test.go	WithCompositeRouteDecision	False	backend/internal/service/composite_platform.go:36	ctx = WithCompositeRouteDecision(ctx, CompositeRouteDecision{Matched: true, TargetPlatform: PlatformOpenAI, UpstreamModel: model, PublicModel: requestModel})
+PR7060	backend/internal/service/openai_images_compatible_test.go	WithContext	False		c.Request = c.Request.WithContext(ctx)
+PR7060	backend/internal/service/openai_images_compatible_test.go	NopCloser	False		"upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{""Content-Type"": {""application/json""}}, Body: io.NopCloser(strings.NewReader(`{""data"":[{""b64_json"":""aW1hZ2U=""}]}`))}}"
+PR7060	backend/internal/service/openai_images_compatible_test.go	Equal	False		require.Equal(t, OpenAIImagesCapabilityAPIKey, parsed.RequiredCapabilityForModel(channelModel))
+PR7060	backend/internal/service/openai_images_compatible_test.go	RequiredCapabilityForModel	True		require.Equal(t, OpenAIImagesCapabilityAPIKey, parsed.RequiredCapabilityForModel(channelModel))
+PR7060	backend/internal/service/openai_images_compatible_test.go	ForwardImages	False	backend/internal/service/openai_images.go:554	result, err := svc.ForwardImages(c.Request.Context(), c, &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: credentials}, body, parsed, channelModel)
+PR7060	backend/internal/service/openai_images_compatible_test.go	firstNonEmptyString	False	backend/internal/handler/grok_media.go:678 | backend/internal/service/openai_images.go:1428 | backend/internal/config/config.go:406	require.Equal(t, firstNonEmptyString(channelModel, parsed.Model), result.Model)
+PR7060	backend/internal/service/openai_images_compatible_test.go	String	False	backend/internal/service/scheduler_cache.go:52 | backend/internal/service/usage_log.go:40 | backend/internal/service/batch_image_settlement.go:372 | backend/internal/service/usage_record_worker_pool.go:499	"require.Equal(t, ""https://compatible.example""+endpoint, upstream.lastReq.URL.String())"
+PR7060	backend/internal/service/openai_images_compatible_test.go	Get	False	backend/internal/handler/model_plaza_handler.go:105 | backend/internal/handler/batch_image_handler.go:93 | backend/internal/handler/image_task_admin_toggle_test.go:26 | backend/internal/handler/image_task_handler_test.go:33	"require.Equal(t, ""Bearer image-key"", upstream.lastReq.Header.Get(""Authorization""))"
+PR7060	backend/internal/service/openai_images_compatible_test.go	ParseMultipartForm	False		require.NoError(t, r.ParseMultipartForm(1<<20))
+PR7060	backend/internal/service/openai_images_compatible_test.go	FormValue	False		"require.Equal(t, model, r.FormValue(""model""))"
+PR7060	backend/internal/service/openai_images_compatible_test.go	FormFile	False		"file, _, err := r.FormFile(""image"")"
+PR7060	backend/internal/service/openai_images_compatible_test.go	ReadAll	False		data, err := io.ReadAll(file)
+PR7060	backend/internal/service/openai_images_compatible_test.go	string	False		"require.Equal(t, ""original-image-bytes"", string(data))"
+PR7060	backend/internal/service/openai_images_compatible_test.go	GetBytes	False		"require.Equal(t, model, gjson.GetBytes(upstream.lastBody, ""model"").String())"
+PR7060	backend/internal/service/openai_images_compatible_test.go	TestCompatibleImagesNativeAccountsRejectGeminiBeforeForwarding	True		func TestCompatibleImagesNativeAccountsRejectGeminiBeforeForwarding(t *testing.T) {
+PR7060	backend/internal/service/openai_images_compatible_test.go	Background	False		"_, err := svc.ForwardImages(context.Background(), c, account, nil, &OpenAIImagesRequest{Model: model}, """")"
+PR7060	backend/internal/service/openai_images_compatible_test.go	Empty	False		require.Empty(t, upstream.requests)
+PR4867	backend/internal/service/backup_service_test.go	TestBackupService_S3ConfigStaysEncryptedAfterSecondSave	True		func TestBackupService_S3ConfigStaysEncryptedAfterSecondSave(t *testing.T) {
+PR4867	backend/internal/service/backup_service_test.go	newMockSettingRepo	False	backend/internal/service/backup_service_test.go:32	repo := newMockSettingRepo()
+PR4867	backend/internal/service/backup_service_test.go	newTestBackupService	False	backend/internal/service/backup_service_test.go:273	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+PR4867	backend/internal/service/backup_service_test.go	newMockObjectStore	False	backend/internal/service/backup_service_test.go:211	svc := newTestBackupService(repo, &mockDumper{}, newMockObjectStore())
+PR4867	backend/internal/service/backup_service_test.go	UpdateS3Config	False	backend/internal/service/backup_service.go:322 | backend/internal/handler/admin/backup_handler.go:34	_, err := svc.UpdateS3Config(context.Background(), BackupS3Config{
+PR4867	backend/internal/service/backup_service_test.go	Background	False		_, err := svc.UpdateS3Config(context.Background(), BackupS3Config{
+PR4867	backend/internal/service/backup_service_test.go	NoError	False		require.NoError(t, err)
+PR4867	backend/internal/service/backup_service_test.go	GetValue	False	backend/internal/handler/ops_error_logger_test.go:22 | backend/internal/handler/ops_error_logger_test.go:1377 | backend/internal/handler/image_task_admin_toggle_test.go:28 | backend/internal/handler/passkey_handler_test.go:48	raw, _ := repo.GetValue(context.Background(), settingKeyBackupS3Config)
+PR4867	backend/internal/service/backup_service_test.go	Unmarshal	False		require.NoError(t, json.Unmarshal([]byte(raw), &stored))
+PR4867	backend/internal/service/backup_service_test.go	byte	False		require.NoError(t, json.Unmarshal([]byte(raw), &stored))
+PR4867	backend/internal/service/backup_service_test.go	Equal	False		"require.Equal(t, ""ENC:original-secret"", storedSecret())"
+PR4867	backend/internal/service/backup_service_test.go	storedSecret	False		"require.Equal(t, ""ENC:original-secret"", storedSecret())"
+PR4867	backend/internal/service/backup_service_test.go	NotEqual	False		"require.NotEqual(t, ""original-secret"", storedSecret(), ""secret must never be stored as plaintext"")"
+PR4867	backend/internal/service/backup_service_test.go	loadS3Config	False	backend/internal/service/backup_service.go:1196	internal, err := svc.loadS3Config(context.Background())
+PR7636	backend/internal/setup/setup_test.go	TestWriteConfigFileOmitsObsoleteRateLimit	True		func TestWriteConfigFileOmitsObsoleteRateLimit(t *testing.T) {
+PR7636	backend/internal/setup/setup_test.go	Setenv	False		"t.Setenv(""DATA_DIR"", t.TempDir())"
+PR7636	backend/internal/setup/setup_test.go	TempDir	False		"t.Setenv(""DATA_DIR"", t.TempDir())"
+PR7636	backend/internal/setup/setup_test.go	writeConfigFile	False	backend/internal/setup/setup.go:531	if err := writeConfigFile(&SetupConfig{
+PR7636	backend/internal/setup/setup_test.go	Fatalf	False		"t.Fatalf(""writeConfigFile() error = %v"", err)"
+PR7636	backend/internal/setup/setup_test.go	ReadFile	False		data, err := os.ReadFile(GetConfigFilePath())
+PR7636	backend/internal/setup/setup_test.go	GetConfigFilePath	False	backend/internal/setup/setup.go:70	data, err := os.ReadFile(GetConfigFilePath())
+PR7636	backend/internal/setup/setup_test.go	Unmarshal	False		if err := yaml.Unmarshal(data, &config); err != nil {

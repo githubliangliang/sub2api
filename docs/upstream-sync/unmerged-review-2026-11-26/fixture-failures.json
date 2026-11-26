@@ -1,0 +1,27 @@
+[
+  {
+    "run": "frontend-probes.json",
+    "kind": "test-only TypeScript syntax error",
+    "cause": "The temporary ControlledReader class lacked its closing brace before the describe callback hooks. Vitest transform failed before any test executed.",
+    "correction": "Added the single class closing brace; retained initial source and raw transform failure.",
+    "product_changes": []
+  },
+  {
+    "run": "frontend-probes-final.json",
+    "cause": "Two temporary group fixtures omitted required user.email, and the definition-clear test selected textarea although the existing UI uses an input. Those cases did not reach their assertions; cascading cleanup errors also invalidated image tests.",
+    "correction": "Supply fake user.email and target the existing description input, then rerun all tests. Keep the initial transform/source and subsequent fixture failure logs.",
+    "product_changes": []
+  },
+  {
+    "run": "frontend-probes-corrected.json",
+    "cause": "The description field is an input with placeholder key fieldDescriptionHint, not descriptionHint. Seven reported failures included this selector mistake; image controls now run normally after correcting group.email.",
+    "correction": "Use the exact existing fieldDescriptionHint selector. No production or assertion changes.",
+    "product_changes": []
+  },
+  {
+    "run": "wire-controls.json",
+    "cause": "The string control used 12.5, but existing numeric custom attributes intentionally validate with strconv.Atoi. Both wire type and existing integer semantics must be kept distinct.",
+    "correction": "Use valid integer 12 as number/string controls; matching frontend probe also uses 12. Decimal acceptance is not part of this proposed fix.",
+    "product_changes": []
+  }
+]

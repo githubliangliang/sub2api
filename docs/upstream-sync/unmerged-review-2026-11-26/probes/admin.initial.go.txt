@@ -1,0 +1,26 @@
+package admin
+
+import (
+ "context"
+ "net/http"
+ "net/http/httptest"
+ "strings"
+ "testing"
+ "github.com/Wei-Shaw/sub2api/internal/service"
+ "github.com/gin-gonic/gin"
+ "github.com/stretchr/testify/require"
+)
+
+type backlogNextDefRepo struct{service.UserAttributeDefinitionRepository}
+func (backlogNextDefRepo) List(context.Context,bool)([]service.UserAttributeDefinition,error){return []service.UserAttributeDefinition{{ID:1,Key:"fixture",Name:"Fixture",Type:"number",Enabled:true}},nil}
+type backlogNextValueRepo struct{service.UserAttributeValueRepository;values []service.UserAttributeValue}
+func (r *backlogNextValueRepo) UpsertBatch(_ context.Context,userID int64,in []service.UpdateUserAttributeInput)error{r.values=nil;for _,v:=range in {r.values=append(r.values,service.UserAttributeValue{UserID:userID,AttributeID:v.AttributeID,Value:v.Value})};return nil}
+func (r *backlogNextValueRepo) GetByUserID(context.Context,int64)([]service.UserAttributeValue,error){return r.values,nil}
+
+func TestBacklogNextControlAttributeHTTPWireType(t *testing.T) {
+ for _,tc:=range []struct{name,body string;status int}{{"number_from_current_form",`{"values":{"1":12.5}}`,400},{"string_contract",`{"values":{"1":"12.5"}}`,200}}{t.Run(tc.name,func(t *testing.T){
+  values:=&backlogNextValueRepo{};h:=NewUserAttributeHandler(service.NewUserAttributeService(backlogNextDefRepo{},values));r:=gin.New();r.PUT("/admin/users/:id/attributes",h.UpdateUserAttributes)
+  req:=httptest.NewRequest(http.MethodPut,"/admin/users/2/attributes",strings.NewReader(tc.body));req.Header.Set("Content-Type","application/json");rec:=httptest.NewRecorder();r.ServeHTTP(rec,req)
+  require.Equal(t,tc.status,rec.Code,rec.Body.String());if tc.status==400 {require.Empty(t,values.values)} else {require.Len(t,values.values,1);require.Equal(t,"12.5",values.values[0].Value)}
+ })}
+}
