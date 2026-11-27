@@ -46,6 +46,7 @@ func RegisterAdminRoutes(
 
 		// 启用账号模型汇总（侧栏「模型广场」）
 		admin.GET("/model-plaza", h.Admin.Account.ListAccountModelPlaza)
+		admin.PUT("/model-plaza/pricing", h.Admin.Account.UpdateModelPlazaReferencePricing)
 
 		// OpenAI OAuth
 		registerOpenAIOAuthRoutes(admin, h)

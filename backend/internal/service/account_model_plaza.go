@@ -21,9 +21,10 @@ type AccountModelPlazaItem struct {
 	Pricing      *AccountModelPlazaPricing `json:"pricing"`
 }
 
-// AccountModelPlazaPricing contains default reference prices in USD per token.
+// AccountModelPlazaPricing contains reference prices in USD per token.
 type AccountModelPlazaPricing struct {
 	Model             string   `json:"model"`
+	Manual            bool     `json:"manual,omitempty"`
 	InputPrice        float64  `json:"input_price"`
 	OutputPrice       float64  `json:"output_price"`
 	CacheWritePrice   *float64 `json:"cache_write_price"`

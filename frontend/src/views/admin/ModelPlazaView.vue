@@ -20,7 +20,7 @@
             <button
               type="button"
               class="btn btn-secondary"
-              :disabled="loading"
+              :disabled="loading || savingPrice"
               :title="t('common.refresh')"
               @click="loadItems"
             >
@@ -86,6 +86,20 @@
               class="min-w-36 space-y-1 text-xs tabular-nums"
               :title="t('admin.modelPlaza.priceHint')"
             >
+              <div v-if="row.pricing.manual" class="flex items-center justify-between gap-3">
+                <span class="rounded bg-primary-50 px-1.5 py-0.5 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400">
+                  {{ t('admin.modelPlaza.manualPrice') }}
+                </span>
+                <button
+                  type="button"
+                  class="text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                  :title="t('admin.modelPlaza.editPrice')"
+                  :disabled="loading || savingPrice"
+                  @click="openPriceEditor(row)"
+                >
+                  {{ t('common.edit') }}
+                </button>
+              </div>
               <div
                 v-if="row.pricing.model !== row.client_id"
                 class="font-mono text-gray-400 dark:text-dark-500"
@@ -106,7 +120,16 @@
                 </div>
               </template>
             </div>
-            <span v-else class="text-sm text-gray-400 dark:text-dark-500">—</span>
+            <button
+              v-else
+              type="button"
+              class="btn btn-secondary px-2 py-1 text-xs"
+              :title="t('admin.modelPlaza.addPrice')"
+              :disabled="loading || savingPrice"
+              @click="openPriceEditor(row)"
+            >
+              {{ t('admin.modelPlaza.addPrice') }}
+            </button>
           </template>
 
           <template #cell-account_count="{ value }">
@@ -124,6 +147,61 @@
         </DataTable>
       </template>
     </TablePageLayout>
+
+    <BaseDialog
+      :show="editingPrice !== null"
+      :title="t(editingPrice?.pricing?.manual ? 'admin.modelPlaza.editPrice' : 'admin.modelPlaza.addPrice')"
+      :close-on-escape="!savingPrice"
+      :show-close-button="!savingPrice"
+      @close="closePriceEditor"
+    >
+      <form id="plaza-price-form" class="space-y-4" @submit.prevent="savePrice()">
+        <div class="space-y-1">
+          <p class="break-all font-mono text-sm text-gray-900 dark:text-white">{{ editingPrice?.client_id }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ platformLabel(editingPrice?.platform ?? '') }}</p>
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ t('admin.modelPlaza.price') }}</p>
+          <p class="input-hint">{{ t('admin.modelPlaza.manualPriceHint') }}</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div v-for="field in priceFields" :key="field.key">
+            <label :for="`plaza-price-${field.key}`" class="input-label">
+              {{ t(`admin.modelPlaza.${field.label}`) }}
+              <span v-if="field.key === 'input_price' || field.key === 'output_price'" class="text-red-500">*</span>
+            </label>
+            <input
+              :id="`plaza-price-${field.key}`"
+              v-model="priceForm[field.key]"
+              type="number"
+              min="0"
+              step="any"
+              class="input"
+              :required="field.key === 'input_price' || field.key === 'output_price'"
+              :disabled="savingPrice"
+            />
+          </div>
+        </div>
+      </form>
+      <template #footer>
+        <div class="flex flex-wrap justify-end gap-3">
+          <button
+            v-if="editingPrice?.pricing?.manual"
+            type="button"
+            class="btn btn-secondary mr-auto text-red-600 dark:text-red-400"
+            data-testid="clear-reference-price"
+            :disabled="savingPrice"
+            @click="savePrice(true)"
+          >
+            {{ t('admin.modelPlaza.clearPrice') }}
+          </button>
+          <button type="button" class="btn btn-secondary" :disabled="savingPrice" @click="closePriceEditor">
+            {{ t('common.cancel') }}
+          </button>
+          <button type="submit" form="plaza-price-form" class="btn btn-primary" :disabled="savingPrice">
+            {{ t(savingPrice ? 'common.saving' : 'common.save') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
   </AppLayout>
 </template>
 
@@ -132,6 +210,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import type { AccountModelPlazaItem } from '@/api/admin/modelPlaza'
+import type { PlazaOfficialPricing } from '@/api/modelPlaza'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Select from '@/components/common/Select.vue'
 import type { Column } from '@/components/common/types'
@@ -155,6 +235,8 @@ const loading = ref(false)
 const items = ref<PlazaRow[]>([])
 const searchQuery = ref('')
 const platformFilter = ref('')
+const editingPrice = ref<PlazaRow | null>(null)
+const savingPrice = ref(false)
 
 const priceFields = [
   { key: 'input_price', label: 'inputPrice' },
@@ -163,6 +245,15 @@ const priceFields = [
   { key: 'cache_write_price', label: 'cacheWritePrice' },
   { key: 'cache_write_1h_price', label: 'cacheWrite1hPrice' }
 ] as const
+
+type PriceField = typeof priceFields[number]['key']
+const priceForm = ref<Record<PriceField, string | number>>({
+  input_price: '',
+  output_price: '',
+  cache_read_price: '',
+  cache_write_price: '',
+  cache_write_1h_price: ''
+})
 
 const columns = computed<Column[]>(() => [
   { key: 'client_id', label: t('admin.modelPlaza.clientId'), sortable: true },
@@ -201,6 +292,56 @@ const filteredItems = computed(() => {
 
 function copyId(id: string) {
   void copyToClipboard(id)
+}
+
+function openPriceEditor(row: PlazaRow) {
+  for (const { key } of priceFields) {
+    const value = row.pricing?.[key]
+    priceForm.value[key] = value == null ? '' : Number((value * 1_000_000).toPrecision(15)).toString()
+  }
+  editingPrice.value = row
+}
+
+function closePriceEditor() {
+  if (!savingPrice.value) editingPrice.value = null
+}
+
+async function savePrice(clear = false) {
+  const row = editingPrice.value
+  if (!row || savingPrice.value) return
+
+  let pricing: PlazaOfficialPricing | null = null
+  if (!clear) {
+    const values = {} as Record<PriceField, number | null>
+    for (const { key } of priceFields) {
+      const raw = String(priceForm.value[key]).trim()
+      if (raw === '' && key !== 'input_price' && key !== 'output_price') {
+        values[key] = null
+      } else if (raw === '' || !Number.isFinite(Number(raw)) || Number(raw) < 0) {
+        appStore.showError(t('admin.modelPlaza.invalidPrice'))
+        return
+      } else {
+        values[key] = Number(raw) / 1_000_000
+      }
+    }
+    pricing = values
+  }
+
+  savingPrice.value = true
+  try {
+    await adminAPI.modelPlaza.updateReferencePricing({
+      client_id: row.client_id,
+      platform: row.platform,
+      pricing
+    })
+    appStore.showSuccess(t('admin.modelPlaza.priceSaved'))
+    editingPrice.value = null
+    await loadItems()
+  } catch {
+    appStore.showError(t('admin.modelPlaza.savePriceFailed'))
+  } finally {
+    savingPrice.value = false
+  }
 }
 
 async function loadItems() {

@@ -6,7 +6,7 @@ export interface AccountModelPlazaItem {
   platform: string
   upstream_ids: string[]
   account_count: number
-  pricing: (PlazaOfficialPricing & { model: string }) | null
+  pricing: (PlazaOfficialPricing & { model: string; manual?: boolean }) | null
 }
 
 export interface AccountModelPlazaResponse {
@@ -18,8 +18,19 @@ export async function listAccountModels(): Promise<AccountModelPlazaResponse> {
   return data ?? { items: [] }
 }
 
+export interface UpdateReferencePricingRequest {
+  client_id: string
+  platform: string
+  pricing: PlazaOfficialPricing | null
+}
+
+export async function updateReferencePricing(request: UpdateReferencePricingRequest): Promise<void> {
+  await apiClient.put('/admin/model-plaza/pricing', request)
+}
+
 export const modelPlazaAPI = {
-  listAccountModels
+  listAccountModels,
+  updateReferencePricing
 }
 
 export default modelPlazaAPI

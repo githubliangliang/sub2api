@@ -65,6 +65,7 @@ type AccountHandler struct {
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
 	pricingService          *service.PricingService
+	modelPlazaSettings      *service.SettingService
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
@@ -78,6 +79,10 @@ func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUs
 
 func (h *AccountHandler) SetPricingService(pricing *service.PricingService) {
 	h.pricingService = pricing
+}
+
+func (h *AccountHandler) SetModelPlazaSettingService(settings *service.SettingService) {
+	h.modelPlazaSettings = settings
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -2860,9 +2865,41 @@ func (h *AccountHandler) ListAccountModelPlaza(c *gin.Context) {
 			items[i].Pricing.CacheReadPrice = &pricing.CacheReadInputTokenCost
 		}
 	}
+	if err := h.modelPlazaSettings.ApplyModelPlazaReferencePricing(c.Request.Context(), items); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	response.Success(c, gin.H{
 		"items": items,
 	})
+}
+
+// UpdateModelPlazaReferencePricing saves or clears a display-only manual price.
+// PUT /api/v1/admin/model-plaza/pricing
+func (h *AccountHandler) UpdateModelPlazaReferencePricing(c *gin.Context) {
+	var req struct {
+		ClientID string          `json:"client_id" binding:"required"`
+		Platform string          `json:"platform" binding:"required"`
+		Pricing  json.RawMessage `json:"pricing" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	var pricing *service.ModelPlazaReferencePricing
+	if err := json.Unmarshal(req.Pricing, &pricing); err != nil {
+		response.BadRequest(c, "Invalid reference price: "+err.Error())
+		return
+	}
+	if h.modelPlazaSettings == nil {
+		response.InternalError(c, "Model plaza settings unavailable")
+		return
+	}
+	if err := h.modelPlazaSettings.SetModelPlazaReferencePricing(c.Request.Context(), req.Platform, req.ClientID, pricing); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"success": true})
 }
 
 // antigravityAccountTestModels uses the stored mapping rather than GetModelMapping,
