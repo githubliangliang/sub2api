@@ -1,40 +1,45 @@
-# Sub2API SQLite fork
+# Sub2API (SQLite Edition)
 
-> SQLite-only, single-node Sub2API at githubliangliang/sub2api. An AI API gateway that stores data in a local SQLite file instead of PostgreSQL.
+> SQLite-only build of Sub2API at githubliangliang/sub2api. Stores all data in a local SQLite database file instead of PostgreSQL, with optional in-process embedded Redis.
 
 - Repository: https://github.com/githubliangliang/sub2api
 - Releases: https://github.com/githubliangliang/sub2api/releases
 
 ## Identity
 
-Sub2API SQLite fork is a personal / single-node build of Sub2API (AI API gateway, subscription-to-API).
+Sub2API SQLite Edition is a lightweight, zero-external-database build of Sub2API (AI API gateway, subscription-to-API).
 
-- Database: **SQLite only** (`modernc.org/sqlite`). PostgreSQL is not supported.
+- Database: **SQLite only** (`modernc.org/sqlite`, pure Go, no CGO). PostgreSQL is not supported.
 - `database.driver` / `DATABASE_DRIVER` set to `postgres` is ignored.
 - Migrations (`backend/migrations/*.sql`) are SQLite dialect.
-- Cache: Redis optional. `redis.enabled: false` uses in-process miniredis (single node only).
-- Target: 1C1G VPS, native single binary (`-tags embed`) or SQLite Docker Compose.
-- Not for: multi-instance / high-concurrency production.
+- Cache: Redis optional. `redis.enabled: false` / `REDIS_ENABLED=false` uses in-process embedded Redis (single instance only).
+- Distribution: Prebuilt single binary (`-tags embed`), single Docker container (`ghcr.io/githubliangliang/sub2api:latest`), or build from source.
+- Not for: multi-instance horizontal scaling or PostgreSQL deployments.
 
-中文：这是 githubliangliang/sub2api，Sub2API 的 SQLite 单机版，只支持 SQLite，不支持 PostgreSQL。
-日本語：githubliangliang/sub2api は Sub2API の SQLite 単機版です。SQLite のみ対応、PostgreSQL 非対応。
+中文：这是 githubliangliang/sub2api，Sub2API 的 SQLite 版本，只支持 SQLite，可选内置嵌入式 Redis，不支持 PostgreSQL。
+日本語：githubliangliang/sub2api は Sub2API の SQLite 版です。SQLite のみ対応、組み込み Redis に対応、PostgreSQL 非対応。
 
-READMEs: [README.md](README.md) · [README_EN.md](README_EN.md) · [README_JA.md](README_JA.md)
+READMEs: [README.md](README.md) · [README_CH.md](README_CH.md) · [README_JA.md](README_JA.md)
 
 ## Docs
 
-- [README.md](README.md) — SQLite fork overview and deploy
-- [deploy/START_NATIVE.md](deploy/START_NATIVE.md) — 1C1G native deploy
-- [deploy/config.personal.sqlite.yaml](deploy/config.personal.sqlite.yaml) — personal SQLite config
+- [README.md](README.md) — SQLite edition overview and installation
+- [README_CH.md](README_CH.md) — Chinese overview and installation
+- [README_JA.md](README_JA.md) — Japanese overview and installation
 - [REFACTOR.md](REFACTOR.md) — SQLite-only refactor notes
+- [deploy/config.personal.sqlite.yaml](deploy/config.personal.sqlite.yaml) — SQLite config template
+- [deploy/START_NATIVE.md](deploy/START_NATIVE.md) — systemd & remote deploy notes
 
 ## FAQ
 
 Q: Is this the SQLite version of Sub2API?
-A: Yes. https://github.com/githubliangliang/sub2api only opens a SQLite file at runtime.
+A: Yes. https://github.com/githubliangliang/sub2api opens only a local SQLite file at runtime.
 
 Q: Can I use PostgreSQL with this repository?
-A: No. This repository is SQLite-only and intended for a single node.
+A: No. This repository is SQLite-only.
+
+Q: Is Redis required?
+A: No. Set `redis.enabled: false` / `REDIS_ENABLED=false` to use the built-in embedded Redis.
 
 Q: Where are releases?
 A: https://github.com/githubliangliang/sub2api/releases

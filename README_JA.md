@@ -2,358 +2,265 @@
 
 <img src="assets/logo.svg" alt="Sub2API Logo" width="128" />
 
-# Sub2API（SQLite 単一ノード版フォーク）
+# Sub2API（SQLite 版）
 
-[![Go](https://img.shields.io/badge/Go-1.27.0-00ADD8.svg)](https://golang.org/)
-[![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
-[![SQLite](https://img.shields.io/badge/SQLite-only-003B57.svg)](https://www.sqlite.org/)
+[![Go](https://img.shields.io/badge/Go-1.27.4-00ADD8.svg)](https://golang.org/)
+[![Vue](https://img.shields.io/badge/Vue-3.5+-4FC08D.svg)](https://vuejs.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-Only-003B57.svg)](https://www.sqlite.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-**SQLite 専用 Sub2API** — [githubliangliang/sub2api](https://github.com/githubliangliang/sub2api) で公開している、個人利用 / 単一ノード向けの Sub2API の SQLite 版です。データベースは **SQLite のみ**（`modernc.org/sqlite`）で、PostgreSQL には対応していません。
-
-本リポジトリは Sub2API の **SQLite 単一ノード版**です。実行時にはローカルの SQLite ファイルだけを開き、`database.driver` / `DATABASE_DRIVER` に `postgres` を指定しても無視されます。個人の単一ノード利用を想定しており、PostgreSQL / 複数インスタンスには対応していません。
+**Sub2API SQLite 版** — 軽量で **SQLite 専用**の Sub2API ビルド（[githubliangliang/sub2api](https://github.com/githubliangliang/sub2api)）。  
+すべてのデータを単一のローカル SQLite ファイル（`modernc.org/sqlite`）に保存し、プロセス内組み込み Redis にも対応。PostgreSQL や外部 Redis は不要です。
 
 リポジトリ：**https://github.com/githubliangliang/sub2api** · リリース：**https://github.com/githubliangliang/sub2api/releases** · [llms.txt](./llms.txt)
 
-[中文](README.md) | [English](README_EN.md) | [日本語](README_JA.md)
+[English](README.md) | [中文](README_CH.md) | [日本語](README_JA.md)
 
 </div>
 
-## 本フォークの変更点
+## Sub2API SQLite 版について
 
-上流版との主な違い：
+本リポジトリは、外部データベース不要の単一ノード運用に向けた **SQLite 専用版 Sub2API** を提供します。
 
-| 機能 | 内容 |
+| 特徴 | 内容 |
 |------|------|
-| **SQLite のみ** | 実行時には SQLite（`modernc.org/sqlite`）だけを開きます。`database.driver` / `DATABASE_DRIVER` に `postgres` を指定しても無視されます |
-| **セットアップウィザード** | Web / CLI / `AUTO_SETUP` では SQLite ファイルのパスだけを設定します。host/port/user/ssl は不要です |
-| **バックアップ** | 管理画面のバックアップでは `VACUUM INTO` を使って `*.db.gz` を作成します。イメージには `pg_dump` / `psql` を含めません |
-| **Redis は任意** | `REDIS_ENABLED=false` の場合はプロセス内の組み込み Redis を使います（単一ノードのみ）。Web ウィザードのステップ 2 に「外部 Redis を使用」スイッチがあり、初期状態ではオフです |
-| **メニューの非表示** | 設定項目 `hidden_menu_keys` と管理画面の「メニュー管理」（`/admin/menu`）で、サイドバーの項目を個別に非表示にできます |
-| **利用量の記録** | `usage_logs` の冪等性インデックスと `usage_billing_dedup` テーブルを補い、リクエストが成功しても利用量が記録されない問題を防ぎます |
-| **決済ページの整理** | 廃止された `/admin/payment/providers` エンドポイントへのフロントエンドのリクエストを削除しています |
+| **SQLite 専用** | 純 Go 製 SQLite ドライバ（`modernc.org/sqlite`、CGO 不要）を使用。実行時はローカルの SQLite ファイルのみを開き、`database.driver` / `DATABASE_DRIVER` に `postgres` を指定しても無視されます |
+| **SQLite 向けセットアップウィザード** | Web、CLI（`--setup`）、`AUTO_SETUP` では SQLite ファイルのパスのみを設定し、PostgreSQL の host / port / user / ssl は不要です |
+| **ネイティブ SQLite バックアップ** | 管理画面のバックアップは `VACUUM INTO` で整合性のある `*.db.gz` スナップショットを作成。コンテナイメージに `pg_dump` / `psql` は含まれません |
+| **任意の組み込み Redis** | `redis.enabled: false` / `REDIS_ENABLED=false` でプロセス内組み込み Redis を使用（単一インスタンスのみ）。Web ウィザードのステップ 2 でも「外部 Redis を使用」は初期状態でオフです |
+| **メニューの非表示設定** | `hidden_menu_keys` または管理画面「メニュー管理」（`/admin/menu`）でサイドバー項目を個別に非表示にできます |
+| **利用量記録の補強** | SQLite 向けに `usage_logs` の冪等性インデックスと `usage_billing_dedup` テーブルを整備し、成功したリクエストの利用量欠落を防ぎます |
+| **決済ページの整理** | 廃止された `/admin/payment/providers` へのフロントエンドリクエストを削除しています |
+
+> **注意**：本バージョンは PostgreSQL および複数インスタンスによるスケールアウトには**対応していません**。`backend/migrations/*.sql` はすべて SQLite 方言です。適用済みの `SELECT 1` no-op マイグレーションは削除しないでください（チェックサムは変更不可）。
 
 関連ドキュメント：
 
 | 内容 | ドキュメント |
 |------|--------------|
-| リファクタリングの詳細 | [REFACTOR.md](./REFACTOR.md) |
-| ネイティブデプロイ | [deploy/START_NATIVE.md](./deploy/START_NATIVE.md) |
-| 開発上の規約と注意点 | [DEV_GUIDE.md](./DEV_GUIDE.md) |
-| 廃止したページ | [REMOVED_PAGES.md](./REMOVED_PAGES.md) |
-| 上流変更の取り込み（リポジトリ全体をマージ**しない**） | [docs/upstream-sync/README.md](./docs/upstream-sync/README.md) |
-
-> **注意**：本リポジトリは PostgreSQL に接続**できません**。`backend/migrations/*.sql` は SQLite 方言です。適用済みの `SELECT 1` no-op マイグレーションを削除しないでください。チェックサムは変更できません。高い同時実行数 / 複数インスタンスには適していません。
+| SQLite リファクタリング詳細 | [REFACTOR.md](./REFACTOR.md) |
+| 開発規約と注意点 | [DEV_GUIDE.md](./DEV_GUIDE.md) |
+| 廃止されたページ | [REMOVED_PAGES.md](./REMOVED_PAGES.md) |
+| ネイティブ systemd / リモート運用ガイド | [deploy/START_NATIVE.md](./deploy/START_NATIVE.md) |
+| 上流変更の取り込み（リポジトリ全体の merge **不可**） | [docs/upstream-sync/README.md](./docs/upstream-sync/README.md) |
 
 ---
 
-## デプロイ方法の選び方
+## インストール
 
-| 利用環境 | 方法 |
-|----------|------|
-| 1 台の VPS で個人利用 | **方法 1**：単一バイナリ + SQLite + 組み込み Redis |
-| ローカル環境 / NAS に Docker がある | **方法 2**：SQLite の単一コンテナ |
-| 複数インスタンス、高い同時実行数、チーム利用 | 本リポジトリは適していません（SQLite のみ、単一ノード） |
+環境に合わせていずれかの方法を選んでください。いずれも PostgreSQL や外部 Redis は不要です。
 
-どちらの方法でも、先に `run_mode` を決めてください。**`standard` を推奨**します。次の節を参照してください。
+### 方法 1：ビルド済みバイナリ（最速）
 
----
-
-## run_mode：standard を推奨
-
-有効な値は `standard` と `simple` だけです。それ以外の値は `config.NormalizeRunMode` によって `standard` に正規化されます。プログラムのデフォルト値、`deploy/config.example.yaml`、`deploy/.env.sqlite.example` はすべて `standard` です。
-
-### 2 つのモードの違い
-
-| 動作 | `standard`（推奨） | `simple` |
-|------|---------------------|------------|
-| 残高 / サブスクリプションの確認 | 有効：残高 ≤ 0、または `billing.minimum_balance_reserve`（デフォルト `0.000001`）未満の場合 → `403 INSUFFICIENT_BALANCE` | すべてスキップ |
-| 利用量と課金 | `usage_logs` に記録し、トークンの実コストを残高から差し引きます | `usage_logs` への記録のみです。コストは計算してログに残しますが、残高は変更しません。ログには `[SIMPLE MODE] Usage recorded (not billed)` と出力します |
-| グループ別のスケジューリング | グループで分離します。キーにグループが設定されていればそのグループのアカウントだけを使い、未設定なら**どのグループにも属していないアカウント**だけを使います | グループを無視し、プラットフォームごとのスケジュール可能な全アカウントから選びます |
-| 起動時の副作用 | なし | 不足している `anthropic-default` / `openai-default` / `gemini-default` / `grok-default` / `antigravity-default-1,2` グループを自動作成します。管理者の同時実行数がまだ 5 なら、一度だけ 30 に引き上げます |
-| サイドバー | 全項目を表示 | ユーザー、グループ、チャネル管理、サブスクリプション、監査ログに加え、ユーザー側の利用量統計、一括画像生成、利用可能なチャネルを非表示にします |
-| URL を直接入力 | すべてアクセス可能 | `/admin/groups`、`/admin/subscriptions`、`/admin/redeem`、`/subscriptions`、`/redeem` はホームにリダイレクトされます。`/admin/users` はサイドバーに表示されないだけで、直接アクセスできます |
-| `/v1/sub2api/billing` | 利用可能 | 404 |
-
-### 個人利用でも standard を推奨する理由
-
-- **グループは、このシステムでアカウントを分離し、特定のアカウントにリクエストを振り分ける唯一の手段です**（グループのモデルマッピング、グループの上限、キーへのグループ設定）。`simple` でも設定を入力・保存でき、UI 上は有効に見えますが、**スケジューリングには使われません**。アカウントが増えると、この点の調査に時間がかかります。
-- 利用量統計、監査ログ、ユーザー管理など、何が起きたかを確認するためのページが、`simple` ではサイドバーから消えます。
-- メニューが多すぎる場合は UI 側で調整できます。本フォークでは `hidden_menu_keys` + `/admin/menu` で項目を個別に非表示にでき、全体を `simple` に切り替えるより細かく制御できます。
-- `simple` で省ける作業は残高の管理だけです。これは次の設定で対応できます。
-
-### standard で必要な設定：自分の残高を設定する
-
-`standard` は残高を確認します。管理者作成時の初期残高には `default.user_balance`（上流版のデフォルトは `0`）を使います。残高を設定しないと、最初の API リクエストで `403 INSUFFICIENT_BALANCE` が返ります。
-
-- **初回起動前**：`config.yaml` の `default.user_balance` を十分な値に設定してください。`deploy/config.personal.sqlite.yaml` では `100000` を設定済みです。管理者はこの残高で作成されます。
-  - この値は**新規登録ユーザー**の初期残高にもなります。登録を開放する場合は `0` に戻し、以下の方法で自分の残高だけを別途設定してください。
-- **すでに起動した場合、または Docker の `AUTO_SETUP` でセットアップした場合**（この方法では管理者の初期残高は `0` 固定）：ログイン後、管理画面 → **ユーザー管理**（`/admin/users`）→ 自分の残高を増やしてください。エンドポイントは `POST /admin/users/:id/balance` です。
-
-残高からトークンの実コストが差し引かれます。0 になると再び 403 が返るので、残高を増やしてください。`/admin/usage` で使用した金額を確認できます。
-
-### simple を選ぶ場合
-
-リクエストを転送できればよく、コストを確認せず、グループでアカウントを分離しない場合に選びます。`standard` に戻す前には 2 点に注意してください。`simple` の間は残高が変更されません。利用量ログには計算したコストが記録されますが、残高の差し引きは記録されず、切り替えた後に差し引きが始まります。また、`simple` が起動時に作成したデフォルトグループはデータベースに残ります。これらのグループは空で、グループ未設定のキーは引き続き「どのグループにも属していないアカウント」を使うため、`standard` には影響しません。
-
----
-
-## デプロイ
-
-### 方法 1：ネイティブデプロイ（個人用サーバーに推奨）
-
-目的：個人の単一ノード利用。ローカルでバイナリをビルドし、サーバーにアップロードします。
-
-構成：単一バイナリ + SQLite + 外部 Redis なし（PostgreSQL / Redis のプロセスは起動しません）。
-
-ローカル環境に必要なもの：Go `1.27.0`（`backend/go.mod` を参照）、Node 20、**pnpm**（npm ではなく pnpm を使ってください）。
-
-#### 1. ローカルでビルド
+[GitHub Releases](https://github.com/githubliangliang/sub2api/releases) から OS・アーキテクチャ（Linux / macOS / Windows）に合うアーカイブをダウンロードして展開し、起動します。
 
 ```bash
-git clone https://github.com/githubliangliang/sub2api.git
-cd sub2api
-
-# フロントエンド
-cd frontend
-pnpm install
-pnpm run build
-cd ..
-
-# バックエンド（フロントエンドを組み込み、strip でサイズを削減）
-cd backend
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-  go build -tags embed -ldflags="-s -w" \
-  -o ../sub2api ./cmd/server
+# 直接起動（初回は Web セットアップウィザードが起動します）
+./sub2api
 ```
 
-リポジトリのルートに単一ファイル `sub2api` が生成されます。
-
-> ARM サーバーでは `GOARCH=amd64` を `arm64` に変更してください。
-
-#### 2. サーバーにアップロード
+- ブラウザーで `http://localhost:8080` を開き、ウィザードで SQLite ファイルパスを設定します（外部 Redis をオフのままにすると組み込み Redis を使用）。
+- ターミナルで対話的に初期化したい場合は `./sub2api --setup` を実行します。
+- `config.yaml` と SQLite ファイルの保存先を指定したい場合は `DATA_DIR` を設定します：
 
 ```bash
-# ローカル環境
-scp sub2api root@あなたのサーバー:/tmp/sub2api
-
-# サーバー
-sudo useradd -r -s /usr/sbin/nologin sub2api 2>/dev/null || true
-sudo mkdir -p /opt/sub2api/data
-sudo mv /tmp/sub2api /opt/sub2api/sub2api
-sudo chmod +x /opt/sub2api/sub2api
-sudo chown -R sub2api:sub2api /opt/sub2api
+DATA_DIR=./data ./sub2api
 ```
 
-#### 3. 設定
+### 方法 2：Docker（単一コンテナ）
+
+公開イメージをそのまま起動し、SQLite データと設定用のディレクトリを 1 つマウントします。
 
 ```bash
-# リポジトリ内のテンプレートをコピー
-sudo cp deploy/config.personal.sqlite.yaml /opt/sub2api/data/config.yaml
-sudo nano /opt/sub2api/data/config.yaml
+docker run -d \
+  --name sub2api \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v $(pwd)/data:/app/data \
+  -e AUTO_SETUP=true \
+  -e DATABASE_PATH=/app/data/sub2api.db \
+  -e REDIS_ENABLED=false \
+  -e RUN_MODE=standard \
+  -e JWT_SECRET="$(openssl rand -hex 32)" \
+  ghcr.io/githubliangliang/sub2api:latest
 ```
 
-**変更が必要な項目：**
-
-```yaml
-jwt:
-  secret: "openssl rand -hex 32 で生成"
-
-totp:
-  encryption_key: "openssl rand -hex 32 で生成（16 進数で 64 文字が必須）"
-
-default:
-  admin_email: "あなたのメールアドレス"
-  admin_password: "強力なパスワード"
-  user_balance: 100000    # テンプレートで設定済み。standard では > 0 が必須。未設定なら最初の API リクエストで 403
-```
-
-> `totp.encryption_key` が空の場合、プログラムは**起動するたびに新しいランダムなキーを生成**します。再起動すると既存の 2FA 設定はすべて直ちに無効になり、決済の resume token も使えなくなります。デプロイ前に設定し、その後は変更しないでください。変更すると既存の設定はすべて無効になります。形式は 32 バイトの 16 進数表現で、形式が正しくないとサービスは起動できません。
-> `deploy/deploy-remote.sh` で初回デプロイする場合、このキーは `jwt.secret` とともにランダムに自動生成されるため、手動入力は不要です。
-
-テンプレートの主な初期設定：
-
-| 項目 | 値 | 用途 |
-|------|----|------|
-| `run_mode` | `standard` | グループ / 課金の動作をすべて有効にします。不要なメニューは `/admin/menu` で個別に非表示にしてください |
-| `default.user_balance` | `100000` | 管理者と新規登録ユーザーの初期残高。standard では > 0 が必須です |
-| `default.user_concurrency` | `10` | 管理者 / 新規ユーザーの同時実行数。足りない場合はユーザー管理で変更できます |
-| `database.driver` | `sqlite` | 互換性用の項目。実行時は常に sqlite を使います |
-| `database.path` | `/opt/sub2api/data/sub2api.db` | データベースファイル |
-| `redis.enabled` | `false` | 組み込み Redis、単一ノード |
-| `ops.enabled` | `true` | エラー / システムログと毎日 03:00 の定期クリーンアップを有効にします。集計（`aggregation`）と収集キャッシュは引き続き無効で、CPU 使用量を抑えます |
-| コネクションプール | 2 | メモリ使用量を抑えます |
-
-設定テンプレート：`deploy/config.personal.sqlite.yaml`。
-
-#### 4. systemd で自動起動
-
-```bash
-sudo cp deploy/sub2api-sqlite.service /etc/systemd/system/sub2api.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now sub2api
-sudo systemctl status sub2api
-sudo journalctl -u sub2api -f
-```
-
-ユニットファイル：`deploy/sub2api-sqlite.service`。
-
-- 作業ディレクトリ：`/opt/sub2api`
-- データ：`DATA_DIR=/opt/sub2api/data`
-- 待ち受けアドレス：`0.0.0.0:8080`
-
-#### 5. アクセス
-
-ブラウザーで `http://サーバーIP:8080` を開きます。
-設定した管理者のメールアドレスとパスワードでログインしてください。
-
-ファイアウォールで 8080 を許可してください。または、前段に Nginx のリバースプロキシを置いて 80/443 を使います。
-
-#### 6. バックアップ / アップグレード
-
-- **停止中にコピー**：`/opt/sub2api/data` ディレクトリ全体（`sub2api.db`、`sub2api.db-wal`、`sub2api.db-shm`、`config.yaml`）をコピーしてください。
-  - `config.yaml` には `jwt.secret` と `totp.encryption_key` が含まれます。失うとすべてのセッションと既存の 2FA 設定が無効になるため、必ず一緒にバックアップしてください。
-- **管理画面のバックアップ**（S3 設定後）：`VACUUM INTO` で整合性のあるスナップショットを作成し、オブジェクト名は `*.db.gz` になります。復元時には稼働中の `.db` を置き換え、`-wal` / `-shm` を削除します。
-- **アップグレード**：ローカルで再度 `go build` → アップロードして `/opt/sub2api/sub2api` を上書き → `sudo systemctl restart sub2api`。
-
-#### 1 コマンドでデプロイ（任意）
-
-```bash
-cp deploy/deploy.env.example deploy/deploy.env   # VPS の情報を入力
-deploy/deploy-remote.sh --setup-key              # SSH 公開鍵を初回だけ設定。パスワード入力も 1 回だけ
-deploy/deploy-remote.sh                          # 以降は毎回：ビルド → アップロード → 再起動 → ヘルスチェック。失敗時は自動ロールバック
-```
-
-バイナリの置き換えと再起動だけを行います。リモートにある既存の `config.yaml` と systemd ユニットは上書きしません。
-
-#### 確認項目
-
-1. ログインできる。
-2. API キー / アカウント / グループのページを開ける。
-3. API リクエストが成功し、`403 INSUFFICIENT_BALANCE` が返らない。返る場合は残高を増やす。
-4. 利用量が記録される。`/admin/usage` にリクエストとコストが表示される。
-5. メニュー管理（`/admin/menu`）を開ける。
-6. `journalctl -u sub2api` に SQL エラーが大量に出力されていない。
-
----
-
-### 方法 2：Docker Compose（SQLite の単一コンテナ）
-
-PostgreSQL / 外部 Redis は不要です。
-
-#### 前提条件
-
-- Docker 20.10+
-- Docker Compose v2+
-
-#### 手順
+または **Docker Compose**（ローカルリポジトリからビルド）を使用します：
 
 ```bash
 git clone https://github.com/githubliangliang/sub2api.git
 cd sub2api/deploy
 
-# 初回
 cp .env.sqlite.example .env.sqlite
-# ADMIN_PASSWORD、JWT_SECRET の変更を推奨（openssl rand -hex 32）
+# 推奨：ADMIN_EMAIL、ADMIN_PASSWORD、JWT_SECRET（openssl rand -hex 32）を設定
 
-# ビルドして起動
 docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite up -d --build
-
-# ログ
 docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite logs -f
 ```
 
-#### アクセス
-
-- URL：`http://localhost:8080`（ポートは `.env.sqlite` の `SERVER_PORT` を参照）。
-- 初期管理者：`.env.sqlite` の `ADMIN_EMAIL` / `ADMIN_PASSWORD` を参照。
-
-> `AUTO_SETUP` で作成した管理者の初期残高は `0` 固定です（同時実行数は 5）。`RUN_MODE=standard`（デフォルト）では、最初の API リクエストで `403 INSUFFICIENT_BALANCE` が返ります。ログイン後、`/admin/users` で自分の残高を増やし、必要に応じて同時実行数を調整してください。
-
-#### データの保存場所
-
-| パス | 内容 |
-|------|------|
-| `deploy/data/sub2api.db` | SQLite データベース |
-| `deploy/data/config.yaml` | 実行時の設定 |
-| `deploy/data/logs/` | ログ |
-
-#### よく使うコマンド
+よく使う Docker Compose コマンド：
 
 ```bash
 # 停止
 docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite down
 
-# コード変更後に再ビルド
+# コード更新後に再ビルド
 docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite up -d --build
 
-# 状態
+# 状態確認
 docker compose -f docker-compose.sqlite.yml --env-file .env.sqlite ps
 ```
 
-#### 環境変数（抜粋）
+- アクセス URL：`http://localhost:8080`（ポートは `.env.sqlite` の `SERVER_PORT`）。
+- データ保存先：`deploy/data/` に `sub2api.db`、`config.yaml`、`logs/` を保存。
+- 主な環境変数（全項目は `deploy/.env.sqlite.example` を参照）：
 
 | 変数 | 説明 |
 |------|------|
-| `RUN_MODE` | `standard`（デフォルト、推奨）/ `simple`。違いは上の [run_mode](#run_modestandard-を推奨) の節を参照してください |
-| `DATABASE_PATH` | デフォルトは `/app/data/sub2api.db`。`DATABASE_DRIVER` は無視されます |
-| `REDIS_ENABLED` | `false` = 組み込み Redis |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | 初回の `AUTO_SETUP` で作成する管理者 |
-| `JWT_SECRET` | セッション用のキー。コンテナを再作成する場合も固定してください |
-| `TOTP_ENCRYPTION_KEY` | 2FA を使う場合は固定が必須です。固定しないと再起動で既存の設定が無効になります |
-| `SERVER_PORT` / `BIND_HOST` | ホスト側のマッピング。デフォルトは `8080`。ローカルで使用中の場合は `8081` などに変更してください |
+| `RUN_MODE` | `standard`（デフォルト、推奨）または `simple`。違いは [`run_mode`](#run_modestandard推奨) を参照 |
+| `DATABASE_PATH` | SQLite データベースパス。デフォルト `/app/data/sub2api.db`（`DATABASE_DRIVER` は無視） |
+| `REDIS_ENABLED` | `false` でプロセス内組み込み Redis を使用 |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | 初回 `AUTO_SETUP` で作成する管理者（空欄時は自動生成され起動ログに出力） |
+| `JWT_SECRET` | セッション署名キー。コンテナ再作成時のログアウトを防ぐため固定を推奨 |
+| `TOTP_ENCRYPTION_KEY` | 2FA 利用時は 64 文字の 16 進数キーを固定必須（未固定だと再起動で既存 2FA が無効化） |
+| `SERVER_PORT` / `BIND_HOST` | ホスト側ポート設定（デフォルト `8080`） |
 
-完全な例：`deploy/.env.sqlite.example`。
+> 注：`deploy/docker-compose.yml` や `deploy/docker-compose.local.yml` は上流版の残存ファイルです。本バージョンは常に SQLite のみを開くため、`deploy/docker-compose.sqlite.yml` を使用してください。
 
-`deploy/docker-compose.yml` / `docker-compose.local.yml` などは上流版から残っているファイルです。本フォークのプロセスは引き続き SQLite だけを開くため、個人用デプロイではこれらを使わないでください。
+### 方法 3：ソースからビルド
+
+Go `1.27.4`（`backend/go.mod` 参照）、Node.js `20+`（CI は Node 24）、**pnpm**（npm 不可）が必要です。
+
+```bash
+git clone https://github.com/githubliangliang/sub2api.git
+cd sub2api
+
+# 1. フロントエンドをビルド
+cd frontend
+pnpm install
+pnpm run build
+cd ..
+
+# 2. フロントエンド組み込みの単一バイナリをビルド（純 Go、CGO 不要）
+cd backend
+CGO_ENABLED=0 go build -tags embed -ldflags="-s -w" -o ../sub2api ./cmd/server
+cd ..
+
+# 3. 起動
+DATA_DIR=./data ./sub2api
+```
+
+> 別プラットフォーム向けにクロスコンパイルする場合は、`go build` の前に `GOOS=linux GOARCH=amd64`（または `arm64`、`darwin`、`windows`）を付けてください。
+
+### 設定ファイルとシークレット
+
+セットアップウィザードの代わりに初回起動前から `config.yaml` で設定したい場合は、`deploy/config.personal.sqlite.yaml` を `$DATA_DIR/config.yaml` にコピーして編集します。
+
+必須の調整項目：
+
+```yaml
+database:
+  driver: "sqlite"
+  path: "./data/sub2api.db"
+
+redis:
+  enabled: false              # 組み込み Redis を使用（単一インスタンス）
+
+jwt:
+  secret: "openssl rand -hex 32 で生成"
+
+totp:
+  encryption_key: "openssl rand -hex 32 で生成"  # 64 文字の 16 進数（32 バイト）が必須
+
+default:
+  admin_email: "you@example.com"
+  admin_password: "強力なパスワード"
+  user_balance: 100000        # standard モードでは > 0 が必須（0 だと初回 API 呼び出しで 403）
+```
+
+> **`totp.encryption_key` は固定してください**：空欄のままにすると起動のたびにランダムなキーが生成され、既存の 2FA 設定がすべて無効になります。形式は 32 バイトの 64 文字 16 進数である必要があります（形式不正時は起動失敗）。
+
+Linux の常駐サービスとして運用する場合の systemd ユニット（`deploy/sub2api-sqlite.service`）やデプロイスクリプト（`deploy/deploy-remote.sh`）については [deploy/START_NATIVE.md](./deploy/START_NATIVE.md) を参照してください。
+
+---
+
+## `run_mode`：`standard`（推奨）
+
+有効な値は `standard` と `simple` のみです（その他の値は `config.NormalizeRunMode` により `standard` に正規化されます）。デフォルトは `standard` です。
+
+| 動作 | `standard`（推奨） | `simple` |
+|------|-------------------|----------|
+| 残高 / サブスクリプション確認 | 有効：残高 ≤ 0 または `billing.minimum_balance_reserve`（既定 `0.000001`）未満 → `403 INSUFFICIENT_BALANCE` | スキップ |
+| 利用量と課金 | `usage_logs` に記録し、トークン実コストを残高から減算 | `usage_logs` 記録のみ（コストはログ出力されるが残高は不変） |
+| グループ別スケジューリング | グループ分離：グループ紐付け済みキーはそのグループのアカウントのみ使用。未紐付けキーは**どのグループにも属さないアカウント**のみ使用 | グループを無視し、プラットフォームの全利用可能アカウントを使用 |
+| 起動時の副作用 | なし | デフォルトグループ（`anthropic-default`、`openai-default` 等）を自動作成し、同時実行数 5 の管理者を一度だけ 30 に引き上げ |
+| サイドバーとルート | 全画面表示。不要な項目は `/admin/menu` で個別に非表示化可能 | ユーザー、グループ、チャネル、サブスクリプション、監査ログを非表示にし、一部ページをリダイレクト |
+| `/v1/sub2api/billing` | 利用可能 | 404 |
+
+### `standard` を推奨する理由
+
+- **グループはアカウント分離とキー振り分けの唯一の手段です**（モデルマッピング、グループ上限、キーのグループ紐付け）。`simple` では UI 上で設定保存できても、スケジューリング時には無視されます。
+- 利用量統計、監査ログ、ユーザー管理をそのまま利用できます。メニューが多い場合は `simple` に下げず、`/admin/menu`（`hidden_menu_keys`）で個別に非表示にしてください。
+
+### `standard` モードでの初期残高設定
+
+`standard` モードでは API 呼び出しに残高が必要です：
+
+- **初回起動前に `config.yaml` で設定**：`default.user_balance` を正の値（例：`100000`）にします。将来ユーザー登録を開放する場合は `0` に戻し、管理者だけ手動加算してください。
+- **Web ウィザードまたは Docker `AUTO_SETUP` で構築した場合**（初期残高は `0`）：ログイン後、**管理画面 → ユーザー管理**（`/admin/users`）から自分の残高を増やしてください（`POST /admin/users/:id/balance`）。
+
+---
+
+## バックアップとアップグレード
+
+- **停止時ファイルバックアップ**：プロセスを停止し、データディレクトリ全体（`sub2api.db`、`sub2api.db-wal`、`sub2api.db-shm`、`config.yaml`）をコピーします。`jwt.secret` と `totp.encryption_key` を失うと全セッションと 2FA 設定が無効になるため、`config.yaml` も必ず含めてください。
+- **オンライン S3 バックアップ**：管理画面で S3 を設定すると、SQLite `VACUUM INTO` で整合性のある `*.db.gz` スナップショットを作成できます。復元時は稼働中の `.db` を置き換え、古い `-wal` / `-shm` を削除します。
+- **アップグレード**：`sub2api` バイナリを差し替える（または Docker イメージを更新・再ビルドする）だけで、再起動時に SQLite マイグレーションが自動適用されます。
 
 ---
 
 ## トラブルシューティング
 
-| 症状 | 原因 / 対処 |
-|------|-------------|
-| API リクエストで `403 INSUFFICIENT_BALANCE` が返る | standard で残高が不足しています。`/admin/users` で自分の残高を増やすか、初回起動前に `default.user_balance` を設定してください |
-| アカウントがスケジュールされない / 利用可能なアカウントがない | standard はグループでアカウントを分離します。グループ設定済みのキーはそのグループのアカウントだけを使い、未設定のキーは**どのグループにも属していないアカウント**だけを使います。キーとアカウントのグループ設定を合わせてください |
-| `config.yaml` の `admin_password` を変更してもログイン時のパスワードが変わらない | `default.admin_*` はデータベースのユーザー数が 0 のときに管理者を作成するためだけに使い、その後は同期しません。UI のプロフィール画面、または `users` テーブルを直接変更してパスワードを更新してください |
-| 再起動後にすべての 2FA 設定が無効になる | `totp.encryption_key` が固定されておらず、起動のたびにランダムなキーを生成しています。32 バイトのキーを 16 進数表現で固定し、`config.yaml` と一緒にバックアップしてください |
-| 起動直後に終了し、`default.admin_password must be changed from the example value` が出る | テンプレートの `CHANGE_ME_STRONG_PASSWORD` を変更していません。実際に使うパスワード（8–128 文字）に変更してから起動してください |
-| 起動時にマイグレーションのチェックサム不一致が出る | 適用済みのマイグレーションファイルが変更されています。新しいマイグレーションを追加して解決してください。個人用データベースなら `*.db` を削除して作り直す方法もあります |
-| ログインで 503 が返る | 古いデータベースに補助テーブル（例：`user_allowed_groups`）がありません。ログで不足しているテーブルを確認してください。`EnsureSQLiteAuxTables` の DDL はマイグレーションと列ごとに一致している必要があります |
+| 症状 | 原因と対処 |
+|------|------------|
+| API リクエストで `403 INSUFFICIENT_BALANCE` | `standard` モードで残高が `0` です。`/admin/users` で残高を追加するか、初回起動前に `default.user_balance` を設定してください |
+| アカウントが選択されない / 利用可能アカウントなし | `standard` はグループで分離します。グループ紐付け済みキーはそのグループのアカウントのみ、未紐付けキーは**どのグループにも属さないアカウント**のみを使用します |
+| `config.yaml` の `admin_password` を変えてもログインパスワードが変わらない | `default.admin_*` はユーザー数 0 の初回作成時のみ参照されます。UI のプロフィール画面、または `users` テーブルから変更してください |
+| 再起動後にすべての 2FA が無効になる | `totp.encryption_key` 未設定のため起動ごとにランダム生成されています。64 文字の 16 進数キーを固定し `config.yaml` と一緒にバックアップしてください |
+| `default.admin_password must be changed from the example value` で起動終了 | テンプレートの `CHANGE_ME_STRONG_PASSWORD` を実際のパスワード（8–128 文字）に変更してください |
+| マイグレーションのチェックサム不一致エラー | 適用済みの SQL マイグレーションが編集されています。新しいマイグレーションを追加するか、新規やり直しなら `*.db` を削除してください |
+| ログイン時に `503` が返る | 古い SQLite データベースに補助テーブル（例：`user_allowed_groups`）が不足しています。ログで不足テーブル名を確認してください |
 
 ---
 
-## 技術スタック（本フォーク）
+## 技術スタック
 
 | コンポーネント | 技術 |
 |----------------|------|
-| バックエンド | Go 1.27.0、Gin、Ent、`modernc.org/sqlite` |
+| バックエンド | Go 1.27.4、Gin、Ent、`modernc.org/sqlite`（純 Go、CGO 不要） |
 | フロントエンド | Vue 3、Vite、TailwindCSS（pnpm） |
-| データベース | **SQLite のみ**（`backend/migrations/*.sql` は SQLite 方言） |
-| キャッシュ | Redis は任意。外部 Redis を無効にするとプロセス内の組み込み実装を使います（単一ノードのみ） |
-| 配布 | 単一バイナリ（`-tags embed` でフロントエンドを組み込み）/ Docker Compose |
+| データベース | **SQLite 専用**（`backend/migrations/*.sql` は SQLite 方言） |
+| キャッシュ | Redis は任意（`redis.enabled: false` でプロセス内組み込み Redis を使用） |
+| 配布形式 | フロントエンド組み込み単一バイナリ（`-tags embed`）または単一 Docker コンテナ |
 
 ---
 
-## FAQ（検索用）
+## FAQ
 
-**これは SQLite 版の Sub2API ですか？**
+**これは Sub2API の SQLite 版ですか？**  
+はい。[githubliangliang/sub2api](https://github.com/githubliangliang/sub2api) はローカルの SQLite ファイルに全データを保存する **SQLite 専用版** Sub2API です。
 
-はい。本リポジトリ（[githubliangliang/sub2api](https://github.com/githubliangliang/sub2api)）は **SQLite 専用**の Sub2API です。実行時には SQLite だけを開き、PostgreSQL には接続しません。
+**PostgreSQL は使えますか？**  
+いいえ。マイグレーションはすべて SQLite 方言であり、PostgreSQL には対応していません。
 
-**PostgreSQL に対応していますか？**
-
-いいえ。`backend/migrations/*.sql` は SQLite 方言です。本リポジトリは単一ノードの SQLite のみを対象にしています。
-
-**一般的な PostgreSQL デプロイとの違いは何ですか？**
-
-SQLite のみ、Redis は任意（プロセス内への組み込みが可能）、メニューの非表示に対応し、個人の単一ノードデプロイを想定しています。上の「本フォークの変更点」を参照してください。
+**Redis のインストールは必要ですか？**  
+不要です。`redis.enabled: false`（または `REDIS_ENABLED=false`）を指定すれば組み込み Redis が動作します。外部 Redis は任意です。
 
 ---
 
 ## リポジトリとライセンス
 
-- リポジトリ（SQLite 単一ノード版）：https://github.com/githubliangliang/sub2api
+- リポジトリ：https://github.com/githubliangliang/sub2api
 - リリース：https://github.com/githubliangliang/sub2api/releases
 - ライセンス：[LICENSE](./LICENSE)（LGPLv3）
 - AI 向けインデックス：[llms.txt](./llms.txt)
